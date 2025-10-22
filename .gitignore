@@ -1,18 +1,16 @@
-.DS_Store
-DerivedData/
 build/
-*.xcuserdatad/
-*.xcscmblueprint
+DerivedData/
 *.xccheckout
-*.xcworkspace/xcuserdata/
+*.xcscmblueprint
 *.xcuserstate
+**/*.xcuserdatad/
+**/xcshareddata/WorkspaceSettings.xcsettings
 .build/
-Pods/
+Package.pins
+Package.resolved
 
-Carthage/Build/
-fastlane/report.xml
-fastlane/Preview.html
-fastlane/test_output
+Pods/
 *.ipa
 *.dSYM.zip
 *.dSYM
+.DS_Store
