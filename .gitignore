@@ -14,3 +14,11 @@ Pods/
 *.dSYM.zip
 *.dSYM
 .DS_Store
+DerivedData/
+build/
+.build/
+*.ipa
+*.xcarchive
+*.xcuserstate
+*.xcscmblueprint
+*.DS_Store
