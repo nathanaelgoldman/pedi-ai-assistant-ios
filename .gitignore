@@ -22,3 +22,10 @@ build/
 *.xcuserstate
 *.xcscmblueprint
 *.DS_Store
+*.xcuserstate
+**/xcuserdata/
+**/project.xcworkspace/xcuserdata/
+.swiftpm/cache/
+**/DerivedData/
+build/
+.build/
