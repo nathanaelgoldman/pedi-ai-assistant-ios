@@ -1,0 +1,612 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BB812EE12EA5E7AD0049DDB7 /* FMDB in Frameworks */ = {isa = PBXBuildFile; productRef = BB812EE02EA5E7AD0049DDB7 /* FMDB */; };
+		BBCC55082E97622B005002B9 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55072E97622B005002B9 /* ZIPFoundation */; };
+		BBCC55112E976F7E005002B9 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55102E976F7E005002B9 /* SQLite */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BBCC54EA2E97619A005002B9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BBCC54D42E976199005002B9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BBCC54DB2E976199005002B9;
+			remoteInfo = PatientViewerApp;
+		};
+		BBCC54F42E97619A005002B9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BBCC54D42E976199005002B9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BBCC54DB2E976199005002B9;
+			remoteInfo = PatientViewerApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		BBCC54DC2E976199005002B9 /* PatientViewerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PatientViewerApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBCC54E92E97619A005002B9 /* PatientViewerAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		BBCC54DE2E976199005002B9 /* PatientViewerApp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PatientViewerApp;
+			sourceTree = "<group>";
+		};
+		BBCC54EC2E97619A005002B9 /* PatientViewerAppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PatientViewerAppTests;
+			sourceTree = "<group>";
+		};
+		BBCC54F62E97619A005002B9 /* PatientViewerAppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PatientViewerAppUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BBCC54D92E976199005002B9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BBCC55112E976F7E005002B9 /* SQLite in Frameworks */,
+				BB812EE12EA5E7AD0049DDB7 /* FMDB in Frameworks */,
+				BBCC55082E97622B005002B9 /* ZIPFoundation in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBCC54E62E97619A005002B9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBCC54F02E97619A005002B9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		BBCC54D32E976199005002B9 = {
+			isa = PBXGroup;
+			children = (
+				BBCC54DE2E976199005002B9 /* PatientViewerApp */,
+				BBCC54EC2E97619A005002B9 /* PatientViewerAppTests */,
+				BBCC54F62E97619A005002B9 /* PatientViewerAppUITests */,
+				BBCC54DD2E976199005002B9 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BBCC54DD2E976199005002B9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BBCC54DC2E976199005002B9 /* PatientViewerApp.app */,
+				BBCC54E92E97619A005002B9 /* PatientViewerAppTests.xctest */,
+				BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		BBCC54DB2E976199005002B9 /* PatientViewerApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBCC54FD2E97619A005002B9 /* Build configuration list for PBXNativeTarget "PatientViewerApp" */;
+			buildPhases = (
+				BBCC54D82E976199005002B9 /* Sources */,
+				BBCC54D92E976199005002B9 /* Frameworks */,
+				BBCC54DA2E976199005002B9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BBCC54DE2E976199005002B9 /* PatientViewerApp */,
+			);
+			name = PatientViewerApp;
+			packageProductDependencies = (
+				BBCC55072E97622B005002B9 /* ZIPFoundation */,
+				BBCC55102E976F7E005002B9 /* SQLite */,
+				BB812EE02EA5E7AD0049DDB7 /* FMDB */,
+			);
+			productName = PatientViewerApp;
+			productReference = BBCC54DC2E976199005002B9 /* PatientViewerApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BBCC54E82E97619A005002B9 /* PatientViewerAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBCC55002E97619A005002B9 /* Build configuration list for PBXNativeTarget "PatientViewerAppTests" */;
+			buildPhases = (
+				BBCC54E52E97619A005002B9 /* Sources */,
+				BBCC54E62E97619A005002B9 /* Frameworks */,
+				BBCC54E72E97619A005002B9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BBCC54EB2E97619A005002B9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BBCC54EC2E97619A005002B9 /* PatientViewerAppTests */,
+			);
+			name = PatientViewerAppTests;
+			packageProductDependencies = (
+			);
+			productName = PatientViewerAppTests;
+			productReference = BBCC54E92E97619A005002B9 /* PatientViewerAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BBCC54F22E97619A005002B9 /* PatientViewerAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBCC55032E97619A005002B9 /* Build configuration list for PBXNativeTarget "PatientViewerAppUITests" */;
+			buildPhases = (
+				BBCC54EF2E97619A005002B9 /* Sources */,
+				BBCC54F02E97619A005002B9 /* Frameworks */,
+				BBCC54F12E97619A005002B9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BBCC54F52E97619A005002B9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BBCC54F62E97619A005002B9 /* PatientViewerAppUITests */,
+			);
+			name = PatientViewerAppUITests;
+			packageProductDependencies = (
+			);
+			productName = PatientViewerAppUITests;
+			productReference = BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BBCC54D42E976199005002B9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					BBCC54DB2E976199005002B9 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					BBCC54E82E97619A005002B9 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = BBCC54DB2E976199005002B9;
+					};
+					BBCC54F22E97619A005002B9 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = BBCC54DB2E976199005002B9;
+					};
+				};
+			};
+			buildConfigurationList = BBCC54D72E976199005002B9 /* Build configuration list for PBXProject "PatientViewerApp" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = BBCC54D32E976199005002B9;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BBCC55062E97622B005002B9 /* XCLocalSwiftPackageReference "../../Documents/ZIPFoundation" */,
+				BBCC550F2E976F7E005002B9 /* XCLocalSwiftPackageReference "../../Documents/SQLiteSwift" */,
+				BB812EDF2EA5E7AD0049DDB7 /* XCRemoteSwiftPackageReference "fmdb" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = BBCC54DD2E976199005002B9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BBCC54DB2E976199005002B9 /* PatientViewerApp */,
+				BBCC54E82E97619A005002B9 /* PatientViewerAppTests */,
+				BBCC54F22E97619A005002B9 /* PatientViewerAppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BBCC54DA2E976199005002B9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBCC54E72E97619A005002B9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBCC54F12E97619A005002B9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BBCC54D82E976199005002B9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBCC54E52E97619A005002B9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBCC54EF2E97619A005002B9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BBCC54EB2E97619A005002B9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BBCC54DB2E976199005002B9 /* PatientViewerApp */;
+			targetProxy = BBCC54EA2E97619A005002B9 /* PBXContainerItemProxy */;
+		};
+		BBCC54F52E97619A005002B9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BBCC54DB2E976199005002B9 /* PatientViewerApp */;
+			targetProxy = BBCC54F42E97619A005002B9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		BBCC54FB2E97619A005002B9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		BBCC54FC2E97619A005002B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BBCC54FE2E97619A005002B9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Q54BDS5LK;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BBCC54FF2E97619A005002B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Q54BDS5LK;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		BBCC55012E97619A005002B9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PatientViewerApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PatientViewerApp";
+			};
+			name = Debug;
+		};
+		BBCC55022E97619A005002B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PatientViewerApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PatientViewerApp";
+			};
+			name = Release;
+		};
+		BBCC55042E97619A005002B9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PatientViewerApp;
+			};
+			name = Debug;
+		};
+		BBCC55052E97619A005002B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PatientViewerApp;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BBCC54D72E976199005002B9 /* Build configuration list for PBXProject "PatientViewerApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBCC54FB2E97619A005002B9 /* Debug */,
+				BBCC54FC2E97619A005002B9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBCC54FD2E97619A005002B9 /* Build configuration list for PBXNativeTarget "PatientViewerApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBCC54FE2E97619A005002B9 /* Debug */,
+				BBCC54FF2E97619A005002B9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBCC55002E97619A005002B9 /* Build configuration list for PBXNativeTarget "PatientViewerAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBCC55012E97619A005002B9 /* Debug */,
+				BBCC55022E97619A005002B9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBCC55032E97619A005002B9 /* Build configuration list for PBXNativeTarget "PatientViewerAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBCC55042E97619A005002B9 /* Debug */,
+				BBCC55052E97619A005002B9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		BBCC55062E97622B005002B9 /* XCLocalSwiftPackageReference "../../Documents/ZIPFoundation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Documents/ZIPFoundation;
+		};
+		BBCC550F2E976F7E005002B9 /* XCLocalSwiftPackageReference "../../Documents/SQLiteSwift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Documents/SQLiteSwift;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BB812EDF2EA5E7AD0049DDB7 /* XCRemoteSwiftPackageReference "fmdb" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ccgus/fmdb";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.12;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BB812EE02EA5E7AD0049DDB7 /* FMDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB812EDF2EA5E7AD0049DDB7 /* XCRemoteSwiftPackageReference "fmdb" */;
+			productName = FMDB;
+		};
+		BBCC55072E97622B005002B9 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ZIPFoundation;
+		};
+		BBCC55102E976F7E005002B9 /* SQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SQLite;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = BBCC54D42E976199005002B9 /* Project object */;
+}

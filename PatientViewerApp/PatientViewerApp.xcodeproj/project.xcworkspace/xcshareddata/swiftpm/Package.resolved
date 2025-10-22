@@ -1,0 +1,24 @@
+{
+  "originHash" : "53e7d5ee9fa0dac2eeeafcdd48d6c14430a30be00f9675796669192c91550670",
+  "pins" : [
+    {
+      "identity" : "fmdb",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ccgus/fmdb",
+      "state" : {
+        "revision" : "1227a3fa2b9916bfd75fe380eb45cd210e69e251",
+        "version" : "2.7.12"
+      }
+    },
+    {
+      "identity" : "swift-toolchain-sqlite",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-toolchain-sqlite",
+      "state" : {
+        "revision" : "b626d3002773b1a1304166643e7f118f724b2132",
+        "version" : "1.0.4"
+      }
+    }
+  ],
+  "version" : 3
+}
