@@ -7,6 +7,9 @@
 
 import SwiftUI
 import SQLite
+import OSLog
+
+private let notesLog = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ParentNotesView")
 
 struct ParentNotesView: SwiftUI.View {
     let dbURL: URL
@@ -87,6 +90,16 @@ struct ParentNotesView: SwiftUI.View {
         }
     }
 
+    // MARK: - Self-heal helpers
+    private func ensureParentNotesColumn(dbPath: String) throws {
+        let db = try Connection(dbPath)
+        let count = (try db.scalar("SELECT count(*) FROM pragma_table_info('patients') WHERE name = 'parent_notes'") as? Int64) ?? 0
+        if count == 0 {
+            try db.run("ALTER TABLE patients ADD COLUMN parent_notes TEXT")
+            notesLog.info("Added missing parent_notes column in patients table at \(dbPath, privacy: .public)")
+        }
+    }
+
     // MARK: - DB path resolution
     private func resolveDBURL() -> URL? {
         let fm = FileManager.default
@@ -105,20 +118,21 @@ struct ParentNotesView: SwiftUI.View {
                 }
             }
         } else {
-            print("[DEBUG] ⚠️ Provided dbURL is not a directory: \(dbURL.path)")
+            notesLog.warning("Provided dbURL is not a directory: \(dbURL.path, privacy: .public)")
         }
         return nil
     }
 
     private func loadNotes() {
         do {
-            print("[DEBUG] 🧭 Attempting to load db from base URL: \(dbURL.path)")
+            notesLog.debug("Attempting to load db from base URL: \(dbURL.path, privacy: .public)")
             guard let dbFileURL = resolveDBURL() else {
                 alertMessage = "Could not locate db.sqlite under \(dbURL.lastPathComponent)."
                 showAlert = true
                 return
             }
-            print("[DEBUG] Loading from DB path: \(dbFileURL.path)")
+            try ensureParentNotesColumn(dbPath: dbFileURL.path)
+            notesLog.debug("Loading from DB path: \(dbFileURL.path, privacy: .public)")
             let db = try Connection(dbFileURL.path)
             let patients = Table("patients")
             
@@ -132,9 +146,9 @@ struct ParentNotesView: SwiftUI.View {
             }
 
             let raw = try patientRow.get(parentNotes) ?? ""
-            print("[DEBUG] Fetched parent_notes for patient \(patientId): \(raw)")
+            notesLog.debug("Fetched parent_notes for patient \(patientId, privacy: .public) (length: \((raw as NSString).length, privacy: .public))")
             notes = raw.split(separator: "\n\n").map { String($0) }
-            print("[DEBUG] View notes array now contains \(notes.count) items.")
+            notesLog.debug("View notes array now contains \(notes.count, privacy: .public) items.")
         } catch {
             alertMessage = "Failed to load notes: \(error)"
             showAlert = true
@@ -151,7 +165,8 @@ struct ParentNotesView: SwiftUI.View {
                 showAlert = true
                 return
             }
-            print("[DEBUG] Saving to DB path: \(dbFileURL.path)")
+            try ensureParentNotesColumn(dbPath: dbFileURL.path)
+            notesLog.debug("Saving to DB path: \(dbFileURL.path, privacy: .public)")
             let db = try Connection(dbFileURL.path)
             let patients = Table("patients")
             let id = Expression<Int64>("id")
@@ -171,14 +186,14 @@ struct ParentNotesView: SwiftUI.View {
             let joined = allNotes.joined(separator: "\n\n")
 
             let update = patients.filter(id == patientId)
-            print("[DEBUG] Executing SQL update on column 'parent_notes' with value: \(joined)")
+            notesLog.debug("Executing SQL update on column 'parent_notes' (new length: \(joined.count, privacy: .public))")
             let changes = try db.run(update.update(parentNotes <- joined))
-            print("[DEBUG] Update affected rows: \(changes)")
+            notesLog.debug("Update affected rows: \(changes, privacy: .public)")
 
             // Read-back test
             if let confirmRow = try? db.pluck(patients.filter(id == patientId)) {
                 let confirmNotes = try confirmRow.get(parentNotes) ?? "[empty]"
-                print("[DEBUG] Confirm saved notes for patient \(patientId): \(confirmNotes)")
+                notesLog.debug("Confirm saved notes for patient \(patientId, privacy: .public) (length: \(confirmNotes.count, privacy: .public))")
             }
 
             noteInput = ""
@@ -215,6 +230,7 @@ struct ParentNotesView: SwiftUI.View {
             let joined = allNotes.joined(separator: "\n\n")
 
             let update = patients.filter(id == patientId)
+            notesLog.debug("Deleting note at index \(index, privacy: .public); remaining count will be \(allNotes.count, privacy: .public)")
             try db.run(update.update(parentNotes <- joined))
 
             loadNotes()

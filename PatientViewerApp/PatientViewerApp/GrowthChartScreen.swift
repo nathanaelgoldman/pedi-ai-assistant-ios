@@ -39,6 +39,19 @@ struct GrowthChartScreen: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear { print("[DEBUG] GrowthChartScreen: patientData is empty for \(selectedMeasurement)") }
+            } else if referenceCurves.isEmpty {
+                // Also avoid rendering if reference curves failed to load.
+                VStack(spacing: 12) {
+                    Text("Reference curves unavailable")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                    Text("Missing WHO reference for “\(whoFileName)”. The chart will appear once curves are available.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear { print("[DEBUG] GrowthChartScreen: reference curves empty for \(whoFileName)") }
             } else {
                 GrowthChartView(
                     dataPoints: patientData,

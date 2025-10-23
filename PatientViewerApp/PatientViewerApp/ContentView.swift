@@ -11,17 +11,18 @@ struct ContentView: SwiftUI.View {
     @State private var bundleAliasLabel: String?
     @State private var bundleDOB: String?
     @State private var showingFileImporter = false
+    // File export (Save As…) routing
+    @State private var showFileExporter = false
+    @State private var exportDoc = ZipFileDocument(data: Data())
+    @State private var exportDefaultName = "patientviewer"
     // Unified sheet router (single source of truth for modal sheets)
     enum SheetRoute: Identifiable, Equatable {
         case bundleLibrary
-        case share(URL)
 
         var id: String {
             switch self {
             case .bundleLibrary:
                 return "bundleLibrary"
-            case .share(let url):
-                return "share:\(url.absoluteString)"
             }
         }
     }
@@ -103,7 +104,15 @@ struct ContentView: SwiftUI.View {
 
                         NavigationLink("📤 Export Bundle", destination: {
                             ExportBundleView(dbURL: url, onShare: { shareURL in
-                                sheetRoute = .share(shareURL)
+                                do {
+                                    let data = try Data(contentsOf: shareURL)
+                                    // Use the exported filename (without path) as default if available
+                                    exportDefaultName = shareURL.deletingPathExtension().lastPathComponent
+                                    exportDoc = ZipFileDocument(data: data)
+                                    showFileExporter = true
+                                } catch {
+                                    print("[DEBUG] ❌ Failed to prepare document for export: \(error)")
+                                }
                             })
                         })
                             .padding(.top)
@@ -168,8 +177,19 @@ struct ContentView: SwiftUI.View {
                         bundleAlias: Binding(get: { bundleAliasLabel ?? "Unknown" }, set: { bundleAliasLabel = $0 }),
                         bundleDOB: Binding(get: { bundleDOB ?? "Unknown" }, set: { bundleDOB = $0 })
                     )
-                case .share(let url):
-                    ShareSheetView(activityItems: [url])
+                }
+            }
+            .fileExporter(
+                isPresented: $showFileExporter,
+                document: exportDoc,
+                contentType: .zip,
+                defaultFilename: exportDefaultName
+            ) { result in
+                switch result {
+                case .success(let url):
+                    print("[DEBUG] ✅ Exported to: \(url.path)")
+                case .failure(let error):
+                    print("[DEBUG] ❌ Export failed: \(error)")
                 }
             }
             .fileImporter(
@@ -304,13 +324,22 @@ struct ContentView: SwiftUI.View {
     }
 }
 
-// Minimal UIActivityViewController wrapper for share sheet routing
-private struct ShareSheetView: UIViewControllerRepresentable {
-    let activityItems: [Any]
+// Simple FileDocument wrapper for exporting the generated .zip
+struct ZipFileDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.zip] }
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
     }
 
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    init(configuration: ReadConfiguration) throws {
+        // Not used for exporting; provide empty data for formality
+        self.data = Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
 }

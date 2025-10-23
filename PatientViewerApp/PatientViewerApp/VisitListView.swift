@@ -10,6 +10,7 @@ import SQLite
 import PDFKit
 import UIKit
 import Foundation
+import os
 
 let inputDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -23,6 +24,9 @@ let outputDateFormatter: DateFormatter = {
     formatter.dateStyle = .medium
     return formatter
 }()
+
+// Structured logger for Visit-related flows (lists, details, PDF generation)
+private let logVisits = Logger(subsystem: "com.yunastic.PatientViewerApp", category: "visits")
 
 struct VisitSummary: Identifiable {
     let id: Int64
@@ -72,7 +76,7 @@ struct PDFGenerator {
             try data.write(to: fileURL)
             return fileURL
         } catch {
-            print("❌ Failed to save PDF: \(error)")
+            logVisits.error("Failed to save PDF: \(String(describing: error))")
             return nil
         }
     }
@@ -106,7 +110,7 @@ struct VisitDetailView: SwiftUI.View {
                                     self.showingPDFPreview = true
                                 }
                             } else {
-                                print("❌ SickVisitPDFGenerator returned nil")
+                                logVisits.error("SickVisitPDFGenerator returned nil")
                             }
                         } else {
                             if visit.category == "well" {
@@ -118,10 +122,10 @@ struct VisitDetailView: SwiftUI.View {
                                                 self.showingPDFPreview = true
                                             }
                                         } else {
-                                            print("❌ WellVisitPDFGenerator returned nil")
+                                            logVisits.error("WellVisitPDFGenerator returned nil")
                                         }
                                     } catch {
-                                        print("❌ Error generating Well Visit PDF: \(error)")
+                                        logVisits.error("Error generating Well Visit PDF: \(String(describing: error))")
                                     }
                                 }
                             } else {
@@ -131,7 +135,7 @@ struct VisitDetailView: SwiftUI.View {
                                         self.showingPDFPreview = true
                                     }
                                 } else {
-                                    print("❌ PDFGenerator returned nil")
+                                    logVisits.error("PDFGenerator returned nil")
                                 }
                             }
                         }
@@ -152,12 +156,8 @@ struct VisitDetailView: SwiftUI.View {
             PDFPreviewContainer(fileURL: identifiableURL.url)
         }
         .padding()
-        .navigationTitle("Visit Details")
         .alert(isPresented: $showExportAlert) {
             Alert(title: Text("✅ PDF Generated"), message: Text("Report saved to Files app."), dismissButton: .default(Text("OK")))
-        }
-        .sheet(item: $generatedPDFURL) { identifiableURL in
-            PDFPreviewContainer(fileURL: identifiableURL.url)
         }
     }
 }
@@ -178,7 +178,9 @@ struct PDFPreviewContainer: SwiftUI.View {
                             }
                         }
                         ToolbarItem(placement: .primaryAction) {
-                            ShareButton(fileURL: fileURL)
+                            ShareLink(item: fileURL) {
+                                Image(systemName: "square.and.arrow.up")
+                            }
                         }
                     }
             } else {
@@ -286,7 +288,7 @@ struct VisitListView: SwiftUI.View {
             }
             self.allVisits = newVisits
         } catch {
-            print("❌ Failed to read visits: \(error)")
+            logVisits.error("Failed to read visits: \(String(describing: error))")
         }
     }
 }
@@ -307,30 +309,4 @@ struct PDFKitView: UIViewRepresentable {
 struct IdentifiableURL: Identifiable {
     let id = UUID()
     let url: URL
-}
-
-struct ActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-struct ShareButton: SwiftUI.View {
-    let fileURL: URL
-    @State private var showShareSheet = false
-
-    var body: some SwiftUI.View {
-        Button(action: {
-            showShareSheet = true
-        }) {
-            Image(systemName: "square.and.arrow.up")
-        }
-        .sheet(isPresented: $showShareSheet) {
-            ActivityView(activityItems: [fileURL])
-        }
-    }
 }
