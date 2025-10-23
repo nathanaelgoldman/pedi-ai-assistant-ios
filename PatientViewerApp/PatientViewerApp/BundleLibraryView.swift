@@ -5,13 +5,16 @@
 //  Created by yunastic on 10/15/25.
 //
 
-
 import SwiftUI
 import Foundation
 import ZIPFoundation
 import SQLite3
 import UniformTypeIdentifiers
 import CryptoKit
+import os
+
+// Central logger for this file
+private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "BundleLibraryView")
 
 // Single source of truth for the currently active bundle location.
 struct ActiveBundleLocator {
@@ -81,7 +84,7 @@ enum BundleIO {
 
             // Determine the extracted root that actually contains the bundle
             let root = findExtractedRoot(in: tempDir, zipURL: url)
-            print("[DEBUG] 📂 Selected extracted root: \(root.path)")
+            log.debug("📂 Selected extracted root: \(root.path, privacy: .public)")
 
             let identity = try extractIdentity(from: root)
             try validateBundleDB(at: root)
@@ -240,13 +243,9 @@ enum BundleIO {
                 .union(CharacterSet(charactersIn: "-_()"))
             let filteredScalars = input.unicodeScalars.filter { allowed.contains($0) }
             var s = String(String.UnicodeScalarView(filteredScalars))
-            // Collapse runs of whitespace to a single space
             s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            // Trim surrounding whitespace
             s = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Trim leading/trailing underscores or dashes
             s = s.trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
-            // Collapse repeated separators like "__" or "--"
             s = s.replacingOccurrences(of: "[\\-_]{2,}", with: "-", options: .regularExpression)
             return s.isEmpty ? "Patient" : s
         }
@@ -469,7 +468,7 @@ enum BundleIO {
 
             // read alias/dob to return
             let (alias, _, dob, _) = try readIdentity(from: activeDBBase)
-            print("[DEBUG] 📌 Active base set to: \(activeDBBase.path)")
+            log.debug("📌 Active base set to: \(activeDBBase.path, privacy: .public)")
             return Activation(activeBase: activeDBBase, alias: alias, dob: dob)
         }
 
@@ -494,7 +493,7 @@ enum BundleIO {
             // 1) Stage the new content inside PersistentBundles (atomic swap).
             let staging = dest.deletingLastPathComponent()
                 .appendingPathComponent(".staging-\(identity.slug)--\(timestampNowString())", isDirectory: true)
-            if fm.fileExists(atPath: staging.path) { try? fm.removeItem(at: staging) }
+            if fm.fileExists(atPath: staging.path) { try fm.removeItem(at: staging) }
             try fm.copyItem(at: newRoot, to: staging)
             // Write sidecar metadata into the staged folder (not the original).
             writeBundleMeta(to: staging, from: zipURL, rootExtractedURL: newRoot, identity: identity)
@@ -616,6 +615,7 @@ struct BundleLibraryView: View {
                             do {
                                 try activatePersistentBundle(at: bundle.folderURL)
                             } catch {
+                                log.error("Failed to load bundle: \(error.localizedDescription, privacy: .public)")
                                 alertMessage = "Failed to load bundle: \(error.localizedDescription)"
                                 showAlert = true
                             }
@@ -659,6 +659,7 @@ struct BundleLibraryView: View {
                     handleZipImport(url: first)
                 }
             case .failure(let error):
+                log.error("fileImporter failed: \(error.localizedDescription, privacy: .public)")
                 alertMessage = "Import failed: \(error.localizedDescription)"
                 showAlert = true
             }
@@ -690,6 +691,7 @@ struct BundleLibraryView: View {
                     try archiveExistingAndReplace(existingURL: pending.existingURL, newRoot: pending.tempRoot, dest: pending.destinationURL, zipURL: pending.zipURL, identity: pending.identity)
                     pendingImport = nil
                 } catch {
+                    log.error("Overwrite failed: \(error.localizedDescription, privacy: .public)")
                     alertMessage = "Overwrite failed: \(error.localizedDescription)"
                     showAlert = true
                 }
@@ -720,7 +722,7 @@ struct BundleLibraryView: View {
             includingPropertiesForKeys: [.creationDateKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
-            print("[DEBUG] ⚠️ Failed to list PersistentBundles; keeping previous list.")
+            log.warning("Failed to list PersistentBundles; using previous list.")
             return
         }
 
@@ -826,7 +828,7 @@ struct BundleLibraryView: View {
 
         // Persist the active base and log
         ActiveBundleLocator.setCurrentBaseURL(activeDBBase)
-        print("[DEBUG] 📌 Active base set to: \(activeDBBase.path)")
+        log.debug("📌 Active base set to: \(activeDBBase.path, privacy: .public)")
 
         // Force UI refresh even if the user re-selects the same patient; then dismiss the sheet.
         extractedFolderURL = nil
@@ -977,14 +979,12 @@ struct BundleLibraryView: View {
     }
 
     private func parseISODateLoose(_ s: String) -> Date? {
-        // Try ISO8601 with and without fractional seconds/time zone
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let d = iso.date(from: s) { return d }
         let iso2 = ISO8601DateFormatter()
         iso2.formatOptions = [.withInternetDateTime]
         if let d = iso2.date(from: s) { return d }
-        // Fallbacks for common formats
         let fmts = [
             "yyyy-MM-dd'T'HH:mm:ssXXXXX",
             "yyyy-MM-dd'T'HH:mm:ss",
@@ -1396,6 +1396,7 @@ struct BundleLibraryView: View {
             // Refresh list
             loadPersistentBundles()
         } catch {
+            log.error("Delete failed: \(error.localizedDescription, privacy: .public)")
             alertMessage = "Failed to delete bundle: \(error.localizedDescription)"
             showAlert = true
         }
@@ -1422,7 +1423,7 @@ struct BundleLibraryView: View {
             .appendingPathComponent("PersistentBundles", isDirectory: true)
             .appendingPathComponent(persistentFolderName, isDirectory: true)
 
-        print("[DEBUG] 📦 Using existing persistent bundle at: \(persistentBundleURL.path)")
+        log.debug("📦 Using existing persistent bundle at: \(persistentBundleURL.path, privacy: .public)")
 
         guard fileManager.fileExists(atPath: persistentBundleURL.path) else {
             throw NSError(domain: "BundleLibraryView", code: 1,
@@ -1466,7 +1467,7 @@ struct BundleLibraryView: View {
             }
             extractedFolderURL = fallback
             ActiveBundleLocator.setCurrentBaseURL(fallback)
-            print("[DEBUG] 📌 Active base set to: \(fallback.path)")
+            log.debug("📌 Active base set to: \(fallback.path, privacy: .public)")
             UserDefaults.standard.set(zipURL.path, forKey: "SavedBundlePath")
             extractPatientInfo(from: fallback)
             return
@@ -1474,14 +1475,14 @@ struct BundleLibraryView: View {
 
         extractedFolderURL = baseForDB
         ActiveBundleLocator.setCurrentBaseURL(baseForDB)
-        print("[DEBUG] 📌 Active base set to: \(baseForDB.path)")
+        log.debug("📌 Active base set to: \(baseForDB.path, privacy: .public)")
         UserDefaults.standard.set(zipURL.path, forKey: "SavedBundlePath")
         extractPatientInfo(from: baseForDB)
         // IMPORTANT: We never delete or modify the original ZIP or its .zip.import.json.
     }
 
     private func extractPatientInfo(from bundleURL: URL) {
-        print("[DEBUG] 🔍 Starting extractPatientInfo from: \(bundleURL.path)")
+        log.debug("🔍 Starting extractPatientInfo from: \(bundleURL.path, privacy: .public)")
         let dbPath = bundleURL.appendingPathComponent("db.sqlite").path
         var db: OpaquePointer?
 
@@ -1498,7 +1499,7 @@ struct BundleLibraryView: View {
                     if let dobCStr = sqlite3_column_text(stmt, 1) {
                         bundleDOB = String(cString: dobCStr)
                     }
-                    print("[DEBUG] ✅ Extracted alias: \(bundleAlias), DOB: \(bundleDOB)")
+                    log.debug("✅ Extracted alias: \(self.bundleAlias, privacy: .private(mask: .hash)), DOB: \(self.bundleDOB, privacy: .private)")
                 }
                 sqlite3_finalize(stmt)
             }
@@ -1524,7 +1525,7 @@ struct BundleLibraryView: View {
 
             // Determine the extracted root that actually contains the bundle
             let root = findExtractedRoot(in: tempDir, zipURL: url)
-            print("[DEBUG] 📂 Selected extracted root: \(root.path)")
+            log.debug("📂 Selected extracted root: \(root.path, privacy: .public)")
 
             let identity = try extractPatientIdentity(from: root)
             try validateBundleDB(at: root)
@@ -1548,6 +1549,7 @@ struct BundleLibraryView: View {
             try? fm.removeItem(at: tempDir)
             // NOTE: The original ZIP (url) and any .zip.import.json next to it are left untouched.
         } catch {
+            log.error("Import failed: \(error.localizedDescription, privacy: .public)")
             alertMessage = "Import failed: \(error.localizedDescription)"
             showAlert = true
             try? fm.removeItem(at: tempDir)
@@ -1588,21 +1590,14 @@ struct BundleLibraryView: View {
     }
 
     private func sanitizedAlias(_ input: String) -> String {
-        // Keep letters, numbers, spaces, dashes, underscores, and parentheses.
-        // DROP everything else (e.g., emojis) instead of replacing with "_",
-        // then collapse whitespace and trim dangling separators.
         let allowed = CharacterSet.alphanumerics
             .union(.whitespacesAndNewlines)
             .union(CharacterSet(charactersIn: "-_()"))
         let filteredScalars = input.unicodeScalars.filter { allowed.contains($0) }
         var s = String(String.UnicodeScalarView(filteredScalars))
-        // Collapse runs of whitespace to a single space
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        // Trim surrounding whitespace
         s = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Trim leading/trailing underscores or dashes
         s = s.trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
-        // Collapse repeated separators like "__" or "--"
         s = s.replacingOccurrences(of: "[\\-_]{2,}", with: "-", options: .regularExpression)
         if s.isEmpty { return "Patient" }
         return s

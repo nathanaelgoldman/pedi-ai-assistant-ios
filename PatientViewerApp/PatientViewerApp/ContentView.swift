@@ -5,6 +5,9 @@ import Foundation
 import UniformTypeIdentifiers
 import UIKit
 import SQLite
+import os
+
+private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ContentView")
 
 struct ContentView: SwiftUI.View {
     @State private var extractedFolderURL: URL?
@@ -82,17 +85,15 @@ struct ContentView: SwiftUI.View {
                         .padding(.top)
 
                         if patientId >= 0 {
-                            let _ = {
-                                DispatchQueue.main.async {
-                                    print("🧠 Passing patient ID to ParentNotesView: \(patientId)")
-                                }
-                            }()
-
                             NavigationLink(destination:
                                 ParentNotesView(
                                     dbURL: url,
                                     patientId: patientId
-                                ).id(patientId)
+                                )
+                                .id(patientId)
+                                .onAppear {
+                                    log.debug("🧠 Passing patient ID to ParentNotesView: \(patientId, privacy: .public)")
+                                }
                             ) {
                                 Text("📝 Parent Notes")
                             }
@@ -111,7 +112,7 @@ struct ContentView: SwiftUI.View {
                                     exportDoc = ZipFileDocument(data: data)
                                     showFileExporter = true
                                 } catch {
-                                    print("[DEBUG] ❌ Failed to prepare document for export: \(error)")
+                                    log.error("Failed to prepare document for export: \(error.localizedDescription, privacy: .public)")
                                 }
                             })
                         })
@@ -124,34 +125,34 @@ struct ContentView: SwiftUI.View {
                             if let url = extractedFolderURL {
                                 // Confirm persistent DB is written before clearing
                                 let dbPath = url.appendingPathComponent("db.sqlite").path
-                                print("[DEBUG] Pre-clear check: Confirming persistent DB exists and is intact.")
+                                log.debug("Pre-clear check: Confirming persistent DB exists and is intact.")
                                 if FileManager.default.fileExists(atPath: dbPath) {
-                                    print("[DEBUG] ✅ Persistent DB file exists at \(dbPath)")
+                                    log.info("Persistent DB file exists at \(dbPath, privacy: .public)")
                                 } else {
-                                    print("[DEBUG] ❌ Persistent DB file is MISSING at \(dbPath)")
+                                    log.error("Persistent DB file is MISSING at \(dbPath, privacy: .public)")
                                 }
-                                print("[DEBUG] Ensuring only temporary bundle is cleared. Persistent bundles remain untouched.")
+                                log.debug("Ensuring only temporary bundle is cleared. Persistent bundles remain untouched.")
 
                                 // Only remove volatile temporary folders, not persistent ActiveBundle/{alias_label}
                                 let path = url.path
                                 if path.contains("tmp") || path.contains("Temporary") {
                                     try? FileManager.default.removeItem(at: url)
-                                    print("[DEBUG] Cleared volatile bundle at \(path)")
+                                    log.info("Cleared volatile bundle at \(path, privacy: .public)")
                                 } else {
-                                    print("[DEBUG] Skipped clearing persistent ActiveBundle at \(path)")
+                                    log.debug("Skipped clearing persistent ActiveBundle at \(path, privacy: .public)")
                                 }
                             }
                             // Flush DB to disk before clearing
                             if let url = extractedFolderURL {
                                 let dbPath = url.appendingPathComponent("db.sqlite").path
-                                print("[DEBUG] Forcing DB flush before clear at: \(dbPath)")
+                                log.debug("Forcing DB flush before clear at: \(dbPath, privacy: .public)")
                                 let db = FMDatabase(path: dbPath)
                                 if db.open() {
                                     db.executeUpdate("VACUUM;", withArgumentsIn: [])
                                     db.close()
-                                    print("[DEBUG] ✅ DB flushed using VACUUM.")
+                                    log.info("DB flushed using VACUUM.")
                                 } else {
-                                    print("[DEBUG] ❌ Failed to open DB for flushing.")
+                                    log.error("Failed to open DB for flushing.")
                                 }
                             }
                             extractedFolderURL = nil
@@ -187,9 +188,9 @@ struct ContentView: SwiftUI.View {
             ) { result in
                 switch result {
                 case .success(let url):
-                    print("[DEBUG] ✅ Exported to: \(url.path)")
+                    log.info("Exported zip to: \(url.path, privacy: .public)")
                 case .failure(let error):
-                    print("[DEBUG] ❌ Export failed: \(error)")
+                    log.error("Export failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
             .fileImporter(
@@ -215,6 +216,7 @@ struct ContentView: SwiftUI.View {
                         showDuplicateDialog = true
                     }
                 } catch {
+                    log.error("Import failed: \(error.localizedDescription, privacy: .public)")
                     importError = error.localizedDescription
                 }
             }
@@ -233,6 +235,7 @@ struct ContentView: SwiftUI.View {
                             bundleDOB = activation.dob
                         }
                     } catch {
+                        log.error("Overwrite import failed: \(error.localizedDescription, privacy: .public)")
                         importError = error.localizedDescription
                     }
                 }
@@ -260,7 +263,7 @@ struct ContentView: SwiftUI.View {
 
     private func saveActiveBundleToPersistent() {
         guard let activeURL = extractedFolderURL else {
-            print("[DEBUG] ❌ No active bundle to save.")
+            log.debug("No active bundle to save.")
             return
         }
         let fm = FileManager.default
@@ -282,9 +285,9 @@ struct ContentView: SwiftUI.View {
             if db.open() {
                 _ = db.executeStatements("PRAGMA wal_checkpoint(FULL); VACUUM;")
                 db.close()
-                print("[DEBUG] ✅ DB checkpoint & vacuum performed before save.")
+                log.debug("DB checkpoint & vacuum performed before save.")
             } else {
-                print("[DEBUG] ❌ Failed to open DB for checkpoint before save.")
+                log.error("Failed to open DB for checkpoint before save.")
             }
 
             // Copy db.sqlite
@@ -293,7 +296,7 @@ struct ContentView: SwiftUI.View {
                 try fm.removeItem(at: destDB)
             }
             try fm.copyItem(at: srcDB, to: destDB)
-            print("[DEBUG] ✅ Saved db.sqlite to persistent: \(destDB.path)")
+            log.info("Saved db.sqlite to persistent: \(destDB.path, privacy: .public)")
 
             // Copy docs folder if present (replace atomically)
             let srcDocs = activeURL.appendingPathComponent("docs", isDirectory: true)
@@ -303,7 +306,7 @@ struct ContentView: SwiftUI.View {
                     try fm.removeItem(at: destDocs)
                 }
                 try fm.copyItem(at: srcDocs, to: destDocs)
-                print("[DEBUG] ✅ Saved docs/ to persistent.")
+                log.info("Saved docs/ to persistent.")
             }
 
             // Optional: copy manifest.json if present at root
@@ -314,12 +317,12 @@ struct ContentView: SwiftUI.View {
                     try fm.removeItem(at: destManifest)
                 }
                 try fm.copyItem(at: srcManifest, to: destManifest)
-                print("[DEBUG] ✅ Saved manifest.json to persistent.")
+                log.info("Saved manifest.json to persistent.")
             }
 
-            print("[DEBUG] 💾 Saved active bundle back to persistent at: \(persistentAlias.path)")
+            log.info("Saved active bundle back to persistent at: \(persistentAlias.path, privacy: .public)")
         } catch {
-            print("[DEBUG] ❌ Save to persistent failed: \(error)")
+            log.error("Save to persistent failed: \(String(describing: error), privacy: .public)")
         }
     }
 }

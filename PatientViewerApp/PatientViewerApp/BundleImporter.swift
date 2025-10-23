@@ -38,6 +38,18 @@ private func loadManifest(at root: URL) throws -> ManifestV2 {
     return try JSONDecoder().decode(ManifestV2.self, from: data)
 }
 
+/// Quick header validation to ensure the file really is an SQLite database.
+private func validateSQLiteHeader(dbURL: URL) throws {
+    let data = try Data(contentsOf: dbURL, options: [.mappedIfSafe])
+    guard data.count >= 16 else {
+        throw NSError(domain: "DBIntegrity", code: 100, userInfo: [NSLocalizedDescriptionKey: "db.sqlite is too small to be a valid SQLite file."])
+    }
+    let magic = String(decoding: data.prefix(16), as: UTF8.self)
+    if magic != "SQLite format 3\u{0}" {
+        throw NSError(domain: "DBIntegrity", code: 101, userInfo: [NSLocalizedDescriptionKey: "db.sqlite header is not 'SQLite format 3\\0' (got: \(magic))"])
+    }
+}
+
 /// Verify db.sqlite hash (hard fail) and docs hashes (soft-fail with warnings).
 /// Returns the decoded manifest for callers that want to use its fields.
 @discardableResult
@@ -150,6 +162,17 @@ struct BundleImporter: View {
             throw NSError(domain: "BundleImporter", code: 3, userInfo: [NSLocalizedDescriptionKey: "❌ Extracted bundle is missing required files."])
         }
 
+        // Fail fast if db.sqlite isn't an actual SQLite file (magic header check)
+        do {
+            try validateSQLiteHeader(dbURL: expectedDB)
+            log.debug("SQLite header validated for \(expectedDB.path, privacy: .public)")
+        } catch {
+            // Cleanup temp items before throwing
+            try? fm.removeItem(at: tempZip)
+            try? fm.removeItem(at: tempExtract)
+            throw NSError(domain: "BundleImporter", code: 11, userInfo: [NSLocalizedDescriptionKey: "❌ Not a valid SQLite file: \(error.localizedDescription)"])
+        }
+
         // Verify manifest/db/docs hashes (throws on db mismatch)
         do {
             _ = try verifyExtractedBundle(root: tempExtract) { msg in
@@ -212,6 +235,9 @@ struct BundleImporter: View {
             } catch {
                 log.warning("ensureParentNotesColumn(existing ActiveBundle) failed: \(error.localizedDescription)")
             }
+            // Cleanup temp artifacts when skipping re-import
+            try? fm.removeItem(at: tempZip)
+            try? fm.removeItem(at: tempExtract)
             return (persistentBundlePath, alias, dob)
         }
 
@@ -235,6 +261,7 @@ struct BundleImporter: View {
 
         // Temp extract no longer needed after copying to ActiveBundle; remove it.
         try? fm.removeItem(at: tempExtract)
+        try? fm.removeItem(at: tempZip)
 
         // Save an import metadata file next to the copied zip
         let importMetadata: [String: Any] = [
@@ -329,6 +356,8 @@ func ensureParentNotesColumn(dbPath: String) throws {
         if db != nil { sqlite3_close(db) }
         throw NSError(domain: "BundleImporter", code: 6, userInfo: [NSLocalizedDescriptionKey: "Unable to open DB for migration: \(err)"])
     }
+    // Avoid transient "database is locked" during quick migrations
+    _ = sqlite3_busy_timeout(db, 2000)
     defer { sqlite3_close(db) }
 
     var hasParentNotes = false
@@ -402,6 +431,8 @@ func runIntegrityCheckOrThrow(dbPath: String) throws {
         if db != nil { sqlite3_close(db) }
         throw NSError(domain: "DBIntegrity", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to open DB for integrity_check: \(err)"])
     }
+    // Avoid transient "database is locked" while checking integrity
+    _ = sqlite3_busy_timeout(db, 2000)
     defer { sqlite3_close(db) }
 
     var stmt: OpaquePointer?
