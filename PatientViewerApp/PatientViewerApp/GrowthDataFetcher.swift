@@ -1,210 +1,247 @@
 import Foundation
 import SQLite
+import os
 
-struct GrowthDataPoint {
-    let ageMonths: Double
-    let value: Double
+// Keep this single definition in the project to avoid redeclarations elsewhere.
+public struct GrowthDataPoint {
+    public let ageMonths: Swift.Double
+    public let value: Swift.Double
 }
 
-class GrowthDataFetcher {
+final class GrowthDataFetcher {
+
+    // MARK: - Logging
+    private static let log = Logger(subsystem: "com.yunastic.PatientViewerApp", category: "GrowthDataFetcher")
+
+    // MARK: - Constants
+    private static let secondsPerDay: Swift.Double = 86_400.0
+    private static let daysPerMonth: Swift.Double = 30.4375
+
+    // MARK: - Date parsing (shared, cached formatters)
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let fallbackFormatters: [DateFormatter] = {
+        let posix = Locale(identifier: "en_US_POSIX")
+        let tz = TimeZone(secondsFromGMT: 0)
+        let fmts = ["yyyy-MM-dd'T'HH:mm:ss",
+                    "yyyy-MM-dd HH:mm:ss",
+                    "yyyy-MM-dd",
+                    "yyyy-MM-dd HH:mm:ss.SSS"]
+        return fmts.map {
+            let df = DateFormatter()
+            df.locale = posix
+            df.timeZone = tz
+            df.dateFormat = $0
+            return df
+        }
+    }()
+
+    private static func parseDate(_ s: String) -> Date? {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let d = isoFormatter.date(from: trimmed) { return d }
+        for df in fallbackFormatters {
+            if let d = df.date(from: trimmed) { return d }
+        }
+        return nil
+    }
+
+    // MARK: - Public API
+
     static func getPatientId(from dbPath: String) -> Int64? {
         do {
             let db = try Connection(dbPath)
             let patients = Table("patients")
-            let patientIdCol = Expression<Int64>("id")
+            let idCol = Expression<Int64>("id")
             if let row = try db.pluck(patients) {
-                return try row.get(patientIdCol)
+                let pid = try row.get(idCol)
+                log.debug("getPatientId: returning \(pid, privacy: .public)")
+                return pid
+            } else {
+                log.error("getPatientId: patients table is empty")
             }
         } catch {
-            print("[ERROR] Could not retrieve patient ID: \(error)")
+            log.error("getPatientId: failed to read DB: \(String(describing: error), privacy: .public)")
         }
         return nil
     }
-    static func fetchGrowthData(dbPath: String, patientID: Int64, measurement: String) -> [GrowthDataPoint] {
-        let db: Connection
-        do {
-            db = try Connection(dbPath)
-        } catch {
-            print("[ERROR] Failed to connect to database: \(error)")
-            return []
-        }
 
+    /// Fetch growth datapoints for a single measurement ("weight" | "height" | "head_circ")
+    static func fetchGrowthData(dbPath: String, patientID: Int64, measurement: String) -> [GrowthDataPoint] {
+
+        // Map measurement -> column name in `vitals`
         let colMap: [String: String] = [
             "weight": "weight_kg",
             "height": "height_cm",
             "head_circ": "head_circumference_cm"
         ]
+        guard let vitalsColumn = colMap[measurement] else {
+            log.error("fetchGrowthData: invalid measurement '\(measurement, privacy: .public)'")
+            return []
+        }
 
-        guard let column = colMap[measurement] else {
-            print("[ERROR] Invalid measurement type: \(measurement)")
+        // Open DB
+        let db: Connection
+        do {
+            db = try Connection(dbPath)
+        } catch {
+            log.error("fetchGrowthData: failed to connect DB: \(String(describing: error), privacy: .public)")
+            return []
+        }
+
+        // --- Obtain DOB from patients row ---
+        let patients = Table("patients")
+        let idCol = Expression<Int64>("id")
+        let dobCol = Expression<String>("dob")
+
+        guard
+            let patientRow = try? db.pluck(patients.filter(idCol == patientID)),
+            let rawDOB = try? patientRow.get(dobCol)
+        else {
+            log.error("fetchGrowthData: could not fetch DOB for patient \(patientID, privacy: .public)")
+            return []
+        }
+
+        log.debug("fetchGrowthData: raw DOB string for \(patientID, privacy: .public) = '\(rawDOB, privacy: .public)'")
+
+        guard let dob = parseDate(rawDOB) else {
+            log.error("fetchGrowthData: failed to parse DOB '\(rawDOB, privacy: .public)'")
             return []
         }
 
         var results: [GrowthDataPoint] = []
 
-        // --- Fetch patient DOB ---
-        let patients = Table("patients")
-        let patientIdCol = Expression<Int64>("id")
-        let dobCol = Expression<String>("dob")
-        guard let patientRow = try? db.pluck(patients.filter(patientIdCol == patientID)) else {
-            print("[ERROR] Failed to locate patient row for ID \(patientID)")
-            return []
-        }
-
-        guard let dobStr = try? patientRow.get(dobCol) else {
-            print("[ERROR] Patient row found but failed to retrieve DOB string")
-            return []
-        }
-
-        print("[DEBUG] Raw DOB string from DB (ID \(patientID)): '\(dobStr)'")
-
-        // Clean up dob string before parsing
-        let dobStringCleaned = dobStr.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Try multiple formatters
-        let isoFormatter = ISO8601DateFormatter()
-        let fallbackFormatters: [DateFormatter] = [
-            {
-                let df = DateFormatter()
-                df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-                return df
-            }(),
-            {
-                let df = DateFormatter()
-                df.dateFormat = "yyyy-MM-dd HH:mm:ss"
-                return df
-            }(),
-            {
-                let df = DateFormatter()
-                df.dateFormat = "yyyy-MM-dd"
-                return df
-            }(),
-            {
-                let df = DateFormatter()
-                df.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-                return df
-            }()
-        ]
-
-        var parsedDOB: Date? = isoFormatter.date(from: dobStringCleaned)
-        if parsedDOB == nil {
-            for formatter in fallbackFormatters {
-                if let date = formatter.date(from: dobStringCleaned) {
-                    parsedDOB = date
-                    break
-                }
-            }
-        }
-
-        guard let dob = parsedDOB else {
-            print("[ERROR] Failed to parse DOB from '\(dobStr)' after trying all formatters")
-            return []
-        }
-
-        // --- Step 1: Vitals ---
+        // --- Step 1: Vitals rows for this patient / measurement ---
         let vitals = Table("vitals")
-        let recordedAt = Expression<String>("recorded_at")
-        let valueCol = Expression<Double?>(column)
+        let recAtCol = Expression<String>("recorded_at")
+        let valueCol = Expression<Swift.Double?>(vitalsColumn) // allow NULLs
         let pidCol = Expression<Int64>("patient_id")
 
         do {
-            let rows = try db.prepare(vitals.filter(pidCol == patientID && valueCol != nil))
-            for row in rows {
+            for row in try db.prepare(vitals.filter(pidCol == patientID && valueCol != nil)) {
                 guard let value = row[valueCol] else {
-                    print("[WARN] Missing value for \(measurement)")
+                    log.warning("fetchGrowthData: nil value for \(measurement, privacy: .public)")
+                    continue
+                }
+                // Filter out non-sensical/invalid numeric values early
+                guard value.isFinite, value > 0 else {
+                    log.warning("fetchGrowthData: invalid value \(value, privacy: .public) for \(measurement, privacy: .public); skipping")
                     continue
                 }
 
-                let rawDate = row[recordedAt]
-                let isoFormatter = ISO8601DateFormatter()
-                let fallbackFormatter1 = DateFormatter()
-                fallbackFormatter1.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-                let fallbackFormatter2 = DateFormatter()
-                fallbackFormatter2.dateFormat = "yyyy-MM-dd HH:mm:ss"
-
-                guard let date = isoFormatter.date(from: rawDate)
-                    ?? fallbackFormatter1.date(from: rawDate)
-                    ?? fallbackFormatter2.date(from: rawDate) else {
-                    print("[WARN] Could not parse date '\(rawDate)' for measurement \(measurement)")
+                let rawWhen = row[recAtCol]
+                guard let when = parseDate(rawWhen) else {
+                    log.warning("fetchGrowthData: unparseable date '\(rawWhen, privacy: .public)'")
                     continue
                 }
-                let ageDays = date.timeIntervalSince(dob) / 86400.0
-                let ageMonths = ageDays / 30.4375
+
+                let ageDays = when.timeIntervalSince(dob) / secondsPerDay
+                let ageMonths = ageDays / daysPerMonth
+                guard ageMonths >= 0 else {
+                    log.warning("fetchGrowthData: negative age \(ageMonths, privacy: .public) for date '\(rawWhen, privacy: .public)'; skipping")
+                    continue
+                }
+
                 results.append(GrowthDataPoint(ageMonths: ageMonths, value: value))
             }
         } catch {
-            print("[ERROR] Failed to fetch vitals: \(error)")
+            log.error("fetchGrowthData: query vitals failed: \(String(describing: error), privacy: .public)")
         }
 
-        // --- Step 2: Perinatal History ---
+        // --- Step 2: Perinatal history (optional baseline points) ---
         let perinatal = Table("perinatal_history")
-        let pid = Expression<Int64>("patient_id")
-        let bw = Expression<Int?>("birth_weight_g")
-        let dw = Expression<Int?>("discharge_weight_g")
-        let bl = Expression<Double?>("birth_length_cm")
-        let bhc = Expression<Double?>("birth_head_circumference_cm")
+        let perinatalPID = Expression<Int64>("patient_id")
 
-        if let row = try? db.pluck(perinatal.filter(pid == patientID)) {
+        // Always read as optional columns to handle both NULL and non-NULL schemas
+        let bwGCol   = Expression<Int?>("birth_weight_g")
+        let dwGCol   = Expression<Int?>("discharge_weight_g")
+        let blCmCol  = Expression<Swift.Double?>("birth_length_cm")
+        let bhcCmCol = Expression<Swift.Double?>("birth_head_circumference_cm")
+
+        if let row = try? db.pluck(perinatal.filter(perinatalPID == patientID)) {
             switch measurement {
             case "weight":
-                if let birthWeight = try? row.get(bw), birthWeight > 0 {
-                    results.append(GrowthDataPoint(ageMonths: 0.0, value: Double(birthWeight) / 1000))
+                let birthG: Int? = (try? row.get(bwGCol)) ?? nil
+                if let g = birthG, g > 0 {
+                    results.append(GrowthDataPoint(ageMonths: 0.0, value: Swift.Double(g) / 1000.0))
                 }
-                if let dischargeWeight = try? row.get(dw), dischargeWeight > 0 {
-                    results.append(GrowthDataPoint(ageMonths: 0.07, value: Double(dischargeWeight) / 1000))
+                let dischargeG: Int? = (try? row.get(dwGCol)) ?? nil
+                if let g = dischargeG, g > 0 {
+                    // ~2 days ~ 0.07 months for a visible baseline before first check
+                    results.append(GrowthDataPoint(ageMonths: 0.07, value: Swift.Double(g) / 1000.0))
                 }
+
             case "height":
-                if let birthLength = try? row.get(bl), birthLength > 0 {
-                    results.append(GrowthDataPoint(ageMonths: 0.0, value: birthLength))
+                let birthLen: Swift.Double? = (try? row.get(blCmCol)) ?? nil
+                if let cm = birthLen, cm > 0 {
+                    results.append(GrowthDataPoint(ageMonths: 0.0, value: cm))
                 }
+
             case "head_circ":
-                if let birthHC = try? row.get(bhc), birthHC > 0 {
-                    results.append(GrowthDataPoint(ageMonths: 0.0, value: birthHC))
+                let birthHC: Swift.Double? = (try? row.get(bhcCmCol)) ?? nil
+                if let cm = birthHC, cm > 0 {
+                    results.append(GrowthDataPoint(ageMonths: 0.0, value: cm))
                 }
+
             default:
                 break
             }
         }
 
-        return results.sorted(by: { $0.ageMonths < $1.ageMonths })
+        let sorted = results.sorted(by: { $0.ageMonths < $1.ageMonths })
+        log.debug("fetchGrowthData: returning \(sorted.count, privacy: .public) point(s) for \(measurement, privacy: .public)")
+        return sorted
     }
 
+    /// Fetch sex and all measurement series. If `patientID` is nil, the first row in `patients` is used.
     static func fetchAllGrowthData(dbPath: String, patientID: Int64? = nil) -> (patientSex: String, allData: [String: [GrowthDataPoint]]) {
+
         let db: Connection
         do {
             db = try Connection(dbPath)
         } catch {
-            print("[ERROR] Failed to connect to database: \(error)")
+            log.error("fetchAllGrowthData: failed to connect DB: \(String(describing: error), privacy: .public)")
             return ("M", [:])
         }
 
         let patients = Table("patients")
-        let patientIdCol = Expression<Int64>("id")
+        let idCol = Expression<Int64>("id")
         let sexCol = Expression<String>("sex")
 
-        guard let row = try? db.pluck(patients),
-              let pid = try? row.get(patientIdCol),
-              let rawSex = try? row.get(sexCol).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
-            print("[ERROR] Failed to retrieve patient ID and sex")
+        var resolvedPID: Int64?
+        var sexRaw: String?
+
+        if let pid = patientID {
+            resolvedPID = pid
+            // Try to read sex for the specific patientID; fall back later if needed
+            if let row = try? db.pluck(patients.filter(idCol == pid)) {
+                sexRaw = try? row.get(sexCol)
+            }
+        } else if let row = try? db.pluck(patients) {
+            resolvedPID = try? row.get(idCol)
+            sexRaw = try? row.get(sexCol)
+        }
+
+        guard let pid = resolvedPID else {
+            log.error("fetchAllGrowthData: could not resolve patient ID")
             return ("M", [:])
         }
 
-        let patientSex = (rawSex == "female") ? "F" : "M"
+        let normalizedSex = (sexRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let patientSex = (normalizedSex == "female" || normalizedSex == "f") ? "F" : "M"
 
         let measurements = ["weight", "height", "head_circ"]
         var allData: [String: [GrowthDataPoint]] = [:]
 
-        for measurement in measurements {
-            let dataPoints = fetchGrowthData(dbPath: dbPath, patientID: pid, measurement: measurement)
-            allData[measurement] = dataPoints
+        for m in measurements {
+            let pts = fetchGrowthData(dbPath: dbPath, patientID: pid, measurement: m)
+            allData[m] = pts
         }
 
+        log.debug("fetchAllGrowthData: built series for patient \(pid, privacy: .public) sex=\(patientSex, privacy: .public)")
         return (patientSex, allData)
     }
-}//
-//  GrowthDataFetcher.swift
-//  PatientViewerApp
-//
-//  Created by yunastic on 10/12/25.
-//
-
+}

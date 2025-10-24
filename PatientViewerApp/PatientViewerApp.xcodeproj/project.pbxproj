@@ -51,6 +51,11 @@
 			path = PatientViewerAppUITests;
 			sourceTree = "<group>";
 		};
+		BBDC9DFB2EAB669C00E341B6 /* docs */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = docs;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,6 +89,7 @@
 		BBCC54D32E976199005002B9 = {
 			isa = PBXGroup;
 			children = (
+				BBDC9DFB2EAB669C00E341B6 /* docs */,
 				BBCC54DE2E976199005002B9 /* PatientViewerApp */,
 				BBCC54EC2E97619A005002B9 /* PatientViewerAppTests */,
 				BBCC54F62E97619A005002B9 /* PatientViewerAppUITests */,

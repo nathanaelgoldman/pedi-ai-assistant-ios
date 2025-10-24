@@ -109,6 +109,14 @@ private func verifyExtractedBundle(root: URL, log: (String) -> Void) throws -> M
     return manifest
 }
 
+// Centralized cleanup for temp artifacts
+private func cleanupTempArtifacts(_ tempZip: URL, _ tempExtract: URL) {
+    let fm = FileManager.default
+    try? fm.removeItem(at: tempZip)
+    try? fm.removeItem(at: tempExtract)
+    log.debug("Cleaned temp import artifacts.")
+}
+
 struct BundleImporter: View {
     @Binding var extractedFolderURL: URL?
     @Binding var bundleAlias: String?
@@ -121,6 +129,8 @@ struct BundleImporter: View {
     /// Import a zip bundle and return the working folder URL, alias and dob
     static func importBundle(from zipURL: URL, force: Bool = false) async throws -> (URL, String, String) {
         let fm = FileManager.default
+        let start = Date()
+        log.info("Import started for \(zipURL.lastPathComponent, privacy: .public)")
         guard let docsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
             throw NSError(domain: "BundleImporter", code: 1, userInfo: [NSLocalizedDescriptionKey: "❌ Failed to locate documents directory."])
         }
@@ -157,8 +167,7 @@ struct BundleImporter: View {
         let expectedManifest = tempExtract.appendingPathComponent("manifest.json")
         guard fm.fileExists(atPath: expectedDB.path), fm.fileExists(atPath: expectedManifest.path) else {
             // Cleanup temp items before throwing
-            try? fm.removeItem(at: tempZip)
-            try? fm.removeItem(at: tempExtract)
+            cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(domain: "BundleImporter", code: 3, userInfo: [NSLocalizedDescriptionKey: "❌ Extracted bundle is missing required files."])
         }
 
@@ -168,8 +177,7 @@ struct BundleImporter: View {
             log.debug("SQLite header validated for \(expectedDB.path, privacy: .public)")
         } catch {
             // Cleanup temp items before throwing
-            try? fm.removeItem(at: tempZip)
-            try? fm.removeItem(at: tempExtract)
+            cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(domain: "BundleImporter", code: 11, userInfo: [NSLocalizedDescriptionKey: "❌ Not a valid SQLite file: \(error.localizedDescription)"])
         }
 
@@ -180,8 +188,7 @@ struct BundleImporter: View {
             }
         } catch {
             // Cleanup temp items before throwing
-            try? fm.removeItem(at: tempZip)
-            try? fm.removeItem(at: tempExtract)
+            cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(domain: "BundleImporter", code: 10, userInfo: [NSLocalizedDescriptionKey: "❌ Verification failed: \(error.localizedDescription)"])
         }
 
@@ -190,8 +197,7 @@ struct BundleImporter: View {
             try runIntegrityCheckOrThrow(dbPath: expectedDB.path)
         } catch {
             // Cleanup temp items before throwing
-            try? fm.removeItem(at: tempZip)
-            try? fm.removeItem(at: tempExtract)
+            cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(domain: "BundleImporter", code: 9, userInfo: [NSLocalizedDescriptionKey: "❌ Integrity check failed for db.sqlite: \(error.localizedDescription)"])
         }
 
@@ -236,8 +242,8 @@ struct BundleImporter: View {
                 log.warning("ensureParentNotesColumn(existing ActiveBundle) failed: \(error.localizedDescription)")
             }
             // Cleanup temp artifacts when skipping re-import
-            try? fm.removeItem(at: tempZip)
-            try? fm.removeItem(at: tempExtract)
+            cleanupTempArtifacts(tempZip, tempExtract)
+            log.info("Import skipped; using existing ActiveBundle at \(persistentBundlePath.path, privacy: .public). Elapsed=\(Date().timeIntervalSince(start), privacy: .public)s")
             return (persistentBundlePath, alias, dob)
         }
 
@@ -260,8 +266,7 @@ struct BundleImporter: View {
         }
 
         // Temp extract no longer needed after copying to ActiveBundle; remove it.
-        try? fm.removeItem(at: tempExtract)
-        try? fm.removeItem(at: tempZip)
+        cleanupTempArtifacts(tempZip, tempExtract)
 
         // Save an import metadata file next to the copied zip
         let importMetadata: [String: Any] = [
@@ -293,6 +298,7 @@ struct BundleImporter: View {
         UserDefaults.standard.set(destinationZipPath.path, forKey: "lastLoadedBundleZipPath")
         UserDefaults.standard.set(safeAlias, forKey: "lastLoadedWorkingFolderName")
 
+        log.info("Import completed for \(safeAlias, privacy: .public) in \(Date().timeIntervalSince(start), privacy: .public)s")
         log.debug("Imported and activated bundle at: \(activeBundleDir.path, privacy: .public)")
         return (activeBundleDir, alias, dob)
     }
@@ -311,16 +317,17 @@ struct BundleImporter: View {
                 switch result {
                 case .success(let urls):
                     if let zipURL = urls.first {
+                        log.info("User selected bundle: \(zipURL.lastPathComponent, privacy: .public)")
                         Task {
                             do {
                                 let (folder, alias, dob) = try await BundleImporter.importBundle(from: zipURL)
-                                DispatchQueue.main.async {
+                                await MainActor.run {
                                     extractedFolderURL = folder
                                     bundleAlias = alias
                                     bundleDOB = dob
                                 }
                             } catch {
-                                DispatchQueue.main.async {
+                                await MainActor.run {
                                     importError = "❌ Import failed: \(error.localizedDescription)"
                                 }
                             }

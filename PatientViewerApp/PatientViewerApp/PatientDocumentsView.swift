@@ -8,6 +8,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import QuickLook
+import UIKit
 import OSLog
 
 
@@ -105,8 +106,9 @@ struct PatientDocumentsView: View {
         .padding()
         .onAppear {
             guard !didLoadOnce else { return }
-            didLoadOnce = true
+            documentsLog.info("Documents view appeared. Base=\(dbURL.path, privacy: .public)")
             loadManifest()
+            didLoadOnce = true
         }
         .alert("Error", isPresented: $showAlert) {
             Button("OK", role: .cancel) {}
@@ -115,7 +117,11 @@ struct PatientDocumentsView: View {
                 Text(msg)
             }
         }
-        .sheet(item: $wrappedPreviewURL, onDismiss: { isPreviewing = false; wrappedPreviewURL = nil }) { (identifiableURL: IdentifiableURL) in
+        .sheet(item: $wrappedPreviewURL, onDismiss: {
+            documentsLog.debug("QuickLook dismissed.")
+            isPreviewing = false
+            wrappedPreviewURL = nil
+        }) { (identifiableURL: IdentifiableURL) in
             QuickLookPreview(url: identifiableURL.url)
         }
         .confirmationDialog(
@@ -189,10 +195,12 @@ struct PatientDocumentsView: View {
 
     private func handleImport(_ result: Result<[URL], Error>) {
         do {
-            let selected = try result.get().first
-            guard let sourceURL = selected else { return }
+            guard let sourceURL = try result.get().first else {
+                documentsLog.warning("FileImporter returned empty selection.")
+                return
+            }
 
-            let filename = UUID().uuidString + "." + sourceURL.pathExtension
+            let filename = UUID().uuidString + (sourceURL.pathExtension.isEmpty ? "" : ".\(sourceURL.pathExtension)")
             let docsFolder = dbURL.appendingPathComponent("docs")
             let destinationURL = docsFolder.appendingPathComponent(filename)
 
@@ -247,6 +255,7 @@ struct PatientDocumentsView: View {
                     }
                     // Sort newest first if timestamps look present
                     records = loaded.sorted { $0.uploadedAt > $1.uploadedAt }
+                    documentsLog.info("Loaded \(records.count, privacy: .public) record(s) from root manifest.")
                     return true
                 }
             } catch {
@@ -262,6 +271,7 @@ struct PatientDocumentsView: View {
                 // Try legacy array schema first
                 if let decoded = try? JSONDecoder().decode([DocumentRecord].self, from: data) {
                     records = decoded
+                    documentsLog.info("Loaded \(decoded.count, privacy: .public) record(s) from legacy docs manifest (array).")
                     return true
                 }
                 // Fallback: legacy object with "files" map
@@ -282,6 +292,7 @@ struct PatientDocumentsView: View {
                                                      uploadedAt: uploadedAt))
                     }
                     records = loaded.sorted { $0.uploadedAt > $1.uploadedAt }
+                    documentsLog.info("Loaded \(records.count, privacy: .public) record(s) from legacy docs manifest (map).")
                     return true
                 }
             } catch {
@@ -308,8 +319,12 @@ struct PatientDocumentsView: View {
         // The exporter builds the authoritative root manifest with hashes at export time.
         let manifestURL = dbURL.appendingPathComponent("docs/manifest.json")
         do {
+            try FileManager.default.createDirectory(
+                at: manifestURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             let data = try JSONEncoder().encode(records)
-            try data.write(to: manifestURL)
+            try data.write(to: manifestURL, options: [.atomic])
             documentsLog.info("Saved legacy docs manifest at: \(manifestURL.path, privacy: .public)")
         } catch {
             alertMessage = "Failed to save manifest."
@@ -328,13 +343,29 @@ struct PatientDocumentsView: View {
 struct QuickLookPreview: UIViewControllerRepresentable {
     let url: URL
 
-    func makeUIViewController(context: Context) -> QLPreviewController {
-        let controller = QLPreviewController()
-        controller.dataSource = context.coordinator
-        return controller
+    private static let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "QuickLook")
+
+    // We wrap the QLPreviewController in a UINavigationController so we can add our own bar buttons.
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let preview = QLPreviewController()
+        preview.dataSource = context.coordinator
+
+        // Add explicit Done and Share buttons.
+        let shareItem = UIBarButtonItem(barButtonSystemItem: .action, target: context.coordinator, action: #selector(Coordinator.shareTapped))
+        let doneItem = UIBarButtonItem(barButtonSystemItem: .done, target: context.coordinator, action: #selector(Coordinator.doneTapped))
+        preview.navigationItem.rightBarButtonItem = shareItem
+        preview.navigationItem.leftBarButtonItem = doneItem
+
+        let nav = UINavigationController(rootViewController: preview)
+        context.coordinator.navController = nav
+
+        Self.log.debug("Prepared QLPreview for \(self.url.lastPathComponent, privacy: .public)")
+        return nav
     }
 
-    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
+    func updateUIViewController(_ controller: UINavigationController, context: Context) {
+        // no-op
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(url: url)
@@ -342,17 +373,72 @@ struct QuickLookPreview: UIViewControllerRepresentable {
 
     class Coordinator: NSObject, QLPreviewControllerDataSource {
         let url: URL
+        weak var navController: UINavigationController?
 
         init(url: URL) {
             self.url = url
         }
 
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
-            1
-        }
+        // MARK: - QLPreviewControllerDataSource
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
 
         func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
             return url as NSURL
+        }
+
+        // MARK: - Actions
+
+        @objc func shareTapped() {
+            QuickLookPreview.log.info("Share tapped for \(self.url.lastPathComponent, privacy: .public)")
+            
+            // Stage a copy in a temp location so any extension can read it safely.
+            let tmpDir = FileManager.default.temporaryDirectory
+            let stagedURL = tmpDir.appendingPathComponent(self.url.lastPathComponent)
+            var provider: NSItemProvider?
+            
+            do {
+                if FileManager.default.fileExists(atPath: stagedURL.path) {
+                    try FileManager.default.removeItem(at: stagedURL)
+                }
+                try FileManager.default.copyItem(at: self.url, to: stagedURL)
+                provider = NSItemProvider(contentsOf: stagedURL)
+                QuickLookPreview.log.debug("Staged share copy at \(stagedURL.path, privacy: .public)")
+            } catch {
+                QuickLookPreview.log.error("Failed to stage share copy: \(String(describing: error), privacy: .public). Falling back to direct provider.")
+                provider = NSItemProvider(contentsOf: self.url)
+            }
+            
+            guard let itemProvider = provider else {
+                QuickLookPreview.log.error("Failed to create NSItemProvider for share.")
+                return
+            }
+            // Preserve the original filename in the share sheet when possible.
+            itemProvider.suggestedName = self.url.lastPathComponent
+            
+            let activityVC = UIActivityViewController(activityItems: [itemProvider], applicationActivities: nil)
+            activityVC.completionWithItemsHandler = { _, completed, _, error in
+                if let error = error {
+                    QuickLookPreview.log.error("Share failed: \(String(describing: error), privacy: .public)")
+                } else {
+                    QuickLookPreview.log.info("Share finished. completed=\(completed, privacy: .public)")
+                }
+                // Best-effort cleanup for the staged file.
+                try? FileManager.default.removeItem(at: stagedURL)
+            }
+            
+            // iPad/iPhone support: anchor to the Share bar button if available
+            if let barButton = navController?.topViewController?.navigationItem.rightBarButtonItem {
+                activityVC.popoverPresentationController?.barButtonItem = barButton
+            } else {
+                activityVC.popoverPresentationController?.sourceView = navController?.view
+            }
+            navController?.present(activityVC, animated: true)
+        }
+
+        @objc func doneTapped() {
+            QuickLookPreview.log.debug("Done tapped, dismissing preview.")
+            navController?.dismiss(animated: true)
         }
     }
 }

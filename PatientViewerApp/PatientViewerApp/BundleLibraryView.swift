@@ -1611,6 +1611,13 @@ struct BundleLibraryView: View {
     }
 }
 
-#Preview {
-    BundleLibraryView(extractedFolderURL: .constant(nil), bundleAlias: .constant(""), bundleDOB: .constant(""))
+
+#if DEBUG
+struct BundleLibraryView_Previews: PreviewProvider {
+    static var previews: some View {
+        BundleLibraryView(extractedFolderURL: .constant(nil),
+                          bundleAlias: .constant(""),
+                          bundleDOB: .constant(""))
+    }
 }
+#endif

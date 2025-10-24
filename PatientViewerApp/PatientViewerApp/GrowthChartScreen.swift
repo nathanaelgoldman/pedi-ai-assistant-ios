@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct GrowthChartScreen: View {
     let patientSex: String
@@ -6,6 +7,7 @@ struct GrowthChartScreen: View {
 
     @State private var selectedMeasurement = "weight"
     private let measurementOptions = ["weight", "height", "head_circ"]
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp", category: "GrowthChartScreen")
 
     var body: some View {
         VStack {
@@ -18,7 +20,7 @@ struct GrowthChartScreen: View {
             .padding()
             .onChange(of: selectedMeasurement) { _, newValue in
                 let file = "\(filePrefix(for: newValue))_0_24m_\(patientSex)"
-                print("[DEBUG] WHO file selected for \(newValue): \(file)")
+                logger.debug("WHO file selected for \(newValue, privacy: .public): \(file, privacy: .public)")
             }
 
             let patientData = allPatientData[selectedMeasurement] ?? []
@@ -38,7 +40,7 @@ struct GrowthChartScreen: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear { print("[DEBUG] GrowthChartScreen: patientData is empty for \(selectedMeasurement)") }
+                .onAppear { logger.warning("patientData is empty for \(self.selectedMeasurement, privacy: .public)") }
             } else if referenceCurves.isEmpty {
                 // Also avoid rendering if reference curves failed to load.
                 VStack(spacing: 12) {
@@ -51,14 +53,20 @@ struct GrowthChartScreen: View {
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear { print("[DEBUG] GrowthChartScreen: reference curves empty for \(whoFileName)") }
+                .onAppear { logger.error("reference curves empty for \(whoFileName, privacy: .public)") }
             } else {
                 GrowthChartView(
                     dataPoints: patientData,
                     referenceCurves: referenceCurves,
                     measurement: selectedMeasurement
                 )
+                .onAppear {
+                    logger.info("Chart appear: measurement=\(self.selectedMeasurement, privacy: .public) points=\(patientData.count) curves=\(referenceCurves.count)")
+                }
             }
+        }
+        .onAppear {
+            logger.info("GrowthChartScreen appeared for sex=\(self.patientSex, privacy: .public) initialMeasurement=\(self.selectedMeasurement, privacy: .public)")
         }
         .navigationTitle("Growth Chart")
     }

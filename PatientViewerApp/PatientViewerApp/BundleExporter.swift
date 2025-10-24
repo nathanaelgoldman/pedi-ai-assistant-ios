@@ -68,6 +68,7 @@ struct BundleExporter {
     private static func integrityCheckOK(dbPath: String) -> Bool {
         do {
             let db = try Connection(dbPath)
+            try? db.execute("PRAGMA busy_timeout = 3000")
             if let res = try db.scalar("PRAGMA integrity_check") as? String {
                 return res.lowercased() == "ok"
             }
@@ -81,6 +82,7 @@ struct BundleExporter {
     private static func foreignKeyCheckOK(dbPath: String) -> Bool {
         do {
             let db = try Connection(dbPath)
+            try? db.execute("PRAGMA busy_timeout = 3000")
             // Ensure the pragma is enabled for the session (harmless if already on)
             try? db.execute("PRAGMA foreign_keys = ON")
             var hasViolations = false
@@ -99,11 +101,24 @@ struct BundleExporter {
     private static func attemptRepair(dbPath: String) {
         do {
             let db = try Connection(dbPath)
+            try? db.execute("PRAGMA busy_timeout = 3000")
             // These may fail on small DBs; that's fine.
             try? db.execute("PRAGMA wal_checkpoint(FULL)")
             try? db.execute("VACUUM")
         } catch {
             log.warning("attemptRepair could not open db: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+    /// If the database is using WAL, flush it so db.sqlite contains all recent changes.
+    private static func checkpointSourceDBIfWAL(at dbPath: String) {
+        do {
+            let db = try Connection(dbPath)
+            // Keep things responsive if another handle is busy
+            try? db.execute("PRAGMA busy_timeout = 3000")
+            // Flush WAL into the main db file; TRUNCATE keeps file small afterward
+            try? db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        } catch {
+            log.warning("checkpointSourceDBIfWAL could not open db: \(error.localizedDescription, privacy: .public)")
         }
     }
     /// Replace spaces/emoji/unsafe chars with underscores for a safe file/dir name.
@@ -169,6 +184,9 @@ struct BundleExporter {
         removeIfExists(bundleFolder)
         try FileManager.default.createDirectory(at: bundleFolder, withIntermediateDirectories: true)
 
+        // Ensure source db.sqlite has all recent changes before copying
+        checkpointSourceDBIfWAL(at: dbURL.path)
+
         try FileManager.default.copyItem(at: dbURL, to: bundleFolder.appendingPathComponent("db.sqlite"))
         let dbFileInBundle = bundleFolder.appendingPathComponent("db.sqlite")
 
@@ -198,6 +216,9 @@ struct BundleExporter {
             includesDocs = true
             // Compute per-file hashes for docs
             docsManifest = try docsFileHashes(in: targetDocs)
+        }
+        if includesDocs {
+            BundleExporter.log.debug("Included docs with \(docsManifest.count, privacy: .public) file(s) in manifest.")
         }
 
         let manifest: [String: Any] = [

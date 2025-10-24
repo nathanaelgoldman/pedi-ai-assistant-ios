@@ -8,10 +8,17 @@
 import SwiftUI
 import SQLite
 import OSLog
+import UIKit
 
 private let notesLog = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ParentNotesView")
 
-struct ParentNotesView: SwiftUI.View {
+private let isoFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+}()
+
+@MainActor struct ParentNotesView: SwiftUI.View {
     let dbURL: URL
     let patientId: Int64
     var onAutoSaveToPersistent: (() -> Void)? = nil
@@ -179,7 +186,7 @@ struct ParentNotesView: SwiftUI.View {
             }
 
             let existing = try patientRow.get(parentNotes) ?? ""
-            let timestamp = ISO8601DateFormatter().string(from: Date())
+            let timestamp = isoFormatter.string(from: Date())
             let newNote = "[\(timestamp)] \(trimmed)"
             var allNotes = existing.split(separator: "\n\n").map { String($0) }
             allNotes.insert(newNote, at: 0)

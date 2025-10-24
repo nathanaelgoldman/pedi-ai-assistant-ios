@@ -2,9 +2,13 @@ import Foundation
 import SQLite
 import PDFKit
 import UIKit
+import OSLog
+import CoreText
 
 struct SickVisitPDFGenerator {
+    private static let log = Logger(subsystem: "com.pedi.PatientViewer", category: "pdf.sick")
     static func generate(for visit: VisitSummary, dbURL: URL) -> URL? {
+        Self.log.log("Generating SickVisit PDF for id=\(visit.id, privacy: .public) db=\(dbURL.path, privacy: .private)")
         let pdfMetaData = [
             kCGPDFContextCreator: "Patient Viewer",
             kCGPDFContextAuthor: "Patient App",
@@ -18,6 +22,7 @@ struct SickVisitPDFGenerator {
         let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
 
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: format)
+        Self.log.debug("PDF renderer created with pageRect=\(String(describing: pageRect))")
 
         let margin: CGFloat = 40
         let contentWidth = pageWidth - 2 * margin
@@ -108,14 +113,16 @@ struct SickVisitPDFGenerator {
                 let attributes: [NSAttributedString.Key: Any] = [.font: font]
                 let attrString = NSAttributedString(string: text, attributes: attributes)
 
-                let textRect = CGRect(x: offset, y: y, width: contentWidth, height: .greatestFiniteMagnitude)
-                let boundingBox = attrString.boundingRect(with: CGSize(width: contentWidth, height: .greatestFiniteMagnitude),
-                                                           options: [.usesLineFragmentOrigin, .usesFontLeading],
-                                                           context: nil)
-                
-                ensureSpace(for: ceil(boundingBox.height))
+                let boundingBox = attrString.boundingRect(
+                    with: CGSize(width: contentWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                )
+                let needed = ceil(boundingBox.height)
+                ensureSpace(for: needed)
+                let textRect = CGRect(x: offset, y: y, width: contentWidth, height: needed)
                 attrString.draw(in: textRect)
-                y += ceil(boundingBox.height) + 6
+                y += needed + 6
             }
 
             let titleFont = UIFont.boldSystemFont(ofSize: 20)
@@ -132,6 +139,7 @@ struct SickVisitPDFGenerator {
             // Fetch patient info
             let dbPath = dbURL.appendingPathComponent("db.sqlite").path
             do {
+                Self.log.debug("Opening SQLite at path=\(dbPath, privacy: .private)")
                 let db = try Connection(dbPath)
                 let episodes = Table("episodes")
                 let episodeID = Expression<Int64>("id")
@@ -139,6 +147,7 @@ struct SickVisitPDFGenerator {
 
                 // 1. Get patient_id for this visit (episode)
                 guard let episodeRow = try db.pluck(episodes.filter(episodeID == visit.id)) else {
+                    Self.log.error("Episode \(visit.id, privacy: .public) not found in 'episodes' table.")
                     drawText("❌ Error: Episode not found", font: subFont)
                     return
                 }
@@ -156,6 +165,7 @@ struct SickVisitPDFGenerator {
                 let alias = Expression<String?>("alias_label")
 
                 guard let patientRow = try db.pluck(patients.filter(id == pid)) else {
+                    Self.log.error("Patient id=\(pid, privacy: .public) not found in 'patients' table.")
                     drawText("❌ Error: Patient not found", font: subFont)
                     return
                 }
@@ -165,6 +175,7 @@ struct SickVisitPDFGenerator {
                 let dobText = patientRow[dob]
                 let sexText = patientRow[sex]
                 let mrnText = patientRow[mrn]
+                Self.log.debug("Patient alias=\(aliasText, privacy: .public) name=\(name, privacy: .public) dob=\(dobText, privacy: .public) sex=\(sexText, privacy: .public)")
 
                 // 3. Render
                 y += 12
@@ -340,6 +351,7 @@ struct SickVisitPDFGenerator {
                 renderSection(title: "Comments", content: try? episodeRow.get(comments))
                 renderSection(title: "AI Notes", content: try? episodeRow.get(aiNotes))
             } catch {
+                Self.log.error("DB error while generating sick visit PDF: \(error.localizedDescription, privacy: .public)")
                 drawText("❌ DB Error: \(error.localizedDescription)", font: subFont)
             }
         }  // end of renderer.pdfData
@@ -348,9 +360,10 @@ struct SickVisitPDFGenerator {
             let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
             let fileURL = docsURL.appendingPathComponent("VisitReport_\(visit.id).pdf")
             try data.write(to: fileURL)
+            Self.log.log("SickVisit PDF saved at \(fileURL.path, privacy: .private) (size=\(data.count, privacy: .public) bytes)")
             return fileURL
         } catch {
-            print("❌ Failed to save sick visit PDF: \(error)")
+            Self.log.error("Failed to save sick visit PDF: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }

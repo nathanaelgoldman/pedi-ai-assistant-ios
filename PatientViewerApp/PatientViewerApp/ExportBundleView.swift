@@ -7,8 +7,10 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import OSLog
 
 struct ExportBundleView: View {
+    private static let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ExportUI")
     let dbURL: URL
     let onShare: (URL) -> Void
 
@@ -61,6 +63,7 @@ struct ExportBundleView: View {
     }
 
     private func exportBundle() async {
+        Self.log.info("Export started from dbURL: \(self.dbURL.path, privacy: .public)")
         await MainActor.run {
             exportInProgress = true
             exportSuccess = false
@@ -71,16 +74,22 @@ struct ExportBundleView: View {
         do {
             let exportURL = try await BundleExporter.exportBundle(from: dbURL)
             let size = (try? Data(contentsOf: exportURL).count) ?? 0
-            print("[DEBUG] Export zip ready at: \(exportURL)")
-            print("[DEBUG] Export finished at: \(exportURL.path) (\(size) bytes)")
+            let humanSize = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+            Self.log.debug("Export zip ready at: \(exportURL.absoluteString, privacy: .public)")
+            Self.log.info("Export finished at: \(exportURL.path, privacy: .public) (\(humanSize, privacy: .public))")
 
             await MainActor.run {
                 exportedFileURL = exportURL
                 exportSuccess = true
+                Self.log.notice("Export succeeded")
             }
 
-            guard !didKickoffShare else { return }
+            if didKickoffShare {
+                Self.log.debug("Share already kicked off, skipping.")
+                return
+            }
             didKickoffShare = true
+            Self.log.debug("Dismissing export sheet and invoking onShare.")
 
             // 1) Dismiss this sheet first
             await MainActor.run { dismiss() }
@@ -90,6 +99,7 @@ struct ExportBundleView: View {
                 onShare(exportURL)
             }
         } catch {
+            Self.log.error("Export failed: \(error.localizedDescription, privacy: .public)")
             await MainActor.run {
                 exportError = error.localizedDescription
             }
@@ -98,5 +108,6 @@ struct ExportBundleView: View {
         await MainActor.run {
             exportInProgress = false
         }
+        Self.log.debug("Export flow ended.")
     }
 }

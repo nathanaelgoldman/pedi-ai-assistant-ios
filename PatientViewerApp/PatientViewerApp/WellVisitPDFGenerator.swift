@@ -2,9 +2,13 @@ import Foundation
 import SQLite
 import PDFKit
 import UIKit
+import OSLog
+import CoreText
 
 struct WellVisitPDFGenerator {
+    private static let log = Logger(subsystem: "com.patientviewer.app", category: "pdf.well")
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
+        WellVisitPDFGenerator.log.info("Generating WellVisit PDF for id=\(visit.id, privacy: .public) base=\(dbURL.path, privacy: .public)")
         let pdfMetaData = [
             kCGPDFContextCreator: "Patient Viewer",
             kCGPDFContextAuthor: "Patient App",
@@ -104,6 +108,7 @@ struct WellVisitPDFGenerator {
         // We'll need sexText and dbPath before rendering
         var sexTextForCharts: String = ""
         let dbPath: String = dbURL.appendingPathComponent("db.sqlite").path
+        WellVisitPDFGenerator.log.debug("Opening SQLite at path=\(dbPath, privacy: .public)")
         var pid: Int64 = 0
         do {
             let db = try Connection(dbPath)
@@ -120,8 +125,10 @@ struct WellVisitPDFGenerator {
             pid = visitRow[patientID]
             if let patientRow = try db.pluck(patients.filter(id == pid)) {
                 sexTextForCharts = patientRow[sex]
+                WellVisitPDFGenerator.log.debug("Preloading growth charts for patient \(pid, privacy: .public) sex=\(sexTextForCharts, privacy: .public)")
             }
         } catch {
+            WellVisitPDFGenerator.log.error("Failed to read patient/sex for charts: \(error.localizedDescription, privacy: .public)")
             sexTextForCharts = ""
         }
         if sexTextForCharts == "M" || sexTextForCharts == "F" {
@@ -139,6 +146,9 @@ struct WellVisitPDFGenerator {
                     filename: filename
                 ) {
                     chartImagesToRender.append((title, chartImage))
+                    WellVisitPDFGenerator.log.debug("Chart '\(title, privacy: .public)' generated (w=\(chartImage.size.width, privacy: .public), h=\(chartImage.size.height, privacy: .public))")
+                } else {
+                    WellVisitPDFGenerator.log.warning("Chart '\(title, privacy: .public)' was not generated (nil image)")
                 }
             }
         }
@@ -146,8 +156,10 @@ struct WellVisitPDFGenerator {
         let data = renderer.pdfData { context in
             context.beginPage()
             var y: CGFloat = margin
+            WellVisitPDFGenerator.log.debug("PDF rendering started; first page begun")
             func ensureSpace(for height: CGFloat) {
                 if y + height > pageRect.maxY - margin {
+                    WellVisitPDFGenerator.log.debug("Page break (remaining=\(pageRect.maxY - margin - y, privacy: .public), needed=\(height, privacy: .public))")
                     context.beginPage()
                     y = margin
                 }
@@ -173,6 +185,7 @@ struct WellVisitPDFGenerator {
             drawText("Report Generated: \(WellVisitPDFGenerator.formatDate(Date()))", font: subFont)
 
             let dbPath = dbURL.appendingPathComponent("db.sqlite").path
+            WellVisitPDFGenerator.log.debug("Opening SQLite at path=\(dbPath, privacy: .public)")
             do {
                 let db = try Connection(dbPath)
 
@@ -180,6 +193,7 @@ struct WellVisitPDFGenerator {
                 let wellVisits = Table("well_visits")
                 let visitID = Expression<Int64>("id")
                 guard let visitRow = try db.pluck(wellVisits.filter(visitID == visit.id)) else {
+                    WellVisitPDFGenerator.log.error("Visit id \(visit.id, privacy: .public) not found in DB")
                     drawText("❌ Error: Visit not found", font: subFont)
                     return
                 }
@@ -196,6 +210,7 @@ struct WellVisitPDFGenerator {
 
                 let pid = visitRow[patientID]
                 guard let patientRow = try db.pluck(patients.filter(id == pid)) else {
+                    WellVisitPDFGenerator.log.error("Patient for visit id \(visit.id, privacy: .public) not found in DB")
                     drawText("❌ Error: Patient not found", font: subFont)
                     return
                 }
@@ -205,6 +220,7 @@ struct WellVisitPDFGenerator {
                 let dobText = patientRow[dob]
                 let sexText = patientRow[sex]
                 let mrnText = patientRow[mrn]
+                WellVisitPDFGenerator.log.debug("Patient alias=\(aliasText, privacy: .public) name=\(name, privacy: .public) dob=\(dobText, privacy: .public) sex=\(sexText, privacy: .public)")
 
                 let visitDate = visitRow[Expression<String>("visit_date")]
                 let visitType = visitRow[Expression<String>("visit_type")]
@@ -708,6 +724,12 @@ struct WellVisitPDFGenerator {
                     // Draw chart title
                     drawText(title, font: UIFont.boldSystemFont(ofSize: 16))
 
+                    // Validate image size to avoid NaN aspect ratios
+                    guard chartImage.size.width > 0, chartImage.size.height > 0 else {
+                        WellVisitPDFGenerator.log.warning("Skipping chart '\(title, privacy: .public)' due to invalid size w=\(chartImage.size.width, privacy: .public) h=\(chartImage.size.height, privacy: .public)")
+                        continue
+                    }
+
                     // Set available drawing space to nearly full page
                     let maxWidth = pageWidth - 2 * margin
                     let maxHeight = pageHeight - 2 * margin
@@ -732,6 +754,7 @@ struct WellVisitPDFGenerator {
                 }
 
             } catch {
+                WellVisitPDFGenerator.log.error("DB error during PDF render: \(error.localizedDescription, privacy: .public)")
                 drawText("❌ DB Error: \(error.localizedDescription)", font: subFont)
             }
         }
@@ -739,6 +762,12 @@ struct WellVisitPDFGenerator {
         let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let fileURL = docsURL.appendingPathComponent("WellVisitReport_\(visit.id).pdf")
         try data.write(to: fileURL)
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+           let size = attrs[.size] as? NSNumber {
+            WellVisitPDFGenerator.log.info("WellVisit PDF saved at \(fileURL.path, privacy: .public) (size=\(size.intValue, privacy: .public) bytes)")
+        } else {
+            WellVisitPDFGenerator.log.info("WellVisit PDF saved at \(fileURL.path, privacy: .public)")
+        }
         return fileURL
     }
 
