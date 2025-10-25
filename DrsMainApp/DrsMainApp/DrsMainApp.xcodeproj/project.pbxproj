@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB9E72BC2EAD1A1C00601148 /* PediaShared */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		BB54973C2EACAB41009F314A /* DrsMainApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DrsMainApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = DrsMainApp.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +28,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -34,6 +40,8 @@
 			children = (
 				BB54973E2EACAB41009F314A /* DrsMainApp */,
 				BB54973D2EACAB41009F314A /* Products */,
+				BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */,
+				BB9E72BB2EAD17A700601148 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -43,6 +51,13 @@
 				BB54973C2EACAB41009F314A /* DrsMainApp.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BB9E72BB2EAD17A700601148 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -65,6 +80,7 @@
 			);
 			name = DrsMainApp;
 			packageProductDependencies = (
+				BB9E72BC2EAD1A1C00601148 /* PediaShared */,
 			);
 			productName = DrsMainApp;
 			productReference = BB54973C2EACAB41009F314A /* DrsMainApp.app */;
@@ -321,6 +337,13 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BB9E72BC2EAD1A1C00601148 /* PediaShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PediaShared;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BB5497342EACAB41009F314A /* Project object */;
 }

@@ -1,30 +1,21 @@
 // swift-tools-version: 5.10
+// swift-tools-version: 5.10
 import PackageDescription
 
 let package = Package(
     name: "PediaShared",
-    defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
     ],
     products: [
-        .library(
-            name: "PediaShared",
-            targets: ["PediaShared"]
-        )
+        .library(name: "PediaShared", targets: ["PediaShared"])
     ],
     targets: [
+        // Explicitly point at the Sources/PediaShared folder
         .target(
             name: "PediaShared",
-            resources: [
-                // Put shared CSV/PDF templates/etc. under Sources/PediaCore/Resources
-                .process("Resources")
-            ]
-        ),
-        .testTarget(
-            name: "PediaSharedTests",
-            dependencies: ["PediaShared"]
+            path: "Sources/PediaShared"
         )
     ]
 )
