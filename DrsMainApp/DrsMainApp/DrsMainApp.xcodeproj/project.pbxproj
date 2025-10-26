@@ -53,6 +53,11 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		BB564ADF2EADC30A00870007 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 		BB9E72BB2EAD17A700601148 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -113,6 +118,12 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BB54973D2EACAB41009F314A /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = BB564ADF2EADC30A00870007 /* Products */;
+					ProjectRef = BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				BB54973B2EACAB41009F314A /* DrsMainApp */,
