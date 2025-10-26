@@ -58,4 +58,23 @@ Central index for project documentation across **PediWorkspace** (DrsMainApp, Pa
 
 ---
 
+## 🔗 Project Docs
+
+- **Data Model** — shared SQLite schema & bundle import/export protocol  
+  [`docs/DATA_MODEL.md`](./docs/DATA_MODEL.md)
+
+- **DrsMainApp (Architecture, macOS)** — modules, navigation, state model  
+  [`docs/DRS_MAINAPP_ARCHITECTURE.md`](./docs/DRS_MAINAPP_ARCHITECTURE.md)
+
+- **PediaShared Guide** — APIs & usage patterns for the shared Swift package  
+  [`docs/PEDIA_SHARED_GUIDE.md`](./docs/PEDIA_SHARED_GUIDE.md)
+
+- **Roadmap — DrsMainApp** — phases, milestones, deliverables  
+  [`docs/DrsMainApp_Roadmap.md`](./docs/DrsMainApp_Roadmap.md)
+
+- **Xcode/iOS Upgrade Checklist** — safe steps for upgrading toolchains  
+  [`docs/UPGRADE_CHECKLIST.md`](./docs/UPGRADE_CHECKLIST.md)
+  
+- **Shared Components Roadmap:** [ROADMAP — DrsMainApp (macOS) + PatientViewerApp (iOS) + PediaShared](./docs/ROADMAP.md)
+
 _Last updated: <!-- YYYY-MM-DD -->_

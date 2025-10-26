@@ -7,11 +7,19 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB564AF42EAE15AE00870007 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF22EAE0D6800870007 /* AppState.swift */; };
+		BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF32EAE0DC500870007 /* SidebarView.swift */; };
+		BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF62EAE5EF000870007 /* SchemaInitializer.swift */; };
+		BB564AF92EAE5F7600870007 /* NewPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF82EAE5F7100870007 /* NewPatientSheet.swift */; };
 		BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB9E72BC2EAD1A1C00601148 /* PediaShared */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		BB54973C2EACAB41009F314A /* DrsMainApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DrsMainApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB564AF22EAE0D6800870007 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		BB564AF32EAE0DC500870007 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		BB564AF62EAE5EF000870007 /* SchemaInitializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaInitializer.swift; sourceTree = "<group>"; };
+		BB564AF82EAE5F7100870007 /* NewPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewPatientSheet.swift; sourceTree = "<group>"; };
 		BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = DrsMainApp.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -38,6 +46,7 @@
 		BB5497332EACAB41009F314A = {
 			isa = PBXGroup;
 			children = (
+				BB564AF12EAE0BB900870007 /* Sources */,
 				BB54973E2EACAB41009F314A /* DrsMainApp */,
 				BB54973D2EACAB41009F314A /* Products */,
 				BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */,
@@ -56,6 +65,49 @@
 		BB564ADF2EADC30A00870007 /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BB564AED2EAE0BB900870007 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				BB564AF22EAE0D6800870007 /* AppState.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		BB564AEE2EAE0BB900870007 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				BB564AF62EAE5EF000870007 /* SchemaInitializer.swift */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		BB564AEF2EAE0BB900870007 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				BB564AF82EAE5F7100870007 /* NewPatientSheet.swift */,
+				BB564AF32EAE0DC500870007 /* SidebarView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		BB564AF02EAE0BB900870007 /* Util */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Util;
+			sourceTree = "<group>";
+		};
+		BB564AF12EAE0BB900870007 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				BB564AED2EAE0BB900870007 /* App */,
+				BB564AEE2EAE0BB900870007 /* Data */,
+				BB564AEF2EAE0BB900870007 /* UI */,
+				BB564AF02EAE0BB900870007 /* Util */,
+			);
+			path = Sources;
 			sourceTree = "<group>";
 		};
 		BB9E72BB2EAD17A700601148 /* Frameworks */ = {
@@ -146,6 +198,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB564AF92EAE5F7600870007 /* NewPatientSheet.swift in Sources */,
+				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
+				BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */,
+				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

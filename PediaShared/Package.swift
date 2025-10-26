@@ -1,5 +1,4 @@
 // swift-tools-version: 5.10
-// swift-tools-version: 5.10
 import PackageDescription
 
 let package = Package(
@@ -12,10 +11,13 @@ let package = Package(
         .library(name: "PediaShared", targets: ["PediaShared"])
     ],
     targets: [
-        // Explicitly point at the Sources/PediaShared folder
         .target(
             name: "PediaShared",
-            path: "Sources/PediaShared"
+            path: "Sources/PediaShared",
+            resources: [
+                // Everything under Sources/PediaShared/Resources will be bundled
+                .process("Resources")
+            ]
         )
     ]
 )
