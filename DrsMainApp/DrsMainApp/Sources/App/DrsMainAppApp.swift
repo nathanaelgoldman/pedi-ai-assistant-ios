@@ -5,6 +5,7 @@
 //  Created by yunastic on 10/25/25.
 //
 
+// DrsMainApp/Sources/App/DrsMainAppApp.swift
 import SwiftUI
 
 @main
@@ -13,7 +14,7 @@ struct DrsMainAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SidebarView()
+            ContentView()
                 .environmentObject(appState)
         }
     }

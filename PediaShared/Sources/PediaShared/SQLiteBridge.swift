@@ -72,6 +72,12 @@ public final class SQLiteDB {
         return true
     }
 
+    /// Back-compat alias so older call sites using `execute` keep working.
+    @discardableResult
+    public func execute(_ sql: String) throws -> Bool {
+        try exec(sql)
+    }
+
     /// Very simple query helper with no bind parameters (sufficient for our immediate use).
     public func queryRows(sql: String) throws -> [[String: Any]] {
         guard let db = handle else { throw SQLiteError.prepareFailed("DB is closed") }
@@ -150,5 +156,13 @@ public final class SQLiteDB {
         let sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='\(safe)' LIMIT 1"
         let rows = try queryRows(sql: sql)
         return !rows.isEmpty
+    }
+
+    /// Explicit close for callers that want to deterministically release the handle.
+    public func close() {
+        if let db = handle {
+            sqlite3_close(db)
+            handle = nil
+        }
     }
 }

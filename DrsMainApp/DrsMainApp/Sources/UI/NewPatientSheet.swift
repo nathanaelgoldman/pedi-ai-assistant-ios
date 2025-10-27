@@ -7,6 +7,7 @@
 
 // DrsMainApp/Sources/UI/NewPatientSheet.swift
 import SwiftUI
+import Foundation
 import PediaShared
 
 struct NewPatientSheet: View {
@@ -95,19 +96,17 @@ struct NewPatientSheet: View {
     }
 
     private func create() {
-        do {
-            let dobISO = ISO8601DateFormatter.calendar.dateFormat(fromTemplate: "yyyy-MM-dd", options: 0, locale: .current) != nil
-            ? ISO8601DateFormatter().string(from: dob)
-            : ISO8601DateFormatter().string(from: dob) // simple ISO8601; tweak if you prefer date-only
+        let trimmedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedFullName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        do {
             let url = try appState.createNewPatient(
-                alias: alias.trimmingCharacters(in: .whitespacesAndNewlines),
-                fullName: fullName.isEmpty ? nil : fullName,
-                dobISO: String(ISO8601DateFormatter().string(from: dob).prefix(10)), // YYYY-MM-DD
-                sex: sex,
-                parentDir: parentDir
+                into: parentDir,
+                alias: trimmedAlias,
+                fullName: trimmedFullName.isEmpty ? nil : trimmedFullName,
+                dob: dob,
+                sex: sex
             )
-            // Optionally select it
             appState.selectBundle(url)
             dismiss()
         } catch {

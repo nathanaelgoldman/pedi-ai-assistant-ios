@@ -7,19 +7,32 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AD92EADC30A00870007 /* ContentView.swift */; };
+		BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */; };
 		BB564AF42EAE15AE00870007 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF22EAE0D6800870007 /* AppState.swift */; };
 		BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF32EAE0DC500870007 /* SidebarView.swift */; };
 		BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF62EAE5EF000870007 /* SchemaInitializer.swift */; };
 		BB564AF92EAE5F7600870007 /* NewPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF82EAE5F7100870007 /* NewPatientSheet.swift */; };
+		BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AFA2EAF1A1200870007 /* FilePicker.swift */; };
+		BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AFC2EAF1F5800870007 /* BundleDetailView.swift */; };
+		BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AFE2EAF25EA00870007 /* PatientsListView.swift */; };
+		BB564B012EAF3C6400870007 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564B002EAF3C5D00870007 /* PatientDetailView.swift */; };
+		BB564B042EAF58C200870007 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB564B032EAF58C200870007 /* ZIPFoundation */; };
 		BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB9E72BC2EAD1A1C00601148 /* PediaShared */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		BB54973C2EACAB41009F314A /* DrsMainApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DrsMainApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB564AD92EADC30A00870007 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrsMainAppApp.swift; sourceTree = "<group>"; };
 		BB564AF22EAE0D6800870007 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		BB564AF32EAE0DC500870007 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		BB564AF62EAE5EF000870007 /* SchemaInitializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaInitializer.swift; sourceTree = "<group>"; };
 		BB564AF82EAE5F7100870007 /* NewPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewPatientSheet.swift; sourceTree = "<group>"; };
+		BB564AFA2EAF1A1200870007 /* FilePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePicker.swift; sourceTree = "<group>"; };
+		BB564AFC2EAF1F5800870007 /* BundleDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundleDetailView.swift; sourceTree = "<group>"; };
+		BB564AFE2EAF25EA00870007 /* PatientsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientsListView.swift; sourceTree = "<group>"; };
+		BB564B002EAF3C5D00870007 /* PatientDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailView.swift; sourceTree = "<group>"; };
 		BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = DrsMainApp.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -37,6 +50,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */,
+				BB564B042EAF58C200870007 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,6 +84,8 @@
 		BB564AED2EAE0BB900870007 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */,
+				BB564AD92EADC30A00870007 /* ContentView.swift */,
 				BB564AF22EAE0D6800870007 /* AppState.swift */,
 			);
 			path = App;
@@ -86,6 +102,10 @@
 		BB564AEF2EAE0BB900870007 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				BB564B002EAF3C5D00870007 /* PatientDetailView.swift */,
+				BB564AFE2EAF25EA00870007 /* PatientsListView.swift */,
+				BB564AFC2EAF1F5800870007 /* BundleDetailView.swift */,
+				BB564AFA2EAF1A1200870007 /* FilePicker.swift */,
 				BB564AF82EAE5F7100870007 /* NewPatientSheet.swift */,
 				BB564AF32EAE0DC500870007 /* SidebarView.swift */,
 			);
@@ -138,6 +158,7 @@
 			name = DrsMainApp;
 			packageProductDependencies = (
 				BB9E72BC2EAD1A1C00601148 /* PediaShared */,
+				BB564B032EAF58C200870007 /* ZIPFoundation */,
 			);
 			productName = DrsMainApp;
 			productReference = BB54973C2EACAB41009F314A /* DrsMainApp.app */;
@@ -167,6 +188,9 @@
 			);
 			mainGroup = BB5497332EACAB41009F314A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BB564B022EAF58C200870007 /* XCLocalSwiftPackageReference "../../../Documents/ZIPFoundation" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BB54973D2EACAB41009F314A /* Products */;
 			projectDirPath = "";
@@ -199,9 +223,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB564AF92EAE5F7600870007 /* NewPatientSheet.swift in Sources */,
+				BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */,
+				BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */,
 				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
 				BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */,
 				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,
+				BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */,
+				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
+				BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */,
+				BB564B012EAF3C6400870007 /* PatientDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,7 +435,18 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		BB564B022EAF58C200870007 /* XCLocalSwiftPackageReference "../../../Documents/ZIPFoundation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../../Documents/ZIPFoundation;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		BB564B032EAF58C200870007 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ZIPFoundation;
+		};
 		BB9E72BC2EAD1A1C00601148 /* PediaShared */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PediaShared;

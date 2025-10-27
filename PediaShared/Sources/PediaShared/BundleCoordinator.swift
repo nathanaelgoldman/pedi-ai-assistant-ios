@@ -177,7 +177,6 @@ public struct PediaBundleCoordinator: Sendable {
             do {
                 // Opening read-write will create the file in our SQLite wrapper; close immediately.
                 let db = try coordinator.openDatabase(readonly: false)
-                defer { try? db.close() }
                 try initializeSchema?(db)
             } catch {
                 throw BundleScaffoldError.cannotCreateDatabase(coordinator.databaseURL, underlying: error)
@@ -186,7 +185,6 @@ public struct PediaBundleCoordinator: Sendable {
             // If db already exists and the caller provided an initializer, let them run migrations.
             do {
                 let db = try coordinator.openDatabase(readonly: false)
-                defer { try? db.close() }
                 try initializeSchema(db)
             } catch {
                 throw BundleScaffoldError.cannotCreateDatabase(coordinator.databaseURL, underlying: error)
