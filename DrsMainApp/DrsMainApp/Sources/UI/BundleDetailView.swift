@@ -103,6 +103,27 @@ struct BundleDetailView: View {
         }
     }
 
+    private func fetchPatientColumns(_ db: OpaquePointer?) throws -> Set<String> {
+        var set = Set<String>()
+        guard let db else { return set }
+
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, "PRAGMA table_info(patients);", -1, &stmt, nil) != SQLITE_OK {
+            let message = String(cString: sqlite3_errmsg(db))
+            throw NSError(domain: "DB", code: 10, userInfo: [NSLocalizedDescriptionKey: "PRAGMA table_info failed: \(message)"])
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+            if let cName = sqlite3_column_text(stmt, 1) {
+                let name = String(cString: cName).lowercased()
+                set.insert(name)
+            }
+        }
+        return set
+    }
+
     private func fetchPatientSummary(dbPath: String) throws -> PatientSummary? {
         var db: OpaquePointer?
         // Open read-only; if you later need write, switch to SQLITE_OPEN_READWRITE
@@ -113,24 +134,66 @@ struct BundleDetailView: View {
         }
         defer { sqlite3_close(db) }
 
-        let selectedID = appState.selectedPatientID
-        let baseSelect = """
-        SELECT
-            id,
-            COALESCE(alias_label, alias, '') AS alias,
-            COALESCE(
-                full_name,
-                TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))
-            ) AS full_name,
-            COALESCE(dob, date_of_birth, '') AS dob,
-            COALESCE(sex, '') AS sex
-        FROM patients
-        """
-        let sql: String
-        if let _ = selectedID {
-            sql = baseSelect + "\nWHERE id = ?\nLIMIT 1;"
+        // Discover actual columns in patients table to avoid "no such column" errors
+        let columns = try fetchPatientColumns(db)
+
+        // Build safe SELECT list based on existing columns
+        var selectParts: [String] = ["id"]
+
+        // alias
+        if columns.contains("alias_label") {
+            selectParts.append("alias_label AS alias")
+        } else if columns.contains("alias") {
+            // legacy fallback only if it truly exists
+            selectParts.append("alias AS alias")
         } else {
-            sql = baseSelect + "\nORDER BY id\nLIMIT 1;"
+            selectParts.append("'' AS alias")
+        }
+
+        // full name
+        if columns.contains("full_name") {
+            selectParts.append("full_name")
+        } else if columns.contains("first_name") && columns.contains("last_name") {
+            selectParts.append("TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS full_name")
+        } else {
+            selectParts.append("'' AS full_name")
+        }
+
+        // dob
+        if columns.contains("dob") {
+            selectParts.append("dob")
+        } else if columns.contains("date_of_birth") {
+            selectParts.append("date_of_birth AS dob")
+        } else {
+            selectParts.append("'' AS dob")
+        }
+
+        // sex
+        if columns.contains("sex") {
+            selectParts.append("sex")
+        } else {
+            selectParts.append("'' AS sex")
+        }
+
+        let selectList = selectParts.joined(separator: ",\n       ")
+
+        let sql: String
+        if appState.selectedPatientID != nil {
+            sql = """
+            SELECT
+                \(selectList)
+            FROM patients
+            WHERE id = ?
+            LIMIT 1;
+            """
+        } else {
+            sql = """
+            SELECT
+                \(selectList)
+            FROM patients
+            ORDER BY id
+            LIMIT 1;
+            """
         }
 
         var stmt: OpaquePointer?
@@ -138,10 +201,11 @@ struct BundleDetailView: View {
             let message = String(cString: sqlite3_errmsg(db))
             throw NSError(domain: "DB", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to prepare statement: \(message)"])
         }
-        if let selectedID {
+        defer { sqlite3_finalize(stmt) }
+
+        if let selectedID = appState.selectedPatientID {
             sqlite3_bind_int64(stmt, 1, sqlite3_int64(selectedID))
         }
-        defer { sqlite3_finalize(stmt) }
 
         let rc = sqlite3_step(stmt)
         if rc == SQLITE_ROW {
