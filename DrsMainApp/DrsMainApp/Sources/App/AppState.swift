@@ -27,14 +27,35 @@ struct PatientRow: Identifiable, Equatable {
     let sex: String
 }
 
+
 struct VisitRow: Identifiable, Equatable {
     let id: Int
     let dateISO: String
     let category: String
 }
 
+// Lightweight summaries for UI
+struct PatientSummary {
+    let vaccination: String?
+    let pmh: String?
+    let perinatal: String?
+}
+
+struct VisitSummary {
+    let problems: String?
+    let diagnosis: String?
+    let conclusions: String?
+}
+
 // C macro for sqlite3 destructor that forces a copy during bind
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+/// Minimal patient profile for header/badge
+struct PatientProfile: Equatable {
+    var vaccinationStatus: String?
+    var pmh: String?                 // cumulative past medical history
+    var perinatalHistory: String?    // brief perinatal summary if available
+}
 
 @MainActor
 final class AppState: ObservableObject {
@@ -47,6 +68,13 @@ final class AppState: ObservableObject {
     @Published var selectedPatientID: Int?
     @Published var visits: [VisitRow] = []
     @Published var bundleLocations: [URL] = []
+
+    // Summaries populated on demand by views
+    @Published var patientSummary: PatientSummary? = nil
+    @Published var visitSummary: VisitSummary? = nil
+    @Published var currentPatientProfile: PatientProfile? = nil
+
+    private let profileLog = Logger(subsystem: "DrsMainApp", category: "PatientProfile")
     
     // The db.sqlite inside the currently selected bundle
     var currentDBURL: URL? {
@@ -59,6 +87,48 @@ final class AppState: ObservableObject {
         return patients.first { $0.id == id }
     }
     
+    // MARK: - Patient profile (badge) helpers
+
+    /// Try to locate the SQLite DB inside the currently-selected bundle.
+    /// We look for `<bundle>/db.sqlite`, then `<bundle>/db/db.sqlite`.
+    private func dbURLForCurrentBundle() -> URL? {
+        guard let root = currentBundleURL else { return nil }
+        let c1 = root.appendingPathComponent("db.sqlite")
+        if FileManager.default.fileExists(atPath: c1.path) { return c1 }
+        let c2 = root.appendingPathComponent("db").appendingPathComponent("db.sqlite")
+        if FileManager.default.fileExists(atPath: c2.path) { return c2 }
+        return nil
+    }
+
+    /// Provide SQLITE_TRANSIENT for Swift bindings
+    private var SQLITE_TRANSIENT: sqlite3_destructor_type {
+        unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    }
+
+    /// Return true if a table exists
+    private func sqliteTableExists(db: OpaquePointer?, table: String) -> Bool {
+        let sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+        table.withCString { c in
+            sqlite3_bind_text(stmt, 1, c, -1, SQLITE_TRANSIENT)
+        }
+        return sqlite3_step(stmt) == SQLITE_ROW
+    }
+
+    /// Run a scalar-text query with a single Int64 bind and return column 0 as String
+    private func sqliteScalarText(db: OpaquePointer?, sql: String, bindID: Int64) -> String? {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, bindID)
+        if sqlite3_step(stmt) == SQLITE_ROW, let cStr = sqlite3_column_text(stmt, 0) {
+            return String(cString: cStr)
+        }
+        return nil
+    }
+    
     // MARK: - Private
     private let recentsKey = "recentBundlePaths"
     private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "AppState")
@@ -66,6 +136,53 @@ final class AppState: ObservableObject {
     // MARK: - Init
     init() {
         loadRecentBundles()
+    }
+    
+    /// Load vaccination status, cumulative PMH, and (optionally) perinatal summary for a patient.
+    func loadPatientProfile(for patientID: Int64) {
+        // clear while loading
+        DispatchQueue.main.async { [weak self] in self?.currentPatientProfile = nil }
+
+        guard let dbURL = dbURLForCurrentBundle() else {
+            profileLog.debug("No db.sqlite found in current bundle")
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else {
+            profileLog.error("sqlite3_open failed for \(dbURL.path, privacy: .public)")
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        // From patients table
+        let vacc = sqliteScalarText(db: db,
+                                    sql: "SELECT vaccination_status FROM patients WHERE id=? LIMIT 1;",
+                                    bindID: patientID)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let pmh  = sqliteScalarText(db: db,
+                                    sql: "SELECT parent_notes FROM patients WHERE id=? LIMIT 1;",
+                                    bindID: patientID)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Optional perinatal summary (table may or may not exist)
+        var peri: String? = nil
+        if sqliteTableExists(db: db, table: "perinatal_history") {
+            // Prefer a 'summary' column; fall back to 'notes' if summary missing
+            peri = sqliteScalarText(db: db,
+                                    sql: "SELECT summary FROM perinatal_history WHERE patient_id=? ORDER BY id DESC LIMIT 1;",
+                                    bindID: patientID)
+            ?? sqliteScalarText(db: db,
+                                sql: "SELECT notes FROM perinatal_history WHERE patient_id=? ORDER BY id DESC LIMIT 1;",
+                                bindID: patientID)
+            peri = peri?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let profile = PatientProfile(vaccinationStatus: vacc, pmh: pmh, perinatalHistory: peri)
+        DispatchQueue.main.async { [weak self] in
+            self?.currentPatientProfile = profile
+        }
     }
 
     // Allow UI to add one or more bundle directories **or .zip files**
@@ -363,7 +480,242 @@ final class AppState: ObservableObject {
             log.info("Visit-like tables exist but no rows matched patient \(patientID). Checked: \(tablesStr, privacy: .public)")
         }
     }
-    // MARK: - ZIP Import (Steps 2 & 3)
+
+    // MARK: - Summaries (patient + visit)
+
+    /// Quick existence check for a row id in a table.
+    private func rowExists(_ table: String, id: Int, db: OpaquePointer?) -> Bool {
+        guard let db = db else { return false }
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        let sql = "SELECT 1 FROM \(table) WHERE id=? LIMIT 1;"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(id))
+        return sqlite3_step(stmt) == SQLITE_ROW
+    }
+
+    /// Load a concise summary for the given patient id.
+    func loadPatientSummary(_ patientID: Int) {
+        guard let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            patientSummary = nil
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            patientSummary = nil
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        // --- Vaccination status from patients.vaccination_status (if present) ---
+        var vaccination: String? = nil
+        do {
+            let cols = columnSet(of: "patients", db: db)
+            if cols.contains("vaccination_status") {
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                let sql = "SELECT vaccination_status FROM patients WHERE id=? LIMIT 1;"
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+                    if sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) {
+                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                        vaccination = s.isEmpty ? nil : s
+                    }
+                }
+            }
+        }
+
+        // --- PMH from patients.(past_medical_history|pmh_summary|pmh) if present ---
+        var pmh: String? = nil
+        do {
+            let cols = columnSet(of: "patients", db: db)
+            if let pmhCol = pickColumn(["past_medical_history","pmh_summary","pmh"], available: cols) {
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                let sql = "SELECT \(pmhCol) FROM patients WHERE id=? LIMIT 1;"
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+                    if sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) {
+                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                        pmh = s.isEmpty ? nil : s
+                    }
+                }
+            }
+        }
+
+        // --- Perinatal summary (if perinatal_summary or perinatal table exists) ---
+        var perinatal: String? = nil
+        do {
+            let candidateTables = ["perinatal_summary","perinatal"]
+            var chosen: String? = nil
+            for t in candidateTables where tableExists(db, name: t) {
+                chosen = t; break
+            }
+            if let table = chosen {
+                let cols = columnSet(of: table, db: db)
+                // Try to assemble a small readable line from any available columns
+                let tryCols = [
+                    "birth_weight","birth_length","birth_head_circumference",
+                    "delivery","apgar1","apgar5","notes","summary"
+                ]
+                // Pick the first 3-5 with content
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                // Find a linking column to patients: commonly patient_id
+                let pidCol = pickColumn(["patient_id","pid","patient","patientId","patientID"], available: cols) ?? "patient_id"
+                let selectCols = tryCols.filter { cols.contains($0) }
+                if !selectCols.isEmpty {
+                    let sql = "SELECT " + selectCols.joined(separator: ", ") + " FROM \(table) WHERE \(pidCol)=? LIMIT 1;"
+                    if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+                        if sqlite3_step(stmt) == SQLITE_ROW {
+                            var parts: [String] = []
+                            for i in 0..<selectCols.count {
+                                if let c = sqlite3_column_text(stmt, Int32(i)) {
+                                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !s.isEmpty {
+                                        parts.append("\(selectCols[i]): \(s)")
+                                    }
+                                }
+                            }
+                            if !parts.isEmpty { perinatal = parts.joined(separator: " • ") }
+                        }
+                    }
+                }
+            }
+        }
+
+        self.patientSummary = PatientSummary(vaccination: vaccination, pmh: pmh, perinatal: perinatal)
+    }
+
+    /// Load a concise summary for a specific visit row by probing likely tables/columns.
+    func loadVisitSummary(for visit: VisitRow) {
+        guard let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            visitSummary = nil
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            visitSummary = nil
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        // Preferred unified table
+        if tableExists(db, name: "visits") {
+            let cols = columnSet(of: "visits", db: db)
+            let problemsCol   = pickColumn(["problem_list","problems"], available: cols)
+            let diagnosisCol  = pickColumn(["diagnosis","final_diagnosis"], available: cols)
+            let conclusionCol = pickColumn(["conclusions","conclusion","plan"], available: cols)
+
+            if problemsCol != nil || diagnosisCol != nil || conclusionCol != nil {
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                let wanted = [problemsCol, diagnosisCol, conclusionCol].compactMap { $0 }
+                let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM visits WHERE id=? LIMIT 1;"
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+                    if sqlite3_step(stmt) == SQLITE_ROW {
+                        var vals: [String?] = []
+                        for i in 0..<wanted.count {
+                            if let c = sqlite3_column_text(stmt, Int32(i)) {
+                                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                vals.append(s.isEmpty ? nil : s)
+                            } else { vals.append(nil) }
+                        }
+                        let problems   = problemsCol != nil   ? vals[safe: 0] : nil
+                        let diagnosis  = diagnosisCol != nil  ? vals[safe: problemsCol == nil ? 0 : 1] : nil
+                        let conclusions = conclusionCol != nil ? vals.last ?? nil : nil
+                        self.visitSummary = VisitSummary(problems: problems ?? nil, diagnosis: diagnosis ?? nil, conclusions: conclusions ?? nil)
+                        return
+                    }
+                }
+            }
+        }
+
+        // Else probe episodes / well_visits
+        var problems: String? = nil
+        var diagnosis: String? = nil
+        var conclusions: String? = nil
+
+        if tableExists(db, name: "episodes"), rowExists("episodes", id: visit.id, db: db) {
+            let cols = columnSet(of: "episodes", db: db)
+            let pb  = pickColumn(["problem_list","problems"], available: cols)
+            let dx  = pickColumn(["diagnosis","final_diagnosis"], available: cols)
+            let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
+            if pb != nil || dx != nil || con != nil {
+                let wanted = [pb, dx, con].compactMap { $0 }
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+                    if sqlite3_step(stmt) == SQLITE_ROW {
+                        var idx = 0
+                        if let pb {
+                            if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                problems = s.isEmpty ? nil : s
+                            }
+                            idx += 1
+                        }
+                        if let dx {
+                            if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                diagnosis = s.isEmpty ? nil : s
+                            }
+                            idx += 1
+                        }
+                        if let con {
+                            if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                conclusions = s.isEmpty ? nil : s
+                            }
+                        }
+                    }
+                }
+            }
+        } else if tableExists(db, name: "well_visits"), rowExists("well_visits", id: visit.id, db: db) {
+            let cols = columnSet(of: "well_visits", db: db)
+            let pb  = pickColumn(["problem_list","problems"], available: cols)
+            let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
+            let wanted = [pb, con].compactMap { $0 }
+            if !wanted.isEmpty {
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+                    if sqlite3_step(stmt) == SQLITE_ROW {
+                        var idx = 0
+                        if let pb {
+                            if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                problems = s.isEmpty ? nil : s
+                            }
+                            idx += 1
+                        }
+                        if let con {
+                            if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                conclusions = s.isEmpty ? nil : s
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        self.visitSummary = VisitSummary(problems: problems, diagnosis: diagnosis, conclusions: conclusions)
+    }
+
+    // Small safe index helper
 
     /// Import one or more bundle .zip files by unzipping to App Support and then detecting the bundle root (folder with db.sqlite)
     @MainActor
@@ -730,5 +1082,12 @@ extension AppState {
             print("Zip extract failed: \(error)")
             return nil
         }
+    }
+}
+
+// Safe index extension for arrays
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

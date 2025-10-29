@@ -10,6 +10,12 @@
 //
 //  Created by yunastic on 10/27/25.
 //
+//
+//  PatientDetailView.swift
+//  DrsMainApp
+//
+//  Created by yunastic on 10/27/25.
+//
 
 import SwiftUI
 import OSLog
@@ -90,7 +96,6 @@ struct PatientDetailView: View {
         }
         return patient.dobISO
     }
-    
 
     var body: some View {
         ScrollView {
@@ -132,8 +137,50 @@ struct PatientDetailView: View {
                     }
                 }
 
+                // --- Patient Summary card (perinatal / PMH / vaccination) ---
+                if let profile = appState.currentPatientProfile,
+                   (profile.perinatalHistory?.isEmpty == false ||
+                    profile.pmh?.isEmpty == false ||
+                    profile.vaccinationStatus?.isEmpty == false) {
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Patient Summary")
+                            .font(.headline)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let s = profile.perinatalHistory, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                LabeledContent {
+                                    Text(s)
+                                } label: {
+                                    Text("Perinatal")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if let pmh = profile.pmh, !pmh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                LabeledContent {
+                                    Text(pmh)
+                                } label: {
+                                    Text("PMH / Parent Notes")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if let v = profile.vaccinationStatus, !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                LabeledContent {
+                                    Text(v)
+                                } label: {
+                                    Text("Vaccination")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.secondary.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+
                 Divider()
-                
+
                 // Visits section
                 Text("Visits")
                     .font(.headline)
@@ -169,11 +216,14 @@ struct PatientDetailView: View {
             .padding(20)
         }
         .onAppear {
+            // Load both visits and the profile
             appState.loadVisits(for: patient.id)
+            appState.loadPatientProfile(for: patient.id)
         }
         .onChange(of: appState.selectedPatientID) { _, newID in
             if let id = newID {
                 appState.loadVisits(for: id)
+                appState.loadPatientProfile(for: id)
             }
         }
         .sheet(item: $visitForDetail) { v in
