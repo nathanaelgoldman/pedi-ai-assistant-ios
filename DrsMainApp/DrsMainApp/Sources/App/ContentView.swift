@@ -10,7 +10,6 @@
 //
 //  Created by yunastic on 10/25/25.
 //
-
 import SwiftUI
 
 struct ContentView: View {
@@ -19,52 +18,30 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView()
+                .environmentObject(appState)
         } detail: {
-            Group {
-                if let patient = appState.selectedPatient {
-                    PatientDetailView(patient: patient)
-                } else if appState.currentBundleURL != nil {
-                    BundleDetailView()
-                } else {
-                    EmptyStateView {
-                        FilePicker.selectBundles { urls in
-                            appState.importBundles(from: urls)
-                        }
-                    }
+            if let patient = appState.selectedPatient {
+                // Right pane = patient details + visits
+                PatientDetailView(patient: patient)
+                    .environmentObject(appState)
+            } else if appState.currentBundleURL != nil {
+                // Bundle chosen but no patient selected
+                BundleDetailView()
+                    .environmentObject(appState)
+            } else {
+                // Nothing chosen yet
+                VStack(spacing: 12) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 36, weight: .regular))
+                        .foregroundStyle(.secondary)
+                    Text("No Bundle Selected")
+                        .font(.title2).bold()
+                        .foregroundStyle(.secondary)
+                    Text("Use “Add Bundles…” to import a .peMR zip or choose a bundle folder.")
+                        .foregroundStyle(.secondary)
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        }
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    FilePicker.selectBundles { urls in
-                        appState.importBundles(from: urls)
-                    }
-                } label: {
-                    Label("Add Bundles…", systemImage: "folder.badge.plus")
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
-}
-
-struct EmptyStateView: View {
-    let onImport: () -> Void
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("No bundle selected")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Button(action: onImport) {
-                Label("Add Bundles…", systemImage: "tray.and.arrow.down")
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-#Preview {
-    ContentView().environmentObject(AppState())
 }

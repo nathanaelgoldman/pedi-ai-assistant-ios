@@ -17,6 +17,7 @@ import SwiftUI
 import OSLog
 import SQLite3
 import ZIPFoundation
+import PediaShared
 
 struct PatientRow: Identifiable, Equatable {
     let id: Int
@@ -46,13 +47,18 @@ final class AppState: ObservableObject {
     @Published var selectedPatientID: Int?
     @Published var visits: [VisitRow] = []
     @Published var bundleLocations: [URL] = []
+    
+    // The db.sqlite inside the currently selected bundle
+    var currentDBURL: URL? {
+        currentBundleURL?.appendingPathComponent("db.sqlite")
+    }
 
     // Convenience for the right pane
     var selectedPatient: PatientRow? {
         guard let id = selectedPatientID else { return nil }
         return patients.first { $0.id == id }
     }
-
+    
     // MARK: - Private
     private let recentsKey = "recentBundlePaths"
     private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "AppState")
@@ -106,10 +112,10 @@ final class AppState: ObservableObject {
     // MARK: - Selection / Recents
     func selectBundle(_ url: URL) {
         currentBundleURL = url
-        addToRecents(url)
-        log.info("Selected bundle at \(url.path, privacy: .public)")
+        selectedPatientID = nil
+        patients = []
+        visits = []
         reloadPatients()
-        visits.removeAll() // reset when bundle changes
     }
 
     private func addToRecents(_ url: URL) {
@@ -130,36 +136,39 @@ final class AppState: ObservableObject {
     }
 
     func reloadPatients() {
-        patients.removeAll()
-        selectedPatientID = nil
-        guard let bundle = currentBundleURL else { return }
-        let dbURL = bundle.appendingPathComponent("db.sqlite")
-        guard FileManager.default.fileExists(atPath: dbURL.path) else { return }
+        guard let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            patients = []
+            return
+        }
 
         var db: OpaquePointer?
-        if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK {
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
             if let db { sqlite3_close(db) }
+            patients = []
             return
         }
         defer { sqlite3_close(db) }
 
         let sql = """
         SELECT
-            id,
-            COALESCE(alias_label, alias, '')                                      AS alias,
-            COALESCE(
-                full_name,
-                TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))
-            )                                                                      AS full_name,
-            COALESCE(dob, date_of_birth, '')                                       AS dobISO,
-            COALESCE(sex, '')                                                      AS sex
+          id,
+          COALESCE(alias_label, '') AS alias,
+          TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS fullName,
+          COALESCE(dob, '')  AS dobISO,
+          COALESCE(sex, '')  AS sex
         FROM patients
         ORDER BY id;
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("reloadPatients prepare failed: \(msg, privacy: .public)")
+            patients = []
+            return
+        }
 
         var rows: [PatientRow] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -168,18 +177,68 @@ final class AppState: ObservableObject {
                 if let c = sqlite3_column_text(stmt, i) { return String(cString: c) }
                 return ""
             }
-            let alias = text(1)
-            let full = text(2)
-            let dob  = text(3)
-            let sex  = text(4)
-            rows.append(PatientRow(id: id, alias: alias, fullName: full, dobISO: dob, sex: sex))
+            let alias    = text(1)
+            let fullName = text(2)
+            let dobISO   = text(3)
+            let sex      = text(4)
+
+            rows.append(PatientRow(id: id, alias: alias, fullName: fullName, dobISO: dobISO, sex: sex))
         }
 
         self.patients = rows
-        self.selectedPatientID = rows.first?.id
+        if self.selectedPatientID == nil, let first = rows.first {
+            self.selectedPatientID = first.id
+        }
     }
 
     // MARK: - Visits (read-only listing for current bundle)
+
+    /// Reload visits for the currently selected patient (safe to call when no selection).
+    func reloadVisitsForSelectedPatient() {
+        guard let pid = selectedPatientID else {
+            visits.removeAll()
+            return
+        }
+        loadVisits(for: pid)
+    }
+
+    /// Check if a table exists in the opened SQLite database.
+    private func tableExists(_ db: OpaquePointer?, name: String) -> Bool {
+        guard let db = db else { return false }
+        let sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;"
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        sqlite3_bind_text(stmt, 1, name, -1, SQLITE_TRANSIENT)
+        return sqlite3_step(stmt) == SQLITE_ROW
+    }
+
+    /// Return the set of column names for a table.
+    private func columnSet(of table: String, db: OpaquePointer?) -> Set<String> {
+        guard let db = db else { return [] }
+        var cols: Set<String> = []
+        let sql = "PRAGMA table_info(\(table));"
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let cStr = sqlite3_column_text(stmt, 1) {
+                cols.insert(String(cString: cStr))
+            }
+        }
+        return cols
+    }
+
+    /// Pick the first available name from `candidates` that is present in `available`.
+    private func pickColumn(_ candidates: [String], available: Set<String>) -> String? {
+        for c in candidates where available.contains(c) { return c }
+        return nil
+    }
+
+    /// Load visits for a patient by *probing* the schema. It will:
+    /// 1) Prefer a unified `visits` table if present (and columns exist)
+    /// 2) Else, union any tables that look like visit tables (episodes / well_visits / encounters)
+    ///    by finding a patient-id column and a date-like column in each.
     func loadVisits(for patientID: Int) {
         visits.removeAll()
         guard let bundle = currentBundleURL else { return }
@@ -193,21 +252,98 @@ final class AppState: ObservableObject {
         }
         defer { sqlite3_close(db) }
 
-        // Try to be resilient to column naming: some DBs use `visit_date`, others `date`.
-        let sql = """
-        SELECT id,
-               COALESCE(visit_date, date, '') AS dateISO,
-               COALESCE(category, '')
-        FROM visits
-        WHERE patient_id = ?
-        ORDER BY dateISO DESC;
-        """
+        // Candidate tables to try in order.
+        let tableCandidates = ["visits", "episodes", "well_visits", "encounters"]
+
+        // Common column name variants.
+        let pidCandidates  = ["patient_id", "patient", "pid", "patientId", "patientID"]
+        let dateCandidates = [
+            "visit_date", "date", "created_at", "updated_at",
+            "encounter_date", "timestamp", "visited_at", "recorded_at"
+        ]
+        let categoryCandidates = ["category", "kind", "type", "visit_type"]
+
+        // 1) If a unified `visits` table exists and has required columns, use it.
+        if tableExists(db, name: "visits") {
+            let cols = columnSet(of: "visits", db: db)
+            if let pidCol = pickColumn(pidCandidates, available: cols),
+               let dateCol = pickColumn(dateCandidates, available: cols) {
+
+                let catCol = pickColumn(categoryCandidates, available: cols) // optional
+                var sql = """
+                          SELECT id, \(dateCol) AS dateISO
+                          """
+                if let catCol { sql += ", \(catCol) AS category" } else { sql += ", '' AS category" }
+                sql += """
+                       FROM visits
+                       WHERE \(pidCol) = ?
+                       ORDER BY dateISO DESC;
+                       """
+
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+
+                var rows: [VisitRow] = []
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let id = Int(sqlite3_column_int64(stmt, 0))
+                    func text(_ i: Int32) -> String {
+                        if let c = sqlite3_column_text(stmt, i) { return String(cString: c) }
+                        return ""
+                    }
+                    let dateISO = text(1)
+                    let category = text(2)
+                    rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
+                }
+                self.visits = rows
+                if rows.isEmpty {
+                    log.info("visits table present but no rows for patient \(patientID)")
+                }
+                return
+            }
+        }
+
+        // 2) Else, dynamically union any visit-like tables that have (pid + date) columns.
+        struct Part { let table: String; let pidCol: String; let dateCol: String; let categoryExpr: String }
+        var parts: [Part] = []
+
+        for t in tableCandidates where tableExists(db, name: t) {
+            let cols = columnSet(of: t, db: db)
+            guard let pidCol = pickColumn(pidCandidates, available: cols),
+                  let dateCol = pickColumn(dateCandidates, available: cols) else { continue }
+
+            let catCol = pickColumn(categoryCandidates, available: cols)
+            let categoryExpr = catCol ?? (t == "episodes" ? "'episode'" : (t == "well_visits" ? "'well'" : "''"))
+            parts.append(Part(table: t, pidCol: pidCol, dateCol: dateCol, categoryExpr: categoryExpr))
+        }
+
+        guard !parts.isEmpty else {
+            let bundleName = dbURL.deletingLastPathComponent().lastPathComponent
+            log.warning("No visit-like tables found for bundle at \(bundleName, privacy: .public)")
+            return
+        }
+
+        // Build UNION ALL with placeholders.
+        let unionSQL = parts.map {
+            """
+            SELECT id, \($0.dateCol) AS dateISO, \($0.categoryExpr) AS category
+            FROM \($0.table)
+            WHERE \($0.pidCol) = ?
+            """
+        }.joined(separator: "\nUNION ALL\n") + "\nORDER BY dateISO DESC;"
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, unionSQL, -1, &stmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("prepare visits-union failed: \(msg, privacy: .public)")
+            return
+        }
         defer { sqlite3_finalize(stmt) }
 
-        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+        // Bind the same patientID for each UNION leg.
+        var index: Int32 = 1
+        for _ in parts { sqlite3_bind_int64(stmt, index, sqlite3_int64(patientID)); index += 1 }
 
         var rows: [VisitRow] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -216,12 +352,16 @@ final class AppState: ObservableObject {
                 if let c = sqlite3_column_text(stmt, i) { return String(cString: c) }
                 return ""
             }
-            let dateISO = text(1)
+            let dateISO  = text(1)
             let category = text(2)
             rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
         }
-
         self.visits = rows
+
+        if rows.isEmpty {
+            let tablesStr = parts.map { $0.table }.joined(separator: ", ")
+            log.info("Visit-like tables exist but no rows matched patient \(patientID). Checked: \(tablesStr, privacy: .public)")
+        }
     }
     // MARK: - ZIP Import (Steps 2 & 3)
 

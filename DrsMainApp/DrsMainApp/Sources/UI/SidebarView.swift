@@ -1,15 +1,8 @@
-
 //  SidebarView.swift
 //  DrsMainApp
-//
-
-//  SidebarView.swift
-//  DrsMainApp
-//
 
 import SwiftUI
 import OSLog
-
 #if os(macOS)
 import AppKit
 #endif
@@ -25,6 +18,7 @@ struct SidebarView: View {
             header
 
             List {
+                // MARK: - Recent Bundles
                 Section("Recent Bundles") {
                     if appState.recentBundles.isEmpty {
                         Text("No bundles yet")
@@ -55,9 +49,64 @@ struct SidebarView: View {
                             }
                         }
                     }
-                }
-            }
-            
+                } // end Section: Recent Bundles
+
+                // MARK: - Patients
+                Section("Patients") {
+                    if appState.currentBundleURL == nil {
+                        HStack {
+                            Text("Select a bundle to load patients")
+                            Spacer()
+                        }
+                        .foregroundStyle(.secondary)
+                    } else if appState.patients.isEmpty {
+                        HStack {
+                            Text("No patients in this bundle")
+                            Spacer()
+                            Button {
+                                appState.reloadPatients()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Reload patients from current db.sqlite")
+                        }
+                        .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(appState.patients) { p in
+                            let title = p.alias.isEmpty
+                                ? (p.fullName.isEmpty ? "Patient #\(p.id)" : p.fullName)
+                                : p.alias
+
+                            HStack {
+                                Image(systemName: "person.crop.circle")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(title)
+                                    if !p.fullName.isEmpty && p.fullName != title {
+                                        Text(p.fullName)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    if !p.dobISO.isEmpty || !p.sex.isEmpty {
+                                        Text("\(p.dobISO)\(p.sex.isEmpty ? "" : " • \(p.sex)")")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                appState.selectedPatientID = p.id
+                                appState.reloadVisitsForSelectedPatient()
+                            }
+                            .background(
+                                appState.selectedPatientID == p.id ? Color.accentColor.opacity(0.12) : .clear
+                            )
+                        }
+                    }
+                } // end Section: Patients
+            } // end List
             .listStyle(.inset)
             .toolbar { toolbar }
             .sheet(isPresented: $showingNewPatient) {
@@ -67,8 +116,7 @@ struct SidebarView: View {
         .frame(minWidth: 240)
     }
 
-    // MARK: - Pieces
-
+    // MARK: - Header
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Pedi•AI — Doctor")
@@ -83,14 +131,12 @@ struct SidebarView: View {
                     .foregroundStyle(.secondary)
             }
             Divider()
-
-            // Patients (Step A)
-            PatientsListView()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
     }
 
+    // MARK: - Toolbar
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
@@ -109,7 +155,6 @@ struct SidebarView: View {
     }
 
     // MARK: - Actions
-
     private func pickAndAddBundles() {
         #if os(macOS)
         FilePicker.selectBundles { urls in
@@ -119,6 +164,7 @@ struct SidebarView: View {
         }
         #endif
     }
+
     private func revealInFinder(_ url: URL) {
         #if os(macOS)
         FilePicker.revealInFinder(url)
