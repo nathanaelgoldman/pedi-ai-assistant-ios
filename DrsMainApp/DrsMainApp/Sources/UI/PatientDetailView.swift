@@ -160,7 +160,15 @@ struct PatientDetailView: View {
                                 LabeledContent {
                                     Text(pmh)
                                 } label: {
-                                    Text("PMH / Parent Notes")
+                                    Text("Past Medical History")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if let notes = profile.parentNotes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                LabeledContent {
+                                    Text(notes)
+                                } label: {
+                                    Text("Parent Notes")
                                         .foregroundStyle(.secondary)
                                 }
                             }
@@ -178,6 +186,7 @@ struct PatientDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                 }
+                
 
                 Divider()
 
@@ -218,12 +227,12 @@ struct PatientDetailView: View {
         .onAppear {
             // Load both visits and the profile
             appState.loadVisits(for: patient.id)
-            appState.loadPatientProfile(for: patient.id)
+            appState.loadPatientProfile(for: Int64(patient.id))
         }
         .onChange(of: appState.selectedPatientID) { _, newID in
             if let id = newID {
                 appState.loadVisits(for: id)
-                appState.loadPatientProfile(for: id)
+                appState.loadPatientProfile(for: Int64(patient.id))
             }
         }
         .sheet(item: $visitForDetail) { v in
@@ -234,6 +243,8 @@ struct PatientDetailView: View {
 
 /// Lightweight detail for a selected visit (no extra DB fetch yet).
 struct VisitDetailView: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) private var dismiss
     let visit: VisitRow
 
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -289,9 +300,62 @@ struct VisitDetailView: View {
                 }
             }
 
+            // --- Summary pulled from AppState (problems / diagnosis / conclusions) ---
+            if let s = appState.visitSummary,
+               ( (s.problems?.isEmpty == false) ||
+                 (s.diagnosis?.isEmpty == false) ||
+                 (s.conclusions?.isEmpty == false) ) {
+
+                Divider().padding(.top, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Summary")
+                        .font(.headline)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let p = s.problems, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            LabeledContent {
+                                Text(p)
+                            } label: {
+                                Text("Problems")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if let d = s.diagnosis, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            LabeledContent {
+                                Text(d)
+                            } label: {
+                                Text("Diagnosis")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if let c = s.conclusions, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            LabeledContent {
+                                Text(c)
+                            } label: {
+                                Text("Conclusions")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+
             Spacer()
         }
         .padding(24)
         .frame(minWidth: 420, minHeight: 280)
+        .onAppear {
+            appState.loadVisitSummary(for: visit)
+        }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
     }
 }

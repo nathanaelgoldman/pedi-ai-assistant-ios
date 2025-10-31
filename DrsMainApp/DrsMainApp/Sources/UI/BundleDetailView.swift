@@ -13,11 +13,20 @@ import SQLite3
 import AppKit
 #endif
 
+// Local minimal summary model to decouple UI from shared types
+private struct LocalPatientSummary {
+    let id: Int
+    let alias: String
+    let fullName: String
+    let dobISO: String
+    let sex: String
+}
+
 struct BundleDetailView: View {
     @EnvironmentObject var appState: AppState
     private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "Detail")
 
-    @State private var summary: PatientSummary?
+    @State private var summary: LocalPatientSummary?
     @State private var loadError: String?
 
     var body: some View {
@@ -124,7 +133,7 @@ struct BundleDetailView: View {
         return set
     }
 
-    private func fetchPatientSummary(dbPath: String) throws -> PatientSummary? {
+    private func fetchPatientSummary(dbPath: String) throws -> LocalPatientSummary? {
         var db: OpaquePointer?
         // Open read-only; if you later need write, switch to SQLITE_OPEN_READWRITE
         if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK {
@@ -223,7 +232,7 @@ struct BundleDetailView: View {
             let fullName = text(2)
             let dob = text(3)
             let sex = text(4)
-            return PatientSummary(id: id, alias: alias, fullName: fullName, dobISO: dob, sex: sex)
+            return LocalPatientSummary(id: id, alias: alias, fullName: fullName, dobISO: dob, sex: sex)
         } else if rc == SQLITE_DONE {
             return nil
         } else {
@@ -252,10 +261,3 @@ struct BundleDetailView: View {
     }
 }
 
-struct PatientSummary: Equatable {
-    let id: Int
-    let alias: String
-    let fullName: String
-    let dobISO: String
-    let sex: String
-}
