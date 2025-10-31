@@ -439,6 +439,7 @@ final class AppState: ObservableObject {
         }
         // MARK: - Selection / Recents
         func selectBundle(_ url: URL) {
+            addToRecents(url)
             currentBundleURL = url
             selectedPatientID = nil
             patients = []

@@ -135,6 +135,7 @@ struct NewPatientSheet: View {
         .padding(20)
         .frame(width: 560)
         .onAppear {
+            parentDir = appState.bundlesRoot
             // Seed alias & MRN on open
             if aliasLabel.isEmpty { regenerateAlias() }
             recomputeMRN()
