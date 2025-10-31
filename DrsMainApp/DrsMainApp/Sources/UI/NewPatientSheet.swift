@@ -14,11 +14,22 @@ struct NewPatientSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var appState: AppState
 
-    @State private var alias = ""
-    @State private var fullName = ""
-    @State private var dob = Date()
-    @State private var sex = "M"
+    // Identity
+    @State private var firstName = ""
+    @State private var lastName = ""
 
+    // Alias (read-only fields presented to user; can regenerate)
+    @State private var aliasLabel = ""
+    @State private var aliasID = ""
+
+    // DOB / Sex
+    @State private var dob = Date()
+    @State private var sex = "M"      // "M" | "F" | "U"
+
+    // MRN preview (read-only)
+    @State private var mrnPreview = ""
+
+    // Default save location
     @State private var parentDir: URL = {
         let base = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Documents/Pedia/Bundles", isDirectory: true)
@@ -33,16 +44,46 @@ struct NewPatientSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Create New Patient").font(.title2).bold()
 
-            HStack {
-                Text("Alias").frame(width: 120, alignment: .trailing)
-                TextField("e.g. Teal Robin", text: $alias)
-                    .textFieldStyle(.roundedBorder)
+            Group {
+                HStack {
+                    Text("First name").frame(width: 120, alignment: .trailing)
+                    TextField("e.g. Alice", text: $firstName)
+                        .textFieldStyle(.roundedBorder)
+                }
+                HStack {
+                    Text("Last name").frame(width: 120, alignment: .trailing)
+                    TextField("e.g. Chen", text: $lastName)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
 
-            HStack {
-                Text("Full name").frame(width: 120, alignment: .trailing)
-                TextField("Optional", text: $fullName)
-                    .textFieldStyle(.roundedBorder)
+            Group {
+                HStack {
+                    Text("Alias").frame(width: 120, alignment: .trailing)
+                    TextField("", text: $aliasLabel)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(true)
+                    Button {
+                        regenerateAlias()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .help("Generate a new random alias")
+                }
+
+                HStack {
+                    Text("Alias ID").frame(width: 120, alignment: .trailing)
+                    TextField("", text: $aliasID)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(true)
+                }
+
+                HStack {
+                    Text("MRN").frame(width: 120, alignment: .trailing)
+                    TextField("", text: $mrnPreview)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(true)
+                }
             }
 
             HStack {
@@ -88,29 +129,88 @@ struct NewPatientSheet: View {
                     create()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!canCreate)
             }
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 560)
+        .onAppear {
+            // Seed alias & MRN on open
+            if aliasLabel.isEmpty { regenerateAlias() }
+            recomputeMRN()
+        }
+        .onChange(of: firstName) { _, _ in recomputeMRN() }
+        .onChange(of: lastName)  { _, _ in recomputeMRN() }
+        .onChange(of: dob)       { _, _ in recomputeMRN() }
+        .onChange(of: sex)       { _, _ in recomputeMRN() }
+    }
+
+    private var canCreate: Bool {
+        // Minimal requirements: alias present, DOB set (always), sex in allowed set
+        !aliasLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && ["M","F","U"].contains(sex)
     }
 
     private func create() {
-        let trimmedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedFullName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let f = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let l = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
             let url = try appState.createNewPatient(
                 into: parentDir,
-                alias: trimmedAlias,
-                fullName: trimmedFullName.isEmpty ? nil : trimmedFullName,
+                alias: aliasLabel,                // for folder label friendliness
+                firstName: f.isEmpty ? nil : f,
+                lastName: l.isEmpty ? nil : l,
+                fullName: nil,                    // let AppState compose if needed
                 dob: dob,
-                sex: sex
+                sex: sex,
+                aliasLabel: aliasLabel,
+                aliasID: aliasID,
+                mrnOverride: mrnPreview.isEmpty ? nil : mrnPreview
             )
             appState.selectBundle(url)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // MARK: - Helpers
+
+    private func regenerateAlias() {
+        let a = AliasGenerator.generate()
+        aliasLabel = a.label
+        aliasID = a.id
+    }
+
+    private func recomputeMRN() {
+        // Prefer MRN utility if present; else compute a simple checksum-based ID.
+        // Format: YYYYMMDD-SX-CCCC where SX = sex initial; CCCC = base36 checksum
+        let df = DateFormatter()
+        df.dateFormat = "yyyyMMdd"
+        let ymd = df.string(from: dob)
+        let sx = (sex.first.map { String($0) } ?? "U")
+        let nameSeed = (firstName + "|" + lastName).lowercased()
+        let seed = "\(ymd)#\(sx)#\(nameSeed)"
+        let csum = simpleChecksumBase36(seed)
+        mrnPreview = "\(ymd)-\(sx)-\(csum)"
+    }
+
+    private func simpleChecksumBase36(_ s: String) -> String {
+        var h: UInt64 = 1469598103934665603 // FNV offset basis
+        for b in s.utf8 {
+            h ^= UInt64(b)
+            h &*= 1099511628211
+        }
+        // produce 4 base36 chars
+        let alphabet = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        var x = h ^ (h >> 32)
+        var out = ""
+        for _ in 0..<4 {
+            let idx = Int(x % 36)
+            out.append(alphabet[idx])
+            x /= 36
+        }
+        return out
     }
 }

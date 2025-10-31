@@ -11,6 +11,7 @@ import SwiftUI
 import OSLog
 import SQLite3
 import ZIPFoundation
+import CryptoKit
 import PediaShared
 
 struct PatientRow: Identifiable, Equatable {
@@ -76,6 +77,11 @@ final class AppState: ObservableObject {
     // Documents (per-bundle)
     @Published var documents: [URL] = []
     @Published var selectedDocumentURL: URL? = nil
+    
+    /// Default root for all patient bundles (auto-created; sandbox-aware).
+    public var bundlesRoot: URL {
+        ensureAppSupportSubdir("Bundles")
+    }
     
     private let profileLog = Logger(subsystem: "DrsMainApp", category: "PatientProfile")
     // Clinicians: injected at init so AppState and Views share the same instance
@@ -931,14 +937,14 @@ final class AppState: ObservableObject {
                         sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
                         if sqlite3_step(stmt) == SQLITE_ROW {
                             var idx = 0
-                            if let pb {
+                            if pb != nil {
                                 if let c = sqlite3_column_text(stmt, Int32(idx)) {
                                     let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
                                     problems = s.isEmpty ? nil : s
                                 }
                                 idx += 1
                             }
-                            if let con {
+                            if con != nil {
                                 if let c = sqlite3_column_text(stmt, Int32(idx)) {
                                     let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
                                     conclusions = s.isEmpty ? nil : s
@@ -1041,12 +1047,17 @@ final class AppState: ObservableObject {
         func createNewPatient(
             into parentFolder: URL,
             alias: String,
+            firstName: String?,
+            lastName: String?,
             fullName: String?,
             dob: Date?,
-            sex: String?
+            sex: String?,
+            aliasLabel overrideAliasLabel: String? = nil,
+            aliasID overrideAliasID: String? = nil,
+            mrnOverride: String? = nil
         ) throws -> URL {
             let fm = FileManager.default
-            
+
             // 1) Make a unique, safe folder name
             let safeAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "New Patient" : alias
             let baseName = safeAlias
@@ -1058,40 +1069,100 @@ final class AppState: ObservableObject {
                 suffix += 1
                 bundleURL = parentFolder.appendingPathComponent("\(baseName) \(suffix)", isDirectory: true)
             }
-            
+
             // 2) Create bundle dirs
             try fm.createDirectory(at: bundleURL, withIntermediateDirectories: true)
             let docsURL = bundleURL.appendingPathComponent("docs", isDirectory: true)
             try fm.createDirectory(at: docsURL, withIntermediateDirectories: true)
-            
+
             // 3) Create and initialize SQLite (minimal schema required to seed patients)
             let dbURL = bundleURL.appendingPathComponent("db.sqlite")
             try initializeMinimalSchema(at: dbURL)
-            
-            // 4) Seed initial patient row
-            try insertInitialPatient(
+
+
+            // 4) Generate (or use provided) alias + MRN, then seed initial patient row
+            //    We allow the sheet to preview and pass alias/mrn so what the user sees matches what gets saved.
+            let generated: (label: String, id: String) = {
+                if let l = overrideAliasLabel, let i = overrideAliasID, !l.isEmpty, !i.isEmpty {
+                    return (l, i)
+                }
+                return AliasGenerator.generate()
+            }()
+            let aliasLabel = generated.label
+            let aliasID    = generated.id
+
+            // ISO DOB string for MRN & manifest
+            let dobStr = dob.map {
+                let df = DateFormatter()
+                df.calendar = Calendar(identifier: .iso8601)
+                df.locale = Locale(identifier: "en_US_POSIX")
+                df.timeZone = TimeZone(secondsFromGMT: 0)
+                df.dateFormat = "yyyy-MM-dd"
+                return df.string(from: $0)
+            } ?? "0000-00-00"
+
+            // If a precomputed MRN is provided, use it; else compute here
+            let mrnValue = (mrnOverride?.isEmpty == false)
+                ? mrnOverride!
+                : MRNGenerator.generate(dobYYYYMMDD: dobStr, sex: (sex ?? ""), aliasID: aliasID)
+
+            // Compose full_name if not provided, from first/last
+            let composedFullName: String? = {
+                if let fn = firstName?.trimmingCharacters(in: .whitespacesAndNewlines), !fn.isEmpty,
+                   let ln = lastName?.trimmingCharacters(in: .whitespacesAndNewlines), !ln.isEmpty {
+                    return "\(fn) \(ln)"
+                }
+                return fullName
+            }()
+
+            let insertedID = try insertInitialPatient(
                 dbURL: dbURL,
-                alias: safeAlias,
-                fullName: fullName,
+                aliasLabel: aliasLabel,
+                aliasID: aliasID,
+                mrn: mrnValue,
+                firstName: firstName,
+                lastName: lastName,
+                fullName: composedFullName,
                 dob: dob,
                 sex: sex
             )
-            
-            // 5) Write a simple manifest at root (and mirror into docs/ for legacy readers)
+
+            // 5) Compute integrity fields and write manifest v2 at root (no copy in docs/)
+            // 5a) Determine inserted patient id to include in manifest
+            let insertedPatientID = insertedID
+
+            // 5b) Compute db.sqlite SHA-256
+            let dbSha256 = sha256OfFile(at: dbURL)
+
+            // 5c) Build docs manifest (relative paths under 'docs/')
+            let docsManifest = buildDocsManifest(docsRoot: docsURL, bundleRoot: bundleURL)
+
+            // 5d) Compose manifest (schema v2 as in PatientViewerApp)
             let iso = ISO8601DateFormatter()
             let nowISO = iso.string(from: Date())
+
             let manifest: [String: Any] = [
-                "alias": safeAlias,
-                "created_at": nowISO,
-                "version": 1,
-                "docs_count": 0
+                "format": "peMR",
+                "version": 1,                 // legacy key for older importers
+                "schema_version": 2,          // hashes present
+                "encrypted": false,
+                "exported_at": nowISO,
+                "source": "DrsMainApp",
+                "includes_docs": !docsManifest.isEmpty,
+                "patient_id": insertedPatientID,
+                "patient_alias": aliasLabel,
+                "dob": dobStr,
+                "patient_sex": sex ?? "",
+                // Integrity fields
+                "db_sha256": dbSha256,
+                "docs_manifest": docsManifest  // array of { path, sha256 }
             ]
+
             let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
             try manifestData.write(to: bundleURL.appendingPathComponent("manifest.json"), options: .atomic)
-            try manifestData.write(to: docsURL.appendingPathComponent("manifest.json"), options: .atomic)
-            
+
             log.info("Created new bundle for \(safeAlias, privacy: .public) at \(bundleURL.path, privacy: .public)")
-            
+
             // 6) Activate
             selectBundle(bundleURL)
             return bundleURL
@@ -1173,13 +1244,17 @@ final class AppState: ObservableObject {
         }
         
         /// Insert the first patient row using a prepared statement.
-        private func insertInitialPatient(
+        @discardableResult private func insertInitialPatient(
             dbURL: URL,
-            alias: String,
+            aliasLabel: String,
+            aliasID: String,
+            mrn: String,
+            firstName: String?,
+            lastName: String?,
             fullName: String?,
             dob: Date?,
             sex: String?
-        ) throws {
+        ) throws -> Int {
             var db: OpaquePointer?
             let path = dbURL.path
             if sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
@@ -1188,55 +1263,127 @@ final class AppState: ObservableObject {
                 throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: "Failed to open DB at \(path)"])
             }
             defer { sqlite3_close(db) }
-            
+
             let iso = ISO8601DateFormatter()
             iso.formatOptions = [.withFullDate]
             let dobStr = dob.map { iso.string(from: $0) }
-            
+
             let sql = """
-        INSERT INTO patients (alias_label, alias_id, full_name, dob, sex)
-        VALUES (?, ?, ?, ?, ?);
-        """
-            
+                        INSERT INTO patients (alias_label, alias_id, mrn, first_name, last_name, full_name, dob, sex)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                        """
+
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
                 let msg = String(cString: sqlite3_errmsg(db))
                 throw NSError(domain: "SQLite", code: 2, userInfo: [NSLocalizedDescriptionKey: "Prepare failed: \(msg)"])
             }
             defer { sqlite3_finalize(stmt) }
-            
-            // Compute alias_id from alias_label
-            let aliasID = alias
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-                .replacingOccurrences(of: " ", with: "_")
-            
+
             // Bind parameters (1-based)
-            sqlite3_bind_text(stmt, 1, alias, -1, SQLITE_TRANSIENT)   // alias_label
-            sqlite3_bind_text(stmt, 2, aliasID, -1, SQLITE_TRANSIENT) // alias_id
-            
-            if let fullName = fullName, !fullName.isEmpty {
-                sqlite3_bind_text(stmt, 3, fullName, -1, SQLITE_TRANSIENT)
-            } else {
-                sqlite3_bind_null(stmt, 3)
-            }
-            
-            if let dobStr = dobStr {
-                sqlite3_bind_text(stmt, 4, dobStr, -1, SQLITE_TRANSIENT) // dob
+            sqlite3_bind_text(stmt, 1, aliasLabel, -1, SQLITE_TRANSIENT)  // alias_label
+            sqlite3_bind_text(stmt, 2, aliasID, -1, SQLITE_TRANSIENT)     // alias_id
+            sqlite3_bind_text(stmt, 3, mrn, -1, SQLITE_TRANSIENT)         // mrn
+
+            if let fn = firstName, !fn.isEmpty {
+                sqlite3_bind_text(stmt, 4, fn, -1, SQLITE_TRANSIENT)      // first_name
             } else {
                 sqlite3_bind_null(stmt, 4)
             }
-            
-            if let sex = sex, !sex.isEmpty {
-                sqlite3_bind_text(stmt, 5, sex, -1, SQLITE_TRANSIENT)
+
+            if let ln = lastName, !ln.isEmpty {
+                sqlite3_bind_text(stmt, 5, ln, -1, SQLITE_TRANSIENT)      // last_name
             } else {
                 sqlite3_bind_null(stmt, 5)
             }
-            
+
+            if let fullName = fullName, !fullName.isEmpty {
+                sqlite3_bind_text(stmt, 6, fullName, -1, SQLITE_TRANSIENT) // full_name
+            } else {
+                sqlite3_bind_null(stmt, 6)
+            }
+
+            if let dobStr = dobStr {
+                sqlite3_bind_text(stmt, 7, dobStr, -1, SQLITE_TRANSIENT)  // dob
+            } else {
+                sqlite3_bind_null(stmt, 7)
+            }
+
+            if let sex = sex, !sex.isEmpty {
+                sqlite3_bind_text(stmt, 8, sex, -1, SQLITE_TRANSIENT)     // sex
+            } else {
+                sqlite3_bind_null(stmt, 8)
+            }
+
             if sqlite3_step(stmt) != SQLITE_DONE {
                 let msg = String(cString: sqlite3_errmsg(db))
                 throw NSError(domain: "SQLite", code: 3, userInfo: [NSLocalizedDescriptionKey: "Insert failed: \(msg)"])
             }
+            let newID = Int(sqlite3_last_insert_rowid(db))
+            return newID
+        }
+
+        // MARK: - Manifest helpers
+
+        /// Return SHA-256 hex of a file (empty string on error).
+        private func sha256OfFile(at url: URL) -> String {
+            guard let fh = try? FileHandle(forReadingFrom: url) else { return "" }
+            defer { try? fh.close() }
+            var hasher = SHA256()
+            while autoreleasepool(invoking: {
+                let chunk = fh.readData(ofLength: 64 * 1024)
+                if chunk.count > 0 {
+                    hasher.update(data: chunk)
+                    return true
+                } else {
+                    return false
+                }
+            }) {}
+            let digest = hasher.finalize()
+            return digest.map { String(format: "%02x", $0) }.joined()
+        }
+
+        /// Build docs manifest entries with relative paths (under 'docs/') and sha256.
+        private func buildDocsManifest(docsRoot: URL, bundleRoot: URL) -> [[String: String]] {
+            var entries: [[String: String]] = []
+            let fm = FileManager.default
+            guard fm.fileExists(atPath: docsRoot.path) else { return entries }
+            if let en = fm.enumerator(at: docsRoot, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
+                for case let url as URL in en {
+                    var isDir: ObjCBool = false
+                    if fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue {
+                        let rel = url.path.replacingOccurrences(of: bundleRoot.path + "/", with: "")
+                        entries.append([
+                            "path": rel,
+                            "sha256": sha256OfFile(at: url)
+                        ])
+                    }
+                }
+            }
+            return entries
+        }
+
+        /// Get last inserted patient id from this DB (or throw).
+        private func fetchLastInsertedPatientID(dbURL: URL) throws -> Int {
+            var db: OpaquePointer?
+            let path = dbURL.path
+            if sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK {
+                let code = sqlite3_errcode(db)
+                defer { sqlite3_close(db) }
+                throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: "Open failed"])
+            }
+            defer { sqlite3_close(db) }
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            let sql = "SELECT id FROM patients ORDER BY id DESC LIMIT 1;"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                let msg = String(cString: sqlite3_errmsg(db))
+                throw NSError(domain: "SQLite", code: 2, userInfo: [NSLocalizedDescriptionKey: "Prepare failed: \(msg)"])
+            }
+            guard sqlite3_step(stmt) == SQLITE_ROW else {
+                throw NSError(domain: "SQLite", code: 3, userInfo: [NSLocalizedDescriptionKey: "No patient row found"])
+            }
+            return Int(sqlite3_column_int64(stmt, 0))
         }
     }
     

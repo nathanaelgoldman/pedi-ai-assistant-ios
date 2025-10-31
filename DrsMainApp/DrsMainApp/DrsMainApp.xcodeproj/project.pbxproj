@@ -19,6 +19,8 @@
 		BB564B012EAF3C6400870007 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564B002EAF3C5D00870007 /* PatientDetailView.swift */; };
 		BB564B042EAF58C200870007 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB564B032EAF58C200870007 /* ZIPFoundation */; };
 		BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */; };
+		BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C052EB486980065EF3E /* AliasGenerator.swift */; };
+		BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */; };
 		BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB9E72BC2EAD1A1C00601148 /* PediaShared */; };
 		BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCEA84F2EB32B4C009A9386 /* ClinicianStore.swift */; };
 /* End PBXBuildFile section */
@@ -36,6 +38,8 @@
 		BB564AFE2EAF25EA00870007 /* PatientsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientsListView.swift; sourceTree = "<group>"; };
 		BB564B002EAF3C5D00870007 /* PatientDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailView.swift; sourceTree = "<group>"; };
 		BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentListView.swift; sourceTree = "<group>"; };
+		BB6D4C052EB486980065EF3E /* AliasGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliasGenerator.swift; sourceTree = "<group>"; };
+		BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MRNGenerator.swift; sourceTree = "<group>"; };
 		BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = DrsMainApp.xcodeproj; sourceTree = "<group>"; };
 		BBCEA84F2EB32B4C009A9386 /* ClinicianStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicianStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -121,6 +125,8 @@
 		BB564AF02EAE0BB900870007 /* Util */ = {
 			isa = PBXGroup;
 			children = (
+				BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */,
+				BB6D4C052EB486980065EF3E /* AliasGenerator.swift */,
 			);
 			path = Util;
 			sourceTree = "<group>";
@@ -232,10 +238,12 @@
 				BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */,
 				BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */,
 				BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */,
+				BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */,
 				BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */,
 				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
 				BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */,
 				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,
+				BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */,
 				BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
 				BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */,

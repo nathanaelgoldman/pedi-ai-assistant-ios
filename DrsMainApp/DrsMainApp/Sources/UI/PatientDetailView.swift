@@ -20,7 +20,6 @@
 import SwiftUI
 import OSLog
 
-@State private var showDocuments = false
 
 // Humanize visit categories (well-visit keys + a fallback)
 fileprivate func prettyCategory(_ raw: String) -> String {
@@ -91,6 +90,7 @@ struct PatientDetailView: View {
     let patient: PatientRow   // ← match AppState.selectedPatient type
     @State private var visitForDetail: VisitRow? = nil
     @State private var visitTab: VisitTab = .all
+    @State private var showDocuments = false
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -162,6 +162,16 @@ struct PatientDetailView: View {
                     }
                     Spacer()
                 }
+                
+                HStack {
+                    Spacer()
+                    Button {
+                        showDocuments.toggle()
+                    } label: {
+                        Label("Documents…", systemImage: "doc.on.clipboard")
+                    }
+                }
+                .padding(.bottom, 4)
 
                 // Facts grid
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
@@ -295,6 +305,10 @@ struct PatientDetailView: View {
                 appState.loadVisits(for: id)
                 appState.loadPatientProfile(for: Int64(patient.id))
             }
+        }
+        .sheet(isPresented: $showDocuments) {
+            DocumentListView()
+                .environmentObject(appState)
         }
         .sheet(item: $visitForDetail) { v in
             VisitDetailView(visit: v)
