@@ -73,6 +73,9 @@ final class AppState: ObservableObject {
     @Published var currentPatientProfile: PatientProfile? = nil
     // Selected/active signed-in clinician (optional until sign-in flow is added)
     @Published var activeUserID: Int? = nil
+    // Documents (per-bundle)
+    @Published var documents: [URL] = []
+    @Published var selectedDocumentURL: URL? = nil
     
     private let profileLog = Logger(subsystem: "DrsMainApp", category: "PatientProfile")
     // Clinicians: injected at init so AppState and Views share the same instance
@@ -81,6 +84,82 @@ final class AppState: ObservableObject {
     // The db.sqlite inside the currently selected bundle
     var currentDBURL: URL? {
         currentBundleURL?.appendingPathComponent("db.sqlite")
+    }
+    /// docs/ folder in the current bundle (created if missing)
+    var currentDocsURL: URL? {
+        guard let root = currentBundleURL else { return nil }
+        let url = root.appendingPathComponent("docs", isDirectory: true)
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: url.path) {
+            try? fm.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        // subfolder for app-imported files (deletable)
+        let inbox = url.appendingPathComponent("inbox", isDirectory: true)
+        if !fm.fileExists(atPath: inbox.path) {
+            try? fm.createDirectory(at: inbox, withIntermediateDirectories: true)
+        }
+        return url
+    }
+
+    /// Refresh the `documents` list for the current bundle.
+    func reloadDocuments() {
+        documents.removeAll()
+        guard let docsRoot = currentDocsURL else { return }
+        let fm = FileManager.default
+        if let en = fm.enumerator(
+            at: docsRoot,
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            var items: [URL] = []
+            for case let url as URL in en {
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue {
+                    items.append(url)
+                }
+            }
+            self.documents = items.sorted {
+                $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+            }
+        }
+    }
+
+    /// Import (copy) selected files into docs/inbox and refresh list.
+    func importDocuments(from urls: [URL]) {
+        guard !urls.isEmpty, let docsRoot = currentDocsURL else { return }
+        let inbox = docsRoot.appendingPathComponent("inbox", isDirectory: true)
+        let fm = FileManager.default
+        for src in urls {
+            var dest = inbox.appendingPathComponent(src.lastPathComponent)
+            var i = 1
+            while fm.fileExists(atPath: dest.path) {
+                let base = src.deletingPathExtension().lastPathComponent
+                let ext  = src.pathExtension
+                dest = inbox.appendingPathComponent("\(base)-\(i)" + (ext.isEmpty ? "" : ".\(ext)"))
+                i += 1
+            }
+            do { try fm.copyItem(at: src, to: dest) }
+            catch { log.error("Import doc copy failed: \(String(describing: error), privacy: .public)") }
+        }
+        reloadDocuments()
+    }
+
+    /// Delete a document only if it is under docs/inbox/
+    func deleteDocument(_ url: URL) {
+        guard let docsRoot = currentDocsURL else { return }
+        let inbox = docsRoot.appendingPathComponent("inbox", isDirectory: true).standardizedFileURL
+        let ok = url.standardizedFileURL.path.hasPrefix(inbox.path)
+        guard ok else {
+            log.info("Refusing delete (not in inbox): \(url.lastPathComponent, privacy: .public)")
+            return
+        }
+        do {
+            try FileManager.default.removeItem(at: url)
+            if selectedDocumentURL == url { selectedDocumentURL = nil }
+            reloadDocuments()
+        } catch {
+            log.error("Delete doc failed: \(String(describing: error), privacy: .public)")
+        }
     }
     
     // Convenience for the right pane
@@ -359,6 +438,7 @@ final class AppState: ObservableObject {
             patients = []
             visits = []
             reloadPatients()
+            reloadDocuments()
         }
         
         private func addToRecents(_ url: URL) {

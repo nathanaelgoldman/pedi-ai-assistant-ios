@@ -13,6 +13,7 @@ struct DrsMainAppApp: App {
     @StateObject private var clinicianStore: ClinicianStore
     @StateObject private var appState: AppState
     @State private var showSignIn: Bool = false
+    @State private var showClinicianProfile = false
 
     init() {
         let store = ClinicianStore()
@@ -36,6 +37,19 @@ struct DrsMainAppApp: App {
                         .environmentObject(appState)
                         .environmentObject(clinicianStore)
                 }
+                .sheet(isPresented: $showClinicianProfile) {
+                    ClinicianProfileForm(
+                        clinicianStore: clinicianStore,
+                        user: {
+                            if let uid = appState.activeUserID {
+                                return clinicianStore.users.first(where: { $0.id == uid })
+                            }
+                            return nil
+                        }(),
+                        onClose: { showClinicianProfile = false }
+                    )
+                    .frame(minWidth: 640, minHeight: 610)
+                }
                 .toolbar {
                     ToolbarItem(placement: .automatic) {
                         let active: Clinician? = {
@@ -52,6 +66,7 @@ struct DrsMainAppApp: App {
                                     return "Signed in as " + (n.isEmpty ? "User #\(active.id)" : n)
                                 }())
                                 Divider()
+                                Button("Edit profile…") { showClinicianProfile = true }
                                 Button("Switch clinician…") { showSignIn = true }
                                 Button("Sign out") {
                                     appState.activeUserID = nil
@@ -212,6 +227,126 @@ private struct SignInSheet: View {
         }
         .frame(minWidth: 640, minHeight: 420) // enforce sheet size on macOS
         .onAppear {
+        }
+    }
+}
+
+private struct ClinicianProfileForm: View {
+    @ObservedObject var clinicianStore: ClinicianStore
+    let user: Clinician?
+    let onClose: () -> Void
+
+    @State private var firstName = ""
+    @State private var lastName  = ""
+    @State private var title     = ""
+    @State private var email     = ""
+    @State private var societies = ""
+    @State private var website   = ""
+    @State private var twitter   = ""
+    @State private var wechat    = ""
+    @State private var instagram = ""
+    @State private var linkedin  = ""
+    @State private var aiEndpoint = ""
+    @State private var aiAPIKey   = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(user == nil ? "Create Clinician" : "Clinician Profile")
+                .font(.title2)
+                .padding(.horizontal)
+                .padding(.top)
+
+            Divider()
+
+            Form {
+                Section("Identity") {
+                    TextField("First name", text: $firstName)
+                    TextField("Last name",  text: $lastName)
+                    TextField("Title (e.g., MD, FAAP)", text: $title)
+                }
+                Section("Contact") {
+                    TextField("Email", text: $email)
+                    TextField("Website", text: $website)
+                }
+                Section("Professional") {
+                    TextField("Societies (comma-separated)", text: $societies)
+                }
+                Section("Social") {
+                    TextField("Twitter/X", text: $twitter)
+                    TextField("WeChat",    text: $wechat)
+                    TextField("Instagram", text: $instagram)
+                    TextField("LinkedIn",  text: $linkedin)
+                }
+                Section("AI Assistant (optional)") {
+                    TextField("Endpoint URL", text: $aiEndpoint)
+                    SecureField("API Key",     text: $aiAPIKey)
+                        .textContentType(.password)
+                }
+            }
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Close") { onClose() }
+                Button(user == nil ? "Create" : "Save") {
+                    if let u = user {
+                        clinicianStore.updateUser(
+                            id: u.id,
+                            firstName: firstName.isEmpty ? nil : firstName,
+                            lastName:  lastName.isEmpty  ? nil : lastName,
+                            title:     title,
+                            email:     email,
+                            societies: societies,
+                            website:   website,
+                            twitter:   twitter,
+                            wechat:    wechat,
+                            instagram: instagram,
+                            linkedin:  linkedin
+                        )
+                        clinicianStore.updateAISettings(id: u.id,
+                                                        endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
+                                                        apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey)
+                    } else {
+                        if let new = clinicianStore.createUser(
+                            firstName: firstName,
+                            lastName:  lastName,
+                            title:     title,
+                            email:     email,
+                            societies: societies,
+                            website:   website,
+                            twitter:   twitter,
+                            wechat:    wechat,
+                            instagram: instagram,
+                            linkedin:  linkedin
+                        ) {
+                            clinicianStore.updateAISettings(id: new.id,
+                                                            endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
+                                                            apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey)
+                            clinicianStore.setActiveUser(new)
+                        }
+                    }
+                    onClose()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding()
+        }
+        .onAppear {
+            if let u = user {
+                firstName = u.firstName
+                lastName  = u.lastName
+                title     = u.title ?? ""
+                email     = u.email ?? ""
+                societies = u.societies ?? ""
+                website   = u.website ?? ""
+                twitter   = u.twitter ?? ""
+                wechat    = u.wechat ?? ""
+                instagram = u.instagram ?? ""
+                linkedin  = u.linkedin ?? ""
+                aiEndpoint = u.aiEndpoint ?? ""
+                aiAPIKey   = u.aiAPIKey ?? ""
+            }
         }
     }
 }

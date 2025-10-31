@@ -20,6 +20,8 @@
 import SwiftUI
 import OSLog
 
+@State private var showDocuments = false
+
 // Humanize visit categories (well-visit keys + a fallback)
 fileprivate func prettyCategory(_ raw: String) -> String {
     let k = raw
@@ -47,11 +49,48 @@ fileprivate func prettyCategory(_ raw: String) -> String {
     return raw.replacingOccurrences(of: "_", with: " ").capitalized
 }
 
+// Segments for visit filtering
+fileprivate enum VisitTab: String, CaseIterable, Identifiable {
+    case all = "All"
+    case sick = "Sick"
+    case well = "Well"
+
+    var id: String { rawValue }
+    var label: String { rawValue }
+}
+
+// Detect whether a visit category is a "well" milestone vs a sick episode
+fileprivate func isWellCategory(_ raw: String) -> Bool {
+    let k = raw
+        .lowercased()
+        .replacingOccurrences(of: "-", with: "_")
+        .replacingOccurrences(of: " ", with: "_")
+
+    let wellKeys: Set<String> = [
+        "one_month","two_month","four_month","six_month","nine_month",
+        "twelve_month","fifteen_month","eighteen_month","twentyfour_month",
+        "twenty_four_month","thirty_month","thirtysix_month","thirty_six_month"
+    ]
+    if wellKeys.contains(k) { return true }
+    // treat anything that's not explicit "episode" as well if it matches "month" pattern
+    if k.contains("month") { return true }
+    return false
+}
+
+fileprivate func isSickCategory(_ raw: String) -> Bool {
+    let k = raw
+        .lowercased()
+        .replacingOccurrences(of: "-", with: "_")
+        .replacingOccurrences(of: " ", with: "_")
+    return k == "episode" || prettyCategory(raw) == "Sick visit"
+}
+
 /// Right-pane details for a selected patient from the sidebar list.
 struct PatientDetailView: View {
     @EnvironmentObject var appState: AppState
     let patient: PatientRow   // ← match AppState.selectedPatient type
     @State private var visitForDetail: VisitRow? = nil
+    @State private var visitTab: VisitTab = .all
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -95,6 +134,17 @@ struct PatientDetailView: View {
             return df.string(from: d)
         }
         return patient.dobISO
+    }
+
+    private var filteredVisits: [VisitRow] {
+        switch visitTab {
+        case .all:
+            return appState.visits
+        case .sick:
+            return appState.visits.filter { isSickCategory($0.category) }
+        case .well:
+            return appState.visits.filter { isWellCategory($0.category) && !isSickCategory($0.category) }
+        }
     }
 
     var body: some View {
@@ -191,18 +241,29 @@ struct PatientDetailView: View {
                 Divider()
 
                 // Visits section
-                Text("Visits")
-                    .font(.headline)
+                HStack {
+                    Text("Visits")
+                        .font(.headline)
+                    Spacer()
+                    Picker("Filter", selection: $visitTab) {
+                        ForEach(VisitTab.allCases) { tab in
+                            Text(tab.label).tag(tab)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 320)
+                }
 
-                if appState.visits.isEmpty {
-                    Text("No visits found for this patient.")
+                let list = filteredVisits
+                if list.isEmpty {
+                    Text("No visits found for this patient in “\(visitTab.label)”")
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(appState.visits) { v in
+                        ForEach(list) { v in
                             Button(action: { visitForDetail = v }) {
                                 HStack(alignment: .top, spacing: 12) {
-                                    Image(systemName: "calendar")
+                                    Image(systemName: isSickCategory(v.category) ? "stethoscope" : "checkmark.seal")
                                         .font(.system(size: 16))
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(visitDateFormatted(v.dateISO))
@@ -276,78 +337,120 @@ struct VisitDetailView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 24))
-                Text("Visit Details")
-                    .font(.title2.bold())
-                Spacer()
-            }
-
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                GridRow {
-                    Text("ID").foregroundStyle(.secondary)
-                    Text("\(visit.id)")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 24))
+                    Text("Visit Details")
+                        .font(.title2.bold())
+                    Spacer()
                 }
-                GridRow {
-                    Text("Date").foregroundStyle(.secondary)
-                    Text(formattedDate(visit.dateISO))
+
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                    GridRow {
+                        Text("ID").foregroundStyle(.secondary)
+                        Text("\(visit.id)")
+                    }
+                    GridRow {
+                        Text("Date").foregroundStyle(.secondary)
+                        Text(formattedDate(visit.dateISO))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    GridRow {
+                        Text("Category").foregroundStyle(.secondary)
+                        Text(prettyCategory(visit.category))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
-                GridRow {
-                    Text("Category").foregroundStyle(.secondary)
-                    Text(prettyCategory(visit.category))
-                }
-            }
 
-            // --- Summary pulled from AppState (problems / diagnosis / conclusions) ---
-            if let s = appState.visitSummary,
-               ( (s.problems?.isEmpty == false) ||
-                 (s.diagnosis?.isEmpty == false) ||
-                 (s.conclusions?.isEmpty == false) ) {
+                // --- Summary pulled from AppState (problems / diagnosis / conclusions) ---
+                if let s = appState.visitSummary,
+                   ( (s.problems?.isEmpty == false) ||
+                     (s.diagnosis?.isEmpty == false) ||
+                     (s.conclusions?.isEmpty == false) ) {
 
-                Divider().padding(.top, 4)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Summary")
-                        .font(.headline)
+                    Divider().padding(.top, 4)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        if let p = s.problems, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            LabeledContent {
-                                Text(p)
-                            } label: {
-                                Text("Problems")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        if let d = s.diagnosis, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            LabeledContent {
-                                Text(d)
-                            } label: {
-                                Text("Diagnosis")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        if let c = s.conclusions, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            LabeledContent {
-                                Text(c)
-                            } label: {
-                                Text("Conclusions")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(12)
-                    .background(Color.secondary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-            }
+                        Text("Summary")
+                            .font(.headline)
 
-            Spacer()
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let p = s.problems, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                LabeledContent {
+                                    Text(p)
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(Color.secondary.opacity(0.12))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .strokeBorder(Color.secondary.opacity(0.25))
+                                        )
+                                } label: {
+                                    Text("Problems")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if let d = s.diagnosis, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                LabeledContent {
+                                    Text(d)
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(Color.secondary.opacity(0.12))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .strokeBorder(Color.secondary.opacity(0.25))
+                                        )
+                                } label: {
+                                    Text("Diagnosis")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if let c = s.conclusions, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                LabeledContent {
+                                    Text(c)
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(Color.secondary.opacity(0.12))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .strokeBorder(Color.secondary.opacity(0.25))
+                                        )
+                                } label: {
+                                    Text("Conclusions")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.secondary.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                Spacer()
+            }
         }
         .padding(24)
-        .frame(minWidth: 420, minHeight: 280)
+        .frame(minWidth: 680, idealWidth: 760, maxWidth: 900,
+               minHeight: 520, idealHeight: 600, maxHeight: 900)
         .onAppear {
             appState.loadVisitSummary(for: visit)
         }

@@ -28,6 +28,8 @@ struct Clinician: Identifiable, Equatable {
     var wechat: String?
     var instagram: String?
     var linkedin: String?
+    var aiEndpoint: String?
+    var aiAPIKey: String?
 
     var fullName: String { "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces) }
 }
@@ -85,6 +87,8 @@ final class ClinicianStore: ObservableObject {
             wechat     TEXT,
             instagram  TEXT,
             linkedin   TEXT,
+            ai_endpoint TEXT,
+            ai_api_key  TEXT,
             created_at TEXT
         );
         """
@@ -107,7 +111,9 @@ final class ClinicianStore: ObservableObject {
             "ALTER TABLE users ADD COLUMN twitter TEXT",
             "ALTER TABLE users ADD COLUMN wechat TEXT",
             "ALTER TABLE users ADD COLUMN instagram TEXT",
-            "ALTER TABLE users ADD COLUMN linkedin TEXT"
+            "ALTER TABLE users ADD COLUMN linkedin TEXT",
+            "ALTER TABLE users ADD COLUMN ai_endpoint TEXT",
+            "ALTER TABLE users ADD COLUMN ai_api_key TEXT"
         ]
         for stmt in alterStmts {
             _ = sqlite3_exec(db, stmt, nil, nil, nil) // ignore errors if column already exists
@@ -133,7 +139,8 @@ final class ClinicianStore: ObservableObject {
         SELECT id,
                TRIM(first_name) AS first_name,
                TRIM(last_name)  AS last_name,
-               title, email, societies, website, twitter, wechat, instagram, linkedin
+               title, email, societies, website, twitter, wechat, instagram, linkedin,
+               ai_endpoint, ai_api_key
         FROM users
         ORDER BY last_name, first_name, id;
         """
@@ -169,7 +176,9 @@ final class ClinicianStore: ObservableObject {
                 twitter: s(7),
                 wechat: s(8),
                 instagram: s(9),
-                linkedin: s(10)
+                linkedin: s(10),
+                aiEndpoint: s(11),
+                aiAPIKey: s(12)
             )
             out.append(user)
         }
@@ -304,6 +313,40 @@ final class ClinicianStore: ObservableObject {
         reloadUsers()
 
         // keep activeUser in sync if necessary
+        if let active = activeUser, active.id == id {
+            activeUser = users.first(where: { $0.id == id })
+        }
+    }
+
+    func updateAISettings(id: Int, endpoint: String?, apiKey: String?) {
+        guard let db = openDB() else { return }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        UPDATE users SET
+          ai_endpoint = COALESCE(?, ai_endpoint),
+          ai_api_key  = COALESCE(?, ai_api_key)
+        WHERE id = ?;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        func bindOpt(_ idx: Int32, _ value: String?) {
+            if let v = value?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty {
+                sqlite3_bind_text(stmt, idx, v, -1, SQLITE_TRANSIENT)
+            } else {
+                sqlite3_bind_null(stmt, idx)
+            }
+        }
+
+        bindOpt(1, endpoint)
+        bindOpt(2, apiKey)
+        sqlite3_bind_int64(stmt, 3, sqlite3_int64(id))
+
+        _ = sqlite3_step(stmt)
+        reloadUsers()
+
         if let active = activeUser, active.id == id {
             activeUser = users.first(where: { $0.id == id })
         }
