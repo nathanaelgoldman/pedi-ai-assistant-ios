@@ -45,6 +45,21 @@ struct VisitSummary {
     let conclusions: String?
 }
 
+/// One row from the vitals table, normalized for UI display.
+struct VitalsPoint: Identifiable, Equatable {
+    let id: Int
+    let recordedAtISO: String
+    let temperatureC: Double?
+    let heartRate: Int?
+    let respiratoryRate: Int?
+    let spo2: Int?
+    let bpSystolic: Int?
+    let bpDiastolic: Int?
+    let weightKg: Double?
+    let heightCm: Double?
+    let headCircumferenceCm: Double?
+}
+
 // C macro for sqlite3 destructor that forces a copy during bind
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
@@ -105,6 +120,121 @@ final class AppState: ObservableObject {
             try? fm.createDirectory(at: inbox, withIntermediateDirectories: true)
         }
         return url
+    }
+    
+    func migrateCurrentDBForGrowth() {
+        guard let dbURL = currentDBURL, FileManager.default.fileExists(atPath: dbURL.path) else { return }
+        ensureGrowthUnificationSchema(at: dbURL)
+    }
+    
+    func loadGrowthForSelectedPatient() -> [GrowthPoint] {
+        guard let pid = selectedPatientID,
+              let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else { return [] }
+
+        // Ensure the unified growth schema/view/triggers exist for this DB
+        migrateCurrentDBForGrowth()
+
+        do {
+            let rows = try GrowthStore().fetchPatientGrowth(dbURL: dbURL, patientID: pid)
+            if rows.isEmpty {
+                log.info("Growth fetch returned 0 rows for patient \(pid)")
+            }
+            return rows
+        } catch {
+            log.error("Growth fetch failed: \(String(describing: error), privacy: .public)")
+            return []
+        }
+    }
+
+    /// Load vitals rows for the currently selected patient from `vitals` table.
+    /// Returns newest-first. Safe against NULLs.
+    func loadVitalsForSelectedPatient() -> [VitalsPoint] {
+        guard let pid = selectedPatientID,
+              let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else { return [] }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+            return []
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT
+          id,
+          COALESCE(recorded_at, '') AS recorded_at,
+          temperature_c,
+          heart_rate,
+          respiratory_rate,
+          spo2,
+          bp_systolic,
+          bp_diastolic,
+          weight_kg,
+          height_cm,
+          head_circumference_cm
+        FROM vitals
+        WHERE patient_id = ?
+        ORDER BY
+          CASE
+            WHEN recorded_at IS NULL OR recorded_at = '' THEN 1
+            ELSE 0
+          END,
+          datetime(COALESCE(recorded_at, '0001-01-01T00:00:00Z')) DESC,
+          id DESC;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return []
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(pid))
+
+        func intOpt(_ i: Int32) -> Int? {
+            let t = sqlite3_column_type(stmt, i)
+            if t == SQLITE_NULL { return nil }
+            return Int(sqlite3_column_int64(stmt, i))
+        }
+        func doubleOpt(_ i: Int32) -> Double? {
+            let t = sqlite3_column_type(stmt, i)
+            if t == SQLITE_NULL { return nil }
+            return sqlite3_column_double(stmt, i)
+        }
+        func text(_ i: Int32) -> String {
+            if let c = sqlite3_column_text(stmt, i) { return String(cString: c) }
+            return ""
+        }
+
+        var rows: [VitalsPoint] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id          = Int(sqlite3_column_int64(stmt, 0))
+            let recordedISO = text(1)
+            let tempC       = doubleOpt(2)
+            let hr          = intOpt(3)
+            let rr          = intOpt(4)
+            let sao2        = intOpt(5)
+            let sys         = intOpt(6)
+            let dia         = intOpt(7)
+            let wkg         = doubleOpt(8)
+            let hcm         = doubleOpt(9)
+            let hccm        = doubleOpt(10)
+
+            rows.append(VitalsPoint(
+                id: id,
+                recordedAtISO: recordedISO,
+                temperatureC: tempC,
+                heartRate: hr,
+                respiratoryRate: rr,
+                spo2: sao2,
+                bpSystolic: sys,
+                bpDiastolic: dia,
+                weightKg: wkg,
+                heightCm: hcm,
+                headCircumferenceCm: hccm
+            ))
+        }
+        return rows
     }
 
     /// Refresh the `documents` list for the current bundle.
@@ -173,7 +303,125 @@ final class AppState: ObservableObject {
         guard let id = selectedPatientID else { return nil }
         return patients.first { $0.id == id }
     }
-    
+    // MARK: - Growth unification objects (VIEW + TRIGGERS + INDEXES)
+    private func ensureGrowthUnificationSchema(at dbURL: URL) {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        func exec(_ sql: String) {
+            if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("Growth schema exec failed: \(msg, privacy: .public)")
+            }
+        }
+
+        // --- Indices (idempotent) ---
+        exec("CREATE INDEX IF NOT EXISTS idx_manual_growth_patient ON manual_growth(patient_id, recorded_at);")
+        exec("CREATE INDEX IF NOT EXISTS idx_vitals_patient ON vitals(patient_id, recorded_at);")
+
+        // --- Mirror vitals -> manual_growth (after INSERT) ---
+        exec("""
+        CREATE TRIGGER IF NOT EXISTS vitals_to_manual_growth_ai
+        AFTER INSERT ON vitals
+        WHEN (NEW.weight_kg IS NOT NULL OR NEW.height_cm IS NOT NULL OR NEW.head_circumference_cm IS NOT NULL)
+        BEGIN
+          INSERT INTO manual_growth (patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source, created_at, updated_at)
+          VALUES (
+            NEW.patient_id,
+            COALESCE(NEW.recorded_at, CURRENT_TIMESTAMP),
+            NEW.weight_kg,
+            NEW.height_cm,
+            NEW.head_circumference_cm,
+            'vitals',
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+          );
+        END;
+        """)
+
+        // Optional: mirror meaningful updates as a new longitudinal point
+        exec("""
+        CREATE TRIGGER IF NOT EXISTS vitals_to_manual_growth_au
+        AFTER UPDATE ON vitals
+        WHEN (
+          (NEW.weight_kg IS NOT NULL AND NEW.weight_kg IS NOT OLD.weight_kg) OR
+          (NEW.height_cm IS NOT NULL AND NEW.height_cm IS NOT OLD.height_cm) OR
+          (NEW.head_circumference_cm IS NOT NULL AND NEW.head_circumference_cm IS NOT OLD.head_circumference_cm)
+        )
+        BEGIN
+          INSERT INTO manual_growth (patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source, created_at, updated_at)
+          VALUES (
+            NEW.patient_id,
+            COALESCE(NEW.recorded_at, CURRENT_TIMESTAMP),
+            NEW.weight_kg,
+            NEW.height_cm,
+            NEW.head_circumference_cm,
+            'vitals:update',
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+          );
+        END;
+        """)
+
+        // --- Unified view (manual_growth + vitals + perinatal birth/discharge) ---
+        // Columns: id, patient_id, episode_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source
+        exec("""
+        CREATE VIEW IF NOT EXISTS growth_unified AS
+        SELECT
+          mg.id                      AS id,
+          mg.patient_id              AS patient_id,
+          NULL                       AS episode_id,
+          mg.recorded_at             AS recorded_at,
+          mg.weight_kg               AS weight_kg,
+          mg.height_cm               AS height_cm,
+          mg.head_circumference_cm   AS head_circumference_cm,
+          COALESCE(mg.source,'manual') AS source
+        FROM manual_growth mg
+
+        UNION ALL
+
+        SELECT
+          v.id + 1000000             AS id,
+          v.patient_id               AS patient_id,
+          v.episode_id               AS episode_id,
+          COALESCE(v.recorded_at, CURRENT_TIMESTAMP) AS recorded_at,
+          v.weight_kg                AS weight_kg,
+          v.height_cm                AS height_cm,
+          v.head_circumference_cm    AS head_circumference_cm,
+          'vitals'                   AS source
+        FROM vitals v
+
+        UNION ALL
+
+        SELECT
+          p.id + 2000000             AS id,
+          p.id                       AS patient_id,
+          NULL                       AS episode_id,
+          COALESCE(p.dob, '')        AS recorded_at,
+          per.birth_weight_g/1000.0  AS weight_kg,
+          per.birth_length_cm        AS height_cm,
+          per.birth_head_circumference_cm AS head_circumference_cm,
+          'birth'                    AS source
+        FROM perinatal_history per
+        JOIN patients p ON p.id = per.patient_id
+
+        UNION ALL
+
+        SELECT
+          p.id + 3000000             AS id,
+          p.id                       AS patient_id,
+          NULL                       AS episode_id,
+          per.maternity_discharge_date AS recorded_at,
+          per.discharge_weight_g/1000.0 AS weight_kg,
+          NULL                       AS height_cm,
+          NULL                       AS head_circumference_cm,
+          'discharge'                AS source
+        FROM perinatal_history per
+        JOIN patients p ON p.id = per.patient_id
+        WHERE per.maternity_discharge_date IS NOT NULL;
+        """)
+    }
     // MARK: - Patient profile (badge) helpers
     
     /// Try to locate the SQLite DB inside the currently-selected bundle.
@@ -1079,6 +1327,7 @@ final class AppState: ObservableObject {
             // 3) Create and initialize SQLite (minimal schema required to seed patients)
             let dbURL = bundleURL.appendingPathComponent("db.sqlite")
             try initializeMinimalSchema(at: dbURL)
+            ensureGrowthUnificationSchema(at: dbURL)
 
 
             // 4) Generate (or use provided) alias + MRN, then seed initial patient row

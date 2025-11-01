@@ -91,6 +91,9 @@ struct PatientDetailView: View {
     @State private var visitForDetail: VisitRow? = nil
     @State private var visitTab: VisitTab = .all
     @State private var showDocuments = false
+    @State private var showGrowth = false
+    @State private var showVitals = false
+    @State private var showGrowthCharts = false
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -169,6 +172,21 @@ struct PatientDetailView: View {
                         showDocuments.toggle()
                     } label: {
                         Label("Documents…", systemImage: "doc.on.clipboard")
+                    }
+                    Button {
+                        showVitals.toggle()
+                    } label: {
+                        Label("Vitals…", systemImage: "waveform.path.ecg")
+                    }
+                    Button {
+                        showGrowth.toggle()
+                    } label: {
+                        Label("Growth…", systemImage: "chart.xyaxis.line")
+                    }
+                    Button {
+                        showGrowthCharts.toggle()
+                    } label: {
+                        Label("Growth Charts…", systemImage: "chart.bar.xaxis")
                     }
                 }
                 .padding(.bottom, 4)
@@ -308,6 +326,18 @@ struct PatientDetailView: View {
         }
         .sheet(isPresented: $showDocuments) {
             DocumentListView()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showGrowth) {
+            GrowthTableView()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showGrowthCharts) {
+            GrowthChartView()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showVitals) {
+            VitalsTableView()
                 .environmentObject(appState)
         }
         .sheet(item: $visitForDetail) { v in

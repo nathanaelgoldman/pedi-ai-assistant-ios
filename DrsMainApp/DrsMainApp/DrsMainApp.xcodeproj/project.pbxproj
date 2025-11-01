@@ -22,6 +22,11 @@
 		BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C052EB486980065EF3E /* AliasGenerator.swift */; };
 		BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */; };
 		BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB9E72BC2EAD1A1C00601148 /* PediaShared */; };
+		BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD522EB5B48F00BDA924 /* GrowthStore.swift */; };
+		BBA6AD552EB5B5D900BDA924 /* GrowthTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */; };
+		BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD562EB5C48C00BDA924 /* GrowthDataFetcher.swift */; };
+		BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */; };
+		BBA6AD5D2EB5F6BB00BDA924 /* GrowthChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */; };
 		BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCEA84F2EB32B4C009A9386 /* ClinicianStore.swift */; };
 /* End PBXBuildFile section */
 
@@ -41,6 +46,11 @@
 		BB6D4C052EB486980065EF3E /* AliasGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliasGenerator.swift; sourceTree = "<group>"; };
 		BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MRNGenerator.swift; sourceTree = "<group>"; };
 		BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = DrsMainApp.xcodeproj; sourceTree = "<group>"; };
+		BBA6AD522EB5B48F00BDA924 /* GrowthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthStore.swift; sourceTree = "<group>"; };
+		BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthTableView.swift; sourceTree = "<group>"; };
+		BBA6AD562EB5C48C00BDA924 /* GrowthDataFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthDataFetcher.swift; sourceTree = "<group>"; };
+		BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsTableView.swift; sourceTree = "<group>"; };
+		BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthChartView.swift; sourceTree = "<group>"; };
 		BBCEA84F2EB32B4C009A9386 /* ClinicianStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicianStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -92,6 +102,7 @@
 		BB564AED2EAE0BB900870007 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				BBA6AD522EB5B48F00BDA924 /* GrowthStore.swift */,
 				BBCEA84F2EB32B4C009A9386 /* ClinicianStore.swift */,
 				BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */,
 				BB564AD92EADC30A00870007 /* ContentView.swift */,
@@ -111,6 +122,9 @@
 		BB564AEF2EAE0BB900870007 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */,
+				BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */,
+				BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */,
 				BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */,
 				BB564B002EAF3C5D00870007 /* PatientDetailView.swift */,
 				BB564AFE2EAF25EA00870007 /* PatientsListView.swift */,
@@ -125,6 +139,7 @@
 		BB564AF02EAE0BB900870007 /* Util */ = {
 			isa = PBXGroup;
 			children = (
+				BBA6AD562EB5C48C00BDA924 /* GrowthDataFetcher.swift */,
 				BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */,
 				BB6D4C052EB486980065EF3E /* AliasGenerator.swift */,
 			);
@@ -236,18 +251,23 @@
 			files = (
 				BB564AF92EAE5F7600870007 /* NewPatientSheet.swift in Sources */,
 				BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */,
+				BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */,
 				BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */,
 				BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */,
 				BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */,
 				BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */,
 				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
+				BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */,
 				BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */,
 				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,
 				BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */,
 				BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */,
+				BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
 				BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */,
+				BBA6AD552EB5B5D900BDA924 /* GrowthTableView.swift in Sources */,
 				BB564B012EAF3C6400870007 /* PatientDetailView.swift in Sources */,
+				BBA6AD5D2EB5F6BB00BDA924 /* GrowthChartView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
