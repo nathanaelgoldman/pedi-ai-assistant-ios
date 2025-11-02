@@ -45,6 +45,22 @@ struct VisitSummary {
     let conclusions: String?
 }
 
+/// Full details for a visit, ready for a detail sheet + export.
+struct VisitDetails {
+    let visit: VisitRow
+    let patientName: String
+    let patientDOB: String?
+    let patientSex: String?
+    let mainComplaint: String?
+    let problems: String?
+    let diagnosis: String?
+    let icd10: String?
+    let conclusions: String?
+    let vitals: VitalsPoint?
+    /// For well visits: "Achieved X/Y; Flags: a, b"
+    let milestonesSummary: String?
+}
+
 /// One row from the vitals table, normalized for UI display.
 struct VitalsPoint: Identifiable, Equatable {
     let id: Int
@@ -86,6 +102,7 @@ final class AppState: ObservableObject {
     // Summaries populated on demand by views
     @Published var patientSummary: PatientSummary? = nil
     @Published var visitSummary: VisitSummary? = nil
+    @Published var visitDetails: VisitDetails? = nil
     @Published var currentPatientProfile: PatientProfile? = nil
     // Selected/active signed-in clinician (optional until sign-in flow is added)
     @Published var activeUserID: Int? = nil
@@ -304,6 +321,11 @@ final class AppState: ObservableObject {
         return patients.first { $0.id == id }
     }
     // MARK: - Growth unification objects (VIEW + TRIGGERS + INDEXES)
+    // Idempotent creator for:
+    // - vitals_to_manual_growth_ai (AFTER INSERT)
+    // - vitals_to_manual_growth_au (AFTER UPDATE)
+    // - growth_unified view combining manual_growth + vitals + perinatal_history
+    // Safe to call after applying bundled schema or at bundle selection time.
     private func ensureGrowthUnificationSchema(at dbURL: URL) {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else { return }
@@ -689,6 +711,11 @@ final class AppState: ObservableObject {
         func selectBundle(_ url: URL) {
             addToRecents(url)
             currentBundleURL = url
+            // Apply bundled schema.sql (idempotent) to keep selected bundles aligned
+            if let dbURL = dbURLForCurrentBundle() {
+                applyBundledSchemaIfPresent(to: dbURL)
+                ensureGrowthUnificationSchema(at: dbURL)
+            }
             selectedPatientID = nil
             patients = []
             visits = []
@@ -1212,6 +1239,274 @@ final class AppState: ObservableObject {
                 conclusions: conclusions
             )
         }
+
+        /// Load full details for a selected visit. Uses current bundle DB and the currently selected patient id.
+        func loadVisitDetails(for visit: VisitRow) {
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                DispatchQueue.main.async { self.visitDetails = nil }
+                return
+            }
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+                DispatchQueue.main.async { self.visitDetails = nil }
+                return
+            }
+            defer { sqlite3_close(db) }
+
+            // --- Patient snapshot (from current selection) ---
+            let pid: Int? = self.selectedPatientID
+            var patientName = "Anon Patient"
+            var patientDOB: String? = nil
+            var patientSex: String? = nil
+            if let pid {
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                if sqlite3_prepare_v2(db, "SELECT TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, dob, sex FROM patients WHERE id=? LIMIT 1;", -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(stmt, 1, sqlite3_int64(pid))
+                    if sqlite3_step(stmt) == SQLITE_ROW {
+                        if let c = sqlite3_column_text(stmt, 0) {
+                            let s = String(cString: c).trimmingCharacters(in: .whitespaces)
+                            if !s.isEmpty { patientName = s }
+                        }
+                        if let c = sqlite3_column_text(stmt, 1) {
+                            let s = String(cString: c).trimmingCharacters(in: .whitespaces)
+                            patientDOB = s.isEmpty ? nil : s
+                        }
+                        if let c = sqlite3_column_text(stmt, 2) {
+                            let s = String(cString: c).trimmingCharacters(in: .whitespaces)
+                            patientSex = s.isEmpty ? nil : s
+                        }
+                    }
+                }
+            }
+
+            // --- Visit core text fields ---
+            func tableExists(_ name: String) -> Bool {
+                let sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;"
+                var s: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK else { return false }
+                defer { sqlite3_finalize(s) }
+                _ = name.withCString { c in sqlite3_bind_text(s, 1, c, -1, SQLITE_TRANSIENT) }
+                return sqlite3_step(s) == SQLITE_ROW
+            }
+            func colSet(_ table: String) -> Set<String> {
+                var cols: Set<String> = []
+                var s: OpaquePointer?
+                defer { sqlite3_finalize(s) }
+                if sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &s, nil) == SQLITE_OK {
+                    while sqlite3_step(s) == SQLITE_ROW {
+                        if let c = sqlite3_column_text(s, 1) {
+                            cols.insert(String(cString: c))
+                        }
+                    }
+                }
+                return cols
+            }
+            func pick(_ cands: [String], _ avail: Set<String>) -> String? {
+                for c in cands where avail.contains(c) { return c }
+                return nil
+            }
+            func rowExists(_ table: String, id: Int) -> Bool {
+                var s: OpaquePointer?
+                defer { sqlite3_finalize(s) }
+                guard sqlite3_prepare_v2(db, "SELECT 1 FROM \(table) WHERE id=? LIMIT 1;", -1, &s, nil) == SQLITE_OK else { return false }
+                sqlite3_bind_int64(s, 1, sqlite3_int64(id))
+                return sqlite3_step(s) == SQLITE_ROW
+            }
+
+            var mainComplaint: String? = nil
+            var problems: String? = nil
+            var diagnosis: String? = nil
+            var icd10: String? = nil
+            var conclusions: String? = nil
+            var milestonesSummary: String? = nil
+
+            // Prefer unified `visits` if present
+            if tableExists("visits") {
+                let cols = colSet("visits")
+                let mc  = pick(["main_complaint","chief_complaint","complaint"], cols)
+                let pb  = pick(["problem_listing","problem_list","problems"], cols)
+                let dx  = pick(["diagnosis","final_diagnosis"], cols)
+                let icd = pick(["icd10","icd_10","icd"], cols)
+                let con = pick(["conclusions","conclusion","plan"], cols)
+                let sel = [mc,pb,dx,icd,con].compactMap{$0}
+                if !sel.isEmpty {
+                    var s: OpaquePointer?
+                    defer { sqlite3_finalize(s) }
+                    let sql = "SELECT " + sel.joined(separator: ", ") + " FROM visits WHERE id=? LIMIT 1;"
+                    if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                        sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                        if sqlite3_step(s) == SQLITE_ROW {
+                            var idx: Int32 = 0
+                            func nextStr() -> String? {
+                                defer { idx += 1 }
+                                if let c = sqlite3_column_text(s, idx) {
+                                    let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    return v.isEmpty ? nil : v
+                                }
+                                return nil
+                            }
+                            mainComplaint = mc  != nil ? nextStr() : nil
+                            problems      = pb  != nil ? nextStr() : nil
+                            diagnosis     = dx  != nil ? nextStr() : nil
+                            icd10         = icd != nil ? nextStr() : nil
+                            conclusions   = con != nil ? nextStr() : nil
+                        }
+                    }
+                }
+            } else if tableExists("episodes"), rowExists("episodes", id: visit.id) {
+                let cols = colSet("episodes")
+                let mc  = pick(["main_complaint","chief_complaint","complaint"], cols)
+                let pb  = pick(["problem_listing","problem_list","problems"], cols)
+                let dx  = pick(["diagnosis","final_diagnosis"], cols)
+                let icd = pick(["icd10","icd_10","icd"], cols)
+                let con = pick(["conclusions","conclusion","plan"], cols)
+                let sel = [mc,pb,dx,icd,con].compactMap{$0}
+                if !sel.isEmpty {
+                    var s: OpaquePointer?
+                    defer { sqlite3_finalize(s) }
+                    let sql = "SELECT " + sel.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
+                    if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                        sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                        if sqlite3_step(s) == SQLITE_ROW {
+                            var idx: Int32 = 0
+                            func nextStr() -> String? {
+                                defer { idx += 1 }
+                                if let c = sqlite3_column_text(s, idx) {
+                                    let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    return v.isEmpty ? nil : v
+                                }
+                                return nil
+                            }
+                            mainComplaint = mc  != nil ? nextStr() : nil
+                            problems      = pb  != nil ? nextStr() : nil
+                            diagnosis     = dx  != nil ? nextStr() : nil
+                            icd10         = icd != nil ? nextStr() : nil
+                            conclusions   = con != nil ? nextStr() : nil
+                        }
+                    }
+                }
+            } else if tableExists("well_visits"), rowExists("well_visits", id: visit.id) {
+                let cols = colSet("well_visits")
+                let pb  = pick(["problem_listing","problem_list","problems"], cols)
+                let con = pick(["conclusions","conclusion","plan"], cols)
+                let sel = [pb,con].compactMap{$0}
+                if !sel.isEmpty {
+                    var s: OpaquePointer?
+                    defer { sqlite3_finalize(s) }
+                    let sql = "SELECT " + sel.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
+                    if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                        sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                        if sqlite3_step(s) == SQLITE_ROW {
+                            var idx: Int32 = 0
+                            func nextStr() -> String? {
+                                defer { idx += 1 }
+                                if let c = sqlite3_column_text(s, idx) {
+                                    let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    return v.isEmpty ? nil : v
+                                }
+                                return nil
+                            }
+                            problems    = pb  != nil ? nextStr() : nil
+                            conclusions = con != nil ? nextStr() : nil
+                        }
+                    }
+                }
+                // Milestones summary if table present
+                if tableExists("well_visit_milestones") {
+                    var total = 0, achieved = 0
+                    var flags: [String] = []
+                    var s: OpaquePointer?
+                    defer { sqlite3_finalize(s) }
+                    if sqlite3_prepare_v2(db, "SELECT status,label FROM well_visit_milestones WHERE visit_id=?", -1, &s, nil) == SQLITE_OK {
+                        sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                        while sqlite3_step(s) == SQLITE_ROW {
+                            total += 1
+                            let status: String = (sqlite3_column_text(s, 0).flatMap { String(cString: $0) }) ?? ""
+                            let label:  String = (sqlite3_column_text(s, 1).flatMap { String(cString: $0) }) ?? ""
+                            if status == "achieved" { achieved += 1 }
+                            else if !label.trimmingCharacters(in: .whitespaces).isEmpty { flags.append(label) }
+                        }
+                    }
+                    if total > 0 {
+                        let prefix = "Achieved \(achieved)/\(total)"
+                        if !flags.isEmpty {
+                            milestonesSummary = prefix + "; Flags: " + flags.prefix(4).joined(separator: ", ")
+                        } else {
+                            milestonesSummary = prefix
+                        }
+                    }
+                }
+            }
+
+            // --- Vitals: latest at or before visit date for this patient ---
+            var latestVitals: VitalsPoint? = nil
+            if let pid, !visit.dateISO.isEmpty {
+                var s: OpaquePointer?
+                defer { sqlite3_finalize(s) }
+                let sql = """
+                SELECT
+                  id,
+                  COALESCE(recorded_at,'') AS recorded_at,
+                  temperature_c, heart_rate, respiratory_rate, spo2,
+                  bp_systolic, bp_diastolic, weight_kg, height_cm, head_circumference_cm
+                FROM vitals
+                WHERE patient_id = ?
+                  AND (recorded_at IS NULL OR recorded_at = '' OR datetime(recorded_at) <= datetime(?))
+                ORDER BY datetime(COALESCE(recorded_at,'0001-01-01T00:00:00Z')) DESC, id DESC
+                LIMIT 1;
+                """
+                if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(s, 1, sqlite3_int64(pid))
+                    _ = visit.dateISO.withCString { c in sqlite3_bind_text(s, 2, c, -1, SQLITE_TRANSIENT) }
+                    if sqlite3_step(s) == SQLITE_ROW {
+                        func intOpt(_ i: Int32) -> Int? {
+                            let t = sqlite3_column_type(s, i)
+                            return t == SQLITE_NULL ? nil : Int(sqlite3_column_int64(s, i))
+                        }
+                        func dblOpt(_ i: Int32) -> Double? {
+                            let t = sqlite3_column_type(s, i)
+                            return t == SQLITE_NULL ? nil : sqlite3_column_double(s, i)
+                        }
+                        func str(_ i: Int32) -> String {
+                            if let c = sqlite3_column_text(s, i) { return String(cString: c) }
+                            return ""
+                        }
+                        latestVitals = VitalsPoint(
+                            id: Int(sqlite3_column_int64(s, 0)),
+                            recordedAtISO: str(1),
+                            temperatureC: dblOpt(2),
+                            heartRate: intOpt(3),
+                            respiratoryRate: intOpt(4),
+                            spo2: intOpt(5),
+                            bpSystolic: intOpt(6),
+                            bpDiastolic: intOpt(7),
+                            weightKg: dblOpt(8),
+                            heightCm: dblOpt(9),
+                            headCircumferenceCm: dblOpt(10)
+                        )
+                    }
+                }
+            }
+
+            let details = VisitDetails(
+                visit: visit,
+                patientName: patientName,
+                patientDOB: patientDOB,
+                patientSex: patientSex,
+                mainComplaint: mainComplaint,
+                problems: problems,
+                diagnosis: diagnosis,
+                icd10: icd10,
+                conclusions: conclusions,
+                vitals: latestVitals,
+                milestonesSummary: milestonesSummary
+            )
+            DispatchQueue.main.async {
+                self.visitDetails = details
+            }
+        }
         
         // Small safe index helper
         
@@ -1238,6 +1533,10 @@ final class AppState: ObservableObject {
                     
                     // Find the real bundle root (folder containing db.sqlite)
                     if let bundleRoot = findBundleRoot(startingAt: dest) {
+                        // Keep imported bundles aligned to mother schema
+                        let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
+                        applyBundledSchemaIfPresent(to: dbURL)
+                        ensureGrowthUnificationSchema(at: dbURL)
                         addBundleRootAndSelect(bundleRoot)
                     } else {
                         log.warning("ZIP import: no db.sqlite found under \(dest.path, privacy: .public)")
@@ -1325,8 +1624,17 @@ final class AppState: ObservableObject {
             try fm.createDirectory(at: docsURL, withIntermediateDirectories: true)
 
             // 3) Create and initialize SQLite (minimal schema required to seed patients)
+            // 3) Create and initialize SQLite from bundled mother DB if available; fall back to minimal schema.
             let dbURL = bundleURL.appendingPathComponent("db.sqlite")
-            try initializeMinimalSchema(at: dbURL)
+            do {
+                try copyGoldenDB(to: dbURL, overwrite: false)
+                applyBundledSchemaIfPresent(to: dbURL)     // idempotent migration pass
+            } catch {
+                // Fallback: create minimal schema then overlay schema.sql
+                try initializeMinimalSchema(at: dbURL)
+                applyBundledSchemaIfPresent(to: dbURL)
+            }
+            // Ensure growth view/triggers exist (idempotent)
             ensureGrowthUnificationSchema(at: dbURL)
 
 
@@ -1417,7 +1725,77 @@ final class AppState: ObservableObject {
             selectBundle(bundleURL)
             return bundleURL
         }
-        
+    // MARK: - Bundled Mother DB (golden.db) + schema.sql helpers
+
+    /// Return the URL of the bundled golden.db inside Resources/DB if present.
+    private func bundledGoldenDBURL() -> URL? {
+        // Preferred path: Resources/DB/golden.db
+        if let url = Bundle.main.url(forResource: "DB/golden", withExtension: "db") {
+            return url
+        }
+        // Fallback if resources are flattened
+        if let url = Bundle.main.url(forResource: "golden", withExtension: "db") {
+            return url
+        }
+        return nil
+    }
+
+    /// Return the URL of the bundled schema.sql inside Resources/DB if present.
+    private func bundledSchemaSQLURL() -> URL? {
+        if let url = Bundle.main.url(forResource: "DB/schema", withExtension: "sql") {
+            return url
+        }
+        if let url = Bundle.main.url(forResource: "schema", withExtension: "sql") {
+            return url
+        }
+        return nil
+    }
+
+    /// Copy the bundled golden.db to a target db.sqlite path, overwriting if requested.
+    private func copyGoldenDB(to targetDBURL: URL, overwrite: Bool = false) throws {
+        let fm = FileManager.default
+        guard let src = bundledGoldenDBURL() else {
+            throw NSError(domain: "AppState", code: 404,
+                          userInfo: [NSLocalizedDescriptionKey: "golden.db not found in bundle"])
+        }
+        if fm.fileExists(atPath: targetDBURL.path) {
+            if overwrite {
+                try fm.removeItem(at: targetDBURL)
+            } else {
+                return
+            }
+        }
+        try fm.copyItem(at: src, to: targetDBURL)
+    }
+
+    /// Execute a .sql file (UTF-8) against a SQLite file on disk.
+    private func applySQLFile(_ sqlURL: URL, to dbURL: URL) {
+        guard let sqlText = try? String(contentsOf: sqlURL, encoding: .utf8) else { return }
+        var db: OpaquePointer?
+        if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        // Split on semicolons, tolerate whitespace/comments.
+        let statements = sqlText
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: ";")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("--") && !$0.hasPrefix("/*") }
+
+        for stmt in statements {
+            _ = sqlite3_exec(db, stmt + ";", nil, nil, nil)
+        }
+    }
+
+    /// Convenience: apply bundled schema.sql to the given db (no-op if missing).
+    private func applyBundledSchemaIfPresent(to dbURL: URL) {
+        if let url = bundledSchemaSQLURL() {
+            applySQLFile(url, to: dbURL)
+        }
+    }
         // MARK: - Minimal schema & seed helpers (no dependency on external initializers)
         
         /// Create a minimal schema sufficient to store patients.
@@ -1491,6 +1869,10 @@ final class AppState: ObservableObject {
                 ELSE alias_id
             END;
         """, nil, nil, nil)
+            // Also try to apply any bundled schema.sql for parity with the mother DB
+            if let schemaURL = bundledSchemaSQLURL() {
+                applySQLFile(schemaURL, to: dbURL)
+            }
         }
         
         /// Insert the first patient row using a prepared statement.

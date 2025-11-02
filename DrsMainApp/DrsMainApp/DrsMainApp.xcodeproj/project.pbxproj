@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */; };
+		BB3E15A52EB73C0C008E1472 /* VisitDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A42EB73C09008E1472 /* VisitDetailSheet.swift */; };
+		BB3E15AA2EB7489D008E1472 /* GoldenDB.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A92EB74899008E1472 /* GoldenDB.swift */; };
 		BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AD92EADC30A00870007 /* ContentView.swift */; };
 		BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */; };
 		BB564AF42EAE15AE00870007 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF22EAE0D6800870007 /* AppState.swift */; };
@@ -31,6 +34,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportBuilder.swift; sourceTree = "<group>"; };
+		BB3E15A42EB73C09008E1472 /* VisitDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitDetailSheet.swift; sourceTree = "<group>"; };
+		BB3E15A92EB74899008E1472 /* GoldenDB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoldenDB.swift; sourceTree = "<group>"; };
 		BB54973C2EACAB41009F314A /* DrsMainApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DrsMainApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB564AD92EADC30A00870007 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrsMainAppApp.swift; sourceTree = "<group>"; };
@@ -55,6 +61,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		BB3E158F2EB704A5008E1472 /* Resources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		BB3E159D2EB7058E008E1472 /* WHO */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WHO;
+			sourceTree = "<group>";
+		};
 		BB54973E2EACAB41009F314A /* DrsMainApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = DrsMainApp;
@@ -75,9 +91,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BB3E15A12EB71C36008E1472 /* Reports */ = {
+			isa = PBXGroup;
+			children = (
+				BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */,
+			);
+			path = Reports;
+			sourceTree = "<group>";
+		};
 		BB5497332EACAB41009F314A = {
 			isa = PBXGroup;
 			children = (
+				BB3E158F2EB704A5008E1472 /* Resources */,
 				BB564AF12EAE0BB900870007 /* Sources */,
 				BB54973E2EACAB41009F314A /* DrsMainApp */,
 				BB54973D2EACAB41009F314A /* Products */,
@@ -114,6 +139,7 @@
 		BB564AEE2EAE0BB900870007 /* Data */ = {
 			isa = PBXGroup;
 			children = (
+				BB3E15A92EB74899008E1472 /* GoldenDB.swift */,
 				BB564AF62EAE5EF000870007 /* SchemaInitializer.swift */,
 			);
 			path = Data;
@@ -122,6 +148,7 @@
 		BB564AEF2EAE0BB900870007 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				BB3E15A42EB73C09008E1472 /* VisitDetailSheet.swift */,
 				BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */,
 				BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */,
 				BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */,
@@ -139,6 +166,7 @@
 		BB564AF02EAE0BB900870007 /* Util */ = {
 			isa = PBXGroup;
 			children = (
+				BB3E159D2EB7058E008E1472 /* WHO */,
 				BBA6AD562EB5C48C00BDA924 /* GrowthDataFetcher.swift */,
 				BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */,
 				BB6D4C052EB486980065EF3E /* AliasGenerator.swift */,
@@ -149,6 +177,7 @@
 		BB564AF12EAE0BB900870007 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				BB3E15A12EB71C36008E1472 /* Reports */,
 				BB564AED2EAE0BB900870007 /* App */,
 				BB564AEE2EAE0BB900870007 /* Data */,
 				BB564AEF2EAE0BB900870007 /* UI */,
@@ -180,6 +209,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				BB3E158F2EB704A5008E1472 /* Resources */,
+				BB3E159D2EB7058E008E1472 /* WHO */,
 				BB54973E2EACAB41009F314A /* DrsMainApp */,
 			);
 			name = DrsMainApp;
@@ -251,7 +282,9 @@
 			files = (
 				BB564AF92EAE5F7600870007 /* NewPatientSheet.swift in Sources */,
 				BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */,
+				BB3E15AA2EB7489D008E1472 /* GoldenDB.swift in Sources */,
 				BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */,
+				BB3E15A52EB73C0C008E1472 /* VisitDetailSheet.swift in Sources */,
 				BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */,
 				BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */,
 				BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */,
@@ -262,6 +295,7 @@
 				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,
 				BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */,
 				BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */,
+				BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */,
 				BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
 				BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */,

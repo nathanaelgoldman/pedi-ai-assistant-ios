@@ -19,6 +19,7 @@
 
 import SwiftUI
 import OSLog
+import AppKit
 
 
 // Humanize visit categories (well-visit keys + a fallback)
@@ -188,6 +189,34 @@ struct PatientDetailView: View {
                     } label: {
                         Label("Growth Charts…", systemImage: "chart.bar.xaxis")
                     }
+                    Menu {
+                        let latestSick = appState.visits
+                            .filter { isSickCategory($0.category) }
+                            .sorted { $0.dateISO > $1.dateISO }
+                            .first
+                        let latestWell = appState.visits
+                            .filter { isWellCategory($0.category) && !isSickCategory($0.category) }
+                            .sorted { $0.dateISO > $1.dateISO }
+                            .first
+                        
+                        if let v = latestSick {
+                            Button("Latest Sick (\(visitDateFormatted(v.dateISO)))") {
+                                visitForDetail = v
+                            }
+                        } else {
+                            Text("No sick visits").foregroundStyle(.secondary)
+                        }
+                        
+                        if let v = latestWell {
+                            Button("Latest Well (\(prettyCategory(v.category)), \(visitDateFormatted(v.dateISO)))") {
+                                visitForDetail = v
+                            }
+                        } else {
+                            Text("No well visits").foregroundStyle(.secondary)
+                        }
+                    } label: {
+                        Label("Report…", systemImage: "doc.plaintext")
+                    }
                 }
                 .padding(.bottom, 4)
 
@@ -289,24 +318,28 @@ struct PatientDetailView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(list) { v in
-                            Button(action: { visitForDetail = v }) {
-                                HStack(alignment: .top, spacing: 12) {
-                                    Image(systemName: isSickCategory(v.category) ? "stethoscope" : "checkmark.seal")
-                                        .font(.system(size: 16))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(visitDateFormatted(v.dateISO))
-                                            .font(.body)
-                                        Text(prettyCategory(v.category))
-                                            .font(.callout)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: isSickCategory(v.category) ? "stethoscope" : "checkmark.seal")
+                                    .font(.system(size: 16))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(visitDateFormatted(v.dateISO))
+                                        .font(.body)
+                                    Text(prettyCategory(v.category))
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
                                 }
-                                .padding(8)
-                                .background(Color.secondary.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                Spacer()
+
+                                Button("Details…") {
+                                    visitForDetail = v
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.plain)
+                            .padding(8)
+                            .background(Color.secondary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
                     }
                 }
@@ -341,7 +374,10 @@ struct PatientDetailView: View {
                 .environmentObject(appState)
         }
         .sheet(item: $visitForDetail) { v in
-            VisitDetailView(visit: v)
+            NavigationStack {
+                VisitDetailView(visit: v)
+                    .navigationTitle("Visit")
+            }
         }
     }
 }
@@ -351,6 +387,13 @@ struct VisitDetailView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     let visit: VisitRow
+
+    @EnvironmentObject var clinicianStore: ClinicianStore
+
+    @State private var exportSuccessURL: URL? = nil
+    @State private var exportErrorMessage: String? = nil
+    @State private var showExportSuccess = false
+    @State private var showExportError = false
 
     private static let isoFullDate: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -499,10 +542,41 @@ struct VisitDetailView: View {
             appState.loadVisitSummary(for: visit)
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button("Export…") {
+                    let kind: VisitKind = isSickCategory(visit.category) ? .sick(episodeID: visit.id) : .well(visitID: visit.id)
+                    Task { @MainActor in
+                        do {
+                            let builder = ReportBuilder(appState: appState, clinicianStore: clinicianStore)
+                            let url = try builder.exportReport(for: kind, format: .pdf)
+                            exportSuccessURL = url
+                            showExportSuccess = true
+                        } catch {
+                            exportErrorMessage = (error as NSError).localizedDescription
+                            showExportError = true
+                        }
+                    }
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
+        }
+        .alert("Report exported", isPresented: $showExportSuccess) {
+            Button("Reveal in Finder") {
+                if let u = exportSuccessURL {
+                    NSWorkspace.shared.activateFileViewerSelecting([u])
+                }
+            }
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportSuccessURL?.lastPathComponent ?? "Saved")
+        }
+        .alert("Export failed", isPresented: $showExportError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportErrorMessage ?? "Unknown error")
         }
     }
 }
