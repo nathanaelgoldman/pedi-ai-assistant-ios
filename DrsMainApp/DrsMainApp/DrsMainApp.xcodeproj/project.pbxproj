@@ -8,8 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */; };
-		BB3E15A52EB73C0C008E1472 /* VisitDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A42EB73C09008E1472 /* VisitDetailSheet.swift */; };
 		BB3E15AA2EB7489D008E1472 /* GoldenDB.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A92EB74899008E1472 /* GoldenDB.swift */; };
+		BB3E15AE2EB89905008E1472 /* ReportDataLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15AD2EB89901008E1472 /* ReportDataLoader.swift */; };
+		BB3E15B02EB89917008E1472 /* ReportDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15AF2EB89913008E1472 /* ReportDataModels.swift */; };
 		BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AD92EADC30A00870007 /* ContentView.swift */; };
 		BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */; };
 		BB564AF42EAE15AE00870007 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AF22EAE0D6800870007 /* AppState.swift */; };
@@ -35,8 +36,9 @@
 
 /* Begin PBXFileReference section */
 		BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportBuilder.swift; sourceTree = "<group>"; };
-		BB3E15A42EB73C09008E1472 /* VisitDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitDetailSheet.swift; sourceTree = "<group>"; };
 		BB3E15A92EB74899008E1472 /* GoldenDB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoldenDB.swift; sourceTree = "<group>"; };
+		BB3E15AD2EB89901008E1472 /* ReportDataLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportDataLoader.swift; sourceTree = "<group>"; };
+		BB3E15AF2EB89913008E1472 /* ReportDataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportDataModels.swift; sourceTree = "<group>"; };
 		BB54973C2EACAB41009F314A /* DrsMainApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DrsMainApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB564AD92EADC30A00870007 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BB564ADB2EADC30A00870007 /* DrsMainAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrsMainAppApp.swift; sourceTree = "<group>"; };
@@ -94,6 +96,8 @@
 		BB3E15A12EB71C36008E1472 /* Reports */ = {
 			isa = PBXGroup;
 			children = (
+				BB3E15AF2EB89913008E1472 /* ReportDataModels.swift */,
+				BB3E15AD2EB89901008E1472 /* ReportDataLoader.swift */,
 				BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */,
 			);
 			path = Reports;
@@ -148,7 +152,6 @@
 		BB564AEF2EAE0BB900870007 /* UI */ = {
 			isa = PBXGroup;
 			children = (
-				BB3E15A42EB73C09008E1472 /* VisitDetailSheet.swift */,
 				BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */,
 				BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */,
 				BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */,
@@ -284,12 +287,13 @@
 				BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */,
 				BB3E15AA2EB7489D008E1472 /* GoldenDB.swift in Sources */,
 				BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */,
-				BB3E15A52EB73C0C008E1472 /* VisitDetailSheet.swift in Sources */,
 				BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */,
+				BB3E15AE2EB89905008E1472 /* ReportDataLoader.swift in Sources */,
 				BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */,
 				BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */,
 				BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */,
 				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
+				BB3E15B02EB89917008E1472 /* ReportDataModels.swift in Sources */,
 				BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */,
 				BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */,
 				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,

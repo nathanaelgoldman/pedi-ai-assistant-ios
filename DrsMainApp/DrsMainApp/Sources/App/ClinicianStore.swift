@@ -102,22 +102,42 @@ final class ClinicianStore: ObservableObject {
             ON users (lower(trim(first_name)), lower(trim(last_name)));
         """, nil, nil, nil)
 
-        // Safe migrations for older DBs: add missing columns if needed
-        let alterStmts = [
-            "ALTER TABLE users ADD COLUMN title TEXT",
-            "ALTER TABLE users ADD COLUMN email TEXT",
-            "ALTER TABLE users ADD COLUMN societies TEXT",
-            "ALTER TABLE users ADD COLUMN website TEXT",
-            "ALTER TABLE users ADD COLUMN twitter TEXT",
-            "ALTER TABLE users ADD COLUMN wechat TEXT",
-            "ALTER TABLE users ADD COLUMN instagram TEXT",
-            "ALTER TABLE users ADD COLUMN linkedin TEXT",
-            "ALTER TABLE users ADD COLUMN ai_endpoint TEXT",
-            "ALTER TABLE users ADD COLUMN ai_api_key TEXT"
-        ]
-        for stmt in alterStmts {
-            _ = sqlite3_exec(db, stmt, nil, nil, nil) // ignore errors if column already exists
+        // Safe migrations for older DBs: add missing columns if needed (without duplicate warnings)
+        // Build the current column set from PRAGMA table_info(users)
+        let existingCols: Set<String> = {
+            var out = Set<String>()
+            var q: OpaquePointer?
+            if sqlite3_prepare_v2(db, "PRAGMA table_info(users);", -1, &q, nil) == SQLITE_OK {
+                defer { sqlite3_finalize(q) }
+                while sqlite3_step(q) == SQLITE_ROW {
+                    if let cstr = sqlite3_column_text(q, 1) {
+                        out.insert(String(cString: cstr))
+                    }
+                }
+            }
+            return out
+        }()
+
+        func addIfMissing(_ name: String, type: String = "TEXT") {
+            guard !existingCols.contains(name) else { return }
+            let stmt = "ALTER TABLE users ADD COLUMN \(name) \(type);"
+            if sqlite3_exec(db, stmt, nil, nil, nil) != SQLITE_OK {
+                // Log once if an unexpected error occurs
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("ClinicianStore: add column \(name) failed: \(msg, privacy: .public)")
+            }
         }
+
+        addIfMissing("title")
+        addIfMissing("email")
+        addIfMissing("societies")
+        addIfMissing("website")
+        addIfMissing("twitter")
+        addIfMissing("wechat")
+        addIfMissing("instagram")
+        addIfMissing("linkedin")
+        addIfMissing("ai_endpoint")
+        addIfMissing("ai_api_key")
     }
 
     // MARK: - Lifecycle

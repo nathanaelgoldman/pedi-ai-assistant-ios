@@ -711,9 +711,9 @@ final class AppState: ObservableObject {
         func selectBundle(_ url: URL) {
             addToRecents(url)
             currentBundleURL = url
-            // Apply bundled schema.sql (idempotent) to keep selected bundles aligned
+            // Apply golden schema idempotently (column-level) to keep selected bundles aligned
             if let dbURL = dbURLForCurrentBundle() {
-                applyBundledSchemaIfPresent(to: dbURL)
+                applyGoldenSchemaIdempotent(to: dbURL)
                 ensureGrowthUnificationSchema(at: dbURL)
             }
             selectedPatientID = nil
@@ -1533,9 +1533,9 @@ final class AppState: ObservableObject {
                     
                     // Find the real bundle root (folder containing db.sqlite)
                     if let bundleRoot = findBundleRoot(startingAt: dest) {
-                        // Keep imported bundles aligned to mother schema
+                        // Keep imported bundles aligned to golden schema
                         let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
-                        applyBundledSchemaIfPresent(to: dbURL)
+                        applyGoldenSchemaIdempotent(to: dbURL)
                         ensureGrowthUnificationSchema(at: dbURL)
                         addBundleRootAndSelect(bundleRoot)
                     } else {
@@ -1628,11 +1628,11 @@ final class AppState: ObservableObject {
             let dbURL = bundleURL.appendingPathComponent("db.sqlite")
             do {
                 try copyGoldenDB(to: dbURL, overwrite: false)
-                applyBundledSchemaIfPresent(to: dbURL)     // idempotent migration pass
+                applyGoldenSchemaIdempotent(to: dbURL)     // idempotent migration pass
             } catch {
                 // Fallback: create minimal schema then overlay schema.sql
                 try initializeMinimalSchema(at: dbURL)
-                applyBundledSchemaIfPresent(to: dbURL)
+                applyGoldenSchemaIdempotent(to: dbURL)
             }
             // Ensure growth view/triggers exist (idempotent)
             ensureGrowthUnificationSchema(at: dbURL)
@@ -1725,6 +1725,19 @@ final class AppState: ObservableObject {
             selectBundle(bundleURL)
             return bundleURL
         }
+    // MARK: - Golden schema idempotent helper
+
+    /// Apply only idempotent, column-level fixes against the current DB to avoid duplicate-column spam.
+    /// This is a strict no-op for bundle DBs; see rationale below.
+    private func applyGoldenSchemaIdempotent(to dbURL: URL) {
+        // Intentionally do nothing here.
+        // Rationale:
+        // - The patient bundle DB (golden schema) must remain decoupled from DrsMainApp private clinician data.
+        // - Columns like title/email/societies/... belong in the separate internal clinicians DB managed by ClinicianStore.
+        // - Any growth-related schema alignment is handled elsewhere by `ensureGrowthUnificationSchema(at:)`.
+        return
+    }
+
     // MARK: - Bundled Mother DB (golden.db) + schema.sql helpers
 
     /// Return the URL of the bundled golden.db inside Resources/DB if present.

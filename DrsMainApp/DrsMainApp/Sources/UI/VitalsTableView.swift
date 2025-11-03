@@ -13,16 +13,18 @@ struct VitalsTableView: View {
 
     @State private var vitals: [VitalsPoint] = []
 
+    // Sort newest first by recordedAtISO (String is Comparable → fine for KeyPathComparator)
+    @State private var sortOrder: [KeyPathComparator<VitalsPoint>] = [
+        .init(\.recordedAtISO, order: .reverse)
+    ]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Patient Vitals")
-                    .font(.title2)
-                    .bold()
+                    .font(.title2).bold()
                 Spacer()
-                Button("Close") {
-                    dismiss()
-                }
+                Button("Close") { dismiss() }
             }
             .padding(.bottom, 8)
 
@@ -31,58 +33,69 @@ struct VitalsTableView: View {
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(vitals) {
-                    TableColumn("Date/Time") { item in
-                        Text(item.recordedAtISO.isEmpty ? "—" : item.recordedAtISO)
+                VStack(spacing: 6) {
+                    // Column headers
+                    HStack {
+                        Text("Date/Time").font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Temp °C").font(.subheadline).foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
+                        Text("HR").font(.subheadline).foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
+                        Text("RR").font(.subheadline).foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
+                        Text("SpO₂").font(.subheadline).foregroundStyle(.secondary).frame(width: 60, alignment: .trailing)
+                        Text("BP").font(.subheadline).foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
+                        Text("Weight (kg)").font(.subheadline).foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
+                        Text("Height (cm)").font(.subheadline).foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
+                        Text("HC (cm)").font(.subheadline).foregroundStyle(.secondary).frame(width: 80, alignment: .trailing)
                     }
-                    TableColumn("Temp °C") { item in
-                        if let v = item.temperatureC {
-                            Text(String(format: "%.1f", v))
+                    .padding(.horizontal, 4)
+
+                    // Rows
+                    List {
+                        ForEach(vitals) { item in
+                            HStack {
+                                Text(item.recordedAtISO.isEmpty ? "—" : item.recordedAtISO)
+                                    .monospacedDigit()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Text(item.temperatureC.map { String(format: "%.1f", $0) } ?? "")
+                                    .frame(width: 70, alignment: .trailing)
+
+                                Text(item.heartRate.map { "\($0)" } ?? "")
+                                    .frame(width: 40, alignment: .trailing)
+
+                                Text(item.respiratoryRate.map { "\($0)" } ?? "")
+                                    .frame(width: 40, alignment: .trailing)
+
+                                Text(item.spo2.map { "\($0)%" } ?? "")
+                                    .frame(width: 60, alignment: .trailing)
+
+                                Text((item.bpSystolic != nil && item.bpDiastolic != nil) ? "\(item.bpSystolic!)/\(item.bpDiastolic!)" : "")
+                                    .frame(width: 70, alignment: .trailing)
+
+                                Text(item.weightKg.map { String(format: "%.2f", $0) } ?? "")
+                                    .frame(width: 90, alignment: .trailing)
+
+                                Text(item.heightCm.map { String(format: "%.1f", $0) } ?? "")
+                                    .frame(width: 90, alignment: .trailing)
+
+                                Text(item.headCircumferenceCm.map { String(format: "%.1f", $0) } ?? "")
+                                    .frame(width: 80, alignment: .trailing)
+                            }
+                            .padding(.vertical, 2)
                         }
                     }
-                    TableColumn("HR") { item in
-                        if let v = item.heartRate {
-                            Text("\(v)")
-                        }
-                    }
-                    TableColumn("RR") { item in
-                        if let v = item.respiratoryRate {
-                            Text("\(v)")
-                        }
-                    }
-                    TableColumn("SpO₂") { item in
-                        if let v = item.spo2 {
-                            Text("\(v)%")
-                        }
-                    }
-                    TableColumn("BP") { item in
-                        if let sys = item.bpSystolic, let dia = item.bpDiastolic {
-                            Text("\(sys)/\(dia)")
-                        }
-                    }
-                    TableColumn("Weight (kg)") { item in
-                        if let v = item.weightKg {
-                            Text(String(format: "%.2f", v))
-                        }
-                    }
-                    TableColumn("Height (cm)") { item in
-                        if let v = item.heightCm {
-                            Text(String(format: "%.1f", v))
-                        }
-                    }
-                    TableColumn("HC (cm)") { item in
-                        if let v = item.headCircumferenceCm {
-                            Text(String(format: "%.1f", v))
-                        }
-                    }
+                    .listStyle(.plain)
                 }
                 .frame(maxHeight: .infinity)
+                .onChange(of: sortOrder) { _, newOrder in
+                    vitals.sort(using: newOrder)
+                }
             }
         }
         .padding()
         .frame(minWidth: 900, minHeight: 500)
         .onAppear {
             vitals = appState.loadVitalsForSelectedPatient()
+            vitals.sort(using: sortOrder)
         }
     }
 }

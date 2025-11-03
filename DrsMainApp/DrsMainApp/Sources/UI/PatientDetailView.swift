@@ -95,6 +95,7 @@ struct PatientDetailView: View {
     @State private var showGrowth = false
     @State private var showVitals = false
     @State private var showGrowthCharts = false
+    @State private var reportVisitKind: VisitKind?
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -151,6 +152,76 @@ struct PatientDetailView: View {
         }
     }
 
+    private var latestSickVisit: VisitRow? {
+        appState.visits
+            .filter { isSickCategory($0.category) }
+            .max(by: { $0.dateISO < $1.dateISO })
+    }
+
+    private var latestWellVisit: VisitRow? {
+        appState.visits
+            .filter { isWellCategory($0.category) && !isSickCategory($0.category) }
+            .max(by: { $0.dateISO < $1.dateISO })
+    }
+    // Break out header actions & report menu to ease type-checking
+    @ViewBuilder
+    private func headerActionButtons() -> some View {
+        HStack {
+            Spacer()
+            Button {
+                showDocuments.toggle()
+            } label: {
+                Label("Documents…", systemImage: "doc.on.clipboard")
+            }
+            Button {
+                showVitals.toggle()
+            } label: {
+                Label("Vitals…", systemImage: "waveform.path.ecg")
+            }
+            Button {
+                showGrowth.toggle()
+            } label: {
+                Label("Growth…", systemImage: "chart.xyaxis.line")
+            }
+            Button {
+                showGrowthCharts.toggle()
+            } label: {
+                Label("Growth Charts…", systemImage: "chart.bar.xaxis")
+            }
+            reportMenu()
+        }
+        .padding(.bottom, 4)
+    }
+
+    @ViewBuilder
+    private func reportMenu() -> some View {
+        // Precompute to avoid heavy expressions inside the ViewBuilder
+        let sick = latestSickVisit
+        let well = latestWellVisit
+
+        Menu {
+            if let v = sick {
+                Button("Latest Sick (\(visitDateFormatted(v.dateISO)))") {
+                    visitForDetail = v
+                    reportVisitKind = .sick(episodeID: v.id)
+                }
+            } else {
+                Text("No sick visits").foregroundStyle(.secondary)
+            }
+
+            if let v = well {
+                Button("Latest Well (\(prettyCategory(v.category)), \(visitDateFormatted(v.dateISO)))") {
+                    visitForDetail = v
+                    reportVisitKind = .well(visitID: v.id)
+                }
+            } else {
+                Text("No well visits").foregroundStyle(.secondary)
+            }
+        } label: {
+            Label("Report…", systemImage: "doc.plaintext")
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -167,58 +238,7 @@ struct PatientDetailView: View {
                     Spacer()
                 }
                 
-                HStack {
-                    Spacer()
-                    Button {
-                        showDocuments.toggle()
-                    } label: {
-                        Label("Documents…", systemImage: "doc.on.clipboard")
-                    }
-                    Button {
-                        showVitals.toggle()
-                    } label: {
-                        Label("Vitals…", systemImage: "waveform.path.ecg")
-                    }
-                    Button {
-                        showGrowth.toggle()
-                    } label: {
-                        Label("Growth…", systemImage: "chart.xyaxis.line")
-                    }
-                    Button {
-                        showGrowthCharts.toggle()
-                    } label: {
-                        Label("Growth Charts…", systemImage: "chart.bar.xaxis")
-                    }
-                    Menu {
-                        let latestSick = appState.visits
-                            .filter { isSickCategory($0.category) }
-                            .sorted { $0.dateISO > $1.dateISO }
-                            .first
-                        let latestWell = appState.visits
-                            .filter { isWellCategory($0.category) && !isSickCategory($0.category) }
-                            .sorted { $0.dateISO > $1.dateISO }
-                            .first
-                        
-                        if let v = latestSick {
-                            Button("Latest Sick (\(visitDateFormatted(v.dateISO)))") {
-                                visitForDetail = v
-                            }
-                        } else {
-                            Text("No sick visits").foregroundStyle(.secondary)
-                        }
-                        
-                        if let v = latestWell {
-                            Button("Latest Well (\(prettyCategory(v.category)), \(visitDateFormatted(v.dateISO)))") {
-                                visitForDetail = v
-                            }
-                        } else {
-                            Text("No well visits").foregroundStyle(.secondary)
-                        }
-                    } label: {
-                        Label("Report…", systemImage: "doc.plaintext")
-                    }
-                }
-                .padding(.bottom, 4)
+                headerActionButtons()
 
                 // Facts grid
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
@@ -317,29 +337,8 @@ struct PatientDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(list) { v in
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: isSickCategory(v.category) ? "stethoscope" : "checkmark.seal")
-                                    .font(.system(size: 16))
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(visitDateFormatted(v.dateISO))
-                                        .font(.body)
-                                    Text(prettyCategory(v.category))
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Spacer()
-
-                                Button("Details…") {
-                                    visitForDetail = v
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                            .padding(8)
-                            .background(Color.secondary.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        ForEach(list, id: \.stableID) { v in
+                            visitRow(v)
                         }
                     }
                 }
@@ -378,6 +377,99 @@ struct PatientDetailView: View {
                 VisitDetailView(visit: v)
                     .navigationTitle("Visit")
             }
+        }
+    }
+
+    // MARK: - Visit row helper (kept inside struct so it can access state/methods)
+    @ViewBuilder
+    private func visitRow(_ v: VisitRow) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: isSickCategory(v.category) ? "stethoscope" : "checkmark.seal")
+                .font(.system(size: 16))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(visitDateFormatted(v.dateISO))
+                    .font(.body)
+                Text(prettyCategory(v.category))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button("Details…") {
+                let kind: VisitKind
+                if isSickCategory(v.category) {
+                    kind = .sick(episodeID: v.id)
+                } else {
+                    kind = .well(visitID: v.id)
+                }
+                visitForDetail = v
+                reportVisitKind = kind
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// Compact bubble-styled selectable text to keep body simpler for the compiler
+private struct BubbleText: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.secondary.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.25))
+            )
+    }
+}
+
+private struct SummarySection: View {
+    let summary: VisitSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Summary")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                if let p = summary.problems, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    LabeledContent {
+                        BubbleText(text: p)
+                    } label: {
+                        Text("Problems").foregroundStyle(.secondary)
+                    }
+                }
+                if let d = summary.diagnosis, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    LabeledContent {
+                        BubbleText(text: d)
+                    } label: {
+                        Text("Diagnosis").foregroundStyle(.secondary)
+                    }
+                }
+                if let c = summary.conclusions, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    LabeledContent {
+                        BubbleText(text: c)
+                    } label: {
+                        Text("Conclusions").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -453,83 +545,12 @@ struct VisitDetailView: View {
 
                 // --- Summary pulled from AppState (problems / diagnosis / conclusions) ---
                 if let s = appState.visitSummary,
-                   ( (s.problems?.isEmpty == false) ||
-                     (s.diagnosis?.isEmpty == false) ||
-                     (s.conclusions?.isEmpty == false) ) {
+                   ((s.problems?.isEmpty == false) ||
+                    (s.diagnosis?.isEmpty == false) ||
+                    (s.conclusions?.isEmpty == false)) {
 
                     Divider().padding(.top, 4)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Summary")
-                            .font(.headline)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let p = s.problems, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                LabeledContent {
-                                    Text(p)
-                                        .textSelection(.enabled)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(10)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(Color.secondary.opacity(0.12))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .strokeBorder(Color.secondary.opacity(0.25))
-                                        )
-                                } label: {
-                                    Text("Problems")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            if let d = s.diagnosis, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                LabeledContent {
-                                    Text(d)
-                                        .textSelection(.enabled)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(10)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(Color.secondary.opacity(0.12))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .strokeBorder(Color.secondary.opacity(0.25))
-                                        )
-                                } label: {
-                                    Text("Diagnosis")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            if let c = s.conclusions, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                LabeledContent {
-                                    Text(c)
-                                        .textSelection(.enabled)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(10)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(Color.secondary.opacity(0.12))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .strokeBorder(Color.secondary.opacity(0.25))
-                                        )
-                                } label: {
-                                    Text("Conclusions")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .padding(12)
-                        .background(Color.secondary.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    SummarySection(summary: s)
                 }
 
                 Spacer()
@@ -543,19 +564,42 @@ struct VisitDetailView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button("Export…") {
-                    let kind: VisitKind = isSickCategory(visit.category) ? .sick(episodeID: visit.id) : .well(visitID: visit.id)
-                    Task { @MainActor in
-                        do {
-                            let builder = ReportBuilder(appState: appState, clinicianStore: clinicianStore)
-                            let url = try builder.exportReport(for: kind, format: .pdf)
-                            exportSuccessURL = url
-                            showExportSuccess = true
-                        } catch {
-                            exportErrorMessage = (error as NSError).localizedDescription
-                            showExportError = true
+                Menu {
+                    Button("Export PDF") {
+                        Task { @MainActor in
+                            do {
+                                let builder = ReportBuilder(appState: appState, clinicianStore: clinicianStore)
+                                let kind: VisitKind = isSickCategory(visit.category)
+                                    ? .sick(episodeID: visit.id)
+                                    : .well(visitID: visit.id)
+                                _ = try builder.exportPDF(for: kind)
+                            } catch {
+                                let alert = NSAlert()
+                                alert.messageText = "Export failed"
+                                alert.informativeText = error.localizedDescription
+                                alert.alertStyle = .warning
+                                alert.runModal()
+                            }
                         }
                     }
+                    Button("Export as RTF") {
+                        Task { @MainActor in
+                            do {
+                                let builder = ReportBuilder(appState: appState, clinicianStore: clinicianStore)
+                                let kind: VisitKind = isSickCategory(visit.category)
+                                    ? .sick(episodeID: visit.id)
+                                    : .well(visitID: visit.id)
+                                let url = try builder.exportRTF(for: kind)
+                                exportSuccessURL = url
+                                showExportSuccess = true
+                            } catch {
+                                exportErrorMessage = error.localizedDescription
+                                showExportError = true
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -580,3 +624,12 @@ struct VisitDetailView: View {
         }
     }
 }
+
+// Composite stable identifier to avoid duplicate IDs when mixing sick/well domains
+private extension VisitRow {
+    var stableID: String {
+        let prefix = isSickCategory(self.category) ? "sick" : "well"
+        return "\(prefix)-\(self.id)"
+    }
+}
+

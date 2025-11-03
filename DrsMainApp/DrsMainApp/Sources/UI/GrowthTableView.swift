@@ -14,56 +14,63 @@ struct GrowthTableView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Table(rows) {
-                TableColumn("Date") { p in
-                    Text(formatDate(p.recordedAtISO)).monospacedDigit()
-                }.width(min: 120)
-
-                TableColumn("Weight (kg)") { p in
-                    Text(formatNumber(p.weightKg)).monospacedDigit()
-                }.width(min: 90)
-
-                TableColumn("Height (cm)") { p in
-                    Text(formatNumber(p.heightCm)).monospacedDigit()
-                }.width(min: 90)
-
-                TableColumn("Head C (cm)") { p in
-                    Text(formatNumber(p.headCircumferenceCm)).monospacedDigit()
-                }.width(min: 100)
-
-                TableColumn("Source") { p in
-                    Text(p.source)
-                }.width(min: 90)
+            // Header row
+            HStack {
+                Text("Date").font(.subheadline).foregroundStyle(.secondary)
+                    .frame(width: 120, alignment: .leading)
+                Text("Weight (kg)").font(.subheadline).foregroundStyle(.secondary)
+                    .frame(width: 100, alignment: .trailing)
+                Text("Height (cm)").font(.subheadline).foregroundStyle(.secondary)
+                    .frame(width: 100, alignment: .trailing)
+                Text("Head C (cm)").font(.subheadline).foregroundStyle(.secondary)
+                    .frame(width: 110, alignment: .trailing)
+                Text("Source").font(.subheadline).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(minHeight: 240)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            Divider()
 
-            if rows.isEmpty {
-                VStack {
-                    Text("No growth records found for this patient.")
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 12)
+            // Rows
+            List {
+                ForEach(rows) { p in
+                    HStack {
+                        Text(formatDate(p.recordedAtISO)).monospacedDigit()
+                            .frame(width: 120, alignment: .leading)
+                        Text(formatNumber(p.weightKg)).monospacedDigit()
+                            .frame(width: 100, alignment: .trailing)
+                        Text(formatNumber(p.heightCm)).monospacedDigit()
+                            .frame(width: 100, alignment: .trailing)
+                        Text(formatNumber(p.headCircumferenceCm)).monospacedDigit()
+                            .frame(width: 110, alignment: .trailing)
+                        Text(p.source)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.vertical, 4)
                 }
             }
+            .listStyle(.inset)
+            .frame(minHeight: 240)
+
+            // Empty state (kept INSIDE the VStack so modifiers below apply to the whole view)
+            if rows.isEmpty {
+                Text("No growth records found for this patient.")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 12)
+            }
         }
+        .frame(minWidth: 720, minHeight: 420)
         .onAppear { reload() }
-        .onChange(of: appState.selectedPatientID) { _ in
-            reload()
-        }
-        .onChange(of: appState.currentBundleURL) { _ in
-            reload()
-        }
+        .onChange(of: appState.selectedPatientID) { _ in reload() }
+        .onChange(of: appState.currentBundleURL) { _ in reload() }
         .navigationTitle("Growth")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Close") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
+                Button("Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
             }
             ToolbarItem(placement: .automatic) {
-                Button {
-                    reload()
-                } label: {
+                Button { reload() } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
@@ -73,6 +80,8 @@ struct GrowthTableView: View {
 
     private func reload() {
         rows = appState.loadGrowthForSelectedPatient()
+        // Sort newest first by ISO string (YYYY-MM-DD or full ISO)
+        rows.sort { $0.recordedAtISO > $1.recordedAtISO }
     }
 
     private func formatDate(_ iso: String) -> String {
