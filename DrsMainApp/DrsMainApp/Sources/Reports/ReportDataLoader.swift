@@ -315,6 +315,115 @@ final class ReportDataLoader {
         return nil
     }
 
+    // Fetch patient first+last name for a SICK episode from the bundle DB
+    private func fetchPatientNameForEpisode(_ episodeID: Int) -> String? {
+        do {
+            let dbPath = try bundleDBPathWithDebug()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
+
+                // Discover columns on episodes to find the patient FK
+                var epCols = Set<String>()
+                var stmtCols: OpaquePointer?
+                if sqlite3_prepare_v2(db, "PRAGMA table_info(episodes);", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
+                    defer { sqlite3_finalize(s) }
+                    while sqlite3_step(s) == SQLITE_ROW {
+                        if let cName = sqlite3_column_text(s, 1) {
+                            epCols.insert(String(cString: cName))
+                        }
+                    }
+                }
+
+                let fkCandidates = ["patient_id","patientId","patientID"]
+                guard let fk = fkCandidates.first(where: { epCols.contains($0) }) else { return nil }
+
+                let sql = """
+                SELECT p.first_name, p.last_name
+                FROM patients p
+                JOIN episodes e ON p.id = e.\(fk)
+                WHERE e.id = ? LIMIT 1;
+                """
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(episodeID))
+                    if sqlite3_step(st) == SQLITE_ROW {
+                        func col(_ i: Int32) -> String? {
+                            guard let c = sqlite3_column_text(st, i) else { return nil }
+                            let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                            return s.isEmpty ? nil : s
+                        }
+                        if let first = col(0), let last = col(1) {
+                            let full = "\(first) \(last)".trimmingCharacters(in: .whitespaces)
+                            if !full.isEmpty { return full }
+                        }
+                    }
+                }
+            }
+        } catch {
+            // ignore and fall back
+        }
+        return nil
+    }
+
+    // Fetch patient first+last name for a WELL visit from the bundle DB
+    private func fetchPatientNameForWellVisit(_ visitID: Int) -> String? {
+        do {
+            let dbPath = try bundleDBPathWithDebug()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
+
+                func columns(in table: String) -> Set<String> {
+                    var cols = Set<String>()
+                    var stmtCols: OpaquePointer?
+                    if sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
+                        defer { sqlite3_finalize(s) }
+                        while sqlite3_step(s) == SQLITE_ROW {
+                            if let cName = sqlite3_column_text(s, 1) {
+                                cols.insert(String(cString: cName))
+                            }
+                        }
+                    }
+                    return cols
+                }
+
+                // Choose well table
+                let table = ["well_visits","visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+                let cols = columns(in: table)
+                let fkCandidates = ["patient_id","patientId","patientID"]
+                guard let fk = fkCandidates.first(where: { cols.contains($0) }) else { return nil }
+
+                let sql = """
+                SELECT p.first_name, p.last_name
+                FROM patients p
+                JOIN \(table) w ON p.id = w.\(fk)
+                WHERE w.id = ? LIMIT 1;
+                """
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(visitID))
+                    if sqlite3_step(st) == SQLITE_ROW {
+                        func col(_ i: Int32) -> String? {
+                            guard let c = sqlite3_column_text(st, i) else { return nil }
+                            let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                            return s.isEmpty ? nil : s
+                        }
+                        if let first = col(0), let last = col(1) {
+                            let full = "\(first) \(last)".trimmingCharacters(in: .whitespaces)
+                            if !full.isEmpty { return full }
+                        }
+                    }
+                }
+            }
+        } catch {
+            // ignore and fall back
+        }
+        return nil
+    }
+
     // Prefer clinician name stored in Golden.db for the specific WELL visit
     private func fetchClinicianNameForWellVisit(_ visitID: Int) -> String? {
         do {
@@ -415,6 +524,7 @@ final class ReportDataLoader {
 
     private func buildMetaForWell(visitID: Int) throws -> ReportMeta {
         let (patientName, alias, mrn, dobISO, sex) = basicPatientStrings()
+        let properPatientName = fetchPatientNameForWellVisit(visitID) ?? patientName
 
         // Visit date + readable type (fallbacks keep it resilient)
         let visitDateISO: String = appState.visits.first(where: { $0.id == visitID })?.dateISO
@@ -428,7 +538,7 @@ final class ReportDataLoader {
         return ReportMeta(
             alias: alias,
             mrn: mrn,
-            name: patientName,
+            name: properPatientName,
             dobISO: dobISO,
             sex: sex,
             visitDateISO: visitDateISO,
@@ -444,6 +554,7 @@ final class ReportDataLoader {
     @MainActor
     private func buildMetaForSick(episodeID: Int) throws -> ReportMeta {
         let (patientName, alias, mrn, dobISO, sex) = basicPatientStrings()
+        let properPatientName = fetchPatientNameForEpisode(episodeID) ?? patientName
 
         // Keep existing visit date behavior (from appState or now)
         var visitDateISO: String = appState.visits.first(where: { $0.id == episodeID })?.dateISO
@@ -504,7 +615,7 @@ final class ReportDataLoader {
         return ReportMeta(
             alias: alias,
             mrn: mrn,
-            name: patientName,
+            name: properPatientName,
             dobISO: dobISO,
             sex: sex,
             visitDateISO: visitDateISO,
