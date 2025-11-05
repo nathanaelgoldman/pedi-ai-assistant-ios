@@ -346,7 +346,108 @@ private extension ReportBuilder {
         para("Clinician: \(data.meta.clinicianName)", font: .systemFont(ofSize: 12))
         content.append(NSAttributedString(string: "\n"))
 
+        // --- Step 1: Perinatal Summary ---
+        let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let bodyFont = NSFont.systemFont(ofSize: 12)
+        if let s = data.perinatalSummary, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            para("Perinatal Summary", font: headerFont)
+            para(s, font: bodyFont)
+            content.append(NSAttributedString(string: "\n"))
+        }
         
+        // --- Step 2: Findings from Previous Well Visits ---
+        if !data.previousVisitFindings.isEmpty {
+            para("Findings from Previous Well Visits", font: headerFont)
+            for item in data.previousVisitFindings {
+                // Subheader for each prior visit (humanized date) — avoid conditional binding on non-optional
+                var sub = item.title
+                let rawDate = item.date.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !rawDate.isEmpty {
+                    let pretty = humanDateOnly(rawDate) ?? rawDate
+                    if !pretty.isEmpty {
+                        sub = sub.replacingOccurrences(of: rawDate, with: pretty)
+                    }
+                }
+                content.append(NSAttributedString(
+                    string: sub + "\n",
+                    attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                                 .foregroundColor: NSColor.labelColor]
+                ))
+                // Render findings (split our joined bullets back into lines)
+                if let f = item.findings, !f.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let lines = f.components(separatedBy: " • ")
+                    for line in lines {
+                        para("• \(line)", font: bodyFont)
+                    }
+                } else {
+                    para("—", font: bodyFont)
+                }
+                content.append(NSAttributedString(string: "\n"))
+            }
+        }
+
+        // --- Step 3: Current Visit (subtitle) + Parents' Concerns + Feeding + Supplementation + Sleep ---
+        let _currentTitle = data.currentVisitTitle
+        let _currentTitleTrimmed = _currentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !_currentTitleTrimmed.isEmpty {
+            para("Current Visit — \(_currentTitleTrimmed)", font: headerFont)
+            content.append(NSAttributedString(string: "\n"))
+        }
+
+        // Parents’ Concerns
+        para("Parents’ Concerns", font: headerFont)
+        let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? data.parentsConcerns! : "—"
+        para(parentsText, font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        // Feeding
+        para("Feeding", font: headerFont)
+        if data.feeding.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let feedOrder = ["Breastfeeding","Formula","Solids","Notes"]
+            for key in feedOrder {
+                if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
+            }
+            let extraFeed = data.feeding.keys.filter { !["Breastfeeding","Formula","Solids","Notes"].contains($0) }.sorted()
+            for key in extraFeed {
+                if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
+            }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        // Supplementation
+        para("Supplementation", font: headerFont)
+        if data.supplementation.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let suppOrder = ["Vitamin D","Iron","Other","Notes"]
+            for key in suppOrder {
+                if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
+            }
+            let extraSupp = data.supplementation.keys.filter { !["Vitamin D","Iron","Other","Notes"].contains($0) }.sorted()
+            for key in extraSupp {
+                if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
+            }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        // Sleep
+        para("Sleep", font: headerFont)
+        if data.sleep.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let sleepOrder = ["Total hours","Naps","Night wakings","Quality","Notes"]
+            for key in sleepOrder {
+                if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
+            }
+            let extraSleep = data.sleep.keys.filter { !["Total hours","Naps","Night wakings","Quality","Notes"].contains($0) }.sorted()
+            for key in extraSleep {
+                if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
+            }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
         return content
     }
 
