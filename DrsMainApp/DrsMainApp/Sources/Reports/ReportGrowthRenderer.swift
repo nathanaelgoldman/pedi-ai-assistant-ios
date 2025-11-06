@@ -14,6 +14,17 @@ import AppKit
 /// - Returns NSImage objects you can embed as PDF pages (one per chart)
 final class ReportGrowthRenderer {
 
+    // Max rendered chart width: 18 cm (in points) so DPI stays reasonable at 300 dpi
+    private static let maxWidthCM: CGFloat = 18.0
+    private static let maxWidthPoints: CGFloat = (maxWidthCM / 2.54) * 72.0  // ≈ 510.24 pt
+
+    /// Clamp a requested logical size to the maximum width, preserving aspect ratio.
+    private static func clampSizeToMaxWidth(_ size: CGSize) -> CGSize {
+        guard size.width > maxWidthPoints, size.width > 0, size.height > 0 else { return size }
+        let k = maxWidthPoints / size.width
+        return CGSize(width: maxWidthPoints, height: size.height * k)
+    }
+
     // MARK: - Public API
 
     /// Produce the three standard charts (WFA, L/HFA, HCFA) as images.
@@ -22,6 +33,7 @@ final class ReportGrowthRenderer {
     static func renderAllCharts(series: ReportDataLoader.ReportGrowthSeries,
                                 size: CGSize = CGSize(width: 700, height: 450)) -> [NSImage] {
 
+        let clamped = clampSizeToMaxWidth(size)
         let sex = series.sex
         // WHO curves
         let wfaCurves = (try? loadWHO(kind: .wfa, sex: sex)) ?? fallbackFlatCurves()
@@ -32,19 +44,19 @@ final class ReportGrowthRenderer {
                                  yLabel: "kg",
                                  curves: wfaCurves,
                                  points: series.wfa,
-                                 size: size)
+                                 size: clamped)
 
         let lhfaImg = renderChart(title: "Length/Height‑for‑Age (0–24 m)",
                                   yLabel: "cm",
                                   curves: lhfaCurves,
                                   points: series.lhfa,
-                                  size: size)
+                                  size: clamped)
 
         let hcfaImg = renderChart(title: "Head Circumference‑for‑Age (0–24 m)",
                                   yLabel: "cm",
                                   curves: hcfaCurves,
                                   points: series.hcfa,
-                                  size: size)
+                                  size: clamped)
 
         return [wfaImg, lhfaImg, hcfaImg]
     }
@@ -158,7 +170,7 @@ final class ReportGrowthRenderer {
     // MARK: - Drawing
 
     private struct Style {
-        var inset: CGFloat = 48
+        var inset: CGFloat = 8
         var gridColor: NSColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
         var axisColor: NSColor = NSColor(calibratedWhite: 0.15, alpha: 1.0)
         var labelColor: NSColor = NSColor(calibratedWhite: 0.1, alpha: 1.0)
@@ -187,8 +199,10 @@ final class ReportGrowthRenderer {
                                     size: CGSize,
                                     style: Style = Style()) -> NSImage {
 
-        // High-DPI rendering: draw at 2× pixel density, then attach as an NSImage sized in points.
-        let scale: CGFloat = 2.0
+        // High-DPI rendering: target 300 DPI so lines remain crisp in PDF/print.
+        // Convert logical point size to pixels using: pixelsPerPoint = targetDPI / 72.
+        let targetDPI: CGFloat = 300.0
+        let scale: CGFloat = targetDPI / 72.0  // ≈ 4.1667×
         let pw = max(1, Int((size.width  * scale).rounded()))
         let ph = max(1, Int((size.height * scale).rounded()))
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil,

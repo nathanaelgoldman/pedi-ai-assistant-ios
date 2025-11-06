@@ -11,6 +11,10 @@ import PDFKit
 import UniformTypeIdentifiers
 import CoreText
 
+// MARK: - Report geometry (single source of truth)
+fileprivate let REPORT_PAGE_SIZE = CGSize(width: 595.0, height: 842.0) // US Letter; switch here if you use A4
+fileprivate let REPORT_INSET: CGFloat = 36.0
+
 // MARK: - Visit selection + format
 
 enum VisitKind {
@@ -64,17 +68,25 @@ final class ReportBuilder {
         do {
             switch format {
             case .pdf:
-                // Build report as two parts: body (no charts) and charts-only, then merge
+                // Build report as two parts: body (no charts) and charts-only Pages.
                 let (bodyAttr, chartsAttr) = try buildAttributedReportParts(for: kind)
                 let bodyPDF = try makePDF(from: bodyAttr)
+
+                // Prefer direct-drawn charts PDF (avoids text-layout clipping of big attachments).
+                var chartsPDFData: Data? = nil
+                if case .well(let visitID) = kind, let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
+                    chartsPDFData = try makeChartsPDFForWell(gs)
+                } else if let chartsAttr = chartsAttr {
+                    chartsPDFData = try makePDF(from: chartsAttr)
+                }
+
                 let finalPDF: Data
-                if let chartsAttr = chartsAttr {
-                    let chartsPDF = try makePDF(from: chartsAttr)
+                if let chartsPDF = chartsPDFData {
                     finalPDF = try mergePDFs([bodyPDF, chartsPDF])
                 } else {
                     finalPDF = bodyPDF
                 }
-                try finalPDF.write(to: dest, options: Data.WritingOptions.atomic)
+                try finalPDF.write(to: dest, options: .atomic)
             case .rtf:
                 guard let rtfData = attributed.rtf(
                     from: NSRange(location: 0, length: attributed.length),
@@ -344,12 +356,18 @@ final class ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         // Charts — each on its own page
-        let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: CGSize(width: 700, height: 450), drawWHO: true)
+        // Render charts sized to the page content width (capped at 18 cm) so they visually fill the page.
+        let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
+        let max18cm: CGFloat = (18.0 / 2.54) * 72.0
+        let renderWidth = min(contentWidth, max18cm)
+        let aspect: CGFloat = 450.0 / 700.0   // match renderer's default aspect ratio
+        let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
+        let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
         for (idx, img) in images.enumerated() {
             if idx > 0 { content.append(pageBreak()) }
             let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
             content.append(centeredTitle(caption))
-            assembleWellChartsOnly
+            content.append(attachmentStringFittedToContent(from: img, reservedTopBottom: 72))
             content.append(NSAttributedString(string: "\n\n"))
         }
         return content
@@ -377,68 +395,59 @@ private extension ReportBuilder {
     private func pageBreak() -> NSAttributedString {
         return NSAttributedString(string: "\u{000C}")
     }
+    
+    // Ensures the text system allocates the full rect for large images (no clipping to a single line).
+    private final class FixedImageAttachmentCell: NSTextAttachmentCell {
+        private let imageRef: NSImage
+        private let fixedSize: NSSize
+
+        init(image: NSImage, size: NSSize) {
+            self.imageRef = image
+            self.fixedSize = size
+            super.init(imageCell: nil)
+        }
+
+        required init(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func cellSize() -> NSSize {
+            return fixedSize
+        }
+
+        override func draw(withFrame cellFrame: NSRect,
+                           in controlView: NSView?,
+                           characterIndex charIndex: Int,
+                           layoutManager: NSLayoutManager) {
+            // Draw the image scaled to the reserved rect; respect flipped contexts.
+            imageRef.draw(in: cellFrame,
+                          from: NSRect(origin: .zero, size: imageRef.size),
+                          operation: .sourceOver,
+                          fraction: 1.0,
+                          respectFlipped: true,
+                          hints: nil)
+        }
+    }
 
     // Build a TIFF-backed attachment string, centered, scaled to maxWidth.
     private func attachmentString(from img: NSImage, maxWidth: CGFloat = 480) -> NSAttributedString {
-        // Compute target size capped by maxWidth while preserving aspect ratio
-        let scaleFactor = min(1.0, maxWidth / max(img.size.width, 1))
-        let targetSize = NSSize(width: max(1, img.size.width * scaleFactor),
-                                height: max(1, img.size.height * scaleFactor))
+        // Preserve the image exactly as rendered (e.g., 300‑dpi from ReportGrowthRenderer).
+        // Only scale the displayed bounds in points when exceeding maxWidth.
+        let srcSize = img.size
+        let scaleFactor = min(1.0, maxWidth / max(srcSize.width, 1))
+        let targetSize = NSSize(width: max(1, srcSize.width * scaleFactor),
+                                height: max(1, srcSize.height * scaleFactor))
 
-        // Render a high-DPI bitmap (2×) for crisper lines when embedded in PDF/RTF
-        let scale: CGFloat = 2.0
-        let pixelsWide  = max(1, Int(ceil(targetSize.width  * scale)))
-        let pixelsHigh  = max(1, Int(ceil(targetSize.height * scale)))
-        guard let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: pixelsWide,
-            pixelsHigh: pixelsHigh,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0
-        ) else {
-            return NSAttributedString(string: "\n")
-        }
-        // Logical display size in points (keeps layout correct)
-        rep.size = targetSize
-
-        NSGraphicsContext.saveGraphicsState()
-        if let nsCtx = NSGraphicsContext(bitmapImageRep: rep) {
-            NSGraphicsContext.current = nsCtx
-            let cg = nsCtx.cgContext
-            // Quality knobs for crisp downsampling
-            cg.setShouldAntialias(true)
-            cg.setAllowsAntialiasing(true)
-            cg.interpolationQuality = .high
-
-            // White background to match report paper
-            cg.setFillColor(NSColor.white.cgColor)
-            cg.fill(CGRect(origin: .zero, size: CGSize(width: targetSize.width, height: targetSize.height)))
-
-            // Draw at 2× so we retain detail before layout scaling
-            cg.scaleBy(x: scale, y: scale)
-            img.draw(in: CGRect(origin: .zero, size: targetSize))
-
-            NSGraphicsContext.current = nil
-        }
-        NSGraphicsContext.restoreGraphicsState()
-
-        guard let tiffData = rep.tiffRepresentation else {
-            return NSAttributedString(string: "\n")
-        }
-
-        // File-backed attachment (RTF-friendly)
-        let fw = FileWrapper(regularFileWithContents: tiffData)
-        fw.preferredFilename = "chart.tiff"
-        let att = NSTextAttachment(fileWrapper: fw)
+        // Use NSTextAttachment(image:) so we do NOT redraw or resample here.
+        // Use a fixed-size attachment cell so layout reserves full height (prevents clipping to a single text line).
+        let att = NSTextAttachment()
+        att.attachmentCell = FixedImageAttachmentCell(image: img, size: targetSize)
         att.bounds = CGRect(origin: .zero, size: targetSize)
 
-        let para = NSMutableParagraphStyle(); para.alignment = .center
-        let s = NSMutableAttributedString(attributedString: NSAttributedString(attachment: att))
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+
+        let s = NSMutableAttributedString(attachment: att)
         s.addAttributes([.paragraphStyle: para], range: NSRange(location: 0, length: s.length))
         return s
     }
@@ -450,6 +459,22 @@ private extension ReportBuilder {
                                                       padding: CGFloat = 0) -> NSAttributedString {
         let contentWidth = max(1, pageSize.width - (2 * inset) - padding)
         return attachmentString(from: img, maxWidth: contentWidth)
+    }
+    
+    // Build an attachment fitted to the page content rect (width & height),
+    // reserving some vertical space for the caption and spacing.
+    private func attachmentStringFittedToContent(from img: NSImage,
+                                                 pageSize: CGSize = CGSize(width: 8.5 * 72.0, height: 11 * 72.0),
+                                                 inset: CGFloat = 36,
+                                                 reservedTopBottom: CGFloat = 72) -> NSAttributedString {
+        let contentWidth  = max(1, pageSize.width  - (2 * inset))
+        let contentHeight = max(1, pageSize.height - (2 * inset) - max(0, reservedTopBottom))
+
+        // If height is limiting, compute the width that corresponds to the capped height.
+        let widthIfHeightBounds = img.size.width * (contentHeight / max(1, img.size.height))
+        let effectiveMaxWidth = min(contentWidth, widthIfHeightBounds)
+
+        return attachmentString(from: img, maxWidth: effectiveMaxWidth)
     }
 
     // MARK: - Date helpers (human readable)
@@ -982,7 +1007,12 @@ private extension ReportBuilder {
 
         // Render actual chart images (WFA, L/HFA, HCFA) — each chart on its own page
         if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
-            let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: CGSize(width: 700, height: 450), drawWHO: true)
+            let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
+            let max18cm: CGFloat = (18.0 / 2.54) * 72.0
+            let renderWidth = min(contentWidth, max18cm)
+            let aspect: CGFloat = 450.0 / 700.0
+            let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
+            let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
 
             content.append(NSAttributedString(string: "\n"))
             for (idx, img) in images.enumerated() {
@@ -992,7 +1022,7 @@ private extension ReportBuilder {
                 }
                 let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
                 content.append(centeredTitle(caption))
-                content.append(attachmentStringCappedToContentWidth(from: img))
+                content.append(attachmentStringFittedToContent(from: img, reservedTopBottom: 72))
                 content.append(NSAttributedString(string: "\n\n"))
             }
         }
@@ -1190,8 +1220,8 @@ private extension ReportBuilder {
     // Render an attributed string into paginated PDF data (supports image attachments)
     // Render an attributed string into paginated PDF data (multi-container pagination)
     func makePDF(from attributed: NSAttributedString,
-                 pageSize: CGSize = CGSize(width: 8.5 * 72.0, height: 11 * 72.0),
-                 inset: CGFloat = 36) throws -> Data {
+                 pageSize: CGSize = REPORT_PAGE_SIZE,
+                 inset: CGFloat = REPORT_INSET) throws -> Data {
         // Layout rects
         let contentRect = CGRect(
             x: inset,
@@ -1366,4 +1396,80 @@ extension ReportBuilder {
                           userInfo: [NSLocalizedDescriptionKey: "Failed to create merged PDF data"])
         }
         return data
+    }
+
+    // Draw charts directly into a PDF (one per page), bypassing text layout.
+    private func makeChartsPDFForWell(_ series: ReportDataLoader.ReportGrowthSeries,
+                                      pageSize: CGSize = REPORT_PAGE_SIZE,
+                                      inset: CGFloat = REPORT_INSET) throws -> Data {
+        // Page geometry
+        let contentRect = CGRect(x: inset, y: inset,
+                                 width: pageSize.width - 2*inset,
+                                 height: pageSize.height - 2*inset)
+
+        // Compute target logical render size (respect 18 cm cap)
+        let max18cm: CGFloat = (18.0 / 2.54) * 72.0
+        let renderW = min(contentRect.width, max18cm)
+        // Keep the renderer's default aspect (matches 700x450)
+        let aspect: CGFloat = 450.0 / 700.0
+        let renderH = renderW * aspect
+        let renderSize = CGSize(width: renderW, height: renderH)
+
+        // Render images at 300 dpi via the renderer
+        let images = ReportGrowthRenderer.renderAllCharts(series: series, size: renderSize, drawWHO: true)
+
+        // Prepare PDF context
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
+            throw NSError(domain: "ReportExport", code: 310, userInfo: [NSLocalizedDescriptionKey: "ChartsPDF: consumer failed"])
+        }
+        var mediaBox = CGRect(origin: .zero, size: pageSize)
+        guard let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+            throw NSError(domain: "ReportExport", code: 311, userInfo: [NSLocalizedDescriptionKey: "ChartsPDF: context failed"])
+        }
+
+        for (idx, img) in images.enumerated() {
+            ctx.beginPDFPage(nil)
+            ctx.setFillColor(NSColor.white.cgColor)
+            ctx.fill(mediaBox)
+
+            // Use a flipped AppKit context for simple top-left coordinates
+            NSGraphicsContext.saveGraphicsState()
+            let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: true)
+            NSGraphicsContext.current = nsCtx
+
+            // Caption
+            let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
+            let p = NSMutableParagraphStyle(); p.alignment = .center
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+                .paragraphStyle: p,
+                .foregroundColor: NSColor.black
+            ]
+            let cap = NSAttributedString(string: caption, attributes: attrs)
+            let capH: CGFloat = 18.0
+            let capRect = CGRect(x: contentRect.minX, y: contentRect.minY, width: contentRect.width, height: capH)
+            cap.draw(in: capRect)
+
+            // Image rect (centered; fits width, preserves aspect)
+            let imgW = renderW
+            let imgH = min(renderH, contentRect.height - capH - 8)
+            let imgX = contentRect.midX - imgW/2
+            let imgY = capRect.maxY + 8
+            let imgRect = CGRect(x: imgX, y: imgY, width: imgW, height: imgH)
+
+            img.draw(in: imgRect,
+                     from: NSRect(origin: .zero, size: img.size),
+                     operation: .sourceOver,
+                     fraction: 1.0,
+                     respectFlipped: true,
+                     hints: nil)
+
+            NSGraphicsContext.current = nil
+            NSGraphicsContext.restoreGraphicsState()
+            ctx.endPDFPage()
+        }
+
+        ctx.closePDF()
+        return data as Data
     }
