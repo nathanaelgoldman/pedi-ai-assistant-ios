@@ -51,19 +51,58 @@ final class ReportGrowthRenderer {
 
     // MARK: - WHO Loader
 
+    /// Try to locate a WHO CSV in several plausible bundle locations and name variants.
+    /// Expected canonical name: "<kind>_0_24m_<M|F>.csv" inside "WHO/" subdirectory.
+    private static func findWHOURL(kind: ReportGrowth.Kind,
+                                   sex: ReportGrowth.Sex,
+                                   bundle: Bundle) -> URL? {
+        let base = "\(kind.rawValue)_0_24m_\(sex == .male ? "M" : "F")"
+        let candidates: [(subdir: String?, name: String)] = [
+            ("WHO", base),
+            ("who", base),
+            ("Resources/WHO", base),
+            (nil, base)
+        ]
+        for c in candidates {
+            if let url = bundle.url(forResource: c.name, withExtension: "csv", subdirectory: c.subdir) {
+                return url
+            }
+        }
+        // Last resort: scan any CSVs in bundle root and WHO dirs that loosely match.
+        let searchSubdirs: [String?] = [nil, "WHO", "who", "Resources/WHO"]
+        for sub in searchSubdirs {
+            if let urls = bundle.urls(forResourcesWithExtension: "csv", subdirectory: sub) {
+                if let match = urls.first(where: { url in
+                    let fname = url.deletingPathExtension().lastPathComponent.lowercased()
+                    // accept both exact and case-insensitive matches like "wfa_0_24m_m" or with extra suffixes
+                    let prefix = "\(kind.rawValue)_0_24m_".lowercased()
+                    let sexMarker = (sex == .male ? "m" : "f")
+                    return fname.hasPrefix(prefix) && fname.contains(sexMarker)
+                }) {
+                    return match
+                }
+            }
+        }
+        return nil
+    }
+
     /// Expected CSV header: age_months,p3,p15,p50,p85,p97
     private static func loadWHO(kind: ReportGrowth.Kind,
                                 sex: ReportGrowth.Sex,
                                 bundle: Bundle = .main) throws -> ReportGrowth.Curves {
-        let file = "\(kind.rawValue)_0_24m_\(sex == .male ? "M" : "F")"
-        guard let url = bundle.url(forResource: file, withExtension: "csv", subdirectory: "WHO") else {
+        // Locate file robustly
+        guard let url = findWHOURL(kind: kind, sex: sex, bundle: bundle) else {
+            #if DEBUG
+            print("[ReportGrowthRenderer] WHO CSV not found for \(kind.rawValue) sex=\(sex == .male ? "M" : "F") in bundle paths {WHO/, who/, Resources/WHO/, root}. Falling back to flat curves.")
+            #endif
             throw NSError(domain: "ReportGrowthRenderer",
                           code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "WHO CSV not found: WHO/\(file).csv"])
+                          userInfo: [NSLocalizedDescriptionKey: "WHO CSV not found for \(kind.rawValue) \(sex == .male ? "M" : "F")"])
         }
 
         let raw = try String(contentsOf: url, encoding: .utf8)
         let lines = raw.split(whereSeparator: \.isNewline)
+
         guard let header = lines.first?.lowercased(),
               header.contains("age_months"),
               header.contains("p3"),
@@ -71,9 +110,12 @@ final class ReportGrowthRenderer {
               header.contains("p50"),
               header.contains("p85"),
               header.contains("p97") else {
+            #if DEBUG
+            print("[ReportGrowthRenderer] Bad WHO header in \(url.lastPathComponent). Header: \(lines.first ?? "")")
+            #endif
             throw NSError(domain: "ReportGrowthRenderer",
                           code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "Bad WHO header in \(file).csv"])
+                          userInfo: [NSLocalizedDescriptionKey: "Bad WHO header in \(url.lastPathComponent)"])
         }
 
         var ages: [Double] = []
@@ -99,6 +141,11 @@ final class ReportGrowthRenderer {
             p3.append(v3); p15.append(v15); p50.append(v50); p85.append(v85); p97.append(v97)
         }
 
+        #if DEBUG
+        if ages.isEmpty { print("[ReportGrowthRenderer] WHO CSV \(url.lastPathComponent) parsed but no rows; using fallback.") }
+        else { print("[ReportGrowthRenderer] WHO loaded \(url.lastPathComponent): rows=\(ages.count)") }
+        #endif
+
         return ReportGrowth.Curves(agesMonths: ages, p3: p3, p15: p15, p50: p50, p85: p85, p97: p97)
     }
 
@@ -116,15 +163,16 @@ final class ReportGrowthRenderer {
         var axisColor: NSColor = NSColor(calibratedWhite: 0.15, alpha: 1.0)
         var labelColor: NSColor = NSColor(calibratedWhite: 0.1, alpha: 1.0)
         var legendText: NSColor = NSColor(calibratedWhite: 0.1, alpha: 1.0)
-        var curveP50: NSColor = .black
-        var curveP3:  NSColor = NSColor(calibratedWhite: 0.2, alpha: 1.0)
-        var curveP97: NSColor = NSColor(calibratedWhite: 0.2, alpha: 1.0)
-        var curveP15: NSColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
-        var curveP85: NSColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+        // Distinct, print‑friendly colors per percentile
+        var curveP3:  NSColor = NSColor(calibratedRed: 0.82, green: 0.29, blue: 0.36, alpha: 1.0)   // red (P3)
+        var curveP15: NSColor = NSColor(calibratedRed: 0.97, green: 0.57, blue: 0.34, alpha: 1.0)   // orange (P15)
+        var curveP50: NSColor = NSColor(calibratedRed: 0.18, green: 0.53, blue: 0.67, alpha: 1.0)   // blue (P50)
+        var curveP85: NSColor = NSColor(calibratedRed: 0.34, green: 0.66, blue: 0.45, alpha: 1.0)   // green (P85)
+        var curveP97: NSColor = NSColor(calibratedRed: 0.49, green: 0.42, blue: 0.77, alpha: 1.0)   // purple (P97)
         var pointColor: NSColor = .systemBlue
 
         var curveThin: CGFloat = 1.2
-        var curveThick: CGFloat = 2.0
+        var curveThick: CGFloat = 1.0   // make P50 thinner than others
         var pointRadius: CGFloat = 2.8
 
         var titleFont: NSFont = .systemFont(ofSize: 15, weight: .semibold)
@@ -139,11 +187,48 @@ final class ReportGrowthRenderer {
                                     size: CGSize,
                                     style: Style = Style()) -> NSImage {
 
-        let img = NSImage(size: size)
-        img.lockFocus()
-        guard let ctx = NSGraphicsContext.current?.cgContext else {
-            img.unlockFocus(); return img
+        // High-DPI rendering: draw at 2× pixel density, then attach as an NSImage sized in points.
+        let scale: CGFloat = 2.0
+        let pw = max(1, Int((size.width  * scale).rounded()))
+        let ph = max(1, Int((size.height * scale).rounded()))
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                         pixelsWide: pw,
+                                         pixelsHigh: ph,
+                                         bitsPerSample: 8,
+                                         samplesPerPixel: 4,
+                                         hasAlpha: true,
+                                         isPlanar: false,
+                                         colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0,
+                                         bitsPerPixel: 0) else {
+            // Fallback to 1× if bitmap allocation fails
+            let fallback = NSImage(size: size)
+            fallback.lockFocus()
+            let ctx = NSGraphicsContext.current!.cgContext
+            let rect = CGRect(origin: .zero, size: size)
+            ctx.setFillColor(NSColor.white.cgColor)
+            ctx.fill(rect)
+            fallback.unlockFocus()
+            return fallback
         }
+        rep.size = size  // logical points, keeps image sized correctly when embedded
+
+        NSGraphicsContext.saveGraphicsState()
+        guard let nsCtx = NSGraphicsContext(bitmapImageRep: rep) else {
+            NSGraphicsContext.restoreGraphicsState()
+            let fallback = NSImage(size: size)
+            return fallback
+        }
+        NSGraphicsContext.current = nsCtx
+        let ctx = nsCtx.cgContext
+
+        // Scale context so our drawing code continues to use point-based 'size' and layout
+        ctx.scaleBy(x: scale, y: scale)
+
+        // Quality knobs for crisp lines and text when downsampled in PDF
+        ctx.setShouldAntialias(true)
+        ctx.setAllowsAntialiasing(true)
+        ctx.interpolationQuality = .high
 
         let rect = CGRect(origin: .zero, size: size)
         ctx.setFillColor(NSColor.white.cgColor)
@@ -258,11 +343,11 @@ final class ReportGrowthRenderer {
             ctx.strokePath()
             ctx.restoreGState()
         }
-        strokeCurve(.p15, color: style.curveP15, width: 1.0, dash: [4,3])
-        strokeCurve(.p85, color: style.curveP85, width: 1.0, dash: [4,3])
-        strokeCurve(.p3,  color: style.curveP3,  width: 1.2, dash: [2,3])
-        strokeCurve(.p97, color: style.curveP97, width: 1.2, dash: [2,3])
+        strokeCurve(.p3,  color: style.curveP3,  width: 1.6, dash: [2,3])
+        strokeCurve(.p15, color: style.curveP15, width: 1.3, dash: [4,3])
         strokeCurve(.p50, color: style.curveP50, width: style.curveThick, dash: nil)
+        strokeCurve(.p85, color: style.curveP85, width: 1.3, dash: [4,3])
+        strokeCurve(.p97, color: style.curveP97, width: 1.6, dash: [2,3])
 
         // Patient polyline + points
         ctx.saveGState()
@@ -287,15 +372,21 @@ final class ReportGrowthRenderer {
         // Legend (top-right inside the plot)
         drawLegend(in: plot, style: style)
 
-        img.unlockFocus()
+        // Finalize high-DPI render and wrap into an NSImage at logical size
+        NSGraphicsContext.current = nil
+        NSGraphicsContext.restoreGraphicsState()
+        let img = NSImage(size: size)
+        img.addRepresentation(rep)
         return img
     }
 
     private static func drawLegend(in plot: CGRect, style: Style) {
         let items: [(String, NSColor, [CGFloat]?)] = [
+            ("P3",  style.curveP3,  [2,3]),
+            ("P15", style.curveP15, [4,3]),
             ("P50", style.curveP50, nil),
-            ("P3 / P97", style.curveP3, [2,3]),
-            ("P15 / P85", style.curveP15, [4,3]),
+            ("P85", style.curveP85, [4,3]),
+            ("P97", style.curveP97, [2,3]),
             ("Patient", style.pointColor, nil)
         ]
 
@@ -329,7 +420,14 @@ final class ReportGrowthRenderer {
             let swRect = CGRect(x: box.minX + padding, y: y, width: swatchW, height: 8)
             ctx.saveGState()
             ctx.setStrokeColor(item.1.cgColor)
-            ctx.setLineWidth(item.0 == "P50" ? 2.0 : 1.2)
+            let lw: CGFloat
+            switch item.0 {
+            case "P3", "P97": lw = 1.6
+            case "P15", "P85": lw = 1.3
+            case "P50": lw = 1.0
+            default: lw = 1.2
+            }
+            ctx.setLineWidth(lw)
             if let dash = item.2 { ctx.setLineDash(phase: 0, lengths: dash) }
             ctx.move(to: CGPoint(x: swRect.minX, y: swRect.midY))
             ctx.addLine(to: CGPoint(x: swRect.maxX, y: swRect.midY))
@@ -342,5 +440,16 @@ final class ReportGrowthRenderer {
         }
 
         ctx.restoreGState()
+    }
+}
+
+// MARK: - Temporary overload to support drawWHO flag from callers
+extension ReportGrowthRenderer {
+    /// Overload that accepts `drawWHO` to match updated call sites.
+    /// Currently forwards to the original implementation; WHO drawing is already handled inside.
+    static func renderAllCharts(series: ReportDataLoader.ReportGrowthSeries,
+                                size: CGSize,
+                                drawWHO: Bool) -> [NSImage] {
+        return renderAllCharts(series: series, size: size)
     }
 }

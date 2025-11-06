@@ -64,8 +64,17 @@ final class ReportBuilder {
         do {
             switch format {
             case .pdf:
-                let pdfData = try makePDF(from: attributed)
-                try pdfData.write(to: dest, options: Data.WritingOptions.atomic)
+                // Build report as two parts: body (no charts) and charts-only, then merge
+                let (bodyAttr, chartsAttr) = try buildAttributedReportParts(for: kind)
+                let bodyPDF = try makePDF(from: bodyAttr)
+                let finalPDF: Data
+                if let chartsAttr = chartsAttr {
+                    let chartsPDF = try makePDF(from: chartsAttr)
+                    finalPDF = try mergePDFs([bodyPDF, chartsPDF])
+                } else {
+                    finalPDF = bodyPDF
+                }
+                try finalPDF.write(to: dest, options: Data.WritingOptions.atomic)
             case .rtf:
                 guard let rtfData = attributed.rtf(
                     from: NSRange(location: 0, length: attributed.length),
@@ -88,6 +97,262 @@ final class ReportBuilder {
             NSLog("[ReportExport] write failed: \(error)")
             throw error
         }
+    }
+    // Build split attributed content: body (no charts) + charts-only (if applicable)
+    func buildAttributedReportParts(for kind: VisitKind) throws -> (body: NSAttributedString, charts: NSAttributedString?) {
+        switch kind {
+        case .well(let visitID):
+            let data = try dataLoader.loadWell(visitID: visitID)
+            let body = assembleAttributedWell_BodyOnly(data: data, visitID: visitID)
+            let charts = assembleWellChartsOnly(data: data, visitID: visitID)
+            return (body, charts)
+        case .sick(let episodeID):
+            let data = try dataLoader.loadSick(episodeID: episodeID)
+            let (_, fallbackSections) = buildContent(for: kind)
+            let all = assembleAttributedSick(data: data, fallbackSections: fallbackSections)
+            return (all, nil)
+        }
+    }
+    // Body-only variant of Well report (steps 1–12), excluding Step 13 charts
+    func assembleAttributedWell_BodyOnly(data: WellReportData, visitID: Int) -> NSAttributedString {
+        let content = NSMutableAttributedString()
+
+        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
+            content.append(NSAttributedString(string: text + "\n",
+                                              attributes: [.font: font, .foregroundColor: color]))
+        }
+
+        // Header block (Well)
+        para("Well Visit Summary", font: .systemFont(ofSize: 20, weight: .semibold))
+        let triad = "Created: \(humanDateTime(data.meta.createdAtISO) ?? "—")   •   Last Edited: \(humanDateTime(data.meta.updatedAtISO) ?? "—")   •   Report Generated: \(humanDateTime(data.meta.generatedAtISO) ?? "—")"
+        para(triad, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Alias: \(data.meta.alias)   •   MRN: \(data.meta.mrn)", font: .systemFont(ofSize: 12))
+        para("Name: \(data.meta.name)", font: .systemFont(ofSize: 12))
+        let dobShortWell = humanDateOnly(data.meta.dobISO) ?? "—"
+        let ageShortWell = {
+            let pre = data.meta.ageAtVisit.trimmingCharacters(in: .whitespacesAndNewlines)
+            if pre.isEmpty || pre == "—" {
+                return computeAgeShort(dobISO: data.meta.dobISO, refISO: data.meta.visitDateISO)
+            }
+            return pre
+        }()
+        para("DOB: \(dobShortWell)   •   Sex: \(data.meta.sex)   •   Age at Visit: \(ageShortWell)", font: .systemFont(ofSize: 12))
+        para("Visit Date: \(humanDateOnly(data.meta.visitDateISO) ?? "—")   •   Visit Type: \(data.meta.visitTypeReadable ?? "Well Visit")", font: .systemFont(ofSize: 12))
+        para("Clinician: \(data.meta.clinicianName)", font: .systemFont(ofSize: 12))
+        content.append(NSAttributedString(string: "\n"))
+
+        // Steps 1–12 (copy of assembleAttributedWell up to just before Step 13)
+        let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let bodyFont = NSFont.systemFont(ofSize: 12)
+
+        if let s = data.perinatalSummary, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            para("Perinatal Summary", font: headerFont)
+            para(s, font: bodyFont)
+            content.append(NSAttributedString(string: "\n"))
+        }
+
+        if !data.previousVisitFindings.isEmpty {
+            para("Findings from Previous Well Visits", font: headerFont)
+            for item in data.previousVisitFindings {
+                var sub = item.title
+                let rawDate = item.date.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !rawDate.isEmpty {
+                    let pretty = humanDateOnly(rawDate) ?? rawDate
+                    if !pretty.isEmpty { sub = sub.replacingOccurrences(of: rawDate, with: pretty) }
+                }
+
+                // Restore Age printing for previous visits (computed from DOB and the visit date)
+                let dobForAge = data.meta.dobISO.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !dobForAge.isEmpty && !rawDate.isEmpty {
+                    let computed = computeAgeShort(dobISO: dobForAge, refISO: rawDate)
+                    if computed != "—" {
+                        if let r = sub.range(of: "Age —") {
+                            sub.replaceSubrange(r, with: "Age \(computed)")
+                        } else if !sub.contains("Age ") {
+                            sub.append(" · Age \(computed)")
+                        }
+                    }
+                }
+
+                content.append(NSAttributedString(
+                    string: sub + "\n",
+                    attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                                 .foregroundColor: NSColor.labelColor]
+                ))
+
+                if let f = item.findings, !f.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let lines = f.components(separatedBy: " • ")
+                    for line in lines { para("• \(line)", font: bodyFont) }
+                } else {
+                    para("—", font: bodyFont)
+                }
+                content.append(NSAttributedString(string: "\n"))
+            }
+        }
+
+        let _currentTitle = data.currentVisitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !_currentTitle.isEmpty {
+            para("Current Visit — \(_currentTitle)", font: headerFont)
+            content.append(NSAttributedString(string: "\n"))
+        }
+
+        para("Parents’ Concerns", font: headerFont)
+        let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? data.parentsConcerns! : "—"
+        para(parentsText, font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Feeding", font: headerFont)
+        if data.feeding.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let feedOrder = ["Breastfeeding","Formula","Solids","Notes"]
+            for key in feedOrder { if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            let extra = data.feeding.keys.filter { !["Breastfeeding","Formula","Solids","Notes"].contains($0) }.sorted()
+            for key in extra { if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Supplementation", font: headerFont)
+        if data.supplementation.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let order = ["Vitamin D","Iron","Other","Notes"]
+            for key in order { if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            let extra = data.supplementation.keys.filter { !["Vitamin D","Iron","Other","Notes"].contains($0) }.sorted()
+            for key in extra { if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Sleep", font: headerFont)
+        if data.sleep.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let order = ["Total hours","Naps","Night wakings","Quality","Notes"]
+            for key in order { if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            let extra = data.sleep.keys.filter { !["Total hours","Naps","Night wakings","Quality","Notes"].contains($0) }.sorted()
+            for key in extra { if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Developmental Evaluation", font: headerFont)
+        if data.developmental.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let devOrder = ["Parent Concerns", "M-CHAT", "Developmental Test"]
+            for key in devOrder { if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            let extra = data.developmental.keys.filter { !["Parent Concerns","M-CHAT","Developmental Test"].contains($0) }.sorted()
+            for key in extra { if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { para("\(key): \(v)", font: bodyFont) } }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Age-specific Milestones", font: headerFont)
+        let achieved = data.milestonesAchieved.0
+        let total = data.milestonesAchieved.1
+        para("Achieved: \(achieved)/\(total)", font: bodyFont)
+        if data.milestoneFlags.isEmpty { para("No flags.", font: bodyFont) } else { for line in data.milestoneFlags { para("• \(line)", font: bodyFont) } }
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Measurements", font: headerFont)
+        if data.measurements.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let measOrder = ["Weight","Length","Head Circumference","Weight gain since discharge"]
+            for key in measOrder { if let v = data.measurements[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            let extra = data.measurements.keys.filter { !["Weight","Length","Head Circumference","Weight gain since discharge"].contains($0) }.sorted()
+            for key in extra { if let v = data.measurements[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Physical Examination", font: headerFont)
+        if data.physicalExamGroups.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            for (groupTitle, lines) in data.physicalExamGroups {
+                content.append(NSAttributedString(
+                    string: groupTitle + "\n",
+                    attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: NSColor.labelColor]
+                ))
+                for line in lines where !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    para("• \(line)", font: bodyFont)
+                }
+            }
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Problem Listing", font: headerFont)
+        let _problem = data.problemListing?.trimmingCharacters(in: .whitespacesAndNewlines)
+        para((_problem?.isEmpty == false ? _problem! : "—"), font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Conclusions", font: headerFont)
+        let _conclusions = data.conclusions?.trimmingCharacters(in: .whitespacesAndNewlines)
+        para((_conclusions?.isEmpty == false ? _conclusions! : "—"), font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Anticipatory Guidance", font: headerFont)
+        let _ag = data.anticipatoryGuidance?.trimmingCharacters(in: .whitespacesAndNewlines)
+        para((_ag?.isEmpty == false ? _ag! : "—"), font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Clinician Comments", font: headerFont)
+        let _cc = data.clinicianComments?.trimmingCharacters(in: .whitespacesAndNewlines)
+        para((_cc?.isEmpty == false ? _cc! : "—"), font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        para("Next Visit Date", font: headerFont)
+        if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines), !rawNext.isEmpty {
+            para(humanDateOnly(rawNext) ?? rawNext, font: bodyFont)
+        } else {
+            para("—", font: bodyFont)
+        }
+        content.append(NSAttributedString(string: "\n"))
+
+        return content
+    }
+
+    // Charts-only pages for Well report (Step 13)
+    func assembleWellChartsOnly(data: WellReportData, visitID: Int) -> NSAttributedString? {
+        guard let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) else { return nil }
+        let content = NSMutableAttributedString()
+
+        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
+            content.append(NSAttributedString(string: text + "\n",
+                                              attributes: [.font: font, .foregroundColor: color]))
+        }
+        let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let bodyFont = NSFont.systemFont(ofSize: 12)
+
+        // Summary header for charts document
+        para("Growth Charts", font: headerFont)
+        let dobPretty = humanDateOnly(gs.dobISO) ?? gs.dobISO
+        let cutPretty = humanDateOnly(gs.visitDateISO) ?? gs.visitDateISO
+        let sexText = (gs.sex == .female) ? "Female" : "Male"
+        para("Sex: \(sexText)   •   DOB: \(dobPretty)   •   Cutoff: \(cutPretty)", font: bodyFont)
+
+        func range(_ pts: [ReportGrowth.Point]) -> String {
+            guard let minA = pts.map({ $0.ageMonths }).min(), let maxA = pts.map({ $0.ageMonths }).max() else { return "0 points" }
+            let nf = NumberFormatter(); nf.maximumFractionDigits = 1
+            let lo = nf.string(from: NSNumber(value: minA)) ?? String(format: "%.1f", minA)
+            let hi = nf.string(from: NSNumber(value: maxA)) ?? String(format: "%.1f", maxA)
+            return "\(pts.count) point\(pts.count == 1 ? "" : "s") (\(lo)–\(hi) mo)"
+        }
+        para("Weight‑for‑Age: \(range(gs.wfa))", font: bodyFont)
+        para("Length/Height‑for‑Age: \(range(gs.lhfa))", font: bodyFont)
+        para("Head Circumference‑for‑Age: \(range(gs.hcfa))", font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        // Charts — each on its own page
+        let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: CGSize(width: 700, height: 450), drawWHO: true)
+        for (idx, img) in images.enumerated() {
+            if idx > 0 { content.append(pageBreak()) }
+            let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
+            content.append(centeredTitle(caption))
+            assembleWellChartsOnly
+            content.append(NSAttributedString(string: "\n\n"))
+        }
+        return content
     }
 }
 
@@ -115,14 +380,16 @@ private extension ReportBuilder {
 
     // Build a TIFF-backed attachment string, centered, scaled to maxWidth.
     private func attachmentString(from img: NSImage, maxWidth: CGFloat = 480) -> NSAttributedString {
-        let scale = min(1.0, maxWidth / max(img.size.width, 1))
-        let targetSize = NSSize(width: max(1, img.size.width * scale),
-                                height: max(1, img.size.height * scale))
+        // Compute target size capped by maxWidth while preserving aspect ratio
+        let scaleFactor = min(1.0, maxWidth / max(img.size.width, 1))
+        let targetSize = NSSize(width: max(1, img.size.width * scaleFactor),
+                                height: max(1, img.size.height * scaleFactor))
 
-        // Draw into a fresh bitmap rep so we can guarantee TIFF bytes
-        let pixelsWide  = max(1, Int(ceil(targetSize.width)))
-        let pixelsHigh  = max(1, Int(ceil(targetSize.height)))
-        let rep = NSBitmapImageRep(
+        // Render a high-DPI bitmap (2×) for crisper lines when embedded in PDF/RTF
+        let scale: CGFloat = 2.0
+        let pixelsWide  = max(1, Int(ceil(targetSize.width  * scale)))
+        let pixelsHigh  = max(1, Int(ceil(targetSize.height * scale)))
+        guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: pixelsWide,
             pixelsHigh: pixelsHigh,
@@ -133,15 +400,29 @@ private extension ReportBuilder {
             colorSpaceName: .deviceRGB,
             bytesPerRow: 0,
             bitsPerPixel: 0
-        )!
+        ) else {
+            return NSAttributedString(string: "\n")
+        }
+        // Logical display size in points (keeps layout correct)
         rep.size = targetSize
 
         NSGraphicsContext.saveGraphicsState()
-        if let ctx = NSGraphicsContext(bitmapImageRep: rep) {
-            NSGraphicsContext.current = ctx
-            ctx.cgContext.setFillColor(NSColor.white.cgColor)
-            ctx.cgContext.fill(CGRect(origin: .zero, size: CGSize(width: targetSize.width, height: targetSize.height)))
+        if let nsCtx = NSGraphicsContext(bitmapImageRep: rep) {
+            NSGraphicsContext.current = nsCtx
+            let cg = nsCtx.cgContext
+            // Quality knobs for crisp downsampling
+            cg.setShouldAntialias(true)
+            cg.setAllowsAntialiasing(true)
+            cg.interpolationQuality = .high
+
+            // White background to match report paper
+            cg.setFillColor(NSColor.white.cgColor)
+            cg.fill(CGRect(origin: .zero, size: CGSize(width: targetSize.width, height: targetSize.height)))
+
+            // Draw at 2× so we retain detail before layout scaling
+            cg.scaleBy(x: scale, y: scale)
             img.draw(in: CGRect(origin: .zero, size: targetSize))
+
             NSGraphicsContext.current = nil
         }
         NSGraphicsContext.restoreGraphicsState()
@@ -160,6 +441,15 @@ private extension ReportBuilder {
         let s = NSMutableAttributedString(attributedString: NSAttributedString(attachment: att))
         s.addAttributes([.paragraphStyle: para], range: NSRange(location: 0, length: s.length))
         return s
+    }
+    
+    // Build an attachment scaled to the printable content width of the PDF page.
+    private func attachmentStringCappedToContentWidth(from img: NSImage,
+                                                      pageSize: CGSize = CGSize(width: 8.5 * 72.0, height: 11 * 72.0),
+                                                      inset: CGFloat = 36,
+                                                      padding: CGFloat = 0) -> NSAttributedString {
+        let contentWidth = max(1, pageSize.width - (2 * inset) - padding)
+        return attachmentString(from: img, maxWidth: contentWidth)
     }
 
     // MARK: - Date helpers (human readable)
@@ -687,16 +977,22 @@ private extension ReportBuilder {
             para("—", font: bodyFont)
         }
         content.append(NSAttributedString(string: "\n"))
+        // Force Growth Charts to start on a new page
+        content.append(pageBreak())
 
-        // Render actual chart images (WFA, L/HFA, HCFA) — inline (no manual page breaks)
+        // Render actual chart images (WFA, L/HFA, HCFA) — each chart on its own page
         if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
-            let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: CGSize(width: 700, height: 450))
+            let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: CGSize(width: 700, height: 450), drawWHO: true)
 
             content.append(NSAttributedString(string: "\n"))
             for (idx, img) in images.enumerated() {
+                // Put each chart on its own page
+                if idx > 0 {
+                    content.append(pageBreak())
+                }
                 let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
                 content.append(centeredTitle(caption))
-                content.append(attachmentString(from: img, maxWidth: 480))
+                content.append(attachmentStringCappedToContentWidth(from: img))
                 content.append(NSAttributedString(string: "\n\n"))
             }
         }
@@ -921,46 +1217,92 @@ private extension ReportBuilder {
         base.addAttribute(.foregroundColor, value: NSColor.black,
                           range: NSRange(location: 0, length: base.length))
 
-        // Single storage + layout manager; one container per page
-        let storage = NSTextStorage(attributedString: base)
-        let layoutManager = NSLayoutManager()
-        layoutManager.usesFontLeading = true
-        layoutManager.usesDefaultHyphenation = false
-        layoutManager.allowsNonContiguousLayout = false
-        storage.addLayoutManager(layoutManager)
+        // --- Respect manual page breaks (form feed U+000C) ---
+        // Split the attributed string into segments separated by form-feed characters;
+        // each segment will start on a new PDF page sequence.
+        let fullNSString = base.string as NSString
+        let fullLength = fullNSString.length
+        var breakRanges: [NSRange] = []
+        fullNSString.enumerateSubstrings(in: NSRange(location: 0, length: fullLength),
+                                         options: [.byComposedCharacterSequences]) { (substr, subRange, _, _) in
+            if substr == "\u{000C}" { breakRanges.append(subRange) }
+        }
 
-        var glyphLocation = 0
-        let totalGlyphs = layoutManager.numberOfGlyphs
+        var segments: [NSAttributedString] = []
+        var cursor = 0
+        for br in breakRanges {
+            let segLen = br.location - cursor
+            let segRange = NSRange(location: cursor, length: max(0, segLen))
+            // Append content before the break; allow empty segment to yield a blank page on purpose
+            segments.append(base.attributedSubstring(from: segRange))
+            cursor = br.location + br.length
+        }
+        if cursor <= fullLength {
+            let tailLen = fullLength - cursor
+            let tailRange = NSRange(location: cursor, length: max(0, tailLen))
+            segments.append(base.attributedSubstring(from: tailRange))
+        }
+        if segments.isEmpty { segments = [base] }
 
-        while glyphLocation < totalGlyphs {
-            // New page container sized to the content area
-            let container = NSTextContainer(size: contentRect.size)
-            container.lineFragmentPadding = 0
-            container.maximumNumberOfLines = 0
-            layoutManager.addTextContainer(container)
+        // Paginate each segment independently; this guarantees that a form feed forces a new page.
+        for segment in segments {
+            let storage = NSTextStorage(attributedString: segment)
+            let layoutManager = NSLayoutManager()
+            layoutManager.usesFontLeading = true
+            layoutManager.usesDefaultHyphenation = false
+            layoutManager.allowsNonContiguousLayout = false
+            storage.addLayoutManager(layoutManager)
 
-            layoutManager.ensureLayout(for: container)
-            let glyphRange = layoutManager.glyphRange(for: container)
-            if glyphRange.length == 0 { break } // safety
+            var glyphLocation = 0
+            let totalGlyphs = layoutManager.numberOfGlyphs
 
-            // New page
-            ctx.beginPDFPage(nil)
-            ctx.setFillColor(NSColor.white.cgColor)
-            ctx.fill(mediaBox)
+            while glyphLocation < totalGlyphs {
+                // New page container sized to the content area
+                let container = NSTextContainer(size: contentRect.size)
+                container.lineFragmentPadding = 0
+                container.maximumNumberOfLines = 0
+                layoutManager.addTextContainer(container)
 
-            // Draw via AppKit bridge
-            NSGraphicsContext.saveGraphicsState()
-            let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: false)
-            NSGraphicsContext.current = nsCtx
-            ctx.saveGState()
-            ctx.translateBy(x: contentRect.minX, y: contentRect.minY)
-            layoutManager.drawBackground(forGlyphRange: glyphRange, at: .zero)
-            layoutManager.drawGlyphs(forGlyphRange: glyphRange, at: .zero)
-            ctx.restoreGState()
-            NSGraphicsContext.restoreGraphicsState()
-            ctx.endPDFPage()
+                layoutManager.ensureLayout(for: container)
+                let glyphRange = layoutManager.glyphRange(for: container)
+                if glyphRange.length == 0 { break }
 
-            glyphLocation = glyphRange.location + glyphRange.length
+                // New page
+                ctx.beginPDFPage(nil)
+                ctx.setFillColor(NSColor.white.cgColor)
+                ctx.fill(mediaBox)
+
+                // Draw using a flipped AppKit context (origin at top-left). No manual CG flips.
+                NSGraphicsContext.saveGraphicsState()
+                let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: true)
+                NSGraphicsContext.current = nsCtx
+
+                // Ensure clean text state
+                ctx.textMatrix = .identity
+
+                // Mirror the entire content area across a horizontal axis (vertical flip of full page content)
+                ctx.saveGState()
+                ctx.translateBy(x: contentRect.minX, y: contentRect.minY + contentRect.height)
+                ctx.scaleBy(x: 1.0, y: -1.0)
+                layoutManager.drawBackground(forGlyphRange: glyphRange, at: .zero)
+                layoutManager.drawGlyphs(forGlyphRange: glyphRange, at: .zero)
+                ctx.restoreGState()
+
+                // Cleanup
+                NSGraphicsContext.current = nil
+                NSGraphicsContext.restoreGraphicsState()
+                ctx.endPDFPage()
+
+                glyphLocation = glyphRange.location + glyphRange.length
+            }
+
+            // If the segment is intentionally empty (e.g., two FF in a row), emit a blank page
+            if totalGlyphs == 0 {
+                ctx.beginPDFPage(nil)
+                ctx.setFillColor(NSColor.white.cgColor)
+                ctx.fill(mediaBox)
+                ctx.endPDFPage()
+            }
         }
 
         ctx.closePDF()
@@ -1002,3 +1344,26 @@ extension ReportBuilder {
         try exportReport(for: kind, format: .rtf)
     }
 }
+
+    // Merge multiple PDF Data blobs into a single PDF
+    func mergePDFs(_ parts: [Data]) throws -> Data {
+        let out = PDFDocument()
+        var pageCursor = 0
+        for (partIndex, d) in parts.enumerated() {
+            guard let doc = PDFDocument(data: d) else {
+                throw NSError(domain: "ReportExport", code: 200 + partIndex,
+                              userInfo: [NSLocalizedDescriptionKey: "Failed to read intermediate PDF part #\(partIndex+1)"])
+            }
+            for i in 0..<doc.pageCount {
+                if let page = doc.page(at: i) {
+                    out.insert(page, at: pageCursor)
+                    pageCursor += 1
+                }
+            }
+        }
+        guard let data = out.dataRepresentation() else {
+            throw NSError(domain: "ReportExport", code: 299,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to create merged PDF data"])
+        }
+        return data
+    }
