@@ -25,6 +25,10 @@
 		BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */; };
 		BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C052EB486980065EF3E /* AliasGenerator.swift */; };
 		BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */; };
+		BB96A56B2EBB3311003F5C44 /* GrowthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96A56A2EBB330D003F5C44 /* GrowthModels.swift */; };
+		BB96A56D2EBB3334003F5C44 /* GrowthWHO.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96A56C2EBB332E003F5C44 /* GrowthWHO.swift */; };
+		BB96A56F2EBB3355003F5C44 /* GrowthChartRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96A56E2EBB3350003F5C44 /* GrowthChartRenderer.swift */; };
+		BB96A5732EBB3A2D003F5C44 /* ReportGrowthRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96A5722EBB3A28003F5C44 /* ReportGrowthRenderer.swift */; };
 		BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB9E72BC2EAD1A1C00601148 /* PediaShared */; };
 		BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD522EB5B48F00BDA924 /* GrowthStore.swift */; };
 		BBA6AD552EB5B5D900BDA924 /* GrowthTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */; };
@@ -53,6 +57,10 @@
 		BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentListView.swift; sourceTree = "<group>"; };
 		BB6D4C052EB486980065EF3E /* AliasGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliasGenerator.swift; sourceTree = "<group>"; };
 		BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MRNGenerator.swift; sourceTree = "<group>"; };
+		BB96A56A2EBB330D003F5C44 /* GrowthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthModels.swift; sourceTree = "<group>"; };
+		BB96A56C2EBB332E003F5C44 /* GrowthWHO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthWHO.swift; sourceTree = "<group>"; };
+		BB96A56E2EBB3350003F5C44 /* GrowthChartRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthChartRenderer.swift; sourceTree = "<group>"; };
+		BB96A5722EBB3A28003F5C44 /* ReportGrowthRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportGrowthRenderer.swift; sourceTree = "<group>"; };
 		BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = DrsMainApp.xcodeproj; sourceTree = "<group>"; };
 		BBA6AD522EB5B48F00BDA924 /* GrowthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthStore.swift; sourceTree = "<group>"; };
 		BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthTableView.swift; sourceTree = "<group>"; };
@@ -96,6 +104,7 @@
 		BB3E15A12EB71C36008E1472 /* Reports */ = {
 			isa = PBXGroup;
 			children = (
+				BB96A5722EBB3A28003F5C44 /* ReportGrowthRenderer.swift */,
 				BB3E15AF2EB89913008E1472 /* ReportDataModels.swift */,
 				BB3E15AD2EB89901008E1472 /* ReportDataLoader.swift */,
 				BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */,
@@ -152,6 +161,7 @@
 		BB564AEF2EAE0BB900870007 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				BB564AF02EAE0BB900870007 /* Util */,
 				BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */,
 				BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */,
 				BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */,
@@ -180,13 +190,23 @@
 		BB564AF12EAE0BB900870007 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				BB96A5692EBB32F0003F5C44 /* Growth */,
 				BB3E15A12EB71C36008E1472 /* Reports */,
 				BB564AED2EAE0BB900870007 /* App */,
 				BB564AEE2EAE0BB900870007 /* Data */,
 				BB564AEF2EAE0BB900870007 /* UI */,
-				BB564AF02EAE0BB900870007 /* Util */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		BB96A5692EBB32F0003F5C44 /* Growth */ = {
+			isa = PBXGroup;
+			children = (
+				BB96A56E2EBB3350003F5C44 /* GrowthChartRenderer.swift */,
+				BB96A56C2EBB332E003F5C44 /* GrowthWHO.swift */,
+				BB96A56A2EBB330D003F5C44 /* GrowthModels.swift */,
+			);
+			path = Growth;
 			sourceTree = "<group>";
 		};
 		BB9E72BB2EAD17A700601148 /* Frameworks */ = {
@@ -291,17 +311,21 @@
 				BB3E15AE2EB89905008E1472 /* ReportDataLoader.swift in Sources */,
 				BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */,
 				BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */,
+				BB96A56F2EBB3355003F5C44 /* GrowthChartRenderer.swift in Sources */,
 				BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */,
 				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
+				BB96A56B2EBB3311003F5C44 /* GrowthModels.swift in Sources */,
 				BB3E15B02EB89917008E1472 /* ReportDataModels.swift in Sources */,
 				BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */,
 				BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */,
 				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,
+				BB96A56D2EBB3334003F5C44 /* GrowthWHO.swift in Sources */,
 				BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */,
 				BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */,
 				BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */,
 				BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
+				BB96A5732EBB3A2D003F5C44 /* ReportGrowthRenderer.swift in Sources */,
 				BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */,
 				BBA6AD552EB5B5D900BDA924 /* GrowthTableView.swift in Sources */,
 				BB564B012EAF3C6400870007 /* PatientDetailView.swift in Sources */,
