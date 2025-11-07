@@ -1433,12 +1433,12 @@ extension ReportBuilder {
             ctx.setFillColor(NSColor.white.cgColor)
             ctx.fill(mediaBox)
 
-            // Use a flipped AppKit context for simple top-left coordinates
+            // Draw using a non-flipped context and explicit coordinates (origin = bottom-left).
             NSGraphicsContext.saveGraphicsState()
-            let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: true)
+            let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: false)
             NSGraphicsContext.current = nsCtx
 
-            // Caption
+            // Caption at the top of the content rect
             let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
             let p = NSMutableParagraphStyle(); p.alignment = .center
             let attrs: [NSAttributedString.Key: Any] = [
@@ -1448,21 +1448,26 @@ extension ReportBuilder {
             ]
             let cap = NSAttributedString(string: caption, attributes: attrs)
             let capH: CGFloat = 18.0
-            let capRect = CGRect(x: contentRect.minX, y: contentRect.minY, width: contentRect.width, height: capH)
+            let capRect = CGRect(x: contentRect.minX,
+                                 y: contentRect.maxY - capH,
+                                 width: contentRect.width,
+                                 height: capH)
             cap.draw(in: capRect)
 
-            // Image rect (centered; fits width, preserves aspect)
-            let imgW = renderW
-            let imgH = min(renderH, contentRect.height - capH - 8)
-            let imgX = contentRect.midX - imgW/2
-            let imgY = capRect.maxY + 8
+            // Image rect: fit to content width and available height below caption (preserve aspect)
+            let availableH = contentRect.height - capH - 8
+            let imgW = min(renderW, contentRect.width)
+            let imgH = min(renderH, availableH)
+            let imgX = contentRect.midX - imgW / 2
+            let imgY = capRect.minY - 8 - imgH
             let imgRect = CGRect(x: imgX, y: imgY, width: imgW, height: imgH)
 
+            // Draw image without additional flipping; coordinates are bottom-left based
             img.draw(in: imgRect,
                      from: NSRect(origin: .zero, size: img.size),
                      operation: .sourceOver,
                      fraction: 1.0,
-                     respectFlipped: true,
+                     respectFlipped: false,
                      hints: nil)
 
             NSGraphicsContext.current = nil
