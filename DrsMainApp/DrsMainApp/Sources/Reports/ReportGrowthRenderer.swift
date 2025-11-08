@@ -170,11 +170,16 @@ final class ReportGrowthRenderer {
     // MARK: - Drawing
 
     private struct Style {
-        var inset: CGFloat = 8
+        var marginLeft: CGFloat = 72
+        var marginRight: CGFloat = 20
+        var marginTop: CGFloat = 36
+        var marginBottom: CGFloat = 44
         var gridColor: NSColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
         var axisColor: NSColor = NSColor(calibratedWhite: 0.15, alpha: 1.0)
         var labelColor: NSColor = NSColor(calibratedWhite: 0.1, alpha: 1.0)
         var legendText: NSColor = NSColor(calibratedWhite: 0.1, alpha: 1.0)
+        // Slightly smaller labels to reduce collisions at 1-month / 1-kg density
+        var labelFontSmall: NSFont = .systemFont(ofSize: 9)
         // Distinct, print‑friendly colors per percentile
         var curveP3:  NSColor = NSColor(calibratedRed: 0.82, green: 0.29, blue: 0.36, alpha: 1.0)   // red (P3)
         var curveP15: NSColor = NSColor(calibratedRed: 0.97, green: 0.57, blue: 0.34, alpha: 1.0)   // orange (P15)
@@ -189,7 +194,7 @@ final class ReportGrowthRenderer {
 
         var titleFont: NSFont = .systemFont(ofSize: 15, weight: .semibold)
         var labelFont: NSFont = .systemFont(ofSize: 11)
-        var legendFont: NSFont = .systemFont(ofSize: 10)
+        var legendFont: NSFont = .systemFont(ofSize: 9)
     }
 
     private static func renderChart(title: String,
@@ -236,8 +241,12 @@ final class ReportGrowthRenderer {
         NSGraphicsContext.current = nsCtx
         let ctx = nsCtx.cgContext
 
-        // Scale context so our drawing code continues to use point-based 'size' and layout
-        ctx.scaleBy(x: scale, y: scale)
+        // Ensure 1pt maps to the intended pixel density, but avoid double-scaling if already applied by NSGraphicsContext.
+        let sx = ctx.ctm.a
+        let sy = ctx.ctm.d
+        if abs(sx - 1.0) < 0.01 && abs(sy - 1.0) < 0.01 {
+            ctx.scaleBy(x: scale, y: scale)
+        }
 
         // Quality knobs for crisp lines and text when downsampled in PDF
         ctx.setShouldAntialias(true)
@@ -248,8 +257,13 @@ final class ReportGrowthRenderer {
         ctx.setFillColor(NSColor.white.cgColor)
         ctx.fill(rect)
 
-        // Plot region
-        let plot = rect.insetBy(dx: style.inset, dy: style.inset)
+        // Plot region (explicit margins so labels fit within image bounds)
+        let plot = CGRect(
+            x: rect.minX + style.marginLeft,
+            y: rect.minY + style.marginBottom,
+            width: max(1, rect.width - style.marginLeft - style.marginRight),
+            height: max(1, rect.height - style.marginTop - style.marginBottom)
+        )
 
         // X range is months 0–24
         let xMin: CGFloat = 0
@@ -285,21 +299,76 @@ final class ReportGrowthRenderer {
         NSAttributedString(string: title, attributes: titleAttrs)
             .draw(at: CGPoint(x: plot.minX, y: plot.maxY + 10))
 
-        // Grid lines
+        // Grid lines (vertical: minor every month; major every 3 months) — plus Y dynamic grid below
+        // Minor vertical grid: every 1 month
         ctx.saveGState()
-        ctx.setStrokeColor(style.gridColor.cgColor)
+        ctx.setStrokeColor(style.gridColor.withAlphaComponent(0.7).cgColor)
+        ctx.setLineWidth(0.3)
+        for month in 0...24 {
+            let x = X(Double(month))
+            ctx.move(to: CGPoint(x: x, y: plot.minY))
+            ctx.addLine(to: CGPoint(x: x, y: plot.maxY))
+        }
+        ctx.strokePath()
+        ctx.restoreGState()
+
+        // Major vertical grid: every 3 months (slightly darker/thicker)
+        ctx.saveGState()
+        ctx.setStrokeColor(style.axisColor.withAlphaComponent(0.6).cgColor)
         ctx.setLineWidth(0.8)
-        // vertical every 3 months
         for month in stride(from: 0, through: 24, by: 3) {
             let x = X(Double(month))
             ctx.move(to: CGPoint(x: x, y: plot.minY))
             ctx.addLine(to: CGPoint(x: x, y: plot.maxY))
         }
-        // horizontal 6 bands
-        for i in 0...6 {
-            let y = plot.minY + CGFloat(i) * (plot.height / 6.0)
-            ctx.move(to: CGPoint(x: plot.minX, y: y))
-            ctx.addLine(to: CGPoint(x: plot.maxX, y: y))
+        ctx.strokePath()
+        ctx.restoreGState()
+
+        // Horizontal grid: major/minor based on y units (kg vs cm)
+        let isKg = (yLabel.lowercased() == "kg")
+        let majorStep: CGFloat = isKg ? 1.0 : 5.0
+        let minorStep: CGFloat = isKg ? 0.5 : 1.0
+
+        // Start inside the visible range to avoid drawing a grid line below the baseline
+        let startMinor = ceil(yMin / minorStep) * minorStep
+        let startMajor = ceil(yMin / majorStep) * majorStep
+
+        // Minor lines
+        ctx.saveGState()
+        ctx.setStrokeColor(style.gridColor.withAlphaComponent(0.8).cgColor)
+        ctx.setLineWidth(0.4)
+        var v = startMinor
+        while v <= yMax + 0.0001 {
+            let y = Y(Double(v))
+            // Clamp to visible plot area to avoid stray lines below baseline or above top
+            if y <= plot.minY + 0.5 || y >= plot.maxY - 0.5 {
+                v += minorStep
+                continue
+            }
+            // Skip if it coincides with a major line (we'll draw major later)
+            let k = round((v - startMajor) / majorStep)
+            if abs(v - (startMajor + k * majorStep)) > 0.001 {
+                ctx.move(to: CGPoint(x: plot.minX, y: y))
+                ctx.addLine(to: CGPoint(x: plot.maxX, y: y))
+            }
+            v += minorStep
+        }
+        ctx.strokePath()
+        ctx.restoreGState()
+
+        // Major lines
+        ctx.saveGState()
+        ctx.setStrokeColor(style.axisColor.withAlphaComponent(0.6).cgColor)
+        ctx.setLineWidth(0.8)
+        var vm = startMajor
+        while vm <= yMax + 0.0001 {
+            let y = Y(Double(vm))
+            // Clamp to visible plot area; don't draw the baseline or above the top
+            if y > plot.minY + 0.5 && y < plot.maxY - 0.5 {
+                ctx.move(to: CGPoint(x: plot.minX, y: y))
+                ctx.addLine(to: CGPoint(x: plot.maxX, y: y))
+            }
+            vm += majorStep
         }
         ctx.strokePath()
         ctx.restoreGState()
@@ -309,33 +378,49 @@ final class ReportGrowthRenderer {
         ctx.setLineWidth(1.2)
         ctx.stroke(plot)
 
-        // X labels + axis label
+        // X labels (monthly, no unit here; unit is on axis title) + axis label
         let labelAttrs: [NSAttributedString.Key: Any] = [
-            .font: style.labelFont,
+            .font: style.labelFontSmall,
             .foregroundColor: style.labelColor
         ]
-        for month in stride(from: 0, through: 24, by: 3) {
-            let s = NSAttributedString(string: "\(month)m", attributes: labelAttrs)
-            s.draw(at: CGPoint(x: X(Double(month)) - 8, y: plot.minY - 16))
+        // Measure a representative label height once
+        let sampleLabelSize = NSAttributedString(string: "00", attributes: labelAttrs).size()
+        let xLabelYOffset: CGFloat = sampleLabelSize.height + 6  // keep labels a few points below the axis line
+        for month in 0...24 {
+            let s = NSAttributedString(string: "\(month)", attributes: labelAttrs)
+            let sz = s.size()
+            let xx = X(Double(month)) - sz.width/2
+            let yy = plot.minY - xLabelYOffset
+            s.draw(at: CGPoint(x: xx, y: yy))
         }
-        // X axis title
+        // X axis title (centered), placed below labels with extra gap
         let xAxis = NSAttributedString(string: "Age (months)", attributes: labelAttrs)
         let xSize = xAxis.size()
-        xAxis.draw(at: CGPoint(x: plot.midX - xSize.width/2, y: plot.minY - 32))
+        let xAxisY = plot.minY - (xLabelYOffset + 8 + xSize.height)
+        xAxis.draw(at: CGPoint(x: plot.midX - xSize.width/2, y: xAxisY))
 
-        // Y labels (min/mid/max) + axis title
-        let yTicks: [CGFloat] = [yMin, (yMin + yMax)/2.0, yMax]
-        for (i, v) in yTicks.enumerated() {
-            let txt = String(format: "%.1f %@", v, yLabel)
-            let s = NSAttributedString(string: txt, attributes: labelAttrs)
-            let yy: CGFloat = (i == 0 ? plot.minY : (i == 1 ? plot.midY - 6 : plot.maxY - 12))
-            s.draw(at: CGPoint(x: plot.minX - 56, y: yy))
+        // Y labels at each major tick (no unit here; unit is shown on the axis title).
+        var vLabel = startMajor  // include the lowest label inside the plot
+        while vLabel <= yMax + 0.0001 {
+            let y = Y(Double(vLabel))
+            let txt = "\(Int(round(vLabel)))"
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: style.labelFontSmall,
+                .foregroundColor: style.labelColor
+            ]
+            let s = NSAttributedString(string: txt, attributes: attrs)
+            let sz = s.size()
+            // Right‑align 6pt left of the plot border (keeps label close to the graph)
+            let x = plot.minX - 6 - sz.width
+            let yy = y - sz.height / 2
+            s.draw(at: CGPoint(x: x, y: yy))
+            vLabel += majorStep
         }
         // Y axis title (rotated)
         let yAxis = NSAttributedString(string: yLabel, attributes: labelAttrs)
         let ySize = yAxis.size()
         ctx.saveGState()
-        ctx.translateBy(x: plot.minX - 72, y: plot.midY)
+        ctx.translateBy(x: plot.minX - 40, y: plot.midY)
         ctx.rotate(by: -.pi / 2)
         yAxis.draw(at: CGPoint(x: -ySize.width/2, y: -ySize.height/2))
         ctx.restoreGState()
@@ -405,12 +490,19 @@ final class ReportGrowthRenderer {
         ]
 
         let padding: CGFloat = 6
-        let swatchW: CGFloat = 24
-        let rowH: CGFloat = 16
-        let legendW: CGFloat = 160
+        let swatchW: CGFloat = 18
+        let rowH: CGFloat = 14
+        // Measure max label width to avoid excess empty space on the right
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: style.legendFont,
+            .foregroundColor: style.legendText
+        ]
+        let maxLabelW = items.map { NSAttributedString(string: $0.0, attributes: textAttrs).size().width }.max() ?? 0
+        let legendW: CGFloat = padding*2 + swatchW + 8 + ceil(maxLabelW)
         let legendH: CGFloat = CGFloat(items.count) * rowH + padding*2
 
-        let box = CGRect(x: plot.maxX - legendW - 8, y: plot.maxY - legendH - 8, width: legendW, height: legendH)
+        // Move legend to bottom‑right inside the plot
+        let box = CGRect(x: plot.maxX - legendW - 8, y: plot.minY + 8, width: legendW, height: legendH)
 
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
@@ -422,11 +514,6 @@ final class ReportGrowthRenderer {
         ctx.setStrokeColor(NSColor(calibratedWhite: 0.7, alpha: 1).cgColor)
         ctx.setLineWidth(0.8)
         path.stroke()
-
-        let textAttrs: [NSAttributedString.Key: Any] = [
-            .font: style.legendFont,
-            .foregroundColor: style.legendText
-        ]
 
         for (i, item) in items.enumerated() {
             let y = box.maxY - padding - CGFloat(i+1)*rowH + 3

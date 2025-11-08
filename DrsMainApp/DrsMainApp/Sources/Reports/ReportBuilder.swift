@@ -14,6 +14,8 @@ import CoreText
 // MARK: - Report geometry (single source of truth)
 fileprivate let REPORT_PAGE_SIZE = CGSize(width: 595.0, height: 842.0) // US Letter; switch here if you use A4
 fileprivate let REPORT_INSET: CGFloat = 36.0
+fileprivate let DEBUG_REPORT_EXPORT: Bool = true
+
 
 // MARK: - Visit selection + format
 
@@ -70,14 +72,39 @@ final class ReportBuilder {
             case .pdf:
                 // Build report as two parts: body (no charts) and charts-only Pages.
                 let (bodyAttr, chartsAttr) = try buildAttributedReportParts(for: kind)
-                let bodyPDF = try makePDF(from: bodyAttr)
+                if DEBUG_REPORT_EXPORT {
+                    let ffCount = bodyAttr.string.reduce(0) { $1 == "\u{000C}" ? $0 + 1 : $0 }
+                    NSLog("[ReportDebug] bodyAttr FF count = %d", ffCount)
+                }
+                let bodyPDF0 = try makePDF(from: bodyAttr)
+                let bodyPDF  = trimmedPDF(bodyPDF0, trimLeading: false, trimTrailing: true)
+                if DEBUG_REPORT_EXPORT, let doc = PDFDocument(data: bodyPDF) {
+                    NSLog("[ReportDebug] bodyPDF pages (after trim) = %d", doc.pageCount)
+                }
+                if DEBUG_REPORT_EXPORT {
+                    if let doc = PDFDocument(data: bodyPDF) {
+                        NSLog("[ReportDebug] bodyPDF pages = %d", doc.pageCount)
+                    }
+                    _ = debugDumpPDF(bodyPDF, name: "Body")
+                }
 
                 // Prefer direct-drawn charts PDF (avoids text-layout clipping of big attachments).
                 var chartsPDFData: Data? = nil
                 if case .well(let visitID) = kind, let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
-                    chartsPDFData = try makeChartsPDFForWell(gs)
+                    let charts0 = try makeChartsPDFForWell(gs)
+                    chartsPDFData = trimmedPDF(charts0, trimLeading: true, trimTrailing: false)
                 } else if let chartsAttr = chartsAttr {
-                    chartsPDFData = try makePDF(from: chartsAttr)
+                    let charts0 = try makePDF(from: chartsAttr)
+                    chartsPDFData = trimmedPDF(charts0, trimLeading: true, trimTrailing: false)
+                }
+                if DEBUG_REPORT_EXPORT, let chartsPDF = chartsPDFData, let doc = PDFDocument(data: chartsPDF) {
+                    NSLog("[ReportDebug] chartsPDF pages (after trim) = %d", doc.pageCount)
+                }
+                if DEBUG_REPORT_EXPORT, let chartsPDF = chartsPDFData {
+                    if let doc = PDFDocument(data: chartsPDF) {
+                        NSLog("[ReportDebug] chartsPDF pages = %d", doc.pageCount)
+                    }
+                    _ = debugDumpPDF(chartsPDF, name: "Charts")
                 }
 
                 let finalPDF: Data
@@ -86,19 +113,71 @@ final class ReportBuilder {
                 } else {
                     finalPDF = bodyPDF
                 }
+                if DEBUG_REPORT_EXPORT {
+                    if let doc = PDFDocument(data: finalPDF) {
+                        NSLog("[ReportDebug] mergedPDF pages = %d", doc.pageCount)
+                    }
+                    _ = debugDumpPDF(finalPDF, name: "Merged")
+                }
                 try finalPDF.write(to: dest, options: .atomic)
             case .rtf:
-                guard let rtfData = attributed.rtf(
-                    from: NSRange(location: 0, length: attributed.length),
-                    documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
-                ) else {
-                    throw NSError(
-                        domain: "ReportExport",
-                        code: 2,
-                        userInfo: [NSLocalizedDescriptionKey: "RTF generation failed"]
-                    )
+                // Build a single‑file RTF that embeds charts inline as \pict\pngblip (no RTFD).
+                // We reuse the user‑chosen `dest` URL (already ".rtf" from the save panel).
+                
+                // Helper: strip everything from the "Growth Charts" header onward (body only).
+                func bodyWithoutCharts(_ full: NSAttributedString) -> NSAttributedString {
+                    let ns = full.string as NSString
+                    let r = ns.range(of: "Growth Charts")
+                    if r.location != NSNotFound && r.location > 0 {
+                        return full.attributedSubstring(from: NSRange(location: 0, length: r.location))
+                    }
+                    return full
                 }
-                try rtfData.write(to: dest, options: .atomic)
+                
+                switch kind {
+                case .well(let visitID):
+                    // Build the well report body without the charts section.
+                    let wellData = try dataLoader.loadWell(visitID: visitID)
+                    // Use the same header/body formatting as elsewhere, then trim charts out.
+                    let fullBody = assembleAttributedWell(data: wellData,
+                                                          fallbackSections: buildContent(for: kind).sections,
+                                                          visitID: visitID)
+                    let bodyOnly = bodyWithoutCharts(fullBody)
+                    
+                    // Render charts sized like in PDF (cap width at ~18 cm, keep renderer aspect 700:450).
+                    let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
+                    let max18cm: CGFloat = (18.0 / 2.54) * 72.0
+                    let renderWidth = min(contentWidth, max18cm)
+                    let aspect: CGFloat = 450.0 / 700.0
+                    let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
+                    
+                    if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
+                        let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
+                        let captions = ["Weight-for-Age", "Length/Height-for-Age", "Head Circumference-for-Age"]
+                        let tuples: [(image: NSImage, goalSizePts: CGSize)] = images.map { (image: $0, goalSizePts: renderSize) }
+                        // Assemble a single-file RTF by appending inline PNG pictures to the body.
+                        let rtfData = try makeSingleFileRTFInline(body: bodyOnly, charts: tuples, captions: captions)
+                        try rtfData.write(to: dest, options: .atomic)
+                    } else {
+                        // No charts available — export body-only as plain RTF.
+                        guard let rtfData = bodyOnly.rtf(from: NSRange(location: 0, length: bodyOnly.length),
+                                                         documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+                            throw NSError(domain: "ReportExport", code: 3004,
+                                          userInfo: [NSLocalizedDescriptionKey: "RTF body-only generation failed"])
+                        }
+                        try rtfData.write(to: dest, options: .atomic)
+                    }
+                    
+                case .sick:
+                    // Sick reports have no charts; export the attributed body directly.
+                    let full = NSRange(location: 0, length: attributed.length)
+                    guard let rtfData = attributed.rtf(from: full,
+                                                       documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+                        throw NSError(domain: "ReportExport", code: 3005,
+                                      userInfo: [NSLocalizedDescriptionKey: "RTF generation failed (sick)"])
+                    }
+                    try rtfData.write(to: dest, options: .atomic)
+                }
             }
 
             // 4) Reveal
@@ -363,11 +442,56 @@ final class ReportBuilder {
         let aspect: CGFloat = 450.0 / 700.0   // match renderer's default aspect ratio
         let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
         let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
+        if DEBUG_REPORT_EXPORT {
+            for (idx, img) in images.enumerated() {
+                debugLogImage(img, label: "chartsOnly[\(idx)]", targetSize: renderSize)
+                _ = debugDumpImage(img, name: "chartsOnly_\(idx)")
+            }
+        }
         for (idx, img) in images.enumerated() {
             if idx > 0 { content.append(pageBreak()) }
             let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
             content.append(centeredTitle(caption))
             content.append(attachmentStringFittedToContent(from: img, reservedTopBottom: 72))
+            content.append(NSAttributedString(string: "\n\n"))
+        }
+        return content
+    }
+    
+    // Charts-only pages for Well report (RTF variant with PNG-embedded attachments)
+    func assembleWellChartsRTF(data: WellReportData, visitID: Int) -> NSAttributedString? {
+        guard let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) else { return nil }
+        let content = NSMutableAttributedString()
+
+        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
+            content.append(NSAttributedString(string: text + "\n",
+                                              attributes: [.font: font, .foregroundColor: color]))
+        }
+        let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let bodyFont = NSFont.systemFont(ofSize: 12)
+
+        // Summary header for charts document
+        para("Growth Charts", font: headerFont)
+        let dobPretty = humanDateOnly(gs.dobISO) ?? gs.dobISO
+        let cutPretty = humanDateOnly(gs.visitDateISO) ?? gs.visitDateISO
+        let sexText = (gs.sex == .female) ? "Female" : "Male"
+        para("Sex: \(sexText)   •   DOB: \(dobPretty)   •   Cutoff: \(cutPretty)", font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
+
+        // Render charts sized to the page content width (capped at 18 cm).
+        let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
+        let max18cm: CGFloat = (18.0 / 2.54) * 72.0
+        let renderWidth = min(contentWidth, max18cm)
+        let aspect: CGFloat = 450.0 / 700.0
+        let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
+        let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
+
+        for (idx, img) in images.enumerated() {
+            if idx > 0 { content.append(pageBreak()) }
+            let caption = (idx == 0 ? "Weight-for-Age" : (idx == 1 ? "Length/Height-for-Age" : "Head Circumference-for-Age"))
+            content.append(centeredTitle(caption))
+            // Use RTF-specific attachment so PNG is embedded and layout reserves full height.
+            content.append(attachmentStringRTFFittedToContent(from: img, pageSize: REPORT_PAGE_SIZE, inset: REPORT_INSET, reservedTopBottom: 72))
             content.append(NSAttributedString(string: "\n\n"))
         }
         return content
@@ -475,6 +599,80 @@ private extension ReportBuilder {
         let effectiveMaxWidth = min(contentWidth, widthIfHeightBounds)
 
         return attachmentString(from: img, maxWidth: effectiveMaxWidth)
+    }
+    
+    // Build a TIFF payload from an NSImage (most compatible for single-file RTF embedding, \pict)
+    private func bestTIFFData(from img: NSImage) -> Data? {
+        // Prefer the highest-resolution bitmap rep if available
+        if let rep = img.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }) {
+            return rep.tiffRepresentation
+        }
+        // Fallback via NSImage.tiffRepresentation
+        if let tiff = img.tiffRepresentation {
+            return tiff
+        }
+        return nil
+    }
+
+    // Build a PNG file wrapper from an NSImage for clean RTF embedding.
+    private func bestPNGData(from img: NSImage) -> Data? {
+        // Prefer highest-resolution bitmap rep
+        if let rep = img.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return png
+        }
+        // Fallback via TIFF -> NSBitmapImageRep -> PNG
+        if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return png
+        }
+        return nil
+    }
+
+    // RTF-specific attachment that embeds an image as an image-based attachment (TIFF-backed), centered and scaled.
+    private func attachmentStringRTF(from img: NSImage,
+                                     maxWidth: CGFloat = 480) -> NSAttributedString {
+        let srcSize = img.size
+        let scale = min(1.0, maxWidth / max(srcSize.width, 1))
+        let targetSize = NSSize(width: max(1, srcSize.width * scale),
+                                height: max(1, srcSize.height * scale))
+
+        // Use an AppKit-compatible attachment: NSTextAttachment + standard image cell.
+        // This path serializes to single-file RTF by embedding TIFF (\pict), not requiring RTFD.
+        let att = NSTextAttachment()
+        att.attachmentCell = NSTextAttachmentCell(imageCell: img)
+        att.bounds = CGRect(origin: .zero, size: targetSize)
+
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+
+        let s = NSMutableAttributedString(attachment: att)
+        s.addAttributes([NSAttributedString.Key.paragraphStyle: para] as [NSAttributedString.Key : Any],
+                        range: NSRange(location: 0, length: s.length))
+        return s
+    }
+
+    // RTF attachment scaled to the printable content width of the page.
+    private func attachmentStringRTFCappedToContentWidth(from img: NSImage,
+                                                         pageSize: CGSize = CGSize(width: 8.5 * 72.0, height: 11 * 72.0),
+                                                         inset: CGFloat = 36,
+                                                         padding: CGFloat = 0) -> NSAttributedString {
+        let contentWidth = max(1, pageSize.width - (2 * inset) - padding)
+        return attachmentStringRTF(from: img, maxWidth: contentWidth)
+    }
+
+    // RTF attachment fitted to page content rect (respects caption spacing reservation).
+    private func attachmentStringRTFFittedToContent(from img: NSImage,
+                                                    pageSize: CGSize = CGSize(width: 8.5 * 72.0, height: 11 * 72.0),
+                                                    inset: CGFloat = 36,
+                                                    reservedTopBottom: CGFloat = 72) -> NSAttributedString {
+        let contentWidth  = max(1, pageSize.width  - (2 * inset))
+        let contentHeight = max(1, pageSize.height - (2 * inset) - max(0, reservedTopBottom))
+        let widthIfHeightBounds = img.size.width * (contentHeight / max(1, img.size.height))
+        let effectiveMaxWidth = min(contentWidth, widthIfHeightBounds)
+        return attachmentStringRTF(from: img, maxWidth: effectiveMaxWidth)
     }
 
     // MARK: - Date helpers (human readable)
@@ -1326,17 +1524,366 @@ private extension ReportBuilder {
                 glyphLocation = glyphRange.location + glyphRange.length
             }
 
-            // If the segment is intentionally empty (e.g., two FF in a row), emit a blank page
-            if totalGlyphs == 0 {
-                ctx.beginPDFPage(nil)
-                ctx.setFillColor(NSColor.white.cgColor)
-                ctx.fill(mediaBox)
-                ctx.endPDFPage()
-            }
         }
 
         ctx.closePDF()
         return data as Data
+    }
+    
+    // === Single‑file RTF (inline \pict) helpers – Step 1 (no behavior change yet) ===
+
+    /// Convert points to twips for RTF (\picwgoal/\pichgoal expect twips).
+    private func twips(_ points: CGFloat) -> Int {
+        return Int((points * 20.0).rounded())
+    }
+
+    /// Produce PNG data and pixel dimensions from NSImage (prefers highest‑res bitmap rep).
+    private func pngDataAndPixels(from img: NSImage) -> (data: Data, pxW: Int, pxH: Int)? {
+        // Prefer largest bitmap rep
+        if let rep = img.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return (png, rep.pixelsWide, rep.pixelsHigh)
+        }
+        // Fallback via TIFF
+        if let tiff = img.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return (png, rep.pixelsWide, rep.pixelsHigh)
+        }
+        return nil
+    }
+    
+    /// Produce TIFF data and pixel dimensions from NSImage (prefers highest-res bitmap rep).
+    private func tiffDataAndPixels(from img: NSImage) -> (data: Data, pxW: Int, pxH: Int)? {
+        if let rep = img.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }),
+           let tiff = rep.tiffRepresentation {
+            return (tiff, rep.pixelsWide, rep.pixelsHigh)
+        }
+        if let tiff = img.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff) {
+            return (tiff, rep.pixelsWide, rep.pixelsHigh)
+        }
+        return nil
+    }
+    
+    // Escape to pure ASCII for safe RTF concatenation (avoid UTF-8 in RTF stream)
+    private func rtfEscapeASCII(_ s: String) -> String {
+        var out = ""
+        out.reserveCapacity(s.count + 16)
+        for scalar in s.unicodeScalars {
+            switch scalar {
+            case "\\":
+                out += "\\\\"
+            case "{":
+                out += "\\{"
+            case "}":
+                out += "\\}"
+            case "\n":
+                out += "\\par "
+            default:
+                let v = scalar.value
+                if v < 0x80 {
+                    out.append(String(scalar))
+                } else {
+                    // Map common punctuation to ASCII so we keep the whole file 7-bit
+                    switch v {
+                    case 0x2011, 0x2013, 0x2014: // non-breaking hyphen, en dash, em dash
+                        out += "-"
+                    case 0x2022: // bullet
+                        out += "*"
+                    case 0x00A0: // nbsp
+                        out += " "
+                    default:
+                        out += "?" // safe fallback for other Unicode
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /// Hex‑encode data for RTF \pict blocks (group into short lines for readability).
+    private func rtfHex(from data: Data, breakEvery: Int = 128) -> String {
+        var s = ""
+        s.reserveCapacity(data.count * 2 + data.count / (breakEvery / 2) + 8)
+        var col = 0
+        data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            for b in bytes {
+                s.append(String(format: "%02X", b))
+                col += 2
+                if col >= breakEvery {
+                    s.append("\n")
+                    col = 0
+                }
+            }
+        }
+        return s
+    }
+
+    /// Build a **single‑file RTF** by taking the body RTF from AppKit and appending inline PNG pictures
+    /// as RTF \\pict blocks (no RTFD). Each chart starts on a new page.
+    private func makeSingleFileRTFInline(body: NSAttributedString,
+                                         charts: [(image: NSImage, goalSizePts: CGSize)],
+                                         captions: [String] = []) throws -> Data {
+        // 1) Base RTF from AppKit (ASCII with RTF escapes)
+        let full = NSRange(location: 0, length: body.length)
+        guard let bodyRTF = body.rtf(from: full,
+                                     documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+            throw NSError(domain: "ReportExport", code: 3001,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to create base RTF for body"])
+        }
+
+        // Decode as ASCII only (avoid UTF-8 multibyte characters in RTF stream)
+        guard var rtf = String(data: bodyRTF, encoding: .ascii) else {
+            throw NSError(domain: "ReportExport", code: 3002,
+                          userInfo: [NSLocalizedDescriptionKey: "Body RTF is not ASCII-serializable"])
+        }
+
+        // 2) Remove the final closing brace of the root group safely (last non-whitespace '}')
+        if let idx = rtf.lastIndex(where: { $0 != " " && $0 != "\t" && $0 != "\n" && $0 != "\r" }) {
+            if rtf[idx] == "}" {
+                rtf.remove(at: idx)
+            } else {
+                // fall back to a minimal header if malformed
+                rtf = "{\\rtf1\\ansi\\deff0\\uc1\n"
+            }
+        } else {
+            rtf = "{\\rtf1\\ansi\\deff0\\uc1\n"
+        }
+
+        // 3) Append each chart page as ASCII-only RTF (caption + \pict hex)
+        for (i, chart) in charts.enumerated() {
+            // page break before each chart
+            rtf += "\\par\\page\n"
+
+            // Centered caption (ASCII-escaped)
+            if i < captions.count {
+                let cap = rtfEscapeASCII(captions[i])
+                rtf += "{\\pard\\qc \\fs24 "
+                rtf += cap
+                rtf += "\\par}\n"
+            }
+
+            // Encode image as PNG hex with goal size in twips
+            guard let (pngData, pxW, pxH) = pngDataAndPixels(from: chart.image) else { continue }
+            let wGoal = twips(chart.goalSizePts.width)
+            let hGoal = twips(chart.goalSizePts.height)
+
+            rtf += "{\\pard\\qc\n{\\pict\\pngblip"
+            rtf += "\\picw\(pxW)\\pich\(pxH)"
+            rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+            rtf += rtfHex(from: pngData)
+            rtf += "}\n\\par}\n"
+        }
+
+        // 4) Close root group and return ASCII data
+        rtf += "}\n"
+        guard let out = rtf.data(using: .ascii, allowLossyConversion: false) else {
+            throw NSError(domain: "ReportExport", code: 3003,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to encode final RTF as ASCII"])
+        }
+        return out
+
+        // 3) Append each chart as a centered caption + inline PNG picture on its own page
+        for (idx, pair) in charts.enumerated() {
+            // Page break before charts and between charts
+            rtf += "\\par\\page\n"
+
+            // Optional centered caption
+            if idx < captions.count {
+                let cap = captions[idx]
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "{", with: "\\{")
+                    .replacingOccurrences(of: "}", with: "\\}")
+                rtf += "{\\pard\\qc \\fs24 "
+                rtf += cap
+                rtf += "\\par}\n"
+            }
+
+            // Image payload
+            // Encode image as TIFF hex if possible (most compatible), else PNG; include goal size in twips
+            let wGoal = twips(chart.goalSizePts.width)
+            let hGoal = twips(chart.goalSizePts.height)
+
+            if let (tiffData, pxW, pxH) = tiffDataAndPixels(from: chart.image) {
+                rtf += "{\\pard\\qc\n{\\pict\\tiffblip"
+                rtf += "\\picw\(pxW)\\pich\(pxH)"
+                rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+                rtf += rtfHex(from: tiffData)
+                rtf += "}\n\\par}\n"
+            } else if let (pngData, pxW, pxH) = pngDataAndPixels(from: chart.image) {
+                rtf += "{\\pard\\qc\n{\\pict\\pngblip"
+                rtf += "\\picw\(pxW)\\pich\(pxH)"
+                rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+                rtf += rtfHex(from: pngData)
+                rtf += "}\n\\par}\n"
+            } else {
+                continue
+            }
+        }
+
+        // 4) Close the root group
+        rtf += "}\n"
+
+        // 5) Return data
+        guard let out = rtf.data(using: .utf8, allowLossyConversion: false) ??
+                        rtf.data(using: .ascii, allowLossyConversion: true) else {
+            throw NSError(domain: "ReportExport", code: 3003,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to encode final RTF"])
+        }
+        return out
+    }
+
+    // MARK: - Debug helpers
+    private func debugTimestamp() -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        return df.string(from: Date())
+    }
+
+    private func debugDir() -> URL {
+        let base = FileManager.default.homeDirectoryForCurrentUser
+        let dir = base.appendingPathComponent("Documents/DrsMainApp/DebugExports", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func debugLogImage(_ img: NSImage, label: String, targetSize: CGSize) {
+        var pxW = 0, pxH = 0
+        if let rep = img.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }) {
+            pxW = rep.pixelsWide; pxH = rep.pixelsHigh
+        } else if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            pxW = rep.pixelsWide; pxH = rep.pixelsHigh
+        }
+        NSLog("[ReportDebug] img %@ points=(%.1f×%.1f) targetPoints=(%.1f×%.1f) pixels=(%dx%d)",
+              label, img.size.width, img.size.height, targetSize.width, targetSize.height, pxW, pxH)
+    }
+
+    @discardableResult
+    private func debugDumpImage(_ img: NSImage, name: String) -> URL? {
+        let url = debugDir().appendingPathComponent("\(name)-\(debugTimestamp()).png")
+        if let tiff = img.tiffRepresentation,
+           let rep  = NSBitmapImageRep(data: tiff),
+           let png  = rep.representation(using: .png, properties: [:]) {
+            do { try png.write(to: url)
+                NSLog("[ReportDebug] wrote %@", url.path)
+                return url
+            } catch {
+                NSLog("[ReportDebug] write failed %@: %@", url.path, String(describing: error))
+                return nil
+            }
+        } else {
+            // Fallback: rasterize at 1× point size
+            let w = max(1, Int(img.size.width))
+            let h = max(1, Int(img.size.height))
+            guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h,
+                                             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                             isPlanar: false, colorSpaceName: .deviceRGB,
+                                             bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+            rep.size = img.size
+            NSGraphicsContext.saveGraphicsState()
+            if let ctx = NSGraphicsContext(bitmapImageRep: rep) {
+                NSGraphicsContext.current = ctx
+                img.draw(in: NSRect(x: 0, y: 0, width: img.size.width, height: img.size.height))
+                NSGraphicsContext.current = nil
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            if let png = rep.representation(using: .png, properties: [:]) {
+                try? png.write(to: url)
+                NSLog("[ReportDebug] wrote (fallback) %@", url.path)
+                return url
+            }
+            return nil
+        }
+    }
+
+    @discardableResult
+    private func debugDumpPDF(_ data: Data, name: String) -> URL? {
+        let url = debugDir().appendingPathComponent("\(name)-\(debugTimestamp()).pdf")
+        do {
+            try data.write(to: url, options: .atomic)
+            if let doc = PDFDocument(data: data) {
+                NSLog("[ReportDebug] wrote %@ (pages=%d)", url.path, doc.pageCount)
+            } else {
+                NSLog("[ReportDebug] wrote %@ (unreadable by PDFDocument)", url.path)
+            }
+            return url
+        } catch {
+            NSLog("[ReportDebug] write failed %@: %@", url.path, String(describing: error))
+            return nil
+        }
+    }
+    
+    // Count image attachments inside an attributed string (for RTF/RTFD verification)
+    private func debugCountAttachments(in s: NSAttributedString) -> Int {
+        var count = 0
+        s.enumerateAttribute(.attachment, in: NSRange(location: 0, length: s.length)) { val, _, _ in
+            if (val as? NSTextAttachment) != nil { count += 1 }
+        }
+        return count
+    }
+
+    // Dump both RTF (single file) and RTFD (package) to DebugExports to see which preserves images
+    private func debugDumpRTFVariants(_ s: NSAttributedString, stem: String) {
+        let range = NSRange(location: 0, length: s.length)
+
+        // 1) Plain RTF
+        if let rtf = s.rtf(from: range, documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) {
+            let url = debugDir().appendingPathComponent("\(stem)-\(debugTimestamp()).rtf")
+            do { try rtf.write(to: url); NSLog("[ReportDebug] wrote %@", url.path) } catch {
+                NSLog("[ReportDebug] write failed %@: %@", url.path, String(describing: error))
+            }
+        } else {
+            NSLog("[ReportDebug] RTF serialization returned nil")
+        }
+
+        // 2) RTFD package
+        if let wrapper = try? s.fileWrapper(from: range, documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd]) {
+            let dir = debugDir().appendingPathComponent("\(stem)-\(debugTimestamp()).rtfd", isDirectory: true)
+            do {
+                try wrapper.write(to: dir, options: .atomic, originalContentsURL: nil)
+                NSLog("[ReportDebug] wrote %@", dir.path)
+            } catch {
+                NSLog("[ReportDebug] RTFD write failed %@: %@", dir.path, String(describing: error))
+            }
+        } else {
+            NSLog("[ReportDebug] RTFD fileWrapper creation failed")
+        }
+    }
+
+    private func debugLogChartLayout(pageSize: CGSize,
+                                     contentRect: CGRect,
+                                     capRect: CGRect,
+                                     imgRect: CGRect,
+                                     image: NSImage) {
+        var pxW = 0, pxH = 0
+        if let rep = image.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }) {
+            pxW = rep.pixelsWide; pxH = rep.pixelsHigh
+        }
+        NSLog("[ReportDebug] page=(%.1f×%.1f) content=(%.1f×%.1f @ %.1f,%.1f) cap=(%.1f×%.1f @ %.1f,%.1f) imgRect=(%.1f×%.1f @ %.1f,%.1f) imgPoints=(%.1f×%.1f) imgPixels=(%dx%d)",
+              pageSize.width, pageSize.height,
+              contentRect.width, contentRect.height, contentRect.origin.x, contentRect.origin.y,
+              capRect.width, capRect.height, capRect.origin.x, capRect.origin.y,
+              imgRect.width, imgRect.height, imgRect.origin.x, imgRect.origin.y,
+              image.size.width, image.size.height,
+              pxW, pxH)
+    }
+
+    // Extract highest-resolution CGImage from NSImage (avoids NSImage multi-rep quirks)
+    private func bestCGImage(from img: NSImage) -> CGImage? {
+        if let rep = img.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }) {
+            return rep.cgImage
+        }
+        if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            return rep.cgImage
+        }
+        return nil
     }
 
     // (Kept in case you want RTF by path later)
@@ -1368,15 +1915,23 @@ private extension ReportBuilder {
 @MainActor
 extension ReportBuilder {
     func exportPDF(for kind: VisitKind) throws -> URL {
-        try exportReport(for: kind, format: .pdf)
+        return try exportReport(for: kind, format: .pdf)
     }
     func exportRTF(for kind: VisitKind) throws -> URL {
-        try exportReport(for: kind, format: .rtf)
+        return try exportReport(for: kind, format: .rtf)
     }
 }
 
+// MARK: - Rendering
+
+private extension ReportBuilder {
+
+    // ...existing functions...
+
+
+
     // Merge multiple PDF Data blobs into a single PDF
-    func mergePDFs(_ parts: [Data]) throws -> Data {
+    private func mergePDFs(_ parts: [Data]) throws -> Data {
         let out = PDFDocument()
         var pageCursor = 0
         for (partIndex, d) in parts.enumerated() {
@@ -1396,6 +1951,36 @@ extension ReportBuilder {
                           userInfo: [NSLocalizedDescriptionKey: "Failed to create merged PDF data"])
         }
         return data
+    }
+    
+    // Heuristic: page is "blank" if it has no extracted text and no annotations.
+    // (Good enough for our case; our extra page is entirely empty.)
+    private func isVisuallyBlank(_ page: PDFPage) -> Bool {
+        let hasText = !(page.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        if hasText { return false }
+        if !page.annotations.isEmpty { return false }
+        return true
+    }
+
+    // Return PDF data with blank pages trimmed from start/end as requested.
+    private func trimmedPDF(_ data: Data, trimLeading: Bool, trimTrailing: Bool) -> Data {
+        guard let doc = PDFDocument(data: data) else { return data }
+        var toRemove = IndexSet()
+
+        if trimLeading {
+            var i = 0
+            while i < doc.pageCount, let p = doc.page(at: i), isVisuallyBlank(p) {
+                toRemove.insert(i); i += 1
+            }
+        }
+        if trimTrailing {
+            var i = doc.pageCount - 1
+            while i >= 0, let p = doc.page(at: i), isVisuallyBlank(p) {
+                toRemove.insert(i); i -= 1
+            }
+        }
+        for i in toRemove.sorted(by: >) { doc.removePage(at: i) }
+        return doc.dataRepresentation() ?? data
     }
 
     // Draw charts directly into a PDF (one per page), bypassing text layout.
@@ -1417,6 +2002,12 @@ extension ReportBuilder {
 
         // Render images at 300 dpi via the renderer
         let images = ReportGrowthRenderer.renderAllCharts(series: series, size: renderSize, drawWHO: true)
+        if DEBUG_REPORT_EXPORT {
+            for (idx, img) in images.enumerated() {
+                debugLogImage(img, label: "pdfCharts[\(idx)]", targetSize: renderSize)
+                _ = debugDumpImage(img, name: "pdfCharts_\(idx)")
+            }
+        }
 
         // Prepare PDF context
         let data = NSMutableData()
@@ -1434,11 +2025,8 @@ extension ReportBuilder {
             ctx.fill(mediaBox)
 
             // Draw using a non-flipped context and explicit coordinates (origin = bottom-left).
-            NSGraphicsContext.saveGraphicsState()
-            let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: false)
-            NSGraphicsContext.current = nsCtx
 
-            // Caption at the top of the content rect
+            // Caption at the top of the content rect (drawn with AppKit text)
             let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
             let p = NSMutableParagraphStyle(); p.alignment = .center
             let attrs: [NSAttributedString.Key: Any] = [
@@ -1452,7 +2040,16 @@ extension ReportBuilder {
                                  y: contentRect.maxY - capH,
                                  width: contentRect.width,
                                  height: capH)
-            cap.draw(in: capRect)
+
+            // Draw caption using an AppKit graphics context (no flips)
+            do {
+                NSGraphicsContext.saveGraphicsState()
+                let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: false)
+                NSGraphicsContext.current = nsCtx
+                cap.draw(in: capRect)
+                NSGraphicsContext.current = nil
+                NSGraphicsContext.restoreGraphicsState()
+            }
 
             // Image rect: fit to content width and available height below caption (preserve aspect)
             let availableH = contentRect.height - capH - 8
@@ -1462,19 +2059,39 @@ extension ReportBuilder {
             let imgY = capRect.minY - 8 - imgH
             let imgRect = CGRect(x: imgX, y: imgY, width: imgW, height: imgH)
 
-            // Draw image without additional flipping; coordinates are bottom-left based
-            img.draw(in: imgRect,
-                     from: NSRect(origin: .zero, size: img.size),
-                     operation: .sourceOver,
-                     fraction: 1.0,
-                     respectFlipped: false,
-                     hints: nil)
+            if DEBUG_REPORT_EXPORT {
+                debugLogChartLayout(pageSize: pageSize,
+                                    contentRect: contentRect,
+                                    capRect: capRect,
+                                    imgRect: imgRect,
+                                    image: img)
+            }
 
-            NSGraphicsContext.current = nil
-            NSGraphicsContext.restoreGraphicsState()
+            // Draw image via CoreGraphics to avoid NSImage multi-representation cropping
+            ctx.saveGState()
+            ctx.interpolationQuality = .high
+            if let cg = bestCGImage(from: img) {
+                ctx.draw(cg, in: imgRect)
+            } else {
+                // Fallback: use AppKit draw (non-flipped) if we cannot extract CGImage
+                NSGraphicsContext.saveGraphicsState()
+                let nsCtx2 = NSGraphicsContext(cgContext: ctx, flipped: false)
+                NSGraphicsContext.current = nsCtx2
+                img.draw(in: imgRect,
+                         from: NSRect(origin: .zero, size: img.size),
+                         operation: .sourceOver,
+                         fraction: 1.0,
+                         respectFlipped: false,
+                         hints: nil)
+                NSGraphicsContext.current = nil
+                NSGraphicsContext.restoreGraphicsState()
+            }
+            ctx.restoreGState()
+
             ctx.endPDFPage()
         }
 
         ctx.closePDF()
         return data as Data
     }
+}
