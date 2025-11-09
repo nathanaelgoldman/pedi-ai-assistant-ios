@@ -30,6 +30,8 @@
 		BB96A56F2EBB3355003F5C44 /* GrowthChartRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96A56E2EBB3350003F5C44 /* GrowthChartRenderer.swift */; };
 		BB96A5732EBB3A2D003F5C44 /* ReportGrowthRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB96A5722EBB3A28003F5C44 /* ReportGrowthRenderer.swift */; };
 		BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB9E72BC2EAD1A1C00601148 /* PediaShared */; };
+		BB9EB0DB2EC0CD0100308D39 /* MacBundleExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9EB0DA2EC0CCF500308D39 /* MacBundleExporter.swift */; };
+		BB9EB0DD2EC0D05200308D39 /* BundleExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9EB0DC2EC0D03E00308D39 /* BundleExporter.swift */; };
 		BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD522EB5B48F00BDA924 /* GrowthStore.swift */; };
 		BBA6AD552EB5B5D900BDA924 /* GrowthTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */; };
 		BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD562EB5C48C00BDA924 /* GrowthDataFetcher.swift */; };
@@ -62,6 +64,8 @@
 		BB96A56E2EBB3350003F5C44 /* GrowthChartRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthChartRenderer.swift; sourceTree = "<group>"; };
 		BB96A5722EBB3A28003F5C44 /* ReportGrowthRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportGrowthRenderer.swift; sourceTree = "<group>"; };
 		BB9E727F2EAD10E800601148 /* DrsMainApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = DrsMainApp.xcodeproj; sourceTree = "<group>"; };
+		BB9EB0DA2EC0CCF500308D39 /* MacBundleExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBundleExporter.swift; sourceTree = "<group>"; };
+		BB9EB0DC2EC0D03E00308D39 /* BundleExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundleExporter.swift; sourceTree = "<group>"; };
 		BBA6AD522EB5B48F00BDA924 /* GrowthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthStore.swift; sourceTree = "<group>"; };
 		BBA6AD542EB5B5CC00BDA924 /* GrowthTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthTableView.swift; sourceTree = "<group>"; };
 		BBA6AD562EB5C48C00BDA924 /* GrowthDataFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthDataFetcher.swift; sourceTree = "<group>"; };
@@ -190,6 +194,7 @@
 		BB564AF12EAE0BB900870007 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				BB9EB0D92EC0CCE300308D39 /* Export */,
 				BB96A5692EBB32F0003F5C44 /* Growth */,
 				BB3E15A12EB71C36008E1472 /* Reports */,
 				BB564AED2EAE0BB900870007 /* App */,
@@ -214,6 +219,15 @@
 			children = (
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		BB9EB0D92EC0CCE300308D39 /* Export */ = {
+			isa = PBXGroup;
+			children = (
+				BB9EB0DC2EC0D03E00308D39 /* BundleExporter.swift */,
+				BB9EB0DA2EC0CCF500308D39 /* MacBundleExporter.swift */,
+			);
+			path = Export;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -317,6 +331,8 @@
 				BB96A56B2EBB3311003F5C44 /* GrowthModels.swift in Sources */,
 				BB3E15B02EB89917008E1472 /* ReportDataModels.swift in Sources */,
 				BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */,
+				BB9EB0DB2EC0CD0100308D39 /* MacBundleExporter.swift in Sources */,
+				BB9EB0DD2EC0D05200308D39 /* BundleExporter.swift in Sources */,
 				BB564AF72EAE5EF900870007 /* SchemaInitializer.swift in Sources */,
 				BB564AF52EAE15CC00870007 /* SidebarView.swift in Sources */,
 				BB96A56D2EBB3334003F5C44 /* GrowthWHO.swift in Sources */,

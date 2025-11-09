@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB01C99A2EC0E09D00E2C067 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB01C9992EC0E09D00E2C067 /* ZIPFoundation */; };
 		BB812EE12EA5E7AD0049DDB7 /* FMDB in Frameworks */ = {isa = PBXBuildFile; productRef = BB812EE02EA5E7AD0049DDB7 /* FMDB */; };
 		BBCC55082E97622B005002B9 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55072E97622B005002B9 /* ZIPFoundation */; };
 		BBCC55112E976F7E005002B9 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55102E976F7E005002B9 /* SQLite */; };
@@ -66,6 +67,7 @@
 				BBCC55112E976F7E005002B9 /* SQLite in Frameworks */,
 				BB812EE12EA5E7AD0049DDB7 /* FMDB in Frameworks */,
 				BBCC55082E97622B005002B9 /* ZIPFoundation in Frameworks */,
+				BB01C99A2EC0E09D00E2C067 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,6 +132,7 @@
 				BBCC55072E97622B005002B9 /* ZIPFoundation */,
 				BBCC55102E976F7E005002B9 /* SQLite */,
 				BB812EE02EA5E7AD0049DDB7 /* FMDB */,
+				BB01C9992EC0E09D00E2C067 /* ZIPFoundation */,
 			);
 			productName = PatientViewerApp;
 			productReference = BBCC54DC2E976199005002B9 /* PatientViewerApp.app */;
@@ -189,7 +192,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1640;
-				LastUpgradeCheck = 1640;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					BBCC54DB2E976199005002B9 = {
 						CreatedOnToolsVersion = 16.4;
@@ -214,7 +217,6 @@
 			mainGroup = BBCC54D32E976199005002B9;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				BBCC55062E97622B005002B9 /* XCLocalSwiftPackageReference "../../Documents/ZIPFoundation" */,
 				BBCC550F2E976F7E005002B9 /* XCLocalSwiftPackageReference "../../Documents/SQLiteSwift" */,
 				BB812EDF2EA5E7AD0049DDB7 /* XCRemoteSwiftPackageReference "fmdb" */,
 			);
@@ -350,6 +352,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -406,6 +409,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -577,10 +581,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		BBCC55062E97622B005002B9 /* XCLocalSwiftPackageReference "../../Documents/ZIPFoundation" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../Documents/ZIPFoundation;
-		};
 		BBCC550F2E976F7E005002B9 /* XCLocalSwiftPackageReference "../../Documents/SQLiteSwift" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Documents/SQLiteSwift;
@@ -599,6 +599,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		BB01C9992EC0E09D00E2C067 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ZIPFoundation;
+		};
 		BB812EE02EA5E7AD0049DDB7 /* FMDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BB812EDF2EA5E7AD0049DDB7 /* XCRemoteSwiftPackageReference "fmdb" */;

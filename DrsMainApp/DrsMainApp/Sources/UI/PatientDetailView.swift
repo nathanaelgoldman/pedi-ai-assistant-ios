@@ -190,6 +190,11 @@ struct PatientDetailView: View {
             } label: {
                 Label("Growth Charts…", systemImage: "chart.bar.xaxis")
             }
+            Button {
+                Task { await MacBundleExporter.run(appState: appState) }
+            } label: {
+                Label("Export peMR Bundle…", systemImage: "shippingbox.and.arrow.up")
+            }
             reportMenu()
         }
         .padding(.bottom, 4)

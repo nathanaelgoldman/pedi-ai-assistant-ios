@@ -1415,7 +1415,7 @@ extension ReportBuilder {
 
 // MARK: - Rendering
 
-private extension ReportBuilder {
+extension ReportBuilder {
 
     // Render an attributed string into paginated PDF data
     // Render an attributed string into paginated PDF data (supports image attachments)
@@ -2466,7 +2466,7 @@ private extension ReportBuilder {
     }
     /// Export a minimal Word (.docx) report with Growth Charts embedded.
     /// v1 focuses on verifying image embedding works reliably in Word.
-    public func exportDOCX(for kind: VisitKind) throws -> URL {
+    func exportDOCX(for kind: VisitKind) throws -> URL {
         // Build text (title) and decide destination folder
         let (attr, stem) = try buildAttributedReport(for: kind)
 
