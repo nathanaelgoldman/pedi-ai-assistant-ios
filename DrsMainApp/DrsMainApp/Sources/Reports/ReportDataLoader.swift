@@ -1548,18 +1548,86 @@ ORDER BY visit_date_raw DESC;
             let dobISO: String
             let visitDateISO: String
         }
-        
+        private func ensureGrowthSchema(_ db: OpaquePointer?) {
+                guard let db = db else { return }
 
+                @discardableResult
+                func exec(_ sql: String) -> Int32 {
+                    var err: UnsafeMutablePointer<Int8>?
+                    let rc = sqlite3_exec(db, sql, nil, nil, &err)
+                    if rc != SQLITE_OK {
+                        let msg = err.flatMap { String(cString: $0) } ?? "unknown"
+                        NSLog("Growth schema exec failed: \(msg)")
+                        if let e = err { sqlite3_free(e) }
+                    }
+                    return rc
+                }
+
+                // Manual user-entered points (broad columns for compatibility across earlier schemas)
+                let createManual = """
+                CREATE TABLE IF NOT EXISTS manual_growth (
+                  id INTEGER PRIMARY KEY,
+                  patient_mrn TEXT,
+                  patient_id INTEGER,
+                  date TEXT NOT NULL,
+                  age_months REAL,
+                  weight_kg REAL,
+                  length_cm REAL,
+                  height_cm REAL,
+                  head_circumference_cm REAL,
+                  unit TEXT
+                );
+                """
+
+                // Visit-linked vitals (again, broad superset of common names)
+                let createVitals = """
+                CREATE TABLE IF NOT EXISTS vitals (
+                  id INTEGER PRIMARY KEY,
+                  visit_id TEXT,
+                  patient_id INTEGER,
+                  date TEXT,
+                  recorded_at TEXT,
+                  measured_at TEXT,
+                  created_at TEXT,
+                  updated_at TEXT,
+                  weight_kg REAL,
+                  length_cm REAL,
+                  height_cm REAL,
+                  head_circ_cm REAL,
+                  head_circumference_cm REAL,
+                  wt_kg REAL,
+                  stature_cm REAL
+                );
+                """
+
+                _ = exec(createManual)
+                _ = exec(createVitals)
+            }
+        
+        
         /// Collect patient growth points up to and including the WELL visit date.
         /// Sources: perinatal_history (birth/discharge), vitals, manual_growth.
         /// Units normalized to kg / cm. Ages expressed in months (days / 30.4375).
-        @MainActor
-        func loadGrowthSeriesForWell(visitID: Int) -> ReportGrowthSeries? {
-            // Resolve db path
-            guard let dbPath = try? bundleDBPathWithDebug() else { return nil }
-            var db: OpaquePointer?
-            guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else { return nil }
-            defer { sqlite3_close(db) }
+    @MainActor
+    func loadGrowthSeriesForWell(visitID: Int) -> ReportGrowthSeries? {
+        // Resolve db path
+        guard let dbPath = try? bundleDBPathWithDebug() else { return nil }
+
+        // Try RW+CREATE so we can create missing tables; fall back to RO if needed.
+        var dbHandle: OpaquePointer?
+        var openedRW = false
+        if sqlite3_open_v2(dbPath, &dbHandle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK, dbHandle != nil {
+            openedRW = true
+        } else if sqlite3_open_v2(dbPath, &dbHandle, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, dbHandle != nil {
+            openedRW = false
+        } else {
+            return nil
+        }
+        guard let db = dbHandle else { return nil }
+        defer { sqlite3_close(db) }
+
+        // If writable, ensure growth schema exists (idempotent).
+        if openedRW { ensureGrowthSchema(db) }
 
             // Helper: read columns of a table
             func columns(in table: String) -> Set<String> {

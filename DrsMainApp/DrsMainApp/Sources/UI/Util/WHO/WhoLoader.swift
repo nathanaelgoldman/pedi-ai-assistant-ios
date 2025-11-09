@@ -28,7 +28,7 @@ enum WhoLoader {
         limitMonths: Int = 24
     ) -> [WhoPoint] {
         guard let url = bundleURL(measure: measure, sex: sex) else { return [] }
-        guard let text = try? String(contentsOf: url) else { return [] }
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         let lines = text.split(whereSeparator: \.isNewline)
         guard !lines.isEmpty else { return [] }
 

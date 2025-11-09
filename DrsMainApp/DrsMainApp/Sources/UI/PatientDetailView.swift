@@ -17,9 +17,11 @@
 //  Created by yunastic on 10/27/25.
 //
 
+
 import SwiftUI
 import OSLog
 import AppKit
+import UniformTypeIdentifiers
 
 
 // Humanize visit categories (well-visit keys + a fallback)
@@ -582,16 +584,36 @@ struct VisitDetailView: View {
                             }
                         }
                     }
-                    Button("Export as RTF") {
+                    Button("Export Word (.docx)") {
                         Task { @MainActor in
                             do {
                                 let builder = ReportBuilder(appState: appState, clinicianStore: clinicianStore)
                                 let kind: VisitKind = isSickCategory(visit.category)
                                     ? .sick(episodeID: visit.id)
                                     : .well(visitID: visit.id)
-                                let url = try builder.exportRTF(for: kind)
-                                exportSuccessURL = url
-                                showExportSuccess = true
+
+                                // Produce the DOCX to the app's default location first
+                                let tempURL = try builder.exportDOCX(for: kind)
+
+                                // Ask user where to save; default to Downloads with the suggested name
+                                let panel = NSSavePanel()
+                                panel.title = "Save Word Report"
+                                let docxType = UTType(filenameExtension: "docx") ?? .data
+                                panel.allowedContentTypes = [docxType]
+                                panel.canCreateDirectories = true
+                                panel.isExtensionHidden = false
+                                panel.nameFieldStringValue = tempURL.lastPathComponent
+                                panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+
+                                if panel.runModal() == .OK, let dest = panel.url {
+                                    // Replace if an older file is present
+                                    if FileManager.default.fileExists(atPath: dest.path) {
+                                        try? FileManager.default.removeItem(at: dest)
+                                    }
+                                    try FileManager.default.copyItem(at: tempURL, to: dest)
+                                    exportSuccessURL = dest
+                                    showExportSuccess = true
+                                }
                             } catch {
                                 exportErrorMessage = error.localizedDescription
                                 showExportError = true

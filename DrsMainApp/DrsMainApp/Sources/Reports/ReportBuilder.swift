@@ -121,62 +121,65 @@ final class ReportBuilder {
                 }
                 try finalPDF.write(to: dest, options: .atomic)
             case .rtf:
-                // Build a single‑file RTF that embeds charts inline as \pict\pngblip (no RTFD).
-                // We reuse the user‑chosen `dest` URL (already ".rtf" from the save panel).
-                
-                // Helper: strip everything from the "Growth Charts" header onward (body only).
-                func bodyWithoutCharts(_ full: NSAttributedString) -> NSAttributedString {
-                    let ns = full.string as NSString
-                    let r = ns.range(of: "Growth Charts")
-                    if r.location != NSNotFound && r.location > 0 {
-                        return full.attributedSubstring(from: NSRange(location: 0, length: r.location))
+                do {
+                    // Build a single‑file RTF that embeds charts inline as \pict\pngblip (no RTFD).
+                    // We reuse the user‑chosen `dest` URL (already ".rtf" from the save panel).
+                    
+                    // Helper: strip everything from the "Growth Charts" header onward (body only).
+                    func bodyWithoutCharts(_ full: NSAttributedString) -> NSAttributedString {
+                        let ns = full.string as NSString
+                        let r = ns.range(of: "Growth Charts")
+                        if r.location != NSNotFound && r.location > 0 {
+                            return full.attributedSubstring(from: NSRange(location: 0, length: r.location))
+                        }
+                        return full
                     }
-                    return full
-                }
-                
-                switch kind {
-                case .well(let visitID):
-                    // Build the well report body without the charts section.
-                    let wellData = try dataLoader.loadWell(visitID: visitID)
-                    // Use the same header/body formatting as elsewhere, then trim charts out.
-                    let fullBody = assembleAttributedWell(data: wellData,
-                                                          fallbackSections: buildContent(for: kind).sections,
-                                                          visitID: visitID)
-                    let bodyOnly = bodyWithoutCharts(fullBody)
                     
-                    // Render charts sized like in PDF (cap width at ~18 cm, keep renderer aspect 700:450).
-                    let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
-                    let max18cm: CGFloat = (18.0 / 2.54) * 72.0
-                    let renderWidth = min(contentWidth, max18cm)
-                    let aspect: CGFloat = 450.0 / 700.0
-                    let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
-                    
-                    if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
-                        let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
-                        let captions = ["Weight-for-Age", "Length/Height-for-Age", "Head Circumference-for-Age"]
-                        let tuples: [(image: NSImage, goalSizePts: CGSize)] = images.map { (image: $0, goalSizePts: renderSize) }
-                        // Assemble a single-file RTF by appending inline PNG pictures to the body.
-                        let rtfData = try makeSingleFileRTFInline(body: bodyOnly, charts: tuples, captions: captions)
-                        try rtfData.write(to: dest, options: .atomic)
-                    } else {
-                        // No charts available — export body-only as plain RTF.
-                        guard let rtfData = bodyOnly.rtf(from: NSRange(location: 0, length: bodyOnly.length),
-                                                         documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
-                            throw NSError(domain: "ReportExport", code: 3004,
-                                          userInfo: [NSLocalizedDescriptionKey: "RTF body-only generation failed"])
+                    switch kind {
+                    case .well(let visitID):
+                        // Build the well report body without the charts section.
+                        let wellData = try dataLoader.loadWell(visitID: visitID)
+                        // Use the same header/body formatting as elsewhere, then trim charts out.
+                        let fullBody = assembleAttributedWell(data: wellData,
+                                                              fallbackSections: buildContent(for: kind).sections,
+                                                              visitID: visitID)
+                        let bodyOnly = bodyWithoutCharts(fullBody)
+                        
+                        // Render charts sized like in PDF (cap width at ~18 cm, keep renderer aspect 700:450).
+                        let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
+                        let max18cm: CGFloat = (18.0 / 2.54) * 72.0
+                        let renderWidth = min(contentWidth, max18cm)
+                        let aspect: CGFloat = 450.0 / 700.0
+                        let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
+                        
+                        if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
+                            let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
+                            let captions = ["Weight-for-Age", "Length/Height-for-Age", "Head Circumference-for-Age"]
+                            let tuples: [(image: NSImage, goalSizePts: CGSize)] = images.map { (image: $0, goalSizePts: renderSize) }
+                            // Assemble a single-file RTF by appending inline PNG/TIFF pictures to the body.
+                            let rtfData = try makeSingleFileRTFInline(body: bodyOnly, charts: tuples, captions: captions)
+                            try rtfData.write(to: dest, options: .atomic)
+                        } else {
+                            // No charts available — export body-only as plain RTF.
+                            let range = NSRange(location: 0, length: bodyOnly.length)
+                            guard let rtfData = bodyOnly.rtf(from: range,
+                                                             documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+                                throw NSError(domain: "ReportExport", code: 3004,
+                                              userInfo: [NSLocalizedDescriptionKey: "RTF body-only generation failed"])
+                            }
+                            try rtfData.write(to: dest, options: .atomic)
+                        }
+                        
+                    case .sick:
+                        // Sick reports have no charts; export the attributed body directly.
+                        let range = NSRange(location: 0, length: attributed.length)
+                        guard let rtfData = attributed.rtf(from: range,
+                                                           documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+                            throw NSError(domain: "ReportExport", code: 3005,
+                                          userInfo: [NSLocalizedDescriptionKey: "RTF generation failed (sick)"])
                         }
                         try rtfData.write(to: dest, options: .atomic)
                     }
-                    
-                case .sick:
-                    // Sick reports have no charts; export the attributed body directly.
-                    let full = NSRange(location: 0, length: attributed.length)
-                    guard let rtfData = attributed.rtf(from: full,
-                                                       documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
-                        throw NSError(domain: "ReportExport", code: 3005,
-                                      userInfo: [NSLocalizedDescriptionKey: "RTF generation failed (sick)"])
-                    }
-                    try rtfData.write(to: dest, options: .atomic)
                 }
             }
 
@@ -500,7 +503,7 @@ final class ReportBuilder {
 
 // MARK: - Content assembly from AppState
 
-private extension ReportBuilder {
+extension ReportBuilder {
 
     // Centered title for figure pages
     private func centeredTitle(_ text: String) -> NSAttributedString {
@@ -1553,6 +1556,71 @@ private extension ReportBuilder {
         }
         return nil
     }
+
+    /// Produce JPEG data and pixel dimensions from NSImage (prefers highest‑res bitmap rep).
+    private func jpegDataAndPixels(from img: NSImage, quality: CGFloat = 0.85) -> (data: Data, pxW: Int, pxH: Int)? {
+        let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: quality]
+        if let rep = img.representations.compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }),
+           let jpg = rep.representation(using: .jpeg, properties: props) {
+            return (jpg, rep.pixelsWide, rep.pixelsHigh)
+        }
+        if let tiff = img.tiffRepresentation,
+           let rep  = NSBitmapImageRep(data: tiff),
+           let jpg  = rep.representation(using: .jpeg, properties: props) {
+            return (jpg, rep.pixelsWide, rep.pixelsHigh)
+        }
+        return nil
+    }
+
+    /// Produce a single‑page PDF from an NSImage at the requested logical size (points).
+    /// Returns PDF data and logical "pixel" dimensions consistent with \blipupi72 (points = px).
+    private func pdfDataFromImage(_ img: NSImage, sizePts: CGSize) -> (data: Data, pxW: Int, pxH: Int)? {
+        let w = max(1.0, sizePts.width)
+        let h = max(1.0, sizePts.height)
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data as CFMutableData) else { return nil }
+        var box = CGRect(origin: .zero, size: CGSize(width: w, height: h))
+        guard let ctx = CGContext(consumer: consumer, mediaBox: &box, nil) else { return nil }
+        ctx.beginPDFPage(nil)
+        ctx.setFillColor(NSColor.white.cgColor)
+        ctx.fill(box)
+
+        // Draw the image to fill the page, preserving its aspect inside the target rect.
+        let target = box
+        ctx.saveGState()
+        ctx.interpolationQuality = .high
+        if let cg = bestCGImage(from: img) {
+            // Fit preserving aspect
+            let iw = CGFloat(cg.width)
+            let ih = CGFloat(cg.height)
+            let sx = target.width / max(iw, 1)
+            let sy = target.height / max(ih, 1)
+            let s = min(sx, sy)
+            let dw = iw * s
+            let dh = ih * s
+            let dx = target.midX - dw / 2
+            let dy = target.midY - dh / 2
+            ctx.draw(cg, in: CGRect(x: dx, y: dy, width: dw, height: dh))
+        } else {
+            // Fallback via NSImage drawing in a non‑flipped context
+            NSGraphicsContext.saveGraphicsState()
+            let ns = NSGraphicsContext(cgContext: ctx, flipped: false)
+            NSGraphicsContext.current = ns
+            img.draw(in: target,
+                     from: NSRect(origin: .zero, size: img.size),
+                     operation: .sourceOver,
+                     fraction: 1.0,
+                     respectFlipped: false,
+                     hints: nil)
+            NSGraphicsContext.current = nil
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        ctx.restoreGState()
+        ctx.endPDFPage()
+        ctx.closePDF()
+        return (data as Data, Int(w.rounded()), Int(h.rounded()))
+    }
     
     /// Produce TIFF data and pixel dimensions from NSImage (prefers highest-res bitmap rep).
     private func tiffDataAndPixels(from img: NSImage) -> (data: Data, pxW: Int, pxH: Int)? {
@@ -1622,8 +1690,7 @@ private extension ReportBuilder {
         return s
     }
 
-    /// Build a **single‑file RTF** by taking the body RTF from AppKit and appending inline PNG pictures
-    /// as RTF \\pict blocks (no RTFD). Each chart starts on a new page.
+    /// Build a **single‑file RTF** by taking the body RTF from AppKit and appending inline PNG/TIFF pictures.
     private func makeSingleFileRTFInline(body: NSAttributedString,
                                          charts: [(image: NSImage, goalSizePts: CGSize)],
                                          captions: [String] = []) throws -> Data {
@@ -1641,19 +1708,15 @@ private extension ReportBuilder {
                           userInfo: [NSLocalizedDescriptionKey: "Body RTF is not ASCII-serializable"])
         }
 
-        // 2) Remove the final closing brace of the root group safely (last non-whitespace '}')
-        if let idx = rtf.lastIndex(where: { $0 != " " && $0 != "\t" && $0 != "\n" && $0 != "\r" }) {
-            if rtf[idx] == "}" {
-                rtf.remove(at: idx)
-            } else {
-                // fall back to a minimal header if malformed
-                rtf = "{\\rtf1\\ansi\\deff0\\uc1\n"
-            }
+        // 2) Remove the final closing brace of the root group safely
+        if let idx = rtf.lastIndex(of: Character("}")) {
+            rtf.remove(at: idx)
         } else {
+            // If not found, fall back to a minimal header
             rtf = "{\\rtf1\\ansi\\deff0\\uc1\n"
         }
 
-        // 3) Append each chart page as ASCII-only RTF (caption + \pict hex)
+        // 3) Append each chart page as ASCII-only RTF (caption + \\pict hex)
         for (i, chart) in charts.enumerated() {
             // page break before each chart
             rtf += "\\par\\page\n"
@@ -1666,16 +1729,79 @@ private extension ReportBuilder {
                 rtf += "\\par}\n"
             }
 
-            // Encode image as PNG hex with goal size in twips
-            guard let (pngData, pxW, pxH) = pngDataAndPixels(from: chart.image) else { continue }
+            // Prefer PDF (\pdfblip) for Cocoa RTF readers (TextEdit/Pages), then JPEG, then PNG.
             let wGoal = twips(chart.goalSizePts.width)
             let hGoal = twips(chart.goalSizePts.height)
 
-            rtf += "{\\pard\\qc\n{\\pict\\pngblip"
-            rtf += "\\picw\(pxW)\\pich\(pxH)"
-            rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
-            rtf += rtfHex(from: pngData)
-            rtf += "}\n\\par}\n"
+            var embedded = false
+
+            // --- PDF first ---
+            if let (pdf, pxW, pxH) = pdfDataFromImage(chart.image, sizePts: chart.goalSizePts) {
+                rtf += "{\\pard\\plain\\qc\n"
+                rtf += "{\\pict\\pdfblip"
+                rtf += "\\picw\(pxW)\\pich\(pxH)"
+                rtf += "\\blipupi72"
+                rtf += "\\picscalex100\\picscaley100"
+                rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+                rtf += rtfHex(from: pdf)
+                rtf += "}\n\\par}\n"
+                embedded = true
+                if DEBUG_REPORT_EXPORT {
+                    NSLog("[ReportDebug] RTF inline chart#%d: pdfBytes=%d px=(%d×%d) goalPts=(%.1f×%.1f)",
+                          i, pdf.count, pxW, pxH, chart.goalSizePts.width, chart.goalSizePts.height)
+                    debugDumpMinimalRTFInlinePDF(pdfData: pdf,
+                                                 pxW: pxW, pxH: pxH,
+                                                 goalPts: chart.goalSizePts,
+                                                 caption: (i < captions.count ? captions[i] : "Chart #\(i+1)"))
+                }
+            }
+
+            // --- JPEG fallback ---
+            if !embedded, let (jpgData, pxW, pxH) = jpegDataAndPixels(from: chart.image, quality: 0.85) {
+                rtf += "{\\pard\\plain\\qc\n"
+                rtf += "{\\pict\\jpegblip"
+                rtf += "\\picw\(pxW)\\pich\(pxH)"
+                rtf += "\\blipupi96"
+                rtf += "\\picscalex100\\picscaley100"
+                rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+                rtf += rtfHex(from: jpgData)
+                rtf += "}\n\\par}\n"
+                embedded = true
+                if DEBUG_REPORT_EXPORT {
+                    NSLog("[ReportDebug] RTF inline chart#%d: jpegBytes=%d px=(%d×%d) goalPts=(%.1f×%.1f)",
+                          i, jpgData.count, pxW, pxH, chart.goalSizePts.width, chart.goalSizePts.height)
+                    debugDumpMinimalRTFInlineJPEG(jpegData: jpgData,
+                                                  pxW: pxW, pxH: pxH,
+                                                  goalPts: chart.goalSizePts,
+                                                  caption: (i < captions.count ? captions[i] : "Chart #\(i+1)"))
+                }
+            }
+
+            // --- PNG fallback ---
+            if !embedded, let (pngData, pxW, pxH) = pngDataAndPixels(from: chart.image) {
+                rtf += "{\\pard\\plain\\qc\n"
+                rtf += "{\\pict\\pngblip"
+                rtf += "\\picw\(pxW)\\pich\(pxH)"
+                rtf += "\\blipupi96"
+                rtf += "\\picscalex100\\picscaley100"
+                rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+                rtf += rtfHex(from: pngData)
+                rtf += "}\n\\par}\n"
+                embedded = true
+                if DEBUG_REPORT_EXPORT {
+                    NSLog("[ReportDebug] RTF inline chart#%d: pngBytes=%d px=(%d×%d) goalPts=(%.1f×%.1f)",
+                          i, pngData.count, pxW, pxH, chart.goalSizePts.width, chart.goalSizePts.height)
+                    debugDumpMinimalRTFInlinePNG(pngData: pngData,
+                                                 pxW: pxW, pxH: pxH,
+                                                 goalPts: chart.goalSizePts,
+                                                 caption: (i < captions.count ? captions[i] : "Chart #\(i+1)"))
+                }
+            }
+
+            if !embedded {
+                NSLog("[ReportExport] All encodings (PDF/JPEG/PNG) failed for chart index \(i); skipping")
+                continue
+            }
         }
 
         // 4) Close root group and return ASCII data
@@ -1685,58 +1811,118 @@ private extension ReportBuilder {
                           userInfo: [NSLocalizedDescriptionKey: "Failed to encode final RTF as ASCII"])
         }
         return out
-
-        // 3) Append each chart as a centered caption + inline PNG picture on its own page
-        for (idx, pair) in charts.enumerated() {
-            // Page break before charts and between charts
-            rtf += "\\par\\page\n"
-
-            // Optional centered caption
-            if idx < captions.count {
-                let cap = captions[idx]
-                    .replacingOccurrences(of: "\\", with: "\\\\")
-                    .replacingOccurrences(of: "{", with: "\\{")
-                    .replacingOccurrences(of: "}", with: "\\}")
-                rtf += "{\\pard\\qc \\fs24 "
-                rtf += cap
-                rtf += "\\par}\n"
-            }
-
-            // Image payload
-            // Encode image as TIFF hex if possible (most compatible), else PNG; include goal size in twips
-            let wGoal = twips(chart.goalSizePts.width)
-            let hGoal = twips(chart.goalSizePts.height)
-
-            if let (tiffData, pxW, pxH) = tiffDataAndPixels(from: chart.image) {
-                rtf += "{\\pard\\qc\n{\\pict\\tiffblip"
-                rtf += "\\picw\(pxW)\\pich\(pxH)"
-                rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
-                rtf += rtfHex(from: tiffData)
-                rtf += "}\n\\par}\n"
-            } else if let (pngData, pxW, pxH) = pngDataAndPixels(from: chart.image) {
-                rtf += "{\\pard\\qc\n{\\pict\\pngblip"
-                rtf += "\\picw\(pxW)\\pich\(pxH)"
-                rtf += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
-                rtf += rtfHex(from: pngData)
-                rtf += "}\n\\par}\n"
-            } else {
-                continue
-            }
-        }
-
-        // 4) Close the root group
-        rtf += "}\n"
-
-        // 5) Return data
-        guard let out = rtf.data(using: .utf8, allowLossyConversion: false) ??
-                        rtf.data(using: .ascii, allowLossyConversion: true) else {
-            throw NSError(domain: "ReportExport", code: 3003,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to encode final RTF"])
-        }
-        return out
     }
 
     // MARK: - Debug helpers
+
+    /// Write a tiny, self‑contained RTF with one inline PDF \pict block to DebugExports.
+    private func debugDumpMinimalRTFInlinePDF(pdfData: Data,
+                                              pxW: Int, pxH: Int,
+                                              goalPts: CGSize,
+                                              caption: String) {
+        let wGoal = twips(goalPts.width)
+        let hGoal = twips(goalPts.height)
+        var s = ""
+        s += "{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang1033\\uc1\n"
+        s += "{\\fonttbl{\\f0 Helvetica;}}\n"
+        s += "{\\colortbl;\\red0\\green0\\blue0;}\n"
+        s += "{\\pard\\qc\\f0\\fs24 "
+        s += rtfEscapeASCII(caption)
+        s += "\\par}\n"
+        s += "{\\pard\\qc\n"
+        s += "{\\pict\\pdfblip"
+        s += "\\picw\(pxW)\\pich\(pxH)"
+        s += "\\blipupi72"
+        s += "\\picscalex100\\picscaley100"
+        s += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+        s += rtfHex(from: pdfData)
+        s += "}\n\\par}\n"
+        s += "}\n"
+        if let data = s.data(using: .ascii) {
+            let url = debugDir().appendingPathComponent("RTF-Minimal-PDF-\(debugTimestamp()).rtf")
+            do {
+                try data.write(to: url, options: .atomic)
+                NSLog("[ReportDebug] wrote minimal PDF RTF probe %@", url.path)
+            } catch {
+                NSLog("[ReportDebug] write failed for minimal PDF RTF probe: %@", String(describing: error))
+            }
+        } else {
+            NSLog("[ReportDebug] ASCII encoding failed for minimal PDF RTF probe")
+        }
+    }
+
+    /// Write a tiny, self-contained RTF with just one inline PNG \pict block to DebugExports.
+    /// This helps isolate whether the embedded block renders in viewers (TextEdit/Pages).
+    private func debugDumpMinimalRTFInlinePNG(pngData: Data,
+                                              pxW: Int, pxH: Int,
+                                              goalPts: CGSize,
+                                              caption: String) {
+        let wGoal = twips(goalPts.width)
+        let hGoal = twips(goalPts.height)
+        var s = ""
+        s += "{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang1033\\uc1\n"
+        s += "{\\fonttbl{\\f0 Helvetica;}}\n"
+        s += "{\\colortbl;\\red0\\green0\\blue0;}\n"
+        s += "{\\pard\\qc\\f0\\fs24 "
+        s += rtfEscapeASCII(caption)
+        s += "\\par}\n"
+        s += "{\\pard\\qc\n"
+        s += "{\\pict\\pngblip"
+        s += "\\picw\(pxW)\\pich\(pxH)"
+        s += "\\blipupi96"
+        s += "\\picscalex100\\picscaley100"
+        s += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+        s += rtfHex(from: pngData)
+        s += "}\n\\par}\n"
+        s += "}\n"
+        if let data = s.data(using: .ascii) {
+            let url = debugDir().appendingPathComponent("RTF-Minimal-\(debugTimestamp()).rtf")
+            do {
+                try data.write(to: url, options: .atomic)
+                NSLog("[ReportDebug] wrote minimal RTF probe %@", url.path)
+            } catch {
+                NSLog("[ReportDebug] write failed for minimal RTF probe: %@", String(describing: error))
+            }
+        } else {
+            NSLog("[ReportDebug] ASCII encoding failed for minimal RTF probe")
+        }
+    }
+
+    /// Write a tiny, self-contained RTF with one inline JPEG \pict block to DebugExports.
+    private func debugDumpMinimalRTFInlineJPEG(jpegData: Data,
+                                               pxW: Int, pxH: Int,
+                                               goalPts: CGSize,
+                                               caption: String) {
+        let wGoal = twips(goalPts.width)
+        let hGoal = twips(goalPts.height)
+        var s = ""
+        s += "{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang1033\\uc1\n"
+        s += "{\\fonttbl{\\f0 Helvetica;}}\n"
+        s += "{\\colortbl;\\red0\\green0\\blue0;}\n"
+        s += "{\\pard\\qc\\f0\\fs24 "
+        s += rtfEscapeASCII(caption)
+        s += "\\par}\n"
+        s += "{\\pard\\qc\n"
+        s += "{\\pict\\jpegblip"
+        s += "\\picw\(pxW)\\pich\(pxH)"
+        s += "\\blipupi96"
+        s += "\\picscalex100\\picscaley100"
+        s += "\\picwgoal\(wGoal)\\pichgoal\(hGoal)\n"
+        s += rtfHex(from: jpegData)
+        s += "}\n\\par}\n"
+        s += "}\n"
+        if let data = s.data(using: .ascii) {
+            let url = debugDir().appendingPathComponent("RTF-Minimal-JPEG-\(debugTimestamp()).rtf")
+            do {
+                try data.write(to: url, options: .atomic)
+                NSLog("[ReportDebug] wrote minimal JPEG RTF probe %@", url.path)
+            } catch {
+                NSLog("[ReportDebug] write failed for minimal JPEG RTF probe: %@", String(describing: error))
+            }
+        } else {
+            NSLog("[ReportDebug] ASCII encoding failed for minimal JPEG RTF probe")
+        }
+    }
     private func debugTimestamp() -> String {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
@@ -1749,6 +1935,707 @@ private extension ReportBuilder {
         let dir = base.appendingPathComponent("Documents/DrsMainApp/DebugExports", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+    
+    /// Zip a directory into a single .zip file using /usr/bin/zip.
+    /// Throws on failure so caller can surface the issue; directory remains usable.
+    private func zipDirectory(at dir: URL, to zipFile: URL) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: zipFile.path) {
+            try? fm.removeItem(at: zipFile)
+        }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        task.currentDirectoryURL = dir.deletingLastPathComponent()
+        task.arguments = ["-r", "-y", zipFile.lastPathComponent, dir.lastPathComponent]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError  = pipe
+        try task.run()
+        task.waitUntilExit()
+        if task.terminationStatus != 0 {
+            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            NSLog("[ReportExport] zip failed (%d): %@", task.terminationStatus, out)
+            throw NSError(domain: "ReportExport", code: 4001,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to zip RTFD at \(dir.path)"])
+        }
+    }
+
+    // ==== DOCX (Office Open XML) helpers ====
+
+    /// Escape text for XML.
+    private func docxEscapeXML(_ s: String) -> String {
+        var out = ""
+        out.reserveCapacity(s.count + 16)
+        for ch in s {
+            switch ch {
+            case "&": out += "&amp;"
+            case "<": out += "&lt;"
+            case ">": out += "&gt;"
+            case "\"": out += "&quot;"
+            default: out.append(ch)
+            }
+        }
+        return out
+    }
+
+    /// EMU (English Metric Unit) from points. 1 pt = 12700 EMU.
+    private func emuFromPoints(_ pts: CGFloat) -> Int {
+        return Int((pts * 12700.0).rounded())
+    }
+
+    /// Zip the **contents** of a directory so the files appear at the root of the zip (required for .docx).
+    private func zipDocxPackage(at packageRoot: URL, to zipFile: URL) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: zipFile.path) { try? fm.removeItem(at: zipFile) }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        task.currentDirectoryURL = packageRoot
+        // Zip everything at root (not the folder itself)
+        task.arguments = ["-r", "-y", zipFile.path, "."]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError  = pipe
+        try task.run()
+        task.waitUntilExit()
+        if task.terminationStatus != 0 {
+            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            NSLog("[ReportExport] docx zip failed (%d): %@", task.terminationStatus, out)
+            throw NSError(domain: "ReportExport", code: 5001,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to zip DOCX at \(packageRoot.path)"])
+        }
+    }
+
+    // Overload that supports styled paragraphs (Heading1, Heading2, etc.)
+    private func writeDocxPackage(title: String,
+                                  styledParagraphs: [(text: String, style: String?)],
+                                  images: [(data: Data, filename: String, sizePts: CGSize)],
+                                  destinationURL: URL) throws {
+        let fm = FileManager.default
+
+        // Create a temp build root
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("DocxBuild-\(UUID().uuidString)", isDirectory: true)
+        let relsDir = root.appendingPathComponent("_rels", isDirectory: true)
+        let wordDir = root.appendingPathComponent("word", isDirectory: true)
+        let wordRelsDir = wordDir.appendingPathComponent("_rels", isDirectory: true)
+        let mediaDir = wordDir.appendingPathComponent("media", isDirectory: true)
+        let propsDir = root.appendingPathComponent("docProps", isDirectory: true)
+        try fm.createDirectory(at: relsDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: wordRelsDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: propsDir, withIntermediateDirectories: true)
+
+        // Write images to word/media
+        for (i, img) in images.enumerated() {
+            let name = img.filename.isEmpty ? "image\(i+1).png" : img.filename
+            try img.data.write(to: mediaDir.appendingPathComponent(name))
+        }
+
+        // === [Content_Types].xml ===
+        let contentTypes =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+          <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+          <Default Extension="xml" ContentType="application/xml"/>
+          <Default Extension="png" ContentType="image/png"/>
+          <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+          <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+          <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+          <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+        </Types>
+        """
+        try contentTypes.data(using: .utf8)!.write(to: root.appendingPathComponent("[Content_Types].xml"))
+
+        // === _rels/.rels ===
+        let rootRels =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+          <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+          <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+        </Relationships>
+        """
+        try rootRels.data(using: .utf8)!.write(to: relsDir.appendingPathComponent(".rels"))
+
+        // === docProps/core.xml ===
+        let now = ISO8601DateFormatter().string(from: Date())
+        let coreXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+          xmlns:dc="http://purl.org/dc/elements/1.1/"
+          xmlns:dcterms="http://purl.org/dc/terms/"
+          xmlns:dcmitype="http://purl.org/dc/dcmitype/"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <dc:title>\(docxEscapeXML(title))</dc:title>
+          <dc:creator>DrsMainApp</dc:creator>
+          <cp:lastModifiedBy>DrsMainApp</cp:lastModifiedBy>
+          <dcterms:created xsi:type="dcterms:W3CDTF">\(now)</dcterms:created>
+          <dcterms:modified xsi:type="dcterms:W3CDTF">\(now)</dcterms:modified>
+        </cp:coreProperties>
+        """
+        try coreXML.data(using: .utf8)!.write(to: propsDir.appendingPathComponent("core.xml"))
+
+        // === docProps/app.xml ===
+        let appXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+          xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+          <Application>DrsMainApp</Application>
+        </Properties>
+        """
+        try appXML.data(using: .utf8)!.write(to: propsDir.appendingPathComponent("app.xml"))
+
+        // === word/_rels/document.xml.rels ===
+        var rels = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        """
+        for (i, img) in images.enumerated() {
+            let name = img.filename.isEmpty ? "image\(i+1).png" : img.filename
+            rels += """
+              <Relationship Id="rId\(i+1)" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/\(name)"/>
+            """
+        }
+        // Add Styles relationship after the images, using the next available rId
+        let stylesRelId = images.count + 1
+        rels += """
+          <Relationship Id="rId\(stylesRelId)" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+        """
+        rels += "\n</Relationships>\n"
+        try rels.data(using: .utf8)!.write(to: wordRelsDir.appendingPathComponent("document.xml.rels"))
+
+        // === word/styles.xml ===
+        let stylesXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+            <w:name w:val="Normal"/>
+            <w:rPr>
+              <w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/>
+              <w:sz w:val="22"/><w:szCs w:val="22"/>
+            </w:rPr>
+            <w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr>
+          </w:style>
+          <w:style w:type="paragraph" w:styleId="Title">
+            <w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:qFormat/>
+            <w:rPr><w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/><w:b/><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr>
+            <w:pPr><w:spacing w:after="180"/></w:pPr>
+          </w:style>
+          <w:style w:type="paragraph" w:styleId="Heading1">
+            <w:name w:val="Heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/>
+            <w:rPr><w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>
+            <w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr>
+          </w:style>
+          <w:style w:type="paragraph" w:styleId="Heading2">
+            <w:name w:val="Heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/>
+            <w:rPr><w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
+            <w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr>
+          </w:style>
+        </w:styles>
+        """
+        try stylesXML.data(using: .utf8)!.write(to: wordDir.appendingPathComponent("styles.xml"))
+
+        // === word/document.xml (apply styles per paragraph) ===
+        var body = ""
+        // Title paragraph (use Title style)
+        body += """
+        <w:p>
+          <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+          <w:r><w:t>\(docxEscapeXML(title))</w:t></w:r>
+        </w:p>
+        """
+        for (text, style) in styledParagraphs {
+            let t = docxEscapeXML(text)
+            if let st = style, !st.isEmpty {
+                body += """
+                <w:p>
+                  <w:pPr><w:pStyle w:val="\(st)"/></w:pPr>
+                  <w:r><w:t>\(t)</w:t></w:r>
+                </w:p>
+                """
+            } else {
+                body += "<w:p><w:r><w:t>\(t)</w:t></w:r></w:p>"
+            }
+        }
+        for (i, img) in images.enumerated() {
+            let cx = emuFromPoints(img.sizePts.width)
+            let cy = emuFromPoints(img.sizePts.height)
+            body +=
+            """
+            <w:p>
+              <w:r>
+                <w:drawing>
+                  <wp:inline distT="0" distB="0" distL="0" distR="0"
+                    xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+                    <wp:extent cx="\(cx)" cy="\(cy)"/>
+                    <wp:docPr id="\(100 + i)" name="Chart \(i+1)"/>
+                    <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                        <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                          <pic:nvPicPr>
+                            <pic:cNvPr id="\(i+1)" name="chart\(i+1).png"/>
+                            <pic:cNvPicPr/>
+                          </pic:nvPicPr>
+                          <pic:blipFill>
+                            <a:blip r:embed="rId\(i+1)" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+                            <a:stretch><a:fillRect/></a:stretch>
+                          </pic:blipFill>
+                          <pic:spPr>
+                            <a:xfrm><a:off x="0" y="0"/><a:ext cx="\(cx)" cy="\(cy)"/></a:xfrm>
+                            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                          </pic:spPr>
+                        </pic:pic>
+                      </a:graphicData>
+                    </a:graphic>
+                  </wp:inline>
+                </w:drawing>
+              </w:r>
+            </w:p>
+            """
+        }
+        let documentXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            \(body)
+            <w:sectPr/>
+          </w:body>
+        </w:document>
+        """
+        try documentXML.data(using: .utf8)!.write(to: wordDir.appendingPathComponent("document.xml"))
+
+        // === Zip into .docx ===
+        try zipDocxPackage(at: root, to: destinationURL)
+
+        // Cleanup temp folder
+        try? fm.removeItem(at: root)
+    }
+    /// Build a minimal DOCX package with paragraphs and inline PNG images.
+    /// - Parameters:
+    ///   - title: Document title for properties and first paragraph.
+    ///   - paragraphs: Plain text paragraphs (no rich styling for v1).
+    ///   - images: Array of (data (PNG), filename, logical size in points).
+    ///   - destinationURL: Final `.docx` URL to write.
+    private func writeDocxPackage(title: String,
+                                  paragraphs: [String],
+                                  images: [(data: Data, filename: String, sizePts: CGSize)],
+                                  destinationURL: URL) throws {
+        let fm = FileManager.default
+
+        // Create a temp build root
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("DocxBuild-\(UUID().uuidString)", isDirectory: true)
+        let relsDir = root.appendingPathComponent("_rels", isDirectory: true)
+        let wordDir = root.appendingPathComponent("word", isDirectory: true)
+        let wordRelsDir = wordDir.appendingPathComponent("_rels", isDirectory: true)
+        let mediaDir = wordDir.appendingPathComponent("media", isDirectory: true)
+        let propsDir = root.appendingPathComponent("docProps", isDirectory: true)
+        try fm.createDirectory(at: relsDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: wordRelsDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: propsDir, withIntermediateDirectories: true)
+
+        // Write images to word/media
+        for (i, img) in images.enumerated() {
+            let name = img.filename.isEmpty ? "image\(i+1).png" : img.filename
+            try img.data.write(to: mediaDir.appendingPathComponent(name))
+        }
+
+        // === [Content_Types].xml ===
+        let contentTypes =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+          <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+          <Default Extension="xml" ContentType="application/xml"/>
+          <Default Extension="png" ContentType="image/png"/>
+          <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+          <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+          <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+          <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+        </Types>
+        """
+        try contentTypes.data(using: .utf8)!.write(to: root.appendingPathComponent("[Content_Types].xml"))
+
+        // === _rels/.rels ===
+        let rootRels =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+          <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+          <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+        </Relationships>
+        """
+        try rootRels.data(using: .utf8)!.write(to: relsDir.appendingPathComponent(".rels"))
+
+        // === docProps/core.xml ===
+        let now = ISO8601DateFormatter().string(from: Date())
+        let coreXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+          xmlns:dc="http://purl.org/dc/elements/1.1/"
+          xmlns:dcterms="http://purl.org/dc/terms/"
+          xmlns:dcmitype="http://purl.org/dc/dcmitype/"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <dc:title>\(docxEscapeXML(title))</dc:title>
+          <dc:creator>DrsMainApp</dc:creator>
+          <cp:lastModifiedBy>DrsMainApp</cp:lastModifiedBy>
+          <dcterms:created xsi:type="dcterms:W3CDTF">\(now)</dcterms:created>
+          <dcterms:modified xsi:type="dcterms:W3CDTF">\(now)</dcterms:modified>
+        </cp:coreProperties>
+        """
+        try coreXML.data(using: .utf8)!.write(to: propsDir.appendingPathComponent("core.xml"))
+
+        // === docProps/app.xml ===
+        let appXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+          xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+          <Application>DrsMainApp</Application>
+        </Properties>
+        """
+        try appXML.data(using: .utf8)!.write(to: propsDir.appendingPathComponent("app.xml"))
+
+        // === word/_rels/document.xml.rels ===
+        var rels = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        """
+        for (i, img) in images.enumerated() {
+            let name = img.filename.isEmpty ? "image\(i+1).png" : img.filename
+            rels += """
+              <Relationship Id="rId\(i+1)" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/\(name)"/>
+            """
+        }
+        // Add Styles relationship after the images, using the next available rId
+        let stylesRelId = images.count + 1
+        rels += """
+          <Relationship Id="rId\(stylesRelId)" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+        """
+        rels += "\n</Relationships>\n"
+        try rels.data(using: .utf8)!.write(to: wordRelsDir.appendingPathComponent("document.xml.rels"))
+
+        // === word/styles.xml ===
+        let stylesXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <!-- Default 'Normal' paragraph style: 11pt, 1.15 line spacing, 6pt after -->
+          <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+            <w:name w:val="Normal"/>
+            <w:rPr>
+              <w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/>
+              <w:sz w:val="22"/>
+              <w:szCs w:val="22"/>
+            </w:rPr>
+            <w:pPr>
+              <w:spacing w:after="120" w:line="276" w:lineRule="auto"/>
+            </w:pPr>
+          </w:style>
+
+          <!-- Title style: 20pt bold -->
+          <w:style w:type="paragraph" w:styleId="Title">
+            <w:name w:val="Title"/>
+            <w:basedOn w:val="Normal"/>
+            <w:qFormat/>
+            <w:rPr>
+              <w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/>
+              <w:b/>
+              <w:sz w:val="40"/>
+              <w:szCs w:val="40"/>
+            </w:rPr>
+            <w:pPr>
+              <w:spacing w:after="180"/>
+            </w:pPr>
+          </w:style>
+
+          <!-- Heading 1: 14pt semibold -->
+          <w:style w:type="paragraph" w:styleId="Heading1">
+            <w:name w:val="Heading 1"/>
+            <w:basedOn w:val="Normal"/>
+            <w:qFormat/>
+            <w:rPr>
+              <w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/>
+              <w:b/>
+              <w:sz w:val="28"/>
+              <w:szCs w:val="28"/>
+            </w:rPr>
+            <w:pPr>
+              <w:spacing w:before="120" w:after="120"/>
+            </w:pPr>
+          </w:style>
+
+          <!-- Heading 2: 12pt semibold -->
+          <w:style w:type="paragraph" w:styleId="Heading2">
+            <w:name w:val="Heading 2"/>
+            <w:basedOn w:val="Normal"/>
+            <w:qFormat/>
+            <w:rPr>
+              <w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/>
+              <w:b/>
+              <w:sz w:val="24"/>
+              <w:szCs w:val="24"/>
+            </w:rPr>
+            <w:pPr>
+              <w:spacing w:before="80" w:after="80"/>
+            </w:pPr>
+          </w:style>
+        </w:styles>
+        """
+        try stylesXML.data(using: .utf8)!.write(to: wordDir.appendingPathComponent("styles.xml"))
+
+        // === word/document.xml (heading + paragraphs + images) ===
+        var body = ""
+        // Title paragraph (use Title style)
+        body += """
+        <w:p>
+          <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+          <w:r><w:t>\(docxEscapeXML(title))</w:t></w:r>
+        </w:p>
+        """
+
+        for p in paragraphs {
+            let t = docxEscapeXML(p)
+            body += "<w:p><w:r><w:t>\(t)</w:t></w:r></w:p>"
+        }
+
+        for (i, img) in images.enumerated() {
+            let cx = emuFromPoints(img.sizePts.width)
+            let cy = emuFromPoints(img.sizePts.height)
+            body +=
+            """
+            <w:p>
+              <w:r>
+                <w:drawing>
+                  <wp:inline distT="0" distB="0" distL="0" distR="0"
+                    xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+                    <wp:extent cx="\(cx)" cy="\(cy)"/>
+                    <wp:docPr id="\(100 + i)" name="Chart \(i+1)"/>
+                    <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                        <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                          <pic:nvPicPr>
+                            <pic:cNvPr id="\(i+1)" name="chart\(i+1).png"/>
+                            <pic:cNvPicPr/>
+                          </pic:nvPicPr>
+                          <pic:blipFill>
+                            <a:blip r:embed="rId\(i+1)" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+                            <a:stretch><a:fillRect/></a:stretch>
+                          </pic:blipFill>
+                          <pic:spPr>
+                            <a:xfrm><a:off x="0" y="0"/><a:ext cx="\(cx)" cy="\(cy)"/></a:xfrm>
+                            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                          </pic:spPr>
+                        </pic:pic>
+                      </a:graphicData>
+                    </a:graphic>
+                  </wp:inline>
+                </w:drawing>
+              </w:r>
+            </w:p>
+            """
+        }
+
+        let documentXML =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            \(body)
+            <w:sectPr/>
+          </w:body>
+        </w:document>
+        """
+        try documentXML.data(using: .utf8)!.write(to: wordDir.appendingPathComponent("document.xml"))
+
+        // === Zip into .docx ===
+        try zipDocxPackage(at: root, to: destinationURL)
+
+        // Cleanup temp folder
+        try? fm.removeItem(at: root)
+    }
+    /// Export a minimal Word (.docx) report with Growth Charts embedded.
+    /// v1 focuses on verifying image embedding works reliably in Word.
+    public func exportDOCX(for kind: VisitKind) throws -> URL {
+        // Build text (title) and decide destination folder
+        let (attr, stem) = try buildAttributedReport(for: kind)
+
+        let fm = FileManager.default
+        let baseDir: URL = {
+            if let bundle = appState.currentBundleURL {
+                return bundle.appendingPathComponent("Docs", isDirectory: true)
+            } else {
+                return fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents/DrsMainApp/Reports", isDirectory: true)
+            }
+        }()
+        try fm.createDirectory(at: baseDir, withIntermediateDirectories: true)
+        let outURL = baseDir.appendingPathComponent("\(stem).docx")
+
+        // Title as plain string
+        let title = "Clinical Report"
+
+        // Body paragraphs with Heading detection and previous-visit date line promotion
+        let headingSet: Set<String> = [
+            // Well visit sections (top of report)
+            "Well Visit Summary",
+            "Perinatal Summary",
+            "Findings from Previous Well Visits",
+            // Existing well visit sections
+            "Previous Well Visits","Parents’ Concerns","Feeding","Supplementation","Sleep",
+            "Developmental Evaluation","Age-specific Milestones","Measurements",
+            "Physical Examination","Problem Listing","Conclusions","Anticipatory Guidance",
+            "Clinician Comments","Next Visit Date","Growth Charts",
+            // Sick visit sections
+            "Main Complaint","History of Present Illness","Duration","Basics",
+            "Past Medical History","Vaccination","Vitals Summary","Investigations",
+            "Working Diagnosis","ICD-10","Plan & Anticipatory Guidance","Medications",
+            "Follow-up / Next Visit","Sick Visit Report"
+        ]
+        func classifyStyle(_ s: String) -> String? {
+            if s.hasPrefix("Current Visit —") { return "Heading1" }
+            if headingSet.contains(s) { return "Heading1" }
+            return nil
+        }
+        var styledParagraphs: [(text: String, style: String?)] = []
+
+        // Detect date-looking lines (very tolerant: ISO, "Sep 15, 2025", "15 Sep 2025", etc.)
+        func isDateLine(_ s: String) -> Bool {
+            // Quick paths for ISO-like and Month-name patterns
+            let iso = #"^(?:•\s*)?\d{4}-\d{2}-\d{2}\b"#
+            let mdy = #"^(?:•\s*)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s*\d{4}\b"#
+            let dmy = #"^(?:•\s*)?\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b"#
+            return s.range(of: iso, options: .regularExpression) != nil
+                || s.range(of: mdy, options: .regularExpression) != nil
+                || s.range(of: dmy, options: .regularExpression) != nil
+        }
+        func stripLeadingBullet(_ s: String) -> String {
+            if s.hasPrefix("• ") { return String(s.dropFirst(2)) }
+            return s
+        }
+
+        // We only promote date lines that appear under these sections:
+        let prevDatesSections: Set<String> = [
+            "Previous Well Visits",
+            "Findings from Previous Well Visits"
+        ]
+        var inPrevDatesSection = false
+
+        for line in attr.string.components(separatedBy: .newlines) {
+            let s = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !s.isEmpty else { continue }
+
+            // Heading1 detection first (also flips the in-section flag)
+            if s.hasPrefix("Current Visit —") || headingSet.contains(s) {
+                styledParagraphs.append((s, "Heading1"))
+                inPrevDatesSection = prevDatesSections.contains(s)
+                continue
+            }
+
+            // Under the previous-visits sections, promote clear date lines to Heading2
+            if inPrevDatesSection, isDateLine(s) {
+                styledParagraphs.append((stripLeadingBullet(s), "Heading2"))
+                continue
+            }
+
+            // Keep other bullets/lines as body text
+            if s.hasPrefix("• ") {
+                styledParagraphs.append((s, nil))
+            } else {
+                styledParagraphs.append((s, nil))
+            }
+        }
+
+        // Render growth charts (Well visit only). If not a Well visit, we still create a text-only docx.
+        var images: [(data: Data, filename: String, sizePts: CGSize)] = []
+
+        switch kind {
+        case .well(let visitID):
+            if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
+                let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
+                let max18cm: CGFloat = (18.0 / 2.54) * 72.0
+                let renderWidth = min(contentWidth, max18cm)
+                let aspect: CGFloat = 450.0 / 700.0
+                let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
+                let imgs = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
+
+                for (i, img) in imgs.enumerated() {
+                    // Encode as PNG for docx
+                    if let tiff = img.tiffRepresentation,
+                       let rep  = NSBitmapImageRep(data: tiff),
+                       let png  = rep.representation(using: .png, properties: [:]) {
+                        images.append((data: png, filename: "image\(i+1).png", sizePts: renderSize))
+                    }
+                }
+                NSLog("[ReportDebug] DOCX charts embedded count = %d  sizePts=(%.1f×%.1f)", images.count, renderSize.width, renderSize.height)
+            }
+        case .sick:
+            break
+        }
+
+        try writeDocxPackage(title: title, styledParagraphs: styledParagraphs, images: images, destinationURL: outURL)
+        NSLog("[ReportExport] wrote DOCX %@", outURL.path)
+        return outURL
+    }
+
+    /// Ensure a given NSTextAttachment has a real FileWrapper (so it serializes into RTFD).
+    /// If the attachment only has an attachmentCell/image, we create a PNG file wrapper for it.
+    private func normalizeAttachmentToFileWrapper(_ att: NSTextAttachment, nameHint: String = "image.png") {
+        // If there is already a file wrapper, we're good.
+        if att.fileWrapper != nil { return }
+
+        // Try to extract an NSImage from the attachment.
+        var image: NSImage?
+        if let cell = att.attachmentCell as? NSTextAttachmentCell {
+            image = cell.image
+        }
+        // Some AppKit versions expose 'image' on NSTextAttachment directly.
+        if image == nil {
+            #if compiler(>=5.7)
+            image = att.image
+            #endif
+        }
+
+        // Build a PNG file wrapper if we can.
+        if let img = image {
+            if let png = bestPNGData(from: img) {
+                let wrapper = FileWrapper(regularFileWithContents: png)
+                wrapper.preferredFilename = nameHint
+                att.fileWrapper = wrapper
+                // Preserve intended on-page size if bounds were set; otherwise use the image's logical size.
+                if att.bounds.size == .zero {
+                    att.bounds = CGRect(origin: .zero, size: img.size)
+                }
+            } else if let tiff = img.tiffRepresentation {
+                let wrapper = FileWrapper(regularFileWithContents: tiff)
+                wrapper.preferredFilename = nameHint.replacingOccurrences(of: ".png", with: ".tiff")
+                att.fileWrapper = wrapper
+                if att.bounds.size == .zero {
+                    att.bounds = CGRect(origin: .zero, size: img.size)
+                }
+            }
+        }
+    }
+
+    /// Walk all attachments in an attributed string and make sure they have FileWrappers for RTFD export.
+    private func ensureRTFDAttachments(in content: NSMutableAttributedString) {
+        var idx = 0
+        content.enumerateAttribute(.attachment,
+                                   in: NSRange(location: 0, length: content.length)) { value, _, _ in
+            if let att = value as? NSTextAttachment {
+                normalizeAttachmentToFileWrapper(att, nameHint: String(format: "img_%03d.png", idx))
+                idx += 1
+            }
+        }
     }
 
     private func debugLogImage(_ img: NSImage, label: String, targetSize: CGSize) {
@@ -1918,7 +2805,12 @@ extension ReportBuilder {
         return try exportReport(for: kind, format: .pdf)
     }
     func exportRTF(for kind: VisitKind) throws -> URL {
-        return try exportReport(for: kind, format: .rtf)
+        // TEMPORARY: route "RTF" requests to the new DOCX path so existing UI
+        // produces a Word file while we debug RTF/RTFD on macOS.
+        // This keeps all call sites unchanged.
+        let url = try exportDOCX(for: kind)
+        NSLog("[ReportExport] (RTF shim) returned DOCX instead: %@", url.path)
+        return url
     }
 }
 

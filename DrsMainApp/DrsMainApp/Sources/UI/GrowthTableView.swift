@@ -11,6 +11,7 @@ struct GrowthTableView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [GrowthPoint] = []
+    @State private var pendingReload = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,9 +61,9 @@ struct GrowthTableView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 420)
-        .onAppear { reload() }
-        .onChange(of: appState.selectedPatientID) { _ in reload() }
-        .onChange(of: appState.currentBundleURL) { _ in reload() }
+        .onAppear { scheduleReload() }
+        .onChange(of: appState.selectedPatientID) { _, _ in scheduleReload() }
+        .onChange(of: appState.currentBundleURL) { _, _ in scheduleReload() }
         .navigationTitle("Growth")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -70,11 +71,21 @@ struct GrowthTableView: View {
                     .keyboardShortcut(.cancelAction)
             }
             ToolbarItem(placement: .automatic) {
-                Button { reload() } label: {
+                Button { scheduleReload() } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
             }
+        }
+    }
+
+    /// Schedule a reload on the next runloop turn to avoid layout-time state mutations.
+    private func scheduleReload() {
+        if pendingReload { return }
+        pendingReload = true
+        DispatchQueue.main.async {
+            reload()
+            pendingReload = false
         }
     }
 
