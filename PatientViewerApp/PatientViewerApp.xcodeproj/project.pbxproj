@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		BB01C99A2EC0E09D00E2C067 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB01C9992EC0E09D00E2C067 /* ZIPFoundation */; };
+		BB01C99E2EC1763B00E2C067 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB01C99D2EC1763B00E2C067 /* ZIPFoundation */; };
+		BB01C9A12EC17F3800E2C067 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = BB01C9A02EC17F3800E2C067 /* SQLite */; };
 		BB812EE12EA5E7AD0049DDB7 /* FMDB in Frameworks */ = {isa = PBXBuildFile; productRef = BB812EE02EA5E7AD0049DDB7 /* FMDB */; };
 		BBCC55082E97622B005002B9 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55072E97622B005002B9 /* ZIPFoundation */; };
 		BBCC55112E976F7E005002B9 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55102E976F7E005002B9 /* SQLite */; };
@@ -31,6 +33,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		BB01C9A32EC1855F00E2C067 /* libsqlite3.0.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.0.tbd; path = usr/lib/libsqlite3.0.tbd; sourceTree = SDKROOT; };
+		BB01C9A42EC1869900E2C067 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		BBCC54DC2E976199005002B9 /* PatientViewerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PatientViewerApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBCC54E92E97619A005002B9 /* PatientViewerAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -64,10 +68,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB01C9A12EC17F3800E2C067 /* SQLite in Frameworks */,
 				BBCC55112E976F7E005002B9 /* SQLite in Frameworks */,
 				BB812EE12EA5E7AD0049DDB7 /* FMDB in Frameworks */,
 				BBCC55082E97622B005002B9 /* ZIPFoundation in Frameworks */,
 				BB01C99A2EC0E09D00E2C067 /* ZIPFoundation in Frameworks */,
+				BB01C99E2EC1763B00E2C067 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -88,6 +94,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BB01C9A22EC1855F00E2C067 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				BB01C9A42EC1869900E2C067 /* libsqlite3.tbd */,
+				BB01C9A32EC1855F00E2C067 /* libsqlite3.0.tbd */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		BBCC54D32E976199005002B9 = {
 			isa = PBXGroup;
 			children = (
@@ -95,6 +110,7 @@
 				BBCC54DE2E976199005002B9 /* PatientViewerApp */,
 				BBCC54EC2E97619A005002B9 /* PatientViewerAppTests */,
 				BBCC54F62E97619A005002B9 /* PatientViewerAppUITests */,
+				BB01C9A22EC1855F00E2C067 /* Frameworks */,
 				BBCC54DD2E976199005002B9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -133,6 +149,8 @@
 				BBCC55102E976F7E005002B9 /* SQLite */,
 				BB812EE02EA5E7AD0049DDB7 /* FMDB */,
 				BB01C9992EC0E09D00E2C067 /* ZIPFoundation */,
+				BB01C99D2EC1763B00E2C067 /* ZIPFoundation */,
+				BB01C9A02EC17F3800E2C067 /* SQLite */,
 			);
 			productName = PatientViewerApp;
 			productReference = BBCC54DC2E976199005002B9 /* PatientViewerApp.app */;
@@ -217,8 +235,9 @@
 			mainGroup = BBCC54D32E976199005002B9;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				BBCC550F2E976F7E005002B9 /* XCLocalSwiftPackageReference "../../Documents/SQLiteSwift" */,
 				BB812EDF2EA5E7AD0049DDB7 /* XCRemoteSwiftPackageReference "fmdb" */,
+				BB01C99C2EC1763B00E2C067 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				BB01C99F2EC17F3800E2C067 /* XCRemoteSwiftPackageReference "SQLite.swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BBCC54DD2E976199005002B9 /* Products */;
@@ -580,14 +599,23 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		BBCC550F2E976F7E005002B9 /* XCLocalSwiftPackageReference "../../Documents/SQLiteSwift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../Documents/SQLiteSwift;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
+		BB01C99C2EC1763B00E2C067 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.20;
+			};
+		};
+		BB01C99F2EC17F3800E2C067 /* XCRemoteSwiftPackageReference "SQLite.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stephencelis/SQLite.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.15.4;
+			};
+		};
 		BB812EDF2EA5E7AD0049DDB7 /* XCRemoteSwiftPackageReference "fmdb" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ccgus/fmdb";
@@ -602,6 +630,16 @@
 		BB01C9992EC0E09D00E2C067 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ZIPFoundation;
+		};
+		BB01C99D2EC1763B00E2C067 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB01C99C2EC1763B00E2C067 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
+		BB01C9A02EC17F3800E2C067 /* SQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB01C99F2EC17F3800E2C067 /* XCRemoteSwiftPackageReference "SQLite.swift" */;
+			productName = SQLite;
 		};
 		BB812EE02EA5E7AD0049DDB7 /* FMDB */ = {
 			isa = XCSwiftPackageProductDependency;

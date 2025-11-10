@@ -36,6 +36,22 @@ struct DocumentRecord: Identifiable, Codable {
 
 private let documentsLog = Logger(subsystem: "Yunastic.PatientViewerApp", category: "Documents")
 
+private enum AllowedDocTypes {
+    static var supported: [UTType] {
+        var types: [UTType] = [.pdf, .image]
+        let extras: [UTType] = [
+            UTType(filenameExtension: "doc"),
+            UTType(filenameExtension: "docx"),
+            UTType(filenameExtension: "pages"),
+            UTType(filenameExtension: "rtf"),
+            UTType(filenameExtension: "txt"),
+            UTType(filenameExtension: "zip")
+        ].compactMap { $0 }
+        types.append(contentsOf: extras)
+        return types
+    }
+}
+
 struct PatientDocumentsView: View {
     let dbURL: URL
 
@@ -64,7 +80,7 @@ struct PatientDocumentsView: View {
             }
             .fileImporter(
                 isPresented: $showImporter,
-                allowedContentTypes: [.pdf, .image],
+                allowedContentTypes: AllowedDocTypes.supported,
                 allowsMultipleSelection: false
             ) { result in
                 handleImport(result)
@@ -312,6 +328,38 @@ struct PatientDocumentsView: View {
             documentsLog.warning("No manifest.json found at root or docs/. Showing empty list.")
             records = []
         }
+        // Finally, merge in any files that may already exist in docs/ but were missing from the manifest.
+        reconcileDocsFolderWithManifest()
+    }
+
+    private func reconcileDocsFolderWithManifest() {
+        let fm = FileManager.default
+        let docsFolder = dbURL.appendingPathComponent("docs")
+        guard let items = try? fm.contentsOfDirectory(at: docsFolder, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey], options: [.skipsHiddenFiles]) else {
+            return
+        }
+        let knownFilenames = Set(records.map { $0.filename })
+        var added = 0
+        for url in items {
+            // Skip manifest and hidden files/folders
+            let name = url.lastPathComponent
+            if name == "manifest.json" || name.hasPrefix(".") { continue }
+            if let vals = try? url.resourceValues(forKeys: [.isDirectoryKey]), vals.isDirectory == true { continue }
+            if knownFilenames.contains(name) { continue }
+
+            // Add a minimal record for any orphan file we discover
+            let rec = DocumentRecord(
+                filename: name,
+                originalName: name,
+                uploadedAt: formattedNow()
+            )
+            records.insert(rec, at: 0)
+            added += 1
+        }
+        if added > 0 {
+            documentsLog.info("Reconciled \(added, privacy: .public) stray file(s) in docs/ into manifest.")
+            saveManifest()
+        }
     }
 
     private func saveManifest() {
@@ -349,15 +397,33 @@ struct QuickLookPreview: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let preview = QLPreviewController()
         preview.dataSource = context.coordinator
-
-        // Add explicit Done and Share buttons.
-        let shareItem = UIBarButtonItem(barButtonSystemItem: .action, target: context.coordinator, action: #selector(Coordinator.shareTapped))
-        let doneItem = UIBarButtonItem(barButtonSystemItem: .done, target: context.coordinator, action: #selector(Coordinator.doneTapped))
-        preview.navigationItem.rightBarButtonItem = shareItem
-        preview.navigationItem.leftBarButtonItem = doneItem
+        // Avoid large-title layouts to reduce spurious constraint logs on Simulator.
+        preview.navigationItem.largeTitleDisplayMode = .never
 
         let nav = UINavigationController(rootViewController: preview)
+        nav.navigationBar.prefersLargeTitles = false
         context.coordinator.navController = nav
+
+        // Defer adding bar buttons until the next runloop so the nav bar has a real width.
+        // This reduces "temporary width == 0" Auto Layout warnings on Simulator.
+        DispatchQueue.main.async {
+            let shareItem = UIBarButtonItem(
+                barButtonSystemItem: .action,
+                target: context.coordinator,
+                action: #selector(Coordinator.shareTapped)
+            )
+            shareItem.accessibilityIdentifier = "ql.share"
+
+            let doneItem = UIBarButtonItem(
+                barButtonSystemItem: .done,
+                target: context.coordinator,
+                action: #selector(Coordinator.doneTapped)
+            )
+            doneItem.accessibilityIdentifier = "ql.done"
+
+            preview.navigationItem.rightBarButtonItem = shareItem
+            preview.navigationItem.leftBarButtonItem = doneItem
+        }
 
         Self.log.debug("Prepared QLPreview for \(self.url.lastPathComponent, privacy: .public)")
         return nav

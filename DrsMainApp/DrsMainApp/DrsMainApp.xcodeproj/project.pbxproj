@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB26FA232EC1ED8E00EB3280 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA222EC1ED8E00EB3280 /* ZIPFoundation */; };
+		BB26FA262EC1EF9600EB3280 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA252EC1EF9600EB3280 /* PediaShared */; };
+		BB26FA292EC1EFE700EB3280 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA282EC1EFE700EB3280 /* PediaShared */; };
 		BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */; };
 		BB3E15AA2EB7489D008E1472 /* GoldenDB.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15A92EB74899008E1472 /* GoldenDB.swift */; };
 		BB3E15AE2EB89905008E1472 /* ReportDataLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E15AD2EB89901008E1472 /* ReportDataLoader.swift */; };
@@ -21,7 +24,6 @@
 		BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AFC2EAF1F5800870007 /* BundleDetailView.swift */; };
 		BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564AFE2EAF25EA00870007 /* PatientsListView.swift */; };
 		BB564B012EAF3C6400870007 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB564B002EAF3C5D00870007 /* PatientDetailView.swift */; };
-		BB564B042EAF58C200870007 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB564B032EAF58C200870007 /* ZIPFoundation */; };
 		BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */; };
 		BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C052EB486980065EF3E /* AliasGenerator.swift */; };
 		BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */; };
@@ -97,8 +99,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB26FA262EC1EF9600EB3280 /* PediaShared in Frameworks */,
+				BB26FA292EC1EFE700EB3280 /* PediaShared in Frameworks */,
 				BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */,
-				BB564B042EAF58C200870007 /* ZIPFoundation in Frameworks */,
+				BB26FA232EC1ED8E00EB3280 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -253,7 +257,9 @@
 			name = DrsMainApp;
 			packageProductDependencies = (
 				BB9E72BC2EAD1A1C00601148 /* PediaShared */,
-				BB564B032EAF58C200870007 /* ZIPFoundation */,
+				BB26FA222EC1ED8E00EB3280 /* ZIPFoundation */,
+				BB26FA252EC1EF9600EB3280 /* PediaShared */,
+				BB26FA282EC1EFE700EB3280 /* PediaShared */,
 			);
 			productName = DrsMainApp;
 			productReference = BB54973C2EACAB41009F314A /* DrsMainApp.app */;
@@ -284,7 +290,8 @@
 			mainGroup = BB5497332EACAB41009F314A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				BB564B022EAF58C200870007 /* XCLocalSwiftPackageReference "../../../Documents/ZIPFoundation" */,
+				BB26FA212EC1ED8E00EB3280 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				BB26FA272EC1EFE700EB3280 /* XCLocalSwiftPackageReference "../../PediaShared" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BB54973D2EACAB41009F314A /* Products */;
@@ -550,16 +557,36 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		BB564B022EAF58C200870007 /* XCLocalSwiftPackageReference "../../../Documents/ZIPFoundation" */ = {
+		BB26FA272EC1EFE700EB3280 /* XCLocalSwiftPackageReference "../../PediaShared" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../../Documents/ZIPFoundation;
+			relativePath = ../../PediaShared;
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		BB26FA212EC1ED8E00EB3280 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.20;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
-		BB564B032EAF58C200870007 /* ZIPFoundation */ = {
+		BB26FA222EC1ED8E00EB3280 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = BB26FA212EC1ED8E00EB3280 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
+		};
+		BB26FA252EC1EF9600EB3280 /* PediaShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PediaShared;
+		};
+		BB26FA282EC1EFE700EB3280 /* PediaShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PediaShared;
 		};
 		BB9E72BC2EAD1A1C00601148 /* PediaShared */ = {
 			isa = XCSwiftPackageProductDependency;

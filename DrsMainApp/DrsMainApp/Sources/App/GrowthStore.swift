@@ -99,4 +99,110 @@ final class GrowthStore {
         }
         return rows
     }
+
+    /// Insert a manual historical growth point into `manual_growth`.
+    /// Returns the newly inserted row id.
+    /// - Note: Keep using ISO8601 for `recordedAtISO`, e.g. "2025-01-31T10:22:00Z"
+    func addManualGrowth(
+        dbURL: URL,
+        patientID: Int,
+        recordedAtISO: String,
+        weightKg: Double?,
+        heightCm: Double?,
+        headCircumferenceCm: Double?,
+        episodeID: Int? = nil
+    ) throws -> Int {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            throw GrowthStoreError.openFailed
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        INSERT INTO manual_growth
+          (patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source, episode_id)
+        VALUES (?, ?, ?, ?, ?, 'manual', ?);
+        """
+
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw GrowthStoreError.prepareFailed(msg)
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        // Bind params
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+
+        // recordedAtISO as TEXT (use SQLITE_TRANSIENT so SQLite copies the buffer)
+        let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        recordedAtISO.withCString { cstr in
+            sqlite3_bind_text(stmt, 2, cstr, -1, SQLITE_TRANSIENT)
+        }
+
+        if let w = weightKg {
+            sqlite3_bind_double(stmt, 3, w)
+        } else {
+            sqlite3_bind_null(stmt, 3)
+        }
+
+        if let h = heightCm {
+            sqlite3_bind_double(stmt, 4, h)
+        } else {
+            sqlite3_bind_null(stmt, 4)
+        }
+
+        if let hc = headCircumferenceCm {
+            sqlite3_bind_double(stmt, 5, hc)
+        } else {
+            sqlite3_bind_null(stmt, 5)
+        }
+
+        if let eid = episodeID {
+            sqlite3_bind_int64(stmt, 6, sqlite3_int64(eid))
+        } else {
+            sqlite3_bind_null(stmt, 6)
+        }
+
+        let rc = sqlite3_step(stmt)
+        if rc != SQLITE_DONE {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw GrowthStoreError.prepareFailed("insert failed: \(msg)")
+        }
+
+        let newID = Int(sqlite3_last_insert_rowid(db))
+        log.info("Inserted manual_growth row \(newID, privacy: .public) for patient \(patientID, privacy: .public)")
+        return newID
+    }
+
+    /// Delete a manual growth point by its primary key in `manual_growth`.
+    /// Call this only for rows where `source == "manual"`.
+    func deleteManualGrowth(dbURL: URL, id: Int) throws {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            throw GrowthStoreError.openFailed
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = "DELETE FROM manual_growth WHERE id = ?;"
+
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw GrowthStoreError.prepareFailed(msg)
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(id))
+
+        let rc = sqlite3_step(stmt)
+        if rc != SQLITE_DONE {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw GrowthStoreError.prepareFailed("delete failed: \(msg)")
+        }
+
+        log.info("Deleted manual_growth row \(id, privacy: .public)")
+    }
 }
