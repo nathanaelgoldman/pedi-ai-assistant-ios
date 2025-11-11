@@ -6,6 +6,21 @@
 //
 import SwiftUI
 
+#if os(iOS)
+import UIKit
+#endif
+
+private extension View {
+    @ViewBuilder
+    func decimalKeyboardIfAvailable() -> some View {
+        #if os(iOS)
+        self.keyboardType(.decimalPad)
+        #else
+        self
+        #endif
+    }
+}
+
 /// Read-only table that lists unified growth points for the currently selected patient.
 struct GrowthTableView: View {
     @EnvironmentObject var appState: AppState
@@ -34,32 +49,20 @@ struct GrowthTableView: View {
             Divider()
 
             // Rows
-            List {
-                ForEach(rows) { p in
-                    HStack {
-                        Text(formatDate(p.recordedAtISO)).monospacedDigit()
-                            .frame(width: 120, alignment: .leading)
-                        Text(formatNumber(p.weightKg)).monospacedDigit()
-                            .frame(width: 100, alignment: .trailing)
-                        Text(formatNumber(p.heightCm)).monospacedDigit()
-                            .frame(width: 100, alignment: .trailing)
-                        Text(formatNumber(p.headCircumferenceCm)).monospacedDigit()
-                            .frame(width: 110, alignment: .trailing)
-                        Text(p.source)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(.vertical, 4)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        if p.source.lowercased() == "manual" {
-                            Button(role: .destructive) {
-                                appState.deleteGrowthPointIfManual(p)
-                                scheduleReload()
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
+            List(rows, id: \.id) { p in
+                GrowthRowView(
+                    p: p,
+                    formatDate: formatDate,
+                    formatNumber: formatNumber,
+                    onDelete: {
+                        do {
+                            try appState.deleteGrowthPointIfManual(p)
+                            scheduleReload()
+                        } catch {
+                            print("deleteGrowthPointIfManual error: \(error)")
                         }
                     }
-                }
+                )
             }
             .listStyle(.inset)
             .frame(minHeight: 240)
@@ -73,8 +76,12 @@ struct GrowthTableView: View {
         }
         .frame(minWidth: 720, minHeight: 420)
         .onAppear { scheduleReload() }
-        .onChange(of: appState.selectedPatientID) { _, _ in scheduleReload() }
-        .onChange(of: appState.currentBundleURL) { _, _ in scheduleReload() }
+        .onChange(of: appState.selectedPatientID) { _, _ in
+            scheduleReload()
+        }
+        .onChange(of: appState.currentBundleURL) { _, _ in
+            scheduleReload()
+        }
         .navigationTitle("Growth")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -98,16 +105,23 @@ struct GrowthTableView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             ManualGrowthForm { date, weightKg, heightCm, headC in
-                // Use current selection; if unavailable, just dismiss.
                 if let pid = appState.selectedPatientID {
-                    appState.addGrowthPointManual(
-                        patientID: pid,
-                        date: date,
-                        weightKg: weightKg,
-                        heightCm: heightCm,
-                        headCircumferenceCm: headC
-                    )
-                    scheduleReload()
+                    var df = ISO8601DateFormatter()
+                    df.formatOptions = [.withFullDate]
+                    let iso = df.string(from: date)
+                    do {
+                        try appState.addGrowthPointManual(
+                            patientID: pid,
+                            recordedAtISO: iso,
+                            weightKg: weightKg,
+                            heightCm: heightCm,
+                            headCircumferenceCm: headC,
+                            episodeID: nil
+                        )
+                        scheduleReload()
+                    } catch {
+                        print("addGrowthPointManual error: \(error)")
+                    }
                 }
             }
         }
@@ -152,6 +166,38 @@ struct GrowthTableView: View {
     }
 }
 
+/// A single growth row with a disabled swipe-to-delete when source != manual.
+private struct GrowthRowView: View {
+    let p: GrowthPoint
+    let formatDate: (String) -> String
+    let formatNumber: (Double?) -> String
+    let onDelete: () -> Void
+
+    private var isManual: Bool { p.source.lowercased() == "manual" }
+
+    var body: some View {
+        HStack {
+            Text(formatDate(p.recordedAtISO)).monospacedDigit()
+                .frame(width: 120, alignment: .leading)
+            Text(formatNumber(p.weightKg)).monospacedDigit()
+                .frame(width: 100, alignment: .trailing)
+            Text(formatNumber(p.heightCm)).monospacedDigit()
+                .frame(width: 100, alignment: .trailing)
+            Text(formatNumber(p.headCircumferenceCm)).monospacedDigit()
+                .frame(width: 110, alignment: .trailing)
+            Text(p.source)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 4)
+        .swipeActions(edge: .trailing, allowsFullSwipe: isManual) {
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+            .disabled(!isManual)
+        }
+    }
+}
+
 /// Inline lightweight sheet for adding a manual growth point.
 private struct ManualGrowthForm: View {
     @Environment(\.dismiss) private var dismiss
@@ -172,18 +218,20 @@ private struct ManualGrowthForm: View {
                 }
                 Section("Measurements (optional)") {
                     TextField("Weight (kg)", text: $weightText)
-                        .keyboardType(.decimalPad)
+                        .decimalKeyboardIfAvailable()
                     TextField("Height (cm)", text: $heightText)
-                        .keyboardType(.decimalPad)
+                        .decimalKeyboardIfAvailable()
                     TextField("Head circumference (cm)", text: $headText)
-                        .keyboardType(.decimalPad)
+                        .decimalKeyboardIfAvailable()
                     Text("Leave any field blank to skip it.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Add Growth Point")
+#if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+#endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

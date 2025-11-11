@@ -112,6 +112,16 @@ final class GrowthStore {
         headCircumferenceCm: Double?,
         episodeID: Int? = nil
     ) throws -> Int {
+        // Ignore episodeID for manual entries; schema has no episode_id column.
+        _ = episodeID
+
+        // Basic validation
+        guard !recordedAtISO.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw GrowthStoreError.prepareFailed("recordedAtISO cannot be empty")
+        }
+        guard weightKg != nil || heightCm != nil || headCircumferenceCm != nil else {
+            throw GrowthStoreError.prepareFailed("At least one of weightKg/heightCm/headCircumferenceCm must be provided")
+        }
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
             if let db { sqlite3_close(db) }
@@ -121,8 +131,8 @@ final class GrowthStore {
 
         let sql = """
         INSERT INTO manual_growth
-          (patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source, episode_id)
-        VALUES (?, ?, ?, ?, ?, 'manual', ?);
+          (patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source)
+        VALUES (?, ?, ?, ?, ?, 'manual');
         """
 
         var stmt: OpaquePointer?
@@ -159,11 +169,6 @@ final class GrowthStore {
             sqlite3_bind_null(stmt, 5)
         }
 
-        if let eid = episodeID {
-            sqlite3_bind_int64(stmt, 6, sqlite3_int64(eid))
-        } else {
-            sqlite3_bind_null(stmt, 6)
-        }
 
         let rc = sqlite3_step(stmt)
         if rc != SQLITE_DONE {
