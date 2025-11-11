@@ -12,6 +12,7 @@ struct GrowthTableView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [GrowthPoint] = []
     @State private var pendingReload = false
+    @State private var showAddSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,6 +49,16 @@ struct GrowthTableView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.vertical, 4)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if p.source.lowercased() == "manual" {
+                            Button(role: .destructive) {
+                                appState.deleteGrowthPointIfManual(p)
+                                scheduleReload()
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
             }
             .listStyle(.inset)
@@ -75,6 +86,29 @@ struct GrowthTableView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAddSheet = true
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+                .help("Add a manual growth point")
+            }
+        }
+        .sheet(isPresented: $showAddSheet) {
+            ManualGrowthForm { date, weightKg, heightCm, headC in
+                // Use current selection; if unavailable, just dismiss.
+                if let pid = appState.selectedPatientID {
+                    appState.addGrowthPointManual(
+                        patientID: pid,
+                        date: date,
+                        weightKg: weightKg,
+                        heightCm: heightCm,
+                        headCircumferenceCm: headC
+                    )
+                    scheduleReload()
+                }
             }
         }
     }
@@ -115,6 +149,76 @@ struct GrowthTableView: View {
         f.maximumFractionDigits = 2
         f.locale = Locale.current
         return f.string(from: NSNumber(value: x)) ?? String(format: "%.2f", x)
+    }
+}
+
+/// Inline lightweight sheet for adding a manual growth point.
+private struct ManualGrowthForm: View {
+    @Environment(\.dismiss) private var dismiss
+
+    // Simple callbacks — call `onSave` with parsed values, then dismiss.
+    var onSave: (_ date: Date, _ weightKg: Double?, _ heightCm: Double?, _ headCircumferenceCm: Double?) -> Void
+
+    @State private var date = Date()
+    @State private var weightText = ""
+    @State private var heightText = ""
+    @State private var headText = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Date") {
+                    DatePicker("Recorded date", selection: $date, displayedComponents: .date)
+                }
+                Section("Measurements (optional)") {
+                    TextField("Weight (kg)", text: $weightText)
+                        .keyboardType(.decimalPad)
+                    TextField("Height (cm)", text: $heightText)
+                        .keyboardType(.decimalPad)
+                    TextField("Head circumference (cm)", text: $headText)
+                        .keyboardType(.decimalPad)
+                    Text("Leave any field blank to skip it.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Add Growth Point")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let weight = parseDouble(weightText)
+                        let height = parseDouble(heightText)
+                        let head   = parseDouble(headText)
+                        // If all three are nil, don't save anything.
+                        guard weight != nil || height != nil || head != nil else {
+                            dismiss()
+                            return
+                        }
+                        onSave(date, weight, height, head)
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+    }
+
+    /// Locale-aware decimal parsing; returns nil for empty/invalid.
+    private func parseDouble(_ s: String) -> Double? {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let nf = NumberFormatter()
+        nf.locale = .current
+        nf.numberStyle = .decimal
+        // Try locale parsing first, then fallback to dot-decimal.
+        if let n = nf.number(from: trimmed) {
+            return n.doubleValue
+        }
+        return Double(trimmed)
     }
 }
 

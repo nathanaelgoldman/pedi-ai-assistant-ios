@@ -1508,6 +1508,62 @@ final class AppState: ObservableObject {
             }
         }
         
+        // MARK: - Growth data (writes)
+        /// Add a manual growth point (one or more metrics) for the selected bundle DB.
+        /// Returns the inserted row id in `manual_growth`.
+        @discardableResult
+        func addGrowthPointManual(
+            patientID: Int,
+            recordedAtISO: String,
+            weightKg: Double?,
+            heightCm: Double?,
+            headCircumferenceCm: Double?,
+            episodeID: Int?
+        ) throws -> Int {
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                log.error("addGrowthPointManual: no current DB URL")
+                throw NSError(domain: "AppState", code: 404, userInfo: [NSLocalizedDescriptionKey: "No active bundle DB"])
+            }
+            let newID = try GrowthStore().addManualGrowth(
+                dbURL: dbURL,
+                patientID: patientID,
+                recordedAtISO: recordedAtISO,
+                weightKg: weightKg,
+                heightCm: heightCm,
+                headCircumferenceCm: headCircumferenceCm,
+                episodeID: episodeID
+            )
+            refreshGrowthAfterWrite(for: patientID)
+            return newID
+        }
+
+        /// Delete a manual growth point if the provided `GrowthPoint` was manually entered.
+        func deleteGrowthPointIfManual(_ gp: GrowthPoint) throws {
+            guard gp.source.lowercased() == "manual" else {
+                log.info("deleteGrowthPointIfManual: ignored non-manual source=\(gp.source, privacy: .public)")
+                return
+            }
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                log.error("deleteGrowthPointIfManual: no current DB URL")
+                throw NSError(domain: "AppState", code: 404, userInfo: [NSLocalizedDescriptionKey: "No active bundle DB"])
+            }
+            try GrowthStore().deleteManualGrowth(dbURL: dbURL, id: gp.id)
+            if let pid = selectedPatientID {
+                refreshGrowthAfterWrite(for: pid)
+            }
+        }
+
+        /// Light-weight broadcast to let charts re-query growth.
+        private func refreshGrowthAfterWrite(for patientID: Int) {
+            // If you already have a growth reload path, call it here.
+            // This fallback posts a notification many views can observe.
+            NotificationCenter.default.post(name: .init("com.pediai.growthDataChanged"),
+                                            object: self,
+                                            userInfo: ["patientID": patientID])
+        }
+
         // Small safe index helper
         
         /// Import one or more bundle .zip files by unzipping to App Support and then detecting the bundle root (folder with db.sqlite)
