@@ -14,6 +14,10 @@ import ZIPFoundation
 import CryptoKit
 import PediaShared
 
+#if os(macOS)
+import AppKit   // for NSAlert confirmation dialogs during import
+#endif
+
 struct PatientRow: Identifiable, Equatable {
     let id: Int
     let alias: String
@@ -668,44 +672,12 @@ final class AppState: ObservableObject {
         
         // Allow UI to add one or more bundle directories **or .zip files**
         func addBundles(from urls: [URL]) {
-            guard !urls.isEmpty else { return }
-            let fm = FileManager.default
-            
-            var addedSomething = false
-            var zips: [URL] = []
-            
-            for url in urls {
-                // Directory?
-                var isDir: ObjCBool = false
-                if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                    // Accept either an exact bundle root (has db.sqlite) or a parent folder that contains one
-                    if let root = findBundleRoot(startingAt: url) {
-                        addBundleRootAndSelect(root)       // selects & loads patients
-                        addedSomething = true
-                    } else {
-                        log.warning("Folder does not contain a bundle (no db.sqlite): \(url.path, privacy: .public)")
-                    }
-                    continue
-                }
-                
-                // ZIP?
-                if url.pathExtension.lowercased() == "zip" {
-                    zips.append(url)
-                    continue
-                }
-                
-                log.warning("Unsupported selection: \(url.lastPathComponent, privacy: .public)")
+            let zips = urls.filter { $0.pathExtension.lowercased() == "zip" }
+            if zips.isEmpty {
+                log.warning("addBundles: only .zip bundles are supported for import.")
+                return
             }
-            
-            // Process any ZIPs (unzips then selects the discovered bundle roots)
-            if !zips.isEmpty {
-                importZipBundles(from: zips)
-                addedSomething = true
-            }
-            
-            if !addedSomething {
-                log.warning("No valid bundles were added from the chosen items.")
-            }
+            importZipBundles(from: zips) // This will not change currentBundleURL or selectedPatientID
         }
         // MARK: - Selection / Recents
         func selectBundle(_ url: URL) {
@@ -1571,35 +1543,271 @@ final class AppState: ObservableObject {
         func importZipBundles(from zipURLs: [URL]) {
             guard !zipURLs.isEmpty else { return }
             let fm = FileManager.default
-            
+
+            // Staging and archive roots
+            let stagingRoot = self.ensureAppSupportSubdir("ImportedStaging")
+            let archiveRoot = self.ensureAppSupportSubdir("Archive")
+
             for zipURL in zipURLs {
                 do {
-                    // Destination: ~/Library/Application Support/DrsMainApp/Imported/<zip-basename>/
-                    let base = (zipURL.deletingPathExtension().lastPathComponent)
-                    let dest = ensureAppSupportSubdir("Imported").appendingPathComponent(base, isDirectory: true)
-                    
-                    // Clear any previous extraction for idempotency
-                    if fm.fileExists(atPath: dest.path) {
-                        try fm.removeItem(at: dest)
+                    // Create a unique staging folder for this ZIP
+                    let base = zipURL.deletingPathExtension().lastPathComponent
+                    let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+                    let staged = stagingRoot.appendingPathComponent("\(base)-\(stamp)", isDirectory: true)
+                    if fm.fileExists(atPath: staged.path) {
+                        try fm.removeItem(at: staged)
                     }
-                    try fm.createDirectory(at: dest, withIntermediateDirectories: true)
-                    
-                    // Unzip
-                    try fm.unzipItem(at: zipURL, to: dest)
-                    
-                    // Find the real bundle root (folder containing db.sqlite)
-                    if let bundleRoot = findBundleRoot(startingAt: dest) {
-                        // Keep imported bundles aligned to golden schema
-                        let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
-                        applyGoldenSchemaIdempotent(to: dbURL)
-                        ensureGrowthUnificationSchema(at: dbURL)
-                        addBundleRootAndSelect(bundleRoot)
+                    try fm.createDirectory(at: staged, withIntermediateDirectories: true)
+
+                    // Unzip to staging
+                    try fm.unzipItem(at: zipURL, to: staged)
+
+                    // Find the bundle root (folder containing db.sqlite)
+                    guard let bundleRoot = self.findBundleRoot(startingAt: staged) else {
+                        self.log.warning("ZIP import: no db.sqlite found under \(staged.path, privacy: .public)")
+                        continue
+                    }
+
+                    // Extract patient identity from the staged bundle
+                    guard let identity = self.extractPatientIdentity(from: bundleRoot) else {
+                        self.log.warning("ZIP import: could not extract patient identity from \(bundleRoot.path, privacy: .public)")
+                        // If we cannot identify, just register it without selecting and without replacing
+                        if !self.bundleLocations.contains(bundleRoot) {
+                            self.bundleLocations.append(bundleRoot)
+                            self.addToRecents(bundleRoot)
+                        }
+                        continue
+                    }
+
+                    // Try to find an existing bundle that matches (MRN first, else alias+dob)
+                    if let existingURL = self.existingBundleMatching(identity: identity) {
+                        // Ask what to do when a patient already exists.
+                        #if os(macOS)
+                        let choice = self.presentImportConflictAlert(identity: identity, existingURL: existingURL)
+                        switch choice {
+                        case .replace:
+                            if let finalURL = self.archiveAndReplace(existing: existingURL,
+                                                                with: bundleRoot,
+                                                                identity: identity,
+                                                                archiveRoot: archiveRoot) {
+                                if let idx = self.bundleLocations.firstIndex(of: existingURL) {
+                                    self.bundleLocations[idx] = finalURL
+                                }
+                                self.addToRecents(finalURL)
+                                self.log.info("Replaced existing bundle for \(self.identityString(identity), privacy: .public) at \(finalURL.path, privacy: .public)")
+                            } else {
+                                self.log.error("Failed to replace existing bundle for \(self.identityString(identity), privacy: .public)")
+                            }
+
+                        case .keepBoth:
+                            // Register staged incoming as a separate bundle; no auto-select.
+                            if !self.bundleLocations.contains(bundleRoot) {
+                                self.bundleLocations.append(bundleRoot)
+                            }
+                            self.addToRecents(bundleRoot)
+                            self.log.info("Kept both bundles for \(self.identityString(identity), privacy: .public). New at \(bundleRoot.path, privacy: .public)")
+
+                        case .cancel:
+                            // Drop this staged import.
+                            try? fm.removeItem(at: bundleRoot)
+                            self.log.info("Cancelled import for \(self.identityString(identity), privacy: .public)")
+                            continue
+                        }
+                        #else
+                        // Non-macOS fallback: keep previous behavior (replace).
+                        if let finalURL = self.archiveAndReplace(existing: existingURL,
+                                                            with: bundleRoot,
+                                                            identity: identity,
+                                                            archiveRoot: archiveRoot) {
+                            if let idx = self.bundleLocations.firstIndex(of: existingURL) {
+                                self.bundleLocations[idx] = finalURL
+                            }
+                            self.addToRecents(finalURL)
+                        }
+                        #endif
                     } else {
-                        log.warning("ZIP import: no db.sqlite found under \(dest.path, privacy: .public)")
+                        // New patient bundle: register it but DO NOT auto-select
+                        if !self.bundleLocations.contains(bundleRoot) {
+                            self.bundleLocations.append(bundleRoot)
+                        }
+                        self.addToRecents(bundleRoot)
+                        self.log.info("Imported new bundle (no auto-select): \(self.identityString(identity), privacy: .public) at \(bundleRoot.path, privacy: .public)")
+                    }
+
+                    // Cleanup: remove staging parent if it is empty (best-effort)
+                    do {
+                        let contents = try fm.contentsOfDirectory(atPath: staged.path)
+                        if contents.isEmpty {
+                            try fm.removeItem(at: staged)
+                        }
+                    } catch {
+                        // benign
                     }
                 } catch {
-                    log.error("ZIP import failed for \(zipURL.path, privacy: .public): \(String(describing: error), privacy: .public)")
+                    self.log.error("ZIP import failed for \(zipURL.path, privacy: .public): \(String(describing: error), privacy: .public)")
                 }
+            }
+            // IMPORTANT: We do NOT change currentBundleURL or selectedPatientID here.
+            // The UI remains on the current patient/bundle to avoid confusing focus changes.
+        }
+        
+        #if os(macOS)
+        private enum ImportChoice { case replace, keepBoth, cancel }
+
+        @MainActor
+        private func presentImportConflictAlert(identity: PatientIdentity, existingURL: URL) -> ImportChoice {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Patient already exists"
+            alert.informativeText = "Found an existing bundle for \(identityString(identity)).\nWhat would you like to do?"
+            alert.addButton(withTitle: "Replace")   // 1
+            alert.addButton(withTitle: "Keep Both") // 2
+            alert.addButton(withTitle: "Cancel")    // 3
+            let response = alert.runModal()
+            switch response {
+            case .alertFirstButtonReturn:  return .replace
+            case .alertSecondButtonReturn: return .keepBoth
+            default:                       return .cancel
+            }
+        }
+        #endif
+
+        // MARK: - Import reconciliation helpers (MRN-first; alias+dob fallback)
+
+        private struct PatientIdentity: Equatable {
+            let mrn: String?
+            let alias: String?
+            let dobISO: String?
+
+            // Equality: prefer MRN if present on both; else alias+dob; else alias
+            static func == (lhs: PatientIdentity, rhs: PatientIdentity) -> Bool {
+                let lmrn = lhs.mrn?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let rmrn = rhs.mrn?.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let l = lmrn, !l.isEmpty, let r = rmrn, !r.isEmpty {
+                    return l.caseInsensitiveCompare(r) == .orderedSame
+                }
+                let la = (lhs.alias ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let ra = (rhs.alias ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                var ldob = (lhs.dobISO ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                var rdob = (rhs.dobISO ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                // Normalize YYYY-MM-DD if possible (tolerate full ISO)
+                if let t = ldob.split(separator: "T").first { ldob = String(t) }
+                if let t = rdob.split(separator: "T").first { rdob = String(t) }
+                if !la.isEmpty, !ra.isEmpty, !ldob.isEmpty, !rdob.isEmpty {
+                    return la.caseInsensitiveCompare(ra) == .orderedSame && ldob == rdob
+                }
+                if !la.isEmpty, !ra.isEmpty {
+                    return la.caseInsensitiveCompare(ra) == .orderedSame
+                }
+                return false
+            }
+        }
+
+        private func identityString(_ id: PatientIdentity) -> String {
+            if let mrn = id.mrn, !mrn.isEmpty { return "MRN \(mrn)" }
+            var parts: [String] = []
+            if let a = id.alias, !a.isEmpty { parts.append(a) }
+            if let d = id.dobISO, !d.isEmpty {
+                let day = d.split(separator: "T").first.map(String.init) ?? d
+                parts.append(day)
+            }
+            return parts.isEmpty ? "UnknownPatient" : parts.joined(separator: " • ")
+        }
+
+        private func extractPatientIdentity(from bundleRoot: URL) -> PatientIdentity? {
+            let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
+            guard FileManager.default.fileExists(atPath: dbURL.path) else { return nil }
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_close(db) }
+
+            // Probe columns
+            let cols = columnSet(of: "patients", db: db)
+            guard !cols.isEmpty else { return nil }
+
+            let mrnCol = cols.contains("mrn") ? "mrn" : nil
+            let aliasCol = cols.contains("alias_label") ? "alias_label" : (cols.contains("alias") ? "alias" : nil)
+            let dobCol = cols.contains("dob") ? "dob" : nil
+
+            var sql = "SELECT "
+            var wanted: [String] = []
+            if let mrnCol { wanted.append(mrnCol) }
+            if let aliasCol { wanted.append(aliasCol) }
+            if let dobCol { wanted.append(dobCol) }
+            if wanted.isEmpty { return nil }
+            sql += wanted.joined(separator: ", ")
+            sql += " FROM patients ORDER BY id LIMIT 1;"
+
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+
+            var idx: Int32 = 0
+            func nextStr() -> String? {
+                defer { idx += 1 }
+                if let c = sqlite3_column_text(stmt, idx) {
+                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                    return s.isEmpty ? nil : s
+                }
+                return nil
+            }
+            let mrn = mrnCol != nil ? nextStr() : nil
+            let alias = aliasCol != nil ? nextStr() : nil
+            let dob = dobCol != nil ? nextStr() : nil
+
+            return PatientIdentity(mrn: mrn, alias: alias, dobISO: dob)
+        }
+
+        private func existingBundleMatching(identity: PatientIdentity) -> URL? {
+            for url in bundleLocations {
+                guard let other = extractPatientIdentity(from: url) else { continue }
+                if other == identity { return url }
+            }
+            return nil
+        }
+
+        private func safeName(from id: PatientIdentity) -> String {
+            var raw = identityString(id)
+            if raw.isEmpty { raw = "UnknownPatient" }
+            // sanitize for file system
+            let illegal = CharacterSet(charactersIn: "/:\\?%*|\"<>")
+            return raw.components(separatedBy: illegal).joined(separator: "_")
+        }
+
+        /// Archive `existing` bundle into Archive/<patient>/ (keeping only one copy),
+        /// then replace it with `incoming` bundle contents at the same path.
+        private func archiveAndReplace(existing: URL,
+                                       with incoming: URL,
+                                       identity: PatientIdentity,
+                                       archiveRoot: URL) -> URL? {
+            let fm = FileManager.default
+            do {
+                let patientFolder = archiveRoot.appendingPathComponent(safeName(from: identity), isDirectory: true)
+                if !fm.fileExists(atPath: patientFolder.path) {
+                    try fm.createDirectory(at: patientFolder, withIntermediateDirectories: true)
+                }
+                // Keep only one archived copy: clear any existing content in that folder
+                if let listed = try? fm.contentsOfDirectory(at: patientFolder, includingPropertiesForKeys: nil) {
+                    for u in listed { try? fm.removeItem(at: u) }
+                }
+                // Move existing bundle into Archive/<patient>/previous.bundle
+                let archivedURL = patientFolder.appendingPathComponent("previous.bundle", isDirectory: true)
+                if fm.fileExists(atPath: archivedURL.path) {
+                    try? fm.removeItem(at: archivedURL)
+                }
+                try fm.moveItem(at: existing, to: archivedURL)
+
+                // Move incoming bundle into the *original* location (same parent / name as `existing`)
+                let dest = existing
+                if fm.fileExists(atPath: dest.path) {
+                    try? fm.removeItem(at: dest)
+                }
+                try fm.moveItem(at: incoming, to: dest)
+                return dest
+            } catch {
+                log.error("archiveAndReplace failed: \(String(describing: error), privacy: .public)")
+                return nil
             }
         }
         
@@ -2100,25 +2308,22 @@ final class AppState: ObservableObject {
     extension AppState {
         func importBundles(from urls: [URL]) {
             var imported: [URL] = []
-            
-            for url in urls {
-                if url.pathExtension.lowercased() == "zip" {
-                    if let extracted = extractZipBundle(url),
-                       let canonical = canonicalBundleRoot(at: extracted) {
-                        imported.append(canonical)
-                    }
-                } else if let canonical = canonicalBundleRoot(at: url) {
+
+            for url in urls where url.pathExtension.lowercased() == "zip" {
+                if let extracted = extractZipBundle(url),
+                   let canonical = canonicalBundleRoot(at: extracted) {
                     imported.append(canonical)
                 }
             }
-            
+
             guard !imported.isEmpty else { return }
-            
-            // Merge + select last
+
+            // Register imported bundles WITHOUT changing the current selection
             for u in imported where !bundleLocations.contains(u) {
                 bundleLocations.append(u)
+                addToRecents(u)
             }
-            currentBundleURL = imported.last
+            // Do not alter currentBundleURL or selectedPatientID here.
         }
         
         private func canonicalBundleRoot(at url: URL) -> URL? {

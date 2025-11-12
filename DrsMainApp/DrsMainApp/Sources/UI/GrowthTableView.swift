@@ -190,10 +190,20 @@ private struct GrowthRowView: View {
         }
         .padding(.vertical, 4)
         .swipeActions(edge: .trailing, allowsFullSwipe: isManual) {
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
+            if isManual {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
             }
-            .disabled(!isManual)
+        }
+        .contextMenu {
+            if isManual {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
         }
     }
 }

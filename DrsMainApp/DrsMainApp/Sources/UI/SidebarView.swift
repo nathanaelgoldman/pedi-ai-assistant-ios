@@ -26,7 +26,9 @@ struct SidebarView: View {
                     } else {
                         ForEach(appState.recentBundles, id: \.path) { url in
                             Button {
-                                appState.selectBundle(url)
+                                if appState.currentBundleURL != url {
+                                    appState.selectBundle(url)
+                                }
                             } label: {
                                 HStack {
                                     Image(systemName: "folder")
@@ -143,7 +145,7 @@ struct SidebarView: View {
             Button {
                 pickAndAddBundles()
             } label: {
-                Label("Add Bundles…", systemImage: "folder.badge.plus")
+                Label("Import Bundles…", systemImage: "square.and.arrow.down")
             }
 
             Button {
@@ -159,7 +161,9 @@ struct SidebarView: View {
         #if os(macOS)
         FilePicker.selectBundles { urls in
             if !urls.isEmpty {
-                appState.importBundles(from: urls)
+                Task { @MainActor in
+                    appState.importBundles(from: urls)   // non-switching import path
+                }
             }
         }
         #endif
