@@ -2306,24 +2306,12 @@ final class AppState: ObservableObject {
     
     
     extension AppState {
+        @MainActor
         func importBundles(from urls: [URL]) {
-            var imported: [URL] = []
-
-            for url in urls where url.pathExtension.lowercased() == "zip" {
-                if let extracted = extractZipBundle(url),
-                   let canonical = canonicalBundleRoot(at: extracted) {
-                    imported.append(canonical)
-                }
-            }
-
-            guard !imported.isEmpty else { return }
-
-            // Register imported bundles WITHOUT changing the current selection
-            for u in imported where !bundleLocations.contains(u) {
-                bundleLocations.append(u)
-                addToRecents(u)
-            }
-            // Do not alter currentBundleURL or selectedPatientID here.
+            // Legacy wrapper: funnel all imports through the MRN-aware, prompt-enabled path.
+            let zips = urls.filter { $0.pathExtension.lowercased() == "zip" }
+            guard !zips.isEmpty else { return }
+            self.importZipBundles(from: zips)
         }
         
         private func canonicalBundleRoot(at url: URL) -> URL? {
