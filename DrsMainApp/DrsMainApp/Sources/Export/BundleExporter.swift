@@ -15,6 +15,7 @@
 
 import Foundation
 import CryptoKit
+import SQLite3
 
 // MARK: - Errors
 
@@ -72,7 +73,7 @@ struct BundleExporter {
         }
 
         // 4) Build manifest.json with SHA-256 per file
-        try writeManifest(at: stageRoot)
+        try writeManifestV2(at: stageRoot, sourceRoot: src)
 
         // 5) Zip the staged root (flat)
         let stamp = timestamp()
@@ -127,13 +128,29 @@ struct BundleExporter {
         }
     }
 
-    /// Write manifest.json with sha256, size, mtime for each file in the staged root.
-    private static func writeManifest(at stageRoot: URL) throws {
+    /// Write a v2 manifest with bundle identity (MRN, alias, DOB, sex), db checksum, and docs listing.
+    private static func writeManifestV2(at stageRoot: URL, sourceRoot: URL) throws {
         let fm = FileManager.default
+
+        // Collect file metadata for backward compatibility (full flat list)…
         var files: [[String: Any]] = []
+        var docsManifest: [[String: Any]] = []
+
+        // db.sqlite checksum if present
+        var dbSHA256: String? = nil
+        let dbURL = stageRoot.appendingPathComponent("db.sqlite")
+        if fm.fileExists(atPath: dbURL.path) {
+            let data = try Data(contentsOf: dbURL)
+            dbSHA256 = sha256Hex(data)
+        }
 
         // Walk stage root (db.sqlite and docs/**)
-        let enumerator = fm.enumerator(at: stageRoot, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey], options: [.skipsHiddenFiles, .skipsPackageDescendants])!
+        let enumerator = fm.enumerator(
+            at: stageRoot,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )!
+
         for case let url as URL in enumerator {
             if url == stageRoot { continue }
             let name = url.lastPathComponent
@@ -145,21 +162,139 @@ struct BundleExporter {
             let relPath = url.path.replacingOccurrences(of: stageRoot.path + "/", with: "")
             let data = try Data(contentsOf: url)
             let sha = sha256Hex(data)
-            files.append([
+            let entry: [String: Any] = [
                 "path": relPath,
                 "size": vals.fileSize ?? data.count,
                 "modified": ISO8601DateFormatter().string(from: vals.contentModificationDate ?? Date()),
                 "sha256": sha
-            ])
+            ]
+            files.append(entry)
+            if relPath.hasPrefix("docs/") {
+                docsManifest.append(entry)
+            }
         }
 
-        let manifest: [String: Any] = [
-            "version": 1,
+        // Read patient identity from db.sqlite if possible
+        let ident = try loadPatientIdentity(from: dbURL)
+
+        let manifest: [String: Any?] = [
+            "version": 2,
             "created": ISO8601DateFormatter().string(from: Date()),
+            "bundle_name": sourceRoot.lastPathComponent,
+            // Identity (nullable-safe — importer can fall back if missing)
+            "patient_id": ident.id,
+            "patient_alias": ident.alias,
+            "dob": ident.dob,
+            "patient_sex": ident.sex,
+            "mrn": ident.mrn,
+            // Checksums and listings
+            "db_sha256": dbSHA256,
+            "docs_manifest": docsManifest,
+            // Keep prior "files" for backward compatibility with older importers
             "files": files
         ]
-        let json = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys, .prettyPrinted])
+
+        // Serialize, dropping nils
+        let json = try JSONSerialization.data(
+            withJSONObject: manifest.compactMapValues { $0 },
+            options: [.sortedKeys, .prettyPrinted]
+        )
         try json.write(to: stageRoot.appendingPathComponent("manifest.json"), options: .atomic)
+    }
+
+    /// Extracts a single-patient identity from db.sqlite (best-effort).
+    /// Falls back to nils if table/columns are missing.
+    private static func loadPatientIdentity(from dbURL: URL) throws -> (id: Int?, alias: String?, dob: String?, sex: String?, mrn: String?) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: dbURL.path) else {
+            return (nil, nil, nil, nil, nil)
+        }
+
+        var db: OpaquePointer?
+        defer { if db != nil { sqlite3_close(db) } }
+
+        if sqlite3_open(dbURL.path, &db) != SQLITE_OK {
+            return (nil, nil, nil, nil, nil)
+        }
+
+        // Verify patients table exists
+        let tableCheckSQL = "SELECT name FROM sqlite_master WHERE type='table' AND name='patients' LIMIT 1;"
+        var chkStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, tableCheckSQL, -1, &chkStmt, nil) == SQLITE_OK,
+           sqlite3_step(chkStmt) == SQLITE_ROW {
+            // ok
+        } else {
+            sqlite3_finalize(chkStmt)
+            return (nil, nil, nil, nil, nil)
+        }
+        sqlite3_finalize(chkStmt)
+
+        // Determine which columns exist
+        func hasColumn(_ col: String) -> Bool {
+            var stmt: OpaquePointer?
+            let pragma = "PRAGMA table_info(patients);"
+            var exists = false
+            if sqlite3_prepare_v2(db, pragma, -1, &stmt, nil) == SQLITE_OK {
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    if let cName = sqlite3_column_text(stmt, 1) {
+                        let name = String(cString: cName)
+                        if name == col { exists = true; break }
+                    }
+                }
+            }
+            sqlite3_finalize(stmt)
+            return exists
+        }
+
+        let hasAlias = hasColumn("alias")
+        let hasDOB   = hasColumn("dob")
+        let hasSex   = hasColumn("sex")
+        let hasMRN   = hasColumn("mrn")
+
+        // Build a safe SELECT only for available columns
+        var cols: [String] = ["id"]
+        if hasAlias { cols.append("alias") }
+        if hasDOB   { cols.append("dob") }
+        if hasSex   { cols.append("sex") }
+        if hasMRN   { cols.append("mrn") }
+
+        let sql = "SELECT \(cols.joined(separator: ", ")) FROM patients ORDER BY id LIMIT 1;"
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
+            sqlite3_finalize(stmt)
+            return (nil, nil, nil, nil, nil)
+        }
+
+        var pid: Int? = nil
+        var alias: String? = nil
+        var dob: String? = nil
+        var sex: String? = nil
+        var mrn: String? = nil
+
+        if sqlite3_step(stmt) == SQLITE_ROW {
+            var colIdx = 0
+            // id
+            pid = Int(sqlite3_column_int64(stmt, Int32(colIdx))); colIdx += 1
+            if hasAlias {
+                if let c = sqlite3_column_text(stmt, Int32(colIdx)) { alias = String(cString: c) }
+                colIdx += 1
+            }
+            if hasDOB {
+                if let c = sqlite3_column_text(stmt, Int32(colIdx)) { dob = String(cString: c) }
+                colIdx += 1
+            }
+            if hasSex {
+                if let c = sqlite3_column_text(stmt, Int32(colIdx)) { sex = String(cString: c) }
+                colIdx += 1
+            }
+            if hasMRN {
+                if let c = sqlite3_column_text(stmt, Int32(colIdx)) { mrn = String(cString: c) }
+                colIdx += 1
+            }
+        }
+        sqlite3_finalize(stmt)
+
+        return (pid, alias, dob, sex, mrn)
     }
 
     private static func sha256Hex(_ data: Data) -> String {

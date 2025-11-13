@@ -167,6 +167,8 @@ final class AppState: ObservableObject {
             return []
         }
     }
+    
+    
 
     /// Load vitals rows for the currently selected patient from `vitals` table.
     /// Returns newest-first. Safe against NULLs.
@@ -500,6 +502,7 @@ final class AppState: ObservableObject {
     init(clinicianStore: ClinicianStore) {
         self.clinicianStore = clinicianStore
         self.loadRecentBundles()
+        PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
     }
     
     /// Load vaccination status, cumulative PMH, and (optionally) perinatal summary for a patient.
@@ -1480,6 +1483,69 @@ final class AppState: ObservableObject {
             }
         }
         
+        @Published var perinatalHistory: PerinatalHistory? = nil
+
+        // MARK: - Perinatal history (helpers wired to currentDBURL)
+
+        /// Load perinatal history for the currently selected patient.
+        func loadPerinatalHistoryForSelectedPatient() {
+            guard let pid = selectedPatientID else {
+                perinatalHistory = nil
+                return
+            }
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                perinatalHistory = nil
+                return
+            }
+            do {
+                let hist = try PerinatalStore.fetch(dbURL: dbURL, for: pid)
+                self.perinatalHistory = hist
+            } catch {
+                self.perinatalHistory = nil
+                log.error("Perinatal fetch failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        /// Save (upsert) perinatal history for the currently selected patient, then refresh state.
+        @discardableResult
+        func savePerinatalHistoryForSelectedPatient(_ history: PerinatalHistory) -> Bool {
+            guard let pid = selectedPatientID else { return false }
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else { return false }
+            do {
+                try PerinatalStore.upsert(dbURL: dbURL, for: pid, history: history)
+                // Refresh cache
+                do {
+                    let refreshed = try PerinatalStore.fetch(dbURL: dbURL, for: pid)
+                    self.perinatalHistory = refreshed
+                } catch {
+                    log.warning("Perinatal refresh after upsert failed: \(String(describing: error), privacy: .public)")
+                }
+                return true
+            } catch {
+                log.error("Perinatal upsert failed: \(String(describing: error), privacy: .public)")
+                return false
+            }
+        }
+
+        /// Backward-compat alias used elsewhere in AppState.
+        func reloadPerinatalForActivePatient() {
+            loadPerinatalHistoryForSelectedPatient()
+        }
+
+        // Legacy wrapper retained for older call-sites
+        @discardableResult
+        func savePerinatal(_ history: PerinatalHistory) throws -> Bool {
+            if savePerinatalHistoryForSelectedPatient(history) {
+                return true
+            } else {
+                throw NSError(domain: "AppState",
+                              code: 500,
+                              userInfo: [NSLocalizedDescriptionKey: "Failed to save perinatal history"])
+            }
+        }
+        
         // MARK: - Growth data (writes)
         /// Add a manual growth point (one or more metrics) for the selected bundle DB.
         /// Returns the inserted row id in `manual_growth`.
@@ -1570,8 +1636,7 @@ final class AppState: ObservableObject {
 
                     // Extract patient identity from the staged bundle
                     guard let identity = self.extractPatientIdentity(from: bundleRoot) else {
-                        self.log.warning("ZIP import: could not extract patient identity from \(bundleRoot.path, privacy: .public)")
-                        // If we cannot identify, just register it without selecting and without replacing
+                        self.log.warning("ZIP import: no identity (manifest/db) found under \(bundleRoot.path, privacy: .public) — registering as anonymous; duplicate detection skipped.")
                         if !self.bundleLocations.contains(bundleRoot) {
                             self.bundleLocations.append(bundleRoot)
                             self.addToRecents(bundleRoot)
@@ -1714,50 +1779,106 @@ final class AppState: ObservableObject {
             return parts.isEmpty ? "UnknownPatient" : parts.joined(separator: " • ")
         }
 
-        private func extractPatientIdentity(from bundleRoot: URL) -> PatientIdentity? {
-            let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
-            guard FileManager.default.fileExists(atPath: dbURL.path) else { return nil }
-            var db: OpaquePointer?
-            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
-            defer { sqlite3_close(db) }
+    private func extractPatientIdentity(from bundleRoot: URL) -> PatientIdentity? {
+        let fm = FileManager.default
 
-            // Probe columns
-            let cols = columnSet(of: "patients", db: db)
-            guard !cols.isEmpty else { return nil }
-
-            let mrnCol = cols.contains("mrn") ? "mrn" : nil
-            let aliasCol = cols.contains("alias_label") ? "alias_label" : (cols.contains("alias") ? "alias" : nil)
-            let dobCol = cols.contains("dob") ? "dob" : nil
-
-            var sql = "SELECT "
-            var wanted: [String] = []
-            if let mrnCol { wanted.append(mrnCol) }
-            if let aliasCol { wanted.append(aliasCol) }
-            if let dobCol { wanted.append(dobCol) }
-            if wanted.isEmpty { return nil }
-            sql += wanted.joined(separator: ", ")
-            sql += " FROM patients ORDER BY id LIMIT 1;"
-
-            var stmt: OpaquePointer?
-            defer { sqlite3_finalize(stmt) }
-            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
-            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
-
-            var idx: Int32 = 0
-            func nextStr() -> String? {
-                defer { idx += 1 }
-                if let c = sqlite3_column_text(stmt, idx) {
-                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                    return s.isEmpty ? nil : s
+        // 1) Prefer manifest.json at bundle root
+        let manifestURL = bundleRoot.appendingPathComponent("manifest.json")
+        if fm.fileExists(atPath: manifestURL.path) {
+            do {
+                let data = try Data(contentsOf: manifestURL)
+                if let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    // v2 schema (preferred): explicit identity fields
+                    let hasV2 = ((obj["format"] as? String)?.lowercased() == "pemr") || (obj["schema_version"] != nil)
+                    if hasV2 {
+                        let mrn = (obj["mrn"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let alias = ((obj["patient_alias"] as? String)
+                                  ?? (obj["alias_label"] as? String)
+                                  ?? (obj["alias"] as? String))?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        var dob = ((obj["dob"] as? String)
+                                ?? (obj["date_of_birth"] as? String))?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let d = dob, let day = d.split(separator: "T").first { dob = String(day) }
+                        if (mrn?.isEmpty == false) || (alias?.isEmpty == false) || (dob?.isEmpty == false) {
+                            return PatientIdentity(mrn: mrn, alias: alias, dobISO: dob)
+                        }
+                    }
+                    // Legacy "file list" manifest (v0/v1) without identity
+                    if obj["files"] != nil {
+                        self.log.info("extractPatientIdentity: legacy file-list manifest without identity at \(manifestURL.lastPathComponent, privacy: .public)")
+                    }
                 }
-                return nil
+            } catch {
+                self.log.warning("extractPatientIdentity: manifest.json parse failed at \(manifestURL.lastPathComponent, privacy: .public)")
             }
-            let mrn = mrnCol != nil ? nextStr() : nil
-            let alias = aliasCol != nil ? nextStr() : nil
-            let dob = dobCol != nil ? nextStr() : nil
-
-            return PatientIdentity(mrn: mrn, alias: alias, dobISO: dob)
         }
+
+        // 2) Folder-name heuristic as a last-resort identity (alias only)
+        //    Examples: "Teal_Robin_-bundle.peMR-7-2025-11-13T01-49-38Z" or "Silver_Unicorn_🦊-2025-11-12_19-47-55.peMR"
+        func aliasFromFolderName(_ name: String) -> String? {
+            var cand = name
+            // Strip extension marker like ".peMR" and anything after it
+            if let r = cand.range(of: ".peMR", options: [.caseInsensitive]) {
+                cand = String(cand[..<r.lowerBound])
+            }
+            // If a timestamp pattern is present (e.g., -2025-11-12...), chop from the first "-20"
+            if let r = cand.range(of: "-20") { // crude but effective for our exported names
+                cand = String(cand[..<r.lowerBound])
+            }
+            cand = cand.replacingOccurrences(of: "_", with: " ")
+                       .trimmingCharacters(in: .whitespacesAndNewlines)
+            // Keep something reasonable
+            return cand.isEmpty ? nil : cand
+        }
+        if let guess = aliasFromFolderName(bundleRoot.lastPathComponent) {
+            // Return minimal identity so we can still de-duplicate by alias if needed
+            return PatientIdentity(mrn: nil, alias: guess, dobISO: nil)
+        }
+
+        // 3) Fallback: probe db.sqlite for identity (works even if manifest is missing)
+        let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
+        guard fm.fileExists(atPath: dbURL.path) else { return nil }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_close(db) }
+
+        let cols = columnSet(of: "patients", db: db)
+        guard !cols.isEmpty else { return nil }
+
+        let mrnCol = cols.contains("mrn") ? "mrn" : nil
+        let aliasCol = cols.contains("alias_label") ? "alias_label" : (cols.contains("alias") ? "alias" : nil)
+        let dobCol = cols.contains("dob") ? "dob" : nil
+
+        var sql = "SELECT "
+        var wanted: [String] = []
+        if let mrnCol { wanted.append(mrnCol) }
+        if let aliasCol { wanted.append(aliasCol) }
+        if let dobCol { wanted.append(dobCol) }
+        if wanted.isEmpty { return nil }
+        sql += wanted.joined(separator: ", ")
+        sql += " FROM patients ORDER BY id LIMIT 1;"
+
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+
+        var idx: Int32 = 0
+        func nextStr() -> String? {
+            defer { idx += 1 }
+            if let c = sqlite3_column_text(stmt, idx) {
+                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                return s.isEmpty ? nil : s
+            }
+            return nil
+        }
+        let mrn  = mrnCol  != nil ? nextStr() : nil
+        let alias = aliasCol != nil ? nextStr() : nil
+        var dob  = dobCol  != nil ? nextStr() : nil
+        if let d = dob, let day = d.split(separator: "T").first { dob = String(day) }
+
+        return PatientIdentity(mrn: mrn, alias: alias, dobISO: dob)
+    }
 
         private func existingBundleMatching(identity: PatientIdentity) -> URL? {
             for url in bundleLocations {
@@ -1828,30 +1949,34 @@ final class AppState: ObservableObject {
         }
         
         /// Scan down from `start` to locate a folder that contains `db.sqlite`.
-        private func findBundleRoot(startingAt start: URL) -> URL? {
-            let fm = FileManager.default
-            // Exact folder root?
-            if fm.fileExists(atPath: start.appendingPathComponent("db.sqlite").path) {
-                return start
-            }
-            // Search subfolders (non-recursive depth-first with enumerator is easiest)
-            if let en = fm.enumerator(at: start, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
-                for case let url as URL in en {
-                    var isDir: ObjCBool = false
-                    if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                        if fm.fileExists(atPath: url.appendingPathComponent("db.sqlite").path) {
-                            return url
-                        }
-                    }
+    private func findBundleRoot(startingAt start: URL) -> URL? {
+        let fm = FileManager.default
+        // Exact folder root?
+        let hasDB = fm.fileExists(atPath: start.appendingPathComponent("db.sqlite").path)
+        let hasManifest = fm.fileExists(atPath: start.appendingPathComponent("manifest.json").path)
+        if hasDB || hasManifest { return start }
+
+        // Search subfolders
+        if let en = fm.enumerator(at: start, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+            for case let url as URL in en {
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                    let hasDB = fm.fileExists(atPath: url.appendingPathComponent("db.sqlite").path)
+                    let hasManifest = fm.fileExists(atPath: url.appendingPathComponent("manifest.json").path)
+                    if hasDB || hasManifest { return url }
                 }
             }
-            return nil
         }
+        return nil
+    }
         
         /// Add a new bundle root, make it selected, and refresh patients.
         @MainActor
         private func addBundleRootAndSelect(_ root: URL) {
             selectBundle(root.standardizedFileURL)
+            PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
+            // Refresh perinatal cache for the newly selected bundle/patient context
+            self.reloadPerinatalForActivePatient()
         }
         // MARK: - Create new patient/bundle
         /// Creates a new bundle folder with `db.sqlite`, `docs/`, and `manifest.json`,
@@ -1973,6 +2098,7 @@ final class AppState: ObservableObject {
                 "includes_docs": !docsManifest.isEmpty,
                 "patient_id": insertedPatientID,
                 "patient_alias": aliasLabel,
+                "mrn": mrnValue,
                 "dob": dobStr,
                 "patient_sex": sex ?? "",
                 // Integrity fields
@@ -1987,6 +2113,7 @@ final class AppState: ObservableObject {
 
             // 6) Activate
             selectBundle(bundleURL)
+            PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
             return bundleURL
         }
     // MARK: - Golden schema idempotent helper
@@ -2190,26 +2317,38 @@ final class AppState: ObservableObject {
             defer { sqlite3_finalize(stmt) }
 
             // Bind parameters (1-based)
-            sqlite3_bind_text(stmt, 1, aliasLabel, -1, SQLITE_TRANSIENT)  // alias_label
-            sqlite3_bind_text(stmt, 2, aliasID, -1, SQLITE_TRANSIENT)     // alias_id
-            sqlite3_bind_text(stmt, 3, mrn, -1, SQLITE_TRANSIENT)         // mrn
+            _ = aliasLabel.withCString { sqlite3_bind_text(stmt, 1, $0, -1, SQLITE_TRANSIENT) }  // alias_label
+            _ = aliasID.withCString    { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }  // alias_id
+            _ = mrn.withCString        { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }  // mrn
 
             if let fn = firstName, !fn.isEmpty {
-                sqlite3_bind_text(stmt, 4, fn, -1, SQLITE_TRANSIENT)      // first_name
+                _ = fn.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }      // first_name
             } else {
                 sqlite3_bind_null(stmt, 4)
             }
 
             if let ln = lastName, !ln.isEmpty {
-                sqlite3_bind_text(stmt, 5, ln, -1, SQLITE_TRANSIENT)      // last_name
+                _ = ln.withCString { sqlite3_bind_text(stmt, 5, $0, -1, SQLITE_TRANSIENT) }      // last_name
             } else {
                 sqlite3_bind_null(stmt, 5)
             }
 
-            if let fullName = fullName, !fullName.isEmpty {
-                sqlite3_bind_text(stmt, 6, fullName, -1, SQLITE_TRANSIENT) // full_name
+            if let full = fullName, !full.isEmpty {
+                _ = full.withCString { sqlite3_bind_text(stmt, 6, $0, -1, SQLITE_TRANSIENT) }    // full_name
             } else {
                 sqlite3_bind_null(stmt, 6)
+            }
+
+            if let ds = dobStr {
+                _ = ds.withCString { sqlite3_bind_text(stmt, 7, $0, -1, SQLITE_TRANSIENT) }      // dob
+            } else {
+                sqlite3_bind_null(stmt, 7)
+            }
+
+            if let sx = sex, !sx.isEmpty {
+                _ = sx.withCString { sqlite3_bind_text(stmt, 8, $0, -1, SQLITE_TRANSIENT) }      // sex
+            } else {
+                sqlite3_bind_null(stmt, 8)
             }
 
             if let dobStr = dobStr {
@@ -2270,6 +2409,100 @@ final class AppState: ObservableObject {
                 }
             }
             return entries
+        }
+
+        ///
+        /// Write/refresh a v2 peMR manifest.json at the given bundle root.
+        /// Safe to call before exporting a bundle; idempotent and tolerant of missing bits.
+        @discardableResult
+        func writeManifestV2(bundleRoot: URL) -> Bool {
+            let fm = FileManager.default
+            let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
+            let docsURL = bundleRoot.appendingPathComponent("docs", isDirectory: true)
+
+            // Probe identity from DB if available
+            var patientID: Int? = nil
+            var mrn: String? = nil
+            var aliasLabel: String? = nil
+            var dobStr: String? = nil
+            var sexStr: String? = nil
+
+            if fm.fileExists(atPath: dbURL.path) {
+                var db: OpaquePointer?
+                if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                    defer { sqlite3_close(db) }
+                    // Determine which columns exist
+                    let cols = columnSet(of: "patients", db: db)
+                    if !cols.isEmpty {
+                        var wanted: [String] = ["id"]
+                        if cols.contains("mrn") { wanted.append("mrn") }
+                        if cols.contains("alias_label") { wanted.append("alias_label") }
+                        else if cols.contains("alias") { wanted.append("alias AS alias_label") }
+                        if cols.contains("dob") { wanted.append("dob") }
+                        if cols.contains("sex") { wanted.append("sex") }
+                        let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM patients ORDER BY id LIMIT 1;"
+                        var stmt: OpaquePointer?
+                        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt {
+                            defer { sqlite3_finalize(stmt) }
+                            if sqlite3_step(stmt) == SQLITE_ROW {
+                                var col = Int32(0)
+                                patientID = Int(sqlite3_column_int64(stmt, col)); col += 1
+                                if wanted.contains(where: { $0.hasPrefix("mrn") }) {
+                                    if let c = sqlite3_column_text(stmt, col) { mrn = String(cString: c) }; col += 1
+                                }
+                                if wanted.contains(where: { $0.contains("alias_label") }) {
+                                    if let c = sqlite3_column_text(stmt, col) { aliasLabel = String(cString: c) }; col += 1
+                                }
+                                if wanted.contains("dob") {
+                                    if let c = sqlite3_column_text(stmt, col) { dobStr = String(cString: c) }; col += 1
+                                }
+                                if wanted.contains("sex") {
+                                    if let c = sqlite3_column_text(stmt, col) { sexStr = String(cString: c) }; col += 1
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Hash DB and build docs manifest
+            let dbSha256 = fm.fileExists(atPath: dbURL.path) ? sha256OfFile(at: dbURL) : ""
+            let docsManifest = buildDocsManifest(docsRoot: docsURL, bundleRoot: bundleRoot)
+
+            // Compose v2 manifest
+            let iso = ISO8601DateFormatter()
+            let nowISO = iso.string(from: Date())
+
+            var out: [String: Any] = [
+                "format": "peMR",
+                "version": 1,
+                "schema_version": 2,
+                "encrypted": false,
+                "exported_at": nowISO,
+                "source": "DrsMainApp",
+                "includes_docs": !docsManifest.isEmpty,
+                "db_sha256": dbSha256,
+                "docs_manifest": docsManifest
+            ]
+            if let patientID { out["patient_id"] = patientID }
+            if let mrn = mrn, !mrn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out["mrn"] = mrn }
+            if let alias = aliasLabel, !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out["patient_alias"] = alias }
+            if let dobStr = dobStr, !dobStr.isEmpty { out["dob"] = dobStr }
+            if let sexStr = sexStr, !sexStr.isEmpty { out["patient_sex"] = sexStr }
+
+            do {
+                let data = try JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted, .sortedKeys])
+                try data.write(to: bundleRoot.appendingPathComponent("manifest.json"), options: .atomic)
+                return true
+            } catch {
+                log.error("writeManifestV2 failed: \(String(describing: error), privacy: .public)")
+                return false
+            }
+        }
+
+        /// Convenience: refresh manifest.json for the currently selected bundle, if any.
+        func refreshManifestV2ForCurrentBundle() {
+            if let root = currentBundleURL { _ = writeManifestV2(bundleRoot: root) }
         }
 
         /// Get last inserted patient id from this DB (or throw).
@@ -2369,6 +2602,7 @@ final class AppState: ObservableObject {
         }
     }
     
+
     // Safe index extension for arrays
     private extension Array {
         subscript(safe index: Int) -> Element? {
