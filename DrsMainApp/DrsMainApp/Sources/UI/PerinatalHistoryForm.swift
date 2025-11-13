@@ -11,6 +11,7 @@ import SwiftUI
 /// `app.savePerinatalHistoryForSelectedPatient(_:)`.
 struct PerinatalHistoryForm: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.dismiss) private var dismiss
 
     // Store as strings for painless cross-platform text fields; convert on save.
     @State private var pregnancyRisk = ""
@@ -37,9 +38,12 @@ struct PerinatalHistoryForm: View {
     @State private var dischargeWeightG = ""
     @State private var illnessesAfterBirth = ""
     @State private var evolutionSinceMaternity = ""
+    @State private var currentPatientID: Int?
+    @State private var originalHistory: PerinatalHistory?
 
     @State private var saving = false
     @State private var saveError: String?
+    @State private var showSavedToast = false
 
     var body: some View {
         Form {
@@ -82,7 +86,26 @@ struct PerinatalHistoryForm: View {
                 TextField("Evolution since maternity", text: $evolutionSinceMaternity)
             }
         }
-        .onAppear(perform: loadFromAppState)
+        .onAppear {
+            if app.perinatalHistory == nil {
+                // Proactively fetch from DB if not already loaded
+                app.loadPerinatalHistoryForSelectedPatient()
+            }
+            loadFromAppState()
+        }
+        .onChange(of: app.perinatalHistory) { _, _ in
+            // If the store refreshed (e.g., loaded from DB), reflect those values into the form
+            loadFromAppState()
+        }
+        .task(id: app.selectedPatientID) {
+            // Autosave for the patient that owned this form, then close the form
+            autosavePreviousPatientIfNeeded()
+            dismiss()
+        }
+        .onDisappear {
+            // Safety net: if the form is dismissed in another way, still autosave
+            autosavePreviousPatientIfNeeded()
+        }
         .navigationTitle("Perinatal History")
         .toolbar {
             ToolbarItemGroup(placement: .confirmationAction) {
@@ -91,17 +114,30 @@ struct PerinatalHistoryForm: View {
                 } label: {
                     if saving { ProgressView() } else { Text("Save") }
                 }
-                .disabled(saving)
+                .disabled(saving || !isDirty)
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button("Reset") { loadFromAppState() }
             }
         }
-        .alert("Save failed", isPresented: .constant(saveError != nil), actions: {
-            Button("OK") { saveError = nil }
-        }, message: {
-            Text(saveError ?? "")
-        })
+        .alert(
+            "Save failed",
+            isPresented: Binding(get: { saveError != nil },
+                                 set: { if !$0 { saveError = nil } }),
+            actions: {
+                Button("OK") { saveError = nil }
+            },
+            message: {
+                Text(saveError ?? "")
+            }
+        )
+        .overlay(alignment: .bottom) {
+            if showSavedToast {
+                savedToast
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.bottom, 12)
+            }
+        }
     }
 
     // MARK: - Load/Save
@@ -115,10 +151,8 @@ struct PerinatalHistoryForm: View {
         nicuStay = h?.nicuStay ?? false
         infectionRisk = h?.infectionRisk ?? ""
         birthWeightG = h?.birthWeightG.map(String.init) ?? ""
-        //birthLengthCm = h?.birthLengthCm.map { trimmedDecimal($0) } ?? ""
-        birthLengthCm = ""
-        //birthHeadCircumferenceCm = h?.birthHeadCircumferenceCm.map { trimmedDecimal($0) } ?? ""
-        birthHeadCircumferenceCm = ""
+        birthLengthCm = h?.birthLengthCm.map { trimmedDecimal($0) } ?? ""
+        birthHeadCircumferenceCm = h?.birthHeadCircumferenceCm.map { trimmedDecimal($0) } ?? ""
         maternityStayEvents = h?.maternityStayEvents ?? ""
         maternityVaccinations = h?.maternityVaccinations ?? ""
         vitaminK = h?.vitaminK ?? false
@@ -134,20 +168,36 @@ struct PerinatalHistoryForm: View {
         dischargeWeightG = h?.dischargeWeightG.map(String.init) ?? ""
         illnessesAfterBirth = h?.illnessesAfterBirth ?? ""
         evolutionSinceMaternity = h?.evolutionSinceMaternity ?? ""
+        currentPatientID = app.selectedPatientID
+        originalHistory = app.perinatalHistory
     }
 
     private func save() {
-        guard app.selectedPatientID != nil else {
+        guard let pid = app.selectedPatientID else {
             saveError = "No active patient selected."
             return
         }
-        let pid = app.selectedPatientID!
 
         saving = true
         defer { saving = false }
 
-        var h = app.perinatalHistory ?? PerinatalHistory(patientID: pid) // relies on PerinatalHistory having default nils
+        // Build history from form fields for the selected patient
+        let h = buildPerinatalHistory(for: pid)
 
+        if app.savePerinatalHistoryForSelectedPatient(h) {
+            app.loadPerinatalHistoryForSelectedPatient()
+            originalHistory = app.perinatalHistory
+            flashSavedToast()
+        } else {
+            saveError = "App failed to save the perinatal history."
+        }
+    }
+
+    @MainActor
+    private func buildPerinatalHistory(for pid: Int) -> PerinatalHistory {
+        var h = app.perinatalHistory ?? PerinatalHistory(patientID: pid)
+
+        h.patientID = pid
         h.pregnancyRisk = emptyToNil(pregnancyRisk)
         h.birthMode = emptyToNil(birthMode)
         h.birthTermWeeks = Int(birthTermWeeks)
@@ -155,10 +205,8 @@ struct PerinatalHistoryForm: View {
         h.nicuStay = nicuStay
         h.infectionRisk = emptyToNil(infectionRisk)
         h.birthWeightG = Int(birthWeightG)
-        //h.birthLengthCm = Double(birthLengthCm.replacingOccurrences(of: ",", with: "."))
-        // TODO: Re-wire birthLengthCm once exact property name on PerinatalHistory is confirmed
-        //h.birthHeadCircumferenceCm = Double(birthHeadCircumferenceCm.replacingOccurrences(of: ",", with: "."))
-        // TODO: Re-wire birthHeadCircumferenceCm once exact property name on PerinatalHistory is confirmed
+        h.birthLengthCm = parseDouble(birthLengthCm)
+        h.birthHeadCircumferenceCm = parseDouble(birthHeadCircumferenceCm)
         h.maternityStayEvents = emptyToNil(maternityStayEvents)
         h.maternityVaccinations = emptyToNil(maternityVaccinations)
         h.vitaminK = vitaminK
@@ -175,12 +223,97 @@ struct PerinatalHistoryForm: View {
         h.illnessesAfterBirth = emptyToNil(illnessesAfterBirth)
         h.evolutionSinceMaternity = emptyToNil(evolutionSinceMaternity)
 
-        if app.savePerinatalHistoryForSelectedPatient(h) {
-            // refresh UI cache
-            app.loadPerinatalHistoryForSelectedPatient()
-        } else {
-            saveError = "App failed to save the perinatal history."
+        return h
+    }
+
+    @MainActor
+    private func autosavePreviousPatientIfNeeded() {
+        guard let oldPid = currentPatientID,
+              let url = app.currentDBURL else { return }
+
+        let h = buildPerinatalHistory(for: oldPid)
+        do {
+            try PerinatalStore.upsert(dbURL: url, for: oldPid, history: h)
+            // Update the in-memory cache if we are still on the same patient
+            if app.selectedPatientID == oldPid {
+                app.perinatalHistory = h
+                originalHistory = h
+                flashSavedToast()
+            } else {
+                flashSavedToast()
+            }
+        } catch {
+            // Non-fatal: log but don't block UI
+            print("Perinatal autosave failed for patient \(oldPid): \(error)")
         }
+    }
+
+    // MARK: - Dirty check
+
+    private var isDirty: Bool {
+        guard let pid = currentPatientID ?? app.selectedPatientID else { return false }
+        let current = buildPerinatalHistory(for: pid)
+        return !equal(current, originalHistory)
+    }
+
+    private func equal(_ a: PerinatalHistory?, _ b: PerinatalHistory?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case (let a?, let b?):
+            return a.patientID == b.patientID &&
+                   a.pregnancyRisk == b.pregnancyRisk &&
+                   a.birthMode == b.birthMode &&
+                   a.birthTermWeeks == b.birthTermWeeks &&
+                   a.resuscitation == b.resuscitation &&
+                   a.nicuStay == b.nicuStay &&
+                   a.infectionRisk == b.infectionRisk &&
+                   a.birthWeightG == b.birthWeightG &&
+                   a.birthLengthCm == b.birthLengthCm &&
+                   a.birthHeadCircumferenceCm == b.birthHeadCircumferenceCm &&
+                   a.maternityStayEvents == b.maternityStayEvents &&
+                   a.maternityVaccinations == b.maternityVaccinations &&
+                   a.vitaminK == b.vitaminK &&
+                   a.feedingInMaternity == b.feedingInMaternity &&
+                   a.passedMeconium24h == b.passedMeconium24h &&
+                   a.urination24h == b.urination24h &&
+                   a.heartScreening == b.heartScreening &&
+                   a.metabolicScreening == b.metabolicScreening &&
+                   a.hearingScreening == b.hearingScreening &&
+                   a.motherVaccinations == b.motherVaccinations &&
+                   a.familyVaccinations == b.familyVaccinations &&
+                   a.maternityDischargeDate == b.maternityDischargeDate &&
+                   a.dischargeWeightG == b.dischargeWeightG &&
+                   a.illnessesAfterBirth == b.illnessesAfterBirth &&
+                   a.evolutionSinceMaternity == b.evolutionSinceMaternity
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Toast
+
+    private func flashSavedToast() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showSavedToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showSavedToast = false
+            }
+        }
+    }
+
+    private var savedToast: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+            Text("Saved")
+                .font(.headline)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.thinMaterial)
+        .clipShape(Capsule())
+        .shadow(radius: 8, y: 2)
     }
 
     // MARK: - Helpers
@@ -195,5 +328,12 @@ struct PerinatalHistoryForm: View {
         let s = String(format: "%.2f", d)
         return s.replacingOccurrences(of: #"(\.0+)$"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: #"(,\0+)$"#, with: "", options: .regularExpression)
+    }
+
+    private func parseDouble(_ s: String) -> Double? {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let normalized = t.replacingOccurrences(of: ",", with: ".")
+        return Double(normalized)
     }
 }

@@ -98,6 +98,8 @@ struct PatientDetailView: View {
     @State private var showVitals = false
     @State private var showGrowthCharts = false
     @State private var reportVisitKind: VisitKind?
+    @State private var showPerinatalHistory = false
+    @State private var perinatalForPatientID: Int? = nil
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -179,6 +181,12 @@ struct PatientDetailView: View {
                 showVitals.toggle()
             } label: {
                 Label("Vitals…", systemImage: "waveform.path.ecg")
+            }
+            Button {
+                perinatalForPatientID = patient.id
+                showPerinatalHistory = true
+            } label: {
+                Label("Perinatal History…", systemImage: "doc.text")
             }
             Button {
                 showGrowth.toggle()
@@ -358,9 +366,18 @@ struct PatientDetailView: View {
             appState.loadPatientProfile(for: Int64(patient.id))
         }
         .onChange(of: appState.selectedPatientID) { _, newID in
-            if let id = newID {
-                appState.loadVisits(for: id)
-                appState.loadPatientProfile(for: Int64(patient.id))
+            guard let id = newID else { return }
+            // Only close Perinatal sheet if it was opened for a different patient than the newly selected one
+            if let openID = perinatalForPatientID, openID != id {
+                showPerinatalHistory = false
+                perinatalForPatientID = nil
+            }
+            appState.loadVisits(for: id)
+            appState.loadPatientProfile(for: Int64(id))
+        }
+        .onChange(of: showPerinatalHistory) { _, isPresented in
+            if !isPresented {
+                perinatalForPatientID = nil
             }
         }
         .sheet(isPresented: $showDocuments) {
@@ -377,6 +394,10 @@ struct PatientDetailView: View {
         }
         .sheet(isPresented: $showVitals) {
             VitalsTableView()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showPerinatalHistory) {
+            PerinatalHistoryForm()
                 .environmentObject(appState)
         }
         .sheet(item: $visitForDetail) { v in

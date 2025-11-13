@@ -127,6 +127,22 @@ public extension PerinatalHistory {
     }
 }
 
+// MARK: - Backward-compat name shims (camelCase variants used in older UI)
+// These alias the capitalized CM properties so both spellings work.
+public extension PerinatalHistory {
+    /// Alias for `birthLengthCM` to match older form code (`birthLengthCm`)
+    var birthLengthCm: Double? {
+        get { birthLengthCM }
+        set { birthLengthCM = newValue }
+    }
+
+    /// Alias for `birthHeadCircumferenceCM` to match older form code (`birthHeadCircumferenceCm`)
+    var birthHeadCircumferenceCm: Double? {
+        get { birthHeadCircumferenceCM }
+        set { birthHeadCircumferenceCM = newValue }
+    }
+}
+
 // MARK: - Store
 
 public final class PerinatalStore {
