@@ -1694,6 +1694,85 @@ final class AppState: ObservableObject {
     }
 
 
+    // MARK: - Episodes (lightweight rows for active patient list)
+
+    /// Minimal row used for the episodes list on PatientDetailView.
+    struct EpisodeRow: Identifiable, Hashable {
+        let id: Int
+        let dateISO: String
+        let mainComplaint: String
+        let diagnosis: String
+    }
+
+    @Published var episodesForActivePatient: [EpisodeRow] = []
+
+    /// Reload the episodes list for the currently selected patient.
+    /// Safe to call after inserts/updates; reads from `currentDBURL` and publishes to `episodesForActivePatient`.
+    func loadEpisodeRowsForSelectedPatient() {
+        guard let pid = selectedPatientID else {
+            DispatchQueue.main.async { self.episodesForActivePatient = [] }
+            return
+        }
+        loadEpisodeRows(for: pid)
+    }
+
+    /// Internal loader by explicit patient id (Int).
+    func loadEpisodeRows(for patientID: Int) {
+        guard let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            DispatchQueue.main.async { self.episodesForActivePatient = [] }
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+            DispatchQueue.main.async { self.episodesForActivePatient = [] }
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT id,
+               COALESCE(created_at, '') AS created_at,
+               COALESCE(main_complaint, '') AS main_complaint,
+               COALESCE(diagnosis, '') AS diagnosis
+        FROM episodes
+        WHERE patient_id = ?
+        ORDER BY datetime(COALESCE(created_at, '1970-01-01T00:00:00')) DESC, id DESC;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt else {
+            DispatchQueue.main.async { self.episodesForActivePatient = [] }
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+
+        var rows: [EpisodeRow] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let eid = Int(sqlite3_column_int64(stmt, 0))
+
+            // created_at as stored; try to normalize to ISO if it's in "YYYY-MM-DD HH:MM:SS"
+            let rawDate = sqlite3_column_text(stmt, 1).flatMap { String(cString: $0) } ?? ""
+            let dateISO: String = {
+                // If there's a space, convert "YYYY-MM-DD HH:MM:SS" -> "YYYY-MM-DDTHH:MM:SSZ" (best-effort)
+                if rawDate.contains(" ") && !rawDate.contains("T") {
+                    return rawDate.replacingOccurrences(of: " ", with: "T") + "Z"
+                }
+                return rawDate
+            }()
+
+            let mc = sqlite3_column_text(stmt, 2).flatMap { String(cString: $0) } ?? ""
+            let dx = sqlite3_column_text(stmt, 3).flatMap { String(cString: $0) } ?? ""
+            rows.append(EpisodeRow(id: eid, dateISO: dateISO, mainComplaint: mc, diagnosis: dx))
+        }
+
+        self.log.info("loadEpisodeRows → \(rows.count) rows for pid \(patientID, privacy: .public)")
+        DispatchQueue.main.async { self.episodesForActivePatient = rows }
+    }
+
     // MARK: - Episodes (create + edit window helpers)
 
     /// Clear any in-progress episode editing state (called on patient switch).

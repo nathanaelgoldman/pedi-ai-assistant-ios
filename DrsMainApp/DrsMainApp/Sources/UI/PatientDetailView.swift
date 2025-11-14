@@ -162,14 +162,21 @@ struct PatientDetailView: View {
         return patient.dobISO
     }
 
+    // Newest-first sorted visits by ISO date string
+    private var visitsSorted: [VisitRow] {
+        // Sort newest-first by ISO date string (handles both full datetime and date-only)
+        appState.visits.sorted { $0.dateISO > $1.dateISO }
+    }
+
     private var filteredVisits: [VisitRow] {
+        let base = visitsSorted
         switch visitTab {
         case .all:
-            return appState.visits
+            return base
         case .sick:
-            return appState.visits.filter { isSickCategory($0.category) }
+            return base.filter { isSickCategory($0.category) }
         case .well:
-            return appState.visits.filter { isWellCategory($0.category) && !isSickCategory($0.category) }
+            return base.filter { isWellCategory($0.category) && !isSickCategory($0.category) }
         }
     }
 
@@ -235,6 +242,7 @@ struct PatientDetailView: View {
             Button {
                 editingEpisodeID = nil
                 showEpisodeForm = true
+                visitForDetail = nil
             } label: {
                 Label("New Sick Episode…", systemImage: "stethoscope")
             }
@@ -471,6 +479,7 @@ struct PatientDetailView: View {
             if let id = appState.selectedPatientID {
                 appState.loadVisits(for: id)
                 appState.loadPatientProfile(for: Int64(id))
+                visitTab = .all
             }
         }) {
             SickEpisodeForm(editingEpisodeID: editingEpisodeID)
