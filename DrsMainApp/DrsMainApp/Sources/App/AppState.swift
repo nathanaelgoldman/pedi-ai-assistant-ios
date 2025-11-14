@@ -99,7 +99,22 @@ final class AppState: ObservableObject {
     @Published var currentBundleURL: URL? = nil
     @Published var recentBundles: [URL] = []
     @Published var patients: [PatientRow] = []
-    @Published var selectedPatientID: Int?
+    @Published var selectedPatientID: Int? {
+        didSet {
+            self.loadPerinatalHistoryForSelectedPatient()
+            self.loadPMHForSelectedPatient()
+            self.clearEpisodeEditing()
+            if let pid = self.selectedPatientID {
+                // Keep the readonly header/summary in sync with selection
+                self.loadPatientProfile(for: Int64(pid))
+                self.loadPatientSummary(pid)
+                self.reloadVisitsForSelectedPatient()
+            } else {
+                self.currentPatientProfile = nil
+                self.patientSummary = nil
+            }
+        }
+    }
     @Published var visits: [VisitRow] = []
     @Published var bundleLocations: [URL] = []
     
@@ -113,6 +128,9 @@ final class AppState: ObservableObject {
     // Documents (per-bundle)
     @Published var documents: [URL] = []
     @Published var selectedDocumentURL: URL? = nil
+
+    // Episodes (editing context)
+    @Published var activeEpisodeID: Int? = nil
     
     /// Default root for all patient bundles (auto-created; sandbox-aware).
     public var bundlesRoot: URL {
@@ -1545,7 +1563,271 @@ final class AppState: ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "Failed to save perinatal history"])
             }
         }
-        
+
+        // MARK: - Past Medical History (PMH)
+
+        @Published var pastMedicalHistory: PastMedicalHistory? = nil
+
+        /// Load PMH for the currently selected patient from the active bundle DB.
+        func loadPMHForSelectedPatient() {
+            guard let pid = selectedPatientID else {
+                pastMedicalHistory = nil
+                return
+            }
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                pastMedicalHistory = nil
+                return
+            }
+            do {
+                let pmhStore = PmhStore()
+                let pmh = try pmhStore.fetch(dbURL: dbURL, for: Int64(pid))
+                self.pastMedicalHistory = pmh
+            } catch {
+                self.pastMedicalHistory = nil
+                log.error("PMH fetch failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        /// Save (upsert) PMH for the currently selected patient, then refresh cache.
+        @discardableResult
+        func savePMHForSelectedPatient(_ pmh: PastMedicalHistory) -> Bool {
+            guard let pid = selectedPatientID else { return false }
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else { return false }
+            do {
+                let pmhStore = PmhStore()
+                try pmhStore.upsert(dbURL: dbURL, for: Int64(pid), history: pmh)
+                // Refresh cache
+                do {
+                    let refreshed = try pmhStore.fetch(dbURL: dbURL, for: Int64(pid))
+                    self.pastMedicalHistory = refreshed
+                } catch {
+                    log.warning("PMH refresh after upsert failed: \(String(describing: error), privacy: .public)")
+                }
+                return true
+            } catch {
+                log.error("PMH upsert failed: \(String(describing: error), privacy: .public)")
+                return false
+            }
+        }
+
+        /// Backward-compat alias used elsewhere in AppState.
+        func reloadPMHForActivePatient() {
+            loadPMHForSelectedPatient()
+        }
+
+        /// Legacy wrapper retained for older call-sites.
+        @discardableResult
+        func savePMH(_ history: PastMedicalHistory) throws -> Bool {
+            if savePMHForSelectedPatient(history) {
+                return true
+            } else {
+                throw NSError(domain: "AppState",
+                              code: 500,
+                              userInfo: [NSLocalizedDescriptionKey: "Failed to save PMH"])
+            }
+        }
+
+    // MARK: - Vaccination Status (read/write on patients.vaccination_status)
+
+    /// Return the vaccination_status for the currently selected patient (without mutating UI state).
+    func getVaccinationStatusForSelectedPatient() -> String? {
+        guard let pid = selectedPatientID,
+              let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            return nil
+        }
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        let sql = "SELECT vaccination_status FROM patients WHERE id=? LIMIT 1;"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(pid))
+        if sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) {
+            let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+            return s.isEmpty ? nil : s
+        }
+        return nil
+    }
+
+    /// Save vaccination_status for the selected patient and refresh profile/summary.
+    @discardableResult
+    func saveVaccinationStatusForSelectedPatient(_ status: String?) -> Bool {
+        guard let pid = selectedPatientID,
+              let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            return false
+        }
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
+            return false
+        }
+        defer { sqlite3_close(db) }
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        let sql = "UPDATE patients SET vaccination_status = ? WHERE id = ?;"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("vaccination UPDATE prepare failed: \(msg, privacy: .public)")
+            return false
+        }
+        if let status {
+            _ = status.withCString { c in sqlite3_bind_text(stmt, 1, c, -1, SQLITE_TRANSIENT) }
+        } else {
+            sqlite3_bind_null(stmt, 1)
+        }
+        sqlite3_bind_int64(stmt, 2, sqlite3_int64(pid))
+        if sqlite3_step(stmt) != SQLITE_DONE {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("vaccination UPDATE step failed: \(msg, privacy: .public)")
+            return false
+        }
+        // Refresh read-only panels
+        self.loadPatientProfile(for: Int64(pid))
+        self.loadPatientSummary(pid)
+        return true
+    }
+
+
+    // MARK: - Episodes (create + edit window helpers)
+
+    /// Clear any in-progress episode editing state (called on patient switch).
+    func clearEpisodeEditing() {
+        self.activeEpisodeID = nil
+    }
+
+    /// Set the currently active episode id for editing.
+    func setActiveEpisode(_ id: Int?) {
+        self.activeEpisodeID = id
+    }
+
+    /// Return true if the episode can still be edited (within 24 hours of `created_at`).
+    /// Falls back to allowing edit when `created_at` is missing or unparsable.
+    func canEditEpisode(_ episodeID: Int) -> Bool {
+        guard let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else { return false }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+            return false
+        }
+        defer { sqlite3_close(db) }
+
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        let sql = "SELECT COALESCE(created_at, '') FROM episodes WHERE id=? LIMIT 1;"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(episodeID))
+
+        var createdISO: String = ""
+        if sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) {
+            createdISO = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if createdISO.isEmpty {
+            // No timestamp → allow edit (we cannot enforce the window)
+            return true
+        }
+
+        // Try to parse common ISO-8601 variants
+        func parseISO(_ s: String) -> Date? {
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = iso.date(from: s) { return d }
+            // Retry without fractional seconds
+            let iso2 = ISO8601DateFormatter()
+            iso2.formatOptions = [.withInternetDateTime]
+            if let d = iso2.date(from: s) { return d }
+            // Fallback to common SQLite CURRENT_TIMESTAMP format
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "en_US_POSIX")
+            df.timeZone = TimeZone(secondsFromGMT: 0)
+            df.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            return df.date(from: s)
+        }
+
+        guard let createdAt = parseISO(createdISO) else {
+            // Unparsable → allow edit rather than blocking
+            return true
+        }
+
+        let elapsed = Date().timeIntervalSince(createdAt)
+        return elapsed <= (24 * 60 * 60)
+    }
+
+    /// Create a minimal new episode row for the currently selected patient.
+    /// Returns the new episode id on success. If an episode already exists *today* for the same patient+user
+    /// and `force == false`, returns `nil` (UI can show a "Save Anyway" path).
+    @discardableResult
+    func startNewEpisode(force: Bool = false) -> Int? {
+        guard let pid = selectedPatientID,
+              let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            return nil
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        // If not forcing, guard against same-day duplicate for this clinician (if we have one)
+        if !force {
+            var checkStmt: OpaquePointer?
+            defer { sqlite3_finalize(checkStmt) }
+            let checkSQL = """
+            SELECT id FROM episodes
+            WHERE patient_id = ?
+              AND (user_id IS NULL OR user_id = ?)
+              AND date(COALESCE(created_at, CURRENT_TIMESTAMP)) = date(CURRENT_TIMESTAMP)
+            LIMIT 1;
+            """
+            // If the check statement prepares successfully, enforce the same‑day constraint.
+            // If preparation fails, skip the guard and proceed to insert.
+            if sqlite3_prepare_v2(db, checkSQL, -1, &checkStmt, nil) == SQLITE_OK {
+                sqlite3_bind_int64(checkStmt, 1, sqlite3_int64(pid))
+                if let uid = activeUserID {
+                    sqlite3_bind_int64(checkStmt, 2, sqlite3_int64(uid))
+                } else {
+                    sqlite3_bind_null(checkStmt, 2)
+                }
+                if sqlite3_step(checkStmt) == SQLITE_ROW {
+                    // Found an episode today; respect the constraint unless forced.
+                    return nil
+                }
+            }
+        }
+
+        // Insert minimal row (let created_at default to CURRENT_TIMESTAMP)
+        var ins: OpaquePointer?
+        defer { sqlite3_finalize(ins) }
+        let insertSQL = "INSERT INTO episodes (patient_id, user_id) VALUES (?, ?);"
+        guard sqlite3_prepare_v2(db, insertSQL, -1, &ins, nil) == SQLITE_OK else {
+            return nil
+        }
+        sqlite3_bind_int64(ins, 1, sqlite3_int64(pid))
+        if let uid = activeUserID {
+            sqlite3_bind_int64(ins, 2, sqlite3_int64(uid))
+        } else {
+            sqlite3_bind_null(ins, 2)
+        }
+        guard sqlite3_step(ins) == SQLITE_DONE else {
+            return nil
+        }
+
+        let newID = Int(sqlite3_last_insert_rowid(db))
+        self.activeEpisodeID = newID
+        // Keep the right pane lists fresh
+        self.reloadVisitsForSelectedPatient()
+        return newID
+    }
+
         // MARK: - Growth data (writes)
         /// Add a manual growth point (one or more metrics) for the selected bundle DB.
         /// Returns the inserted row id in `manual_growth`.
@@ -1975,8 +2257,9 @@ final class AppState: ObservableObject {
         private func addBundleRootAndSelect(_ root: URL) {
             selectBundle(root.standardizedFileURL)
             PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
-            // Refresh perinatal cache for the newly selected bundle/patient context
+            // Refresh perinatal and pmh cache for the newly selected bundle/patient context
             self.reloadPerinatalForActivePatient()
+            self.loadPMHForSelectedPatient()
         }
         // MARK: - Create new patient/bundle
         /// Creates a new bundle folder with `db.sqlite`, `docs/`, and `manifest.json`,
@@ -2114,6 +2397,7 @@ final class AppState: ObservableObject {
             // 6) Activate
             selectBundle(bundleURL)
             PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
+            self.loadPMHForSelectedPatient()
             return bundleURL
         }
     // MARK: - Golden schema idempotent helper

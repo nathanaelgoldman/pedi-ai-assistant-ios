@@ -99,7 +99,13 @@ struct PatientDetailView: View {
     @State private var showGrowthCharts = false
     @State private var reportVisitKind: VisitKind?
     @State private var showPerinatalHistory = false
-    @State private var perinatalForPatientID: Int? = nil
+    @State private var perinatalPatientIDForSheet: Int? = nil
+    @State private var showPMH = false
+    @State private var pmhPatientIDForSheet: Int? = nil
+    @State private var showVaccinationStatus = false
+    @State private var vaxPatientIDForSheet: Int? = nil
+    @State private var showEpisodeForm = false
+    @State private var editingEpisodeID: Int? = nil
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -131,6 +137,17 @@ struct PatientDetailView: View {
         }
         // Last resort: return the raw string
         return isoString
+    }
+
+    private func parseVisitDate(_ isoString: String) -> Date? {
+        if let d = Self.isoDateTimeWithFractional.date(from: isoString) { return d }
+        if let d = Self.isoFullDate.date(from: isoString) { return d }
+        return nil
+    }
+
+    private func isWithin24Hours(_ isoString: String) -> Bool {
+        guard let d = parseVisitDate(isoString) else { return false }
+        return Date().timeIntervalSince(d) < 24 * 60 * 60
     }
 
     private var dobFormatted: String {
@@ -183,10 +200,22 @@ struct PatientDetailView: View {
                 Label("Vitals…", systemImage: "waveform.path.ecg")
             }
             Button {
-                perinatalForPatientID = patient.id
+                perinatalPatientIDForSheet = patient.id
                 showPerinatalHistory = true
             } label: {
                 Label("Perinatal History…", systemImage: "doc.text")
+            }
+            Button {
+                pmhPatientIDForSheet = patient.id
+                showPMH = true
+            } label: {
+                Label("Past Medical History…", systemImage: "book")
+            }
+            Button {
+                vaxPatientIDForSheet = patient.id
+                showVaccinationStatus = true
+            } label: {
+                Label("Vaccination Status…", systemImage: "syringe")
             }
             Button {
                 showGrowth.toggle()
@@ -201,7 +230,13 @@ struct PatientDetailView: View {
             Button {
                 Task { await MacBundleExporter.run(appState: appState) }
             } label: {
-                Label("Export peMR Bundle…", systemImage: "shippingbox.and.arrow.up")
+                Label("Export peMR Bundle…", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                editingEpisodeID = nil
+                showEpisodeForm = true
+            } label: {
+                Label("New Sick Episode…", systemImage: "stethoscope")
             }
             reportMenu()
         }
@@ -234,6 +269,59 @@ struct PatientDetailView: View {
             }
         } label: {
             Label("Report…", systemImage: "doc.plaintext")
+        }
+    }
+
+    @ViewBuilder
+    private var patientSummarySection: some View {
+        if let profile = appState.currentPatientProfile,
+           (profile.perinatalHistory?.isEmpty == false ||
+            profile.pmh?.isEmpty == false ||
+            profile.vaccinationStatus?.isEmpty == false ||
+            profile.parentNotes?.isEmpty == false) {
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Patient Summary")
+                    .font(.headline)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    if let s = profile.perinatalHistory, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        LabeledContent {
+                            Text(s)
+                        } label: {
+                            Text("Perinatal")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let pmh = profile.pmh, !pmh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        LabeledContent {
+                            Text(pmh)
+                        } label: {
+                            Text("Past Medical History")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let notes = profile.parentNotes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        LabeledContent {
+                            Text(notes)
+                        } label: {
+                            Text("Parent Notes")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let v = profile.vaccinationStatus, !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        LabeledContent {
+                            Text(v)
+                        } label: {
+                            Text("Vaccination")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
         }
     }
 
@@ -280,54 +368,7 @@ struct PatientDetailView: View {
                 }
 
                 // --- Patient Summary card (perinatal / PMH / vaccination) ---
-                if let profile = appState.currentPatientProfile,
-                   (profile.perinatalHistory?.isEmpty == false ||
-                    profile.pmh?.isEmpty == false ||
-                    profile.vaccinationStatus?.isEmpty == false) {
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Patient Summary")
-                            .font(.headline)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let s = profile.perinatalHistory, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                LabeledContent {
-                                    Text(s)
-                                } label: {
-                                    Text("Perinatal")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            if let pmh = profile.pmh, !pmh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                LabeledContent {
-                                    Text(pmh)
-                                } label: {
-                                    Text("Past Medical History")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            if let notes = profile.parentNotes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                LabeledContent {
-                                    Text(notes)
-                                } label: {
-                                    Text("Parent Notes")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            if let v = profile.vaccinationStatus, !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                LabeledContent {
-                                    Text(v)
-                                } label: {
-                                    Text("Vaccination")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .padding(12)
-                        .background(Color.secondary.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                }
+                patientSummarySection
                 
 
                 Divider()
@@ -360,25 +401,27 @@ struct PatientDetailView: View {
             }
             .padding(20)
         }
+        .id(patient.id)
         .onAppear {
             // Load both visits and the profile
             appState.loadVisits(for: patient.id)
             appState.loadPatientProfile(for: Int64(patient.id))
         }
-        .onChange(of: appState.selectedPatientID) { _, newID in
+        .onChange(of: appState.selectedPatientID) { newID in
             guard let id = newID else { return }
             // Only close Perinatal sheet if it was opened for a different patient than the newly selected one
-            if let openID = perinatalForPatientID, openID != id {
+            if showPerinatalHistory, let openID = perinatalPatientIDForSheet, openID != id {
                 showPerinatalHistory = false
-                perinatalForPatientID = nil
             }
+            if showPMH, let openID = pmhPatientIDForSheet, openID != id {
+                showPMH = false
+            }
+            if showVaccinationStatus, let openID = vaxPatientIDForSheet, openID != id {
+                showVaccinationStatus = false
+            }
+            if showEpisodeForm { showEpisodeForm = false }
             appState.loadVisits(for: id)
             appState.loadPatientProfile(for: Int64(id))
-        }
-        .onChange(of: showPerinatalHistory) { _, isPresented in
-            if !isPresented {
-                perinatalForPatientID = nil
-            }
         }
         .sheet(isPresented: $showDocuments) {
             DocumentListView()
@@ -396,8 +439,41 @@ struct PatientDetailView: View {
             VitalsTableView()
                 .environmentObject(appState)
         }
-        .sheet(isPresented: $showPerinatalHistory) {
+        .sheet(isPresented: $showPerinatalHistory, onDismiss: {
+            showPerinatalHistory = false
+            if let id = appState.selectedPatientID {
+                appState.loadPatientProfile(for: Int64(id))
+            }
+        }) {
             PerinatalHistoryForm()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showPMH, onDismiss: {
+            showPMH = false
+            if let id = appState.selectedPatientID {
+                appState.loadPatientProfile(for: Int64(id))
+            }
+        }) {
+            PmhForm()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showVaccinationStatus, onDismiss: {
+            showVaccinationStatus = false
+            if let id = appState.selectedPatientID {
+                appState.loadPatientProfile(for: Int64(id))
+            }
+        }) {
+            VaccinationStatusForm()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showEpisodeForm, onDismiss: {
+            // Refresh visits and profile after closing the form
+            if let id = appState.selectedPatientID {
+                appState.loadVisits(for: id)
+                appState.loadPatientProfile(for: Int64(id))
+            }
+        }) {
+            SickEpisodeForm(editingEpisodeID: editingEpisodeID)
                 .environmentObject(appState)
         }
         .sheet(item: $visitForDetail) { v in
@@ -436,6 +512,15 @@ struct PatientDetailView: View {
                 reportVisitKind = kind
             }
             .buttonStyle(.bordered)
+
+            if isSickCategory(v.category) {
+                Button("Edit…") {
+                    editingEpisodeID = v.id
+                    showEpisodeForm = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(!isWithin24Hours(v.dateISO))
+            }
         }
         .padding(8)
         .background(Color.secondary.opacity(0.08))
