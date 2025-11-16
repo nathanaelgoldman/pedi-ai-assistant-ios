@@ -2966,6 +2966,7 @@ final class AppState: ObservableObject {
     }
     
 
+
     // Safe index extension for arrays
     private extension Array {
         subscript(safe index: Int) -> Element? {

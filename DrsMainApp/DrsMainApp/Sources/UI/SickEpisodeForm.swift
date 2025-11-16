@@ -47,19 +47,20 @@ struct SickEpisodeForm: View {
     @State private var hydration: String = "Normal"
     @State private var heart: String = "Normal"
     @State private var color: String = "Normal"
-    @State private var skin: String = "Normal"
+
     @State private var ent: Set<String> = ["Normal"]
     @State private var rightEar: String = "Normal"
     @State private var leftEar: String = "Normal"
     @State private var rightEye: String = "Normal"
     @State private var leftEye: String = "Normal"
-    @State private var lungs: String = "Normal"
-    @State private var abdomen: String = "Normal"
     @State private var peristalsis: String = "Normal"
-    @State private var genitalia: String = "Normal"
     @State private var neurological: String = "Alert"
     @State private var musculoskeletal: String = "Normal"
-    @State private var lymphNodes: String = "None"
+    @State private var skinSet: Set<String> = ["Normal"]
+    @State private var lungsSet: Set<String> = ["Normal"]
+    @State private var abdomenSet: Set<String> = ["Normal"]
+    @State private var genitaliaSet: Set<String> = ["Normal"]
+    @State private var lymphNodesSet: Set<String> = ["None"]
 
     // MARK: - Plan
     @State private var problemListing: String = ""
@@ -70,6 +71,36 @@ struct SickEpisodeForm: View {
     @State private var anticipatoryGuidance: String = "URI"
     @State private var comments: String = ""
 
+    // MARK: - Vitals (UI fields)
+    @State private var weightKgField: String = ""
+    @State private var heightCmField: String = ""
+    @State private var headCircumferenceField: String = ""
+    @State private var temperatureCField: String = ""
+    @State private var heartRateField: String = ""
+    @State private var respiratoryRateField: String = ""
+    @State private var spo2Field: String = ""
+    @State private var bpSysField: String = ""
+    @State private var bpDiaField: String = ""
+    @State private var recordedAtField: String = ""
+    @State private var replacePreviousVitals: Bool = false
+
+    // In-memory vitals history for the current episode
+    fileprivate struct VitalsRow: Identifiable {
+        let id: Int64
+        let recordedAt: String
+        let weightKg: Double?
+        let heightCm: Double?
+        let headCircumferenceCm: Double?
+        let temperatureC: Double?
+        let heartRate: Int?
+        let respiratoryRate: Int?
+        let spo2: Int?
+        let bpSys: Int?
+        let bpDia: Int?
+    }
+    @State private var vitalsHistory: [VitalsRow] = []
+    @State private var vitalsDeleteSelection: Int64? = nil
+
     // MARK: - Choices
     private let complaintOptions = [
         "Fever","Cough","Runny nose","Diarrhea","Vomiting",
@@ -79,25 +110,45 @@ struct SickEpisodeForm: View {
     private let feedingChoices = ["Normal","Decreased","Refuses"]
     private let breathingChoices = ["Normal","Fast","Labored","Noisy"]
     private let urinationChoices = ["Normal","Decreased","Painful","Foul-smelling"]
-    private let painChoices = ["None","Abdominal","Ear","Throat","Limb"]
-    private let stoolsChoices = ["Normal","Soft","Liquid"]
+    private let painChoices = ["None","Abdominal","Ear","Throat","Limb","Head","Neck"]
+    private let stoolsChoices = ["Normal","Soft","Liquid","Hard"]
     private let contextChoices = ["Travel","Sick contact","Daycare","None"]
 
     private let generalChoices = ["Well","Tired","Irritable","Lethargic"]
     private let hydrationChoices = ["Normal","Decreased"]
-    private let heartChoices = ["Normal","Murmur","Tachycardia"]
+    private let heartChoices = ["Normal","Murmur","Tachycardia","Bradycardia"]
     private let colorChoices = ["Normal","Pale","Yellow"]
-    private let skinChoices = ["Normal","Papular rash","Macular rash","Maculopapular rash","Petechiae","Purpura"]
-    private let entChoices = ["Normal","Red throat","Ear discharge","Congested nose"]
+
+    // ENT stays multi-select; add tonsil deposits
+    private let entChoices = ["Normal","Red throat","Ear discharge","Congested nose","Tonsil deposits"]
+
     private let earChoices = ["Normal","Red TM","Red & Bulging with pus","Pus in canal","Not seen (wax)","Red canal"]
-    private let eyeChoices = ["Normal","Discharge","Red","Crusty"]
-    private let lungsChoices = ["Normal","Crackles","Wheeze","Decreased sounds"]
-    private let abdomenChoices = ["Normal","Tender","Distended","Guarding"]
+
+    // Eyes keep single-select; add eyelid swelling
+    private let eyeChoices = ["Normal","Discharge","Red","Crusty","Eyelid swelling"]
+
+    // NEW: multi-select option sets for certain PE sections
+    private let skinOptionsMulti = [
+        "Normal","Dry, scaly rash","Papular rash","Macular rash","Maculopapular rash","Petechiae","Purpura"
+    ]
+    private let lungsOptionsMulti = [
+        "Normal",
+        "Crackles","Crackles (R)","Crackles (L)",
+        "Wheeze","Wheeze (R)","Wheeze (L)",
+        "Rhonchi","Rhonchi (R)","Rhonchi (L)",
+        "Decreased sounds","Decreased sounds (R)","Decreased sounds (L)"
+    ]
+    private let abdomenOptionsMulti = [
+        "Normal","Tender","Distended",
+        "Epigastric pain","Periumbilical pain","RLQ pain","LLQ pain","Hypogastric pain",
+        "Guarding","Rebound"
+    ]
+    private let genitaliaOptionsMulti = ["Normal","Swelling","Redness","Discharge"]
+    private let nodesOptionsMulti     = ["None","Cervical","Submandibular","Tender","Generalized"]
+
     private let peristalsisChoices = ["Normal","Increased","Decreased"]
-    private let genitaliaChoices = ["Normal","Redness","Discharge","Abnormal"]
     private let neuroChoices = ["Alert","Sleepy","Irritable","Abnormal tone"]
     private let mskChoices = ["Normal","Limping","Swollen joint","Pain"]
-    private let nodesChoices = ["None","Cervical","Generalized"]
 
     private let guidanceChoices = ["URI","AGE","UTI","Otitis"]
 
@@ -120,57 +171,164 @@ struct SickEpisodeForm: View {
                         Spacer()
                     }
 
-                    // Two columns using Grid
-                    Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 16) {
-                        GridRow {
-                            // Column A
-                            VStack(alignment: .leading, spacing: 12) {
-                                SectionHeader("Main Complaint")
-                                complaintBlock
-                                SectionHeader("History of Present Illness")
-                                pickerRow("Appearance", $appearance, appearanceChoices)
-                                pickerRow("Feeding", $feeding, feedingChoices)
-                                pickerRow("Breathing", $breathing, breathingChoices)
-                                pickerRow("Urination", $urination, urinationChoices)
-                                pickerRow("Pain", $pain, painChoices)
-                                pickerRow("Stools", $stools, stoolsChoices)
-                                multiSelectChips(title: "Context", options: contextChoices, selection: $context)
-                                TextField("HPI summary", text: $hpi, axis: .vertical)
-                                    .textFieldStyle(.roundedBorder)
-                                    .lineLimit(3...6)
-                                TextField("Duration (hours)", text: $duration)
-                                    .textFieldStyle(.roundedBorder)
+                    // Vitals (moved to top)
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader("Vitals")
+                        // Live vitals classification badges
+                        let badges = vitalsBadges()
+                        if !badges.isEmpty {
+                            HStack(spacing: 8) {
+                                ForEach(badges, id: \.self) { b in
+                                    Text(b)
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(Color.secondary.opacity(0.12))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
                             }
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                            // Column B
-                            VStack(alignment: .leading, spacing: 12) {
-                                SectionHeader("Physical Examination")
-                                pickerRow("General appearance", $generalAppearance, generalChoices)
-                                pickerRow("Hydration", $hydration, hydrationChoices)
-                                pickerRow("Heart", $heart, heartChoices)
-                                pickerRow("Color / Hemodynamics", $color, colorChoices)
-                                pickerRow("Skin", $skin, skinChoices)
-                                multiSelectChips(title: "ENT", options: entChoices, selection: $ent)
-                                pickerRow("Right ear", $rightEar, earChoices)
-                                pickerRow("Left ear", $leftEar, earChoices)
-                                pickerRow("Right eye", $rightEye, eyeChoices)
-                                pickerRow("Left eye", $leftEye, eyeChoices)
-                                pickerRow("Lungs", $lungs, lungsChoices)
-                                pickerRow("Abdomen", $abdomen, abdomenChoices)
-                                pickerRow("Peristalsis", $peristalsis, peristalsisChoices)
-                                pickerRow("Genitalia", $genitalia, genitaliaChoices)
-                                pickerRow("Neurological", $neurological, neuroChoices)
-                                pickerRow("Musculoskeletal", $musculoskeletal, mskChoices)
-                                pickerRow("Lymph nodes", $lymphNodes, nodesChoices)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .padding(.bottom, 4)
                         }
+                        if editingEpisodeID == nil {
+                            Text("Save the episode first to enable vitals entry.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+                                GridRow {
+                                    TextField("Weight (kg)", text: $weightKgField)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("Height (cm)", text: $heightCmField)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("Head circ (cm)", text: $headCircumferenceField)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("Temperature (°C)", text: $temperatureCField)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                GridRow {
+                                    TextField("HR (bpm)", text: $heartRateField)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("RR (/min)", text: $respiratoryRateField)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("SpO₂ (%)", text: $spo2Field)
+                                        .textFieldStyle(.roundedBorder)
+                                    HStack {
+                                        TextField("BP systolic", text: $bpSysField)
+                                            .textFieldStyle(.roundedBorder)
+                                        TextField("BP diastolic", text: $bpDiaField)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+                                }
+                                GridRow {
+                                    TextField("Recorded at (ISO8601)", text: $recordedAtField)
+                                        .textFieldStyle(.roundedBorder)
+                                        .help("Leave blank for current time.")
+                                    Toggle("Replace previous vitals for this episode", isOn: $replacePreviousVitals)
+                                        .toggleStyle(.switch)
+                                        .gridCellColumns(3)
+                                }
+                            }
+
+                            HStack {
+                                Button {
+                                    saveVitalsTapped()
+                                } label: {
+                                    Label("Save vitals", systemImage: "heart.text.square")
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(editingEpisodeID == nil)
+
+                                Spacer()
+                            }
+
+                            if !vitalsHistory.isEmpty {
+                                Divider()
+                                Text("Vitals history (oldest → newest)").font(.subheadline.bold())
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(vitalsHistory) { row in
+                                        HStack {
+                                            Text(row.recordedAt).font(.caption.monospaced())
+                                            Spacer()
+                                            Text(summary(for: row)).font(.caption)
+                                        }
+                                    }
+                                }
+                                HStack {
+                                    Picker("Delete a row…", selection: $vitalsDeleteSelection) {
+                                        Text("—").tag(Int64?.none)
+                                        ForEach(vitalsHistory) { row in
+                                            Text("\(row.recordedAt)").tag(Optional(row.id))
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    Button(role: .destructive) {
+                                        deleteSelectedVitals()
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    .disabled(vitalsDeleteSelection == nil)
+                                }
+                            } else {
+                                Text("No vitals recorded for this episode yet.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+
+                    Divider()
+
+                    // Two columns using HStack (forces top alignment)
+                    HStack(alignment: .top, spacing: 20) {
+                        // Column A (left)
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeader("Main Complaint")
+                            complaintBlock
+
+                            SectionHeader("History of Present Illness")
+                            pickerRow("Appearance", $appearance, appearanceChoices)
+                            pickerRow("Feeding", $feeding, feedingChoices)
+                            pickerRow("Breathing", $breathing, breathingChoices)
+                            pickerRow("Urination", $urination, urinationChoices)
+                            pickerRow("Pain", $pain, painChoices)
+                            pickerRow("Stools", $stools, stoolsChoices)
+                            multiSelectChips(title: "Context", options: contextChoices, selection: $context)
+                            TextField("HPI summary", text: $hpi, axis: .vertical)
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(3...6)
+                            TextField("Duration (hours)", text: $duration)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                        // Column B (right)
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeader("Physical Examination")
+                            pickerRow("General appearance", $generalAppearance, generalChoices)
+                            pickerRow("Hydration", $hydration, hydrationChoices)
+                            pickerRow("Heart", $heart, heartChoices)
+                            pickerRow("Color / Hemodynamics", $color, colorChoices)
+                            multiSelectChips(title: "Skin", options: skinOptionsMulti, selection: $skinSet)
+                            multiSelectChips(title: "ENT", options: entChoices, selection: $ent)
+                            pickerRow("Right ear", $rightEar, earChoices)
+                            pickerRow("Left ear", $leftEar, earChoices)
+                            pickerRow("Right eye", $rightEye, eyeChoices)
+                            pickerRow("Left eye", $leftEye, eyeChoices)
+                            multiSelectChips(title: "Lungs", options: lungsOptionsMulti, selection: $lungsSet)
+                            multiSelectChips(title: "Abdomen", options: abdomenOptionsMulti, selection: $abdomenSet)
+                            pickerRow("Peristalsis", $peristalsis, peristalsisChoices)
+                            multiSelectChips(title: "Genitalia", options: genitaliaOptionsMulti, selection: $genitaliaSet)
+                            pickerRow("Neurological", $neurological, neuroChoices)
+                            pickerRow("Musculoskeletal", $musculoskeletal, mskChoices)
+                            multiSelectChips(title: "Lymph nodes", options: nodesOptionsMulti, selection: $lymphNodesSet)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
 
                     // Plan
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader("Plan")
+                        SectionHeader("Problem Listing")
                         HStack {
                             Button {
                                 generateProblemList()
@@ -190,6 +348,7 @@ struct SickEpisodeForm: View {
                             .textFieldStyle(.roundedBorder)
                         TextField("ICD-10", text: $icd10)
                             .textFieldStyle(.roundedBorder)
+                        SectionHeader("Plan")
                         TextEditor(text: $medications)
                             .frame(minHeight: 80)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
@@ -214,6 +373,8 @@ struct SickEpisodeForm: View {
             }
             .onAppear {
                 loadEditingIfNeeded()
+                prefillVitalsIfEditing()
+                loadVitalsHistory()
             }
         }
     }
@@ -503,6 +664,202 @@ struct SickEpisodeForm: View {
         }
     }
 
+    // MARK: - Vitals DB helpers
+
+    private func ensureVitalsTable(dbURL: URL) throws {
+        var db: OpaquePointer?
+        db = try dbOpen(dbURL)
+        defer { if db != nil { sqlite3_close(db) } }
+        let sql = """
+        CREATE TABLE IF NOT EXISTS vitals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          patient_id INTEGER,
+          episode_id INTEGER,
+          weight_kg REAL,
+          height_cm REAL,
+          head_circumference_cm REAL,
+          temperature_c REAL,
+          heart_rate INTEGER,
+          respiratory_rate INTEGER,
+          spo2 INTEGER,
+          recorded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          bp_systolic INTEGER,
+          bp_diastolic INTEGER,
+          FOREIGN KEY (patient_id) REFERENCES patients(id),
+          FOREIGN KEY (episode_id) REFERENCES episodes(id)
+        );
+        """
+        if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw NSError(domain: "SickEpisodeForm.DB", code: 20, userInfo: [NSLocalizedDescriptionKey: "ensure vitals table failed: \(msg)"])
+        }
+    }
+
+    private func latestVitalsRow(dbURL: URL, episodeID: Int64) -> VitalsRow? {
+        var db: OpaquePointer?
+        do { db = try dbOpen(dbURL) } catch { return nil }
+        defer { if db != nil { sqlite3_close(db) } }
+        let sql = """
+        SELECT id, recorded_at, weight_kg, height_cm, head_circumference_cm,
+               temperature_c, heart_rate, respiratory_rate, spo2, bp_systolic, bp_diastolic
+        FROM vitals
+        WHERE episode_id = ?
+        ORDER BY datetime(COALESCE(recorded_at, '1970-01-01T00:00:00')) DESC, id DESC
+        LIMIT 1;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, episodeID)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        func dcol(_ i: Int32) -> Double? {
+            let t = sqlite3_column_type(stmt, i)
+            if t == SQLITE_NULL { return nil }
+            return sqlite3_column_double(stmt, i)
+        }
+        func icol(_ i: Int32) -> Int? {
+            let t = sqlite3_column_type(stmt, i)
+            if t == SQLITE_NULL { return nil }
+            return Int(sqlite3_column_int(stmt, i))
+        }
+        let id = sqlite3_column_int64(stmt, 0)
+        let ts = (sqlite3_column_text(stmt, 1).flatMap { String(cString: $0) }) ?? ""
+        return VitalsRow(
+            id: id,
+            recordedAt: ts,
+            weightKg: dcol(2),
+            heightCm: dcol(3),
+            headCircumferenceCm: dcol(4),
+            temperatureC: dcol(5),
+            heartRate: icol(6),
+            respiratoryRate: icol(7),
+            spo2: icol(8),
+            bpSys: icol(9),
+            bpDia: icol(10)
+        )
+    }
+
+    private func listVitalsForEpisode(dbURL: URL, episodeID: Int64) -> [VitalsRow] {
+        var out: [VitalsRow] = []
+        var db: OpaquePointer?
+        do { db = try dbOpen(dbURL) } catch { return out }
+        defer { if db != nil { sqlite3_close(db) } }
+        let sql = """
+        SELECT id, recorded_at, weight_kg, height_cm, head_circumference_cm,
+               temperature_c, heart_rate, respiratory_rate, spo2, bp_systolic, bp_diastolic
+        FROM vitals
+        WHERE episode_id = ?
+        ORDER BY datetime(COALESCE(recorded_at, '1970-01-01T00:00:00')) ASC, id ASC;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return out }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, episodeID)
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            func dcol(_ i: Int32) -> Double? {
+                let t = sqlite3_column_type(stmt, i)
+                if t == SQLITE_NULL { return nil }
+                return sqlite3_column_double(stmt, i)
+            }
+            func icol(_ i: Int32) -> Int? {
+                let t = sqlite3_column_type(stmt, i)
+                if t == SQLITE_NULL { return nil }
+                return Int(sqlite3_column_int(stmt, i))
+            }
+            let id = sqlite3_column_int64(stmt, 0)
+            let ts = (sqlite3_column_text(stmt, 1).flatMap { String(cString: $0) }) ?? ""
+            out.append(
+                VitalsRow(
+                    id: id,
+                    recordedAt: ts,
+                    weightKg: dcol(2),
+                    heightCm: dcol(3),
+                    headCircumferenceCm: dcol(4),
+                    temperatureC: dcol(5),
+                    heartRate: icol(6),
+                    respiratoryRate: icol(7),
+                    spo2: icol(8),
+                    bpSys: icol(9),
+                    bpDia: icol(10)
+                )
+            )
+        }
+        return out
+    }
+
+    private func deleteVitalsRow(dbURL: URL, id: Int64) -> Bool {
+        var db: OpaquePointer?
+        do { db = try dbOpen(dbURL) } catch { return false }
+        defer { if db != nil { sqlite3_close(db) } }
+        let sql = "DELETE FROM vitals WHERE id = ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, id)
+        return sqlite3_step(stmt) == SQLITE_DONE
+    }
+
+    private func deleteAllVitalsForEpisode(dbURL: URL, episodeID: Int64) -> Int {
+        var db: OpaquePointer?
+        do { db = try dbOpen(dbURL) } catch { return 0 }
+        defer { if db != nil { sqlite3_close(db) } }
+        let sql = "DELETE FROM vitals WHERE episode_id = ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, episodeID)
+        if sqlite3_step(stmt) == SQLITE_DONE {
+            return Int(sqlite3_changes(db))
+        }
+        return 0
+    }
+
+    private func insertVitals(
+        dbURL: URL,
+        patientID: Int64,
+        episodeID: Int64,
+        weightKg: Double?, heightCm: Double?, headCircumferenceCm: Double?,
+        temperatureC: Double?, heartRate: Int?, respiratoryRate: Int?, spo2: Int?,
+        bpSys: Int?, bpDia: Int?,
+        recordedAtISO: String?
+    ) throws -> Int64 {
+        var db: OpaquePointer?
+        db = try dbOpen(dbURL)
+        defer { if db != nil { sqlite3_close(db) } }
+        let sql = """
+        INSERT INTO vitals (
+          patient_id, episode_id, weight_kg, height_cm, head_circumference_cm,
+          temperature_c, heart_rate, respiratory_rate, spo2,
+          bp_systolic, bp_diastolic, recorded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw NSError(domain: "SickEpisodeForm.DB", code: 21, userInfo: [NSLocalizedDescriptionKey: "prepare vitals insert failed: \(msg)"])
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, patientID)
+        sqlite3_bind_int64(stmt, 2, episodeID)
+        if let x = weightKg { sqlite3_bind_double(stmt, 3, x) } else { sqlite3_bind_null(stmt, 3) }
+        if let x = heightCm { sqlite3_bind_double(stmt, 4, x) } else { sqlite3_bind_null(stmt, 4) }
+        if let x = headCircumferenceCm { sqlite3_bind_double(stmt, 5, x) } else { sqlite3_bind_null(stmt, 5) }
+        if let x = temperatureC { sqlite3_bind_double(stmt, 6, x) } else { sqlite3_bind_null(stmt, 6) }
+        if let x = heartRate { sqlite3_bind_int(stmt, 7, Int32(x)) } else { sqlite3_bind_null(stmt, 7) }
+        if let x = respiratoryRate { sqlite3_bind_int(stmt, 8, Int32(x)) } else { sqlite3_bind_null(stmt, 8) }
+        if let x = spo2 { sqlite3_bind_int(stmt, 9, Int32(x)) } else { sqlite3_bind_null(stmt, 9) }
+        if let x = bpSys { sqlite3_bind_int(stmt, 10, Int32(x)) } else { sqlite3_bind_null(stmt, 10) }
+        if let x = bpDia { sqlite3_bind_int(stmt, 11, Int32(x)) } else { sqlite3_bind_null(stmt, 11) }
+        bindText(stmt, 12, (recordedAtISO?.isEmpty == false ? recordedAtISO : isoNow()))
+
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw NSError(domain: "SickEpisodeForm.DB", code: 22, userInfo: [NSLocalizedDescriptionKey: "vitals insert step failed: \(msg)"])
+        }
+        return sqlite3_last_insert_rowid(db)
+    }
+
     // MARK: - Editing Prefill Helpers
 
     /// Load the episode from DB if we're in edit mode and prefill the form.
@@ -604,7 +961,7 @@ struct SickEpisodeForm: View {
         assignPicker(row["hydration"], allowed: hydrationChoices) { self.hydration = $0 }
         assignPicker(row["heart"], allowed: heartChoices) { self.heart = $0 }
         assignPicker(row["color"], allowed: colorChoices) { self.color = $0 }
-        assignPicker(row["skin"], allowed: skinChoices) { self.skin = $0 }
+        
 
         let entParts = splitTrim(row["ent"])
         self.ent = Set(entParts.filter { entChoices.contains($0) })
@@ -612,13 +969,41 @@ struct SickEpisodeForm: View {
         assignPicker(row["left_ear"],  allowed: earChoices) { self.leftEar  = $0 }
         assignPicker(row["right_eye"], allowed: eyeChoices) { self.rightEye = $0 }
         assignPicker(row["left_eye"],  allowed: eyeChoices) { self.leftEye  = $0 }
-        assignPicker(row["lungs"],     allowed: lungsChoices) { self.lungs = $0 }
-        assignPicker(row["abdomen"],   allowed: abdomenChoices) { self.abdomen = $0 }
+        // Skin (multi)
+        let skinParts = splitTrim(row["skin"])
+        let skinAllowed = Set(skinOptionsMulti)
+        self.skinSet = Set(skinParts.filter { skinAllowed.contains($0) })
+        if self.skinSet.isEmpty { self.skinSet = ["Normal"] }
+
+        // Lungs (multi)
+        let lungParts = splitTrim(row["lungs"])
+        let lungsAllowed = Set(lungsOptionsMulti)
+        self.lungsSet = Set(lungParts.filter { lungsAllowed.contains($0) })
+        if self.lungsSet.isEmpty { self.lungsSet = ["Normal"] }
+
+        // Abdomen (multi)
+        let abdParts = splitTrim(row["abdomen"])
+        let abdAllowed = Set(abdomenOptionsMulti)
+        self.abdomenSet = Set(abdParts.filter { abdAllowed.contains($0) })
+        if self.abdomenSet.isEmpty { self.abdomenSet = ["Normal"] }
+
+        // Genitalia (multi)
+        let genParts = splitTrim(row["genitalia"])
+        let genAllowed = Set(genitaliaOptionsMulti)
+        self.genitaliaSet = Set(genParts.filter { genAllowed.contains($0) })
+        if self.genitaliaSet.isEmpty { self.genitaliaSet = ["Normal"] }
+
+        // Lymph nodes (multi)
+        let nodeParts = splitTrim(row["lymph_nodes"])
+        let nodeAllowed = Set(nodesOptionsMulti)
+        self.lymphNodesSet = Set(nodeParts.filter { nodeAllowed.contains($0) })
+        if self.lymphNodesSet.isEmpty { self.lymphNodesSet = ["None"] }
+        
         assignPicker(row["peristalsis"], allowed: peristalsisChoices) { self.peristalsis = $0 }
-        assignPicker(row["genitalia"], allowed: genitaliaChoices) { self.genitalia = $0 }
+        
         assignPicker(row["neurological"], allowed: neuroChoices) { self.neurological = $0 }
         assignPicker(row["musculoskeletal"], allowed: mskChoices) { self.musculoskeletal = $0 }
-        assignPicker(row["lymph_nodes"], allowed: nodesChoices) { self.lymphNodes = $0 }
+        
 
         self.problemListing = row["problem_listing"] ?? ""
         self.complementaryInvestigations = row["complementary_investigations"] ?? ""
@@ -735,7 +1120,9 @@ struct SickEpisodeForm: View {
         if hydration != "Normal" { lines.append("Hydration: \(hydration)") }
         if heart != "Normal" { lines.append("Heart: \(heart)") }
         if color != "Normal" { lines.append("Color: \(color)") }
-        if skin != "Normal" { lines.append("Skin: \(skin)") }
+        if !(skinSet.count == 1 && skinSet.contains("Normal")) {
+            lines.append("Skin: \(Array(skinSet).sorted().joined(separator: ", "))")
+        }
         if !(ent.count == 1 && ent.contains("Normal")) {
             lines.append("ENT: \(Array(ent).sorted().joined(separator: ", "))")
         }
@@ -743,13 +1130,21 @@ struct SickEpisodeForm: View {
         if leftEar  != "Normal" { lines.append("Left Ear: \(leftEar)") }
         if rightEye != "Normal" { lines.append("Right Eye: \(rightEye)") }
         if leftEye  != "Normal" { lines.append("Left Eye: \(leftEye)") }
-        if lungs != "Normal" { lines.append("Lungs: \(lungs)") }
-        if abdomen != "Normal" { lines.append("Abdomen: \(abdomen)") }
+        if !(lungsSet.count == 1 && lungsSet.contains("Normal")) {
+            lines.append("Lungs: \(Array(lungsSet).sorted().joined(separator: ", "))")
+        }
+        if !(abdomenSet.count == 1 && abdomenSet.contains("Normal")) {
+            lines.append("Abdomen: \(Array(abdomenSet).sorted().joined(separator: ", "))")
+        }
         if peristalsis != "Normal" { lines.append("Peristalsis: \(peristalsis)") }
-        if genitalia != "Normal" { lines.append("Genitalia: \(genitalia)") }
+        if !(genitaliaSet.count == 1 && genitaliaSet.contains("Normal")) {
+            lines.append("Genitalia: \(Array(genitaliaSet).sorted().joined(separator: ", "))")
+        }
         if neurological != "Alert" { lines.append("Neurological: \(neurological)") }
         if musculoskeletal != "Normal" { lines.append("MSK: \(musculoskeletal)") }
-        if lymphNodes != "None" { lines.append("Lymph Nodes: \(lymphNodes)") }
+        if !(lymphNodesSet.count == 1 && lymphNodesSet.contains("None")) {
+            lines.append("Lymph Nodes: \(Array(lymphNodesSet).sorted().joined(separator: ", "))")
+        }
 
         problemListing = lines.joined(separator: "\n")
     }
@@ -780,19 +1175,19 @@ struct SickEpisodeForm: View {
         payload["hydration"] = hydration
         payload["heart"] = heart
         payload["color"] = color
-        payload["skin"] = skin
         payload["ent"] = Array(ent).sorted().joined(separator: ", ")
         payload["right_ear"] = rightEar
         payload["left_ear"] = leftEar
         payload["right_eye"] = rightEye
         payload["left_eye"] = leftEye
-        payload["lungs"] = lungs
-        payload["abdomen"] = abdomen
         payload["peristalsis"] = peristalsis
-        payload["genitalia"] = genitalia
         payload["neurological"] = neurological
         payload["musculoskeletal"] = musculoskeletal
-        payload["lymph_nodes"] = lymphNodes
+        payload["skin"] = Array(skinSet).sorted().joined(separator: ", ")
+        payload["lungs"] = Array(lungsSet).sorted().joined(separator: ", ")
+        payload["abdomen"] = Array(abdomenSet).sorted().joined(separator: ", ")
+        payload["genitalia"] = Array(genitaliaSet).sorted().joined(separator: ", ")
+        payload["lymph_nodes"] = Array(lymphNodesSet).sorted().joined(separator: ", ")
         // Plan
         payload["problem_listing"] = problemListing
         payload["complementary_investigations"] = complementaryInvestigations
@@ -841,6 +1236,19 @@ struct SickEpisodeForm: View {
 
 // MARK: - Small helpers
 
+private func summary(for row: SickEpisodeForm.VitalsRow) -> String {
+    var parts: [String] = []
+    if let w = row.weightKg { parts.append("Wt \(String(format: "%.1f", w))kg") }
+    if let h = row.heightCm { parts.append("Ht \(String(format: "%.1f", h))cm") }
+    if let hc = row.headCircumferenceCm { parts.append("HC \(String(format: "%.1f", hc))cm") }
+    if let t = row.temperatureC { parts.append("T \(String(format: "%.1f", t))°C") }
+    if let hr = row.heartRate { parts.append("HR \(hr)") }
+    if let rr = row.respiratoryRate { parts.append("RR \(rr)") }
+    if let s2 = row.spo2 { parts.append("SpO₂ \(s2)%") }
+    if let s = row.bpSys, let d = row.bpDia { parts.append("BP \(s)/\(d)") }
+    return parts.joined(separator: " • ")
+}
+
 private struct SectionHeader: View {
     let title: String
     init(_ t: String) { title = t }
@@ -882,3 +1290,255 @@ private struct WrappingChips: View {
     }
 }
 
+// MARK: - Vitals UI helpers and lifecycle
+
+extension SickEpisodeForm {
+    // MARK: - Vitals classification (moved inside type)
+
+    /// Returns small badges like ["HR high for toddler", "Fever"] or [] if nothing to show.
+    private func vitalsBadges() -> [String] {
+        // Pull DOB/sex from DB to deduce age band
+        var dobISO: String? = nil
+        var sex: String? = nil
+        if let pid = appState.selectedPatientID,
+           let dbURL = appState.currentDBURL,
+           FileManager.default.fileExists(atPath: dbURL.path) {
+            let demo = fetchPatientDemographics(dbURL: dbURL, patientID: Int64(pid))
+            dobISO = demo.dobISO
+            sex = demo.sex
+        }
+
+        let ageY = ageYears(from: dobISO)
+        let band = ageBandLabel(forYears: ageY)
+
+        // Parse current UI values (prefer what's typed now)
+        func i(_ s: String) -> Int? {
+            let t = s.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : Int(t)
+        }
+        func d(_ s: String) -> Double? {
+            let t = s.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : Double(t)
+        }
+        let hr = i(heartRateField)
+        let rr = i(respiratoryRateField)
+        let temp = d(temperatureCField)
+        let s2 = i(spo2Field)
+
+        var out: [String] = []
+
+        // HR / RR ranges by age band (AAP-style broad bands; matches Python app)
+        if let hr = hr, let a = ageY {
+            let (lo, hi) = hrRange(forYears: a)
+            if let lo = lo, hr < lo {
+                out.append(band != nil ? "HR low for \(band!)" : "HR low")
+            } else if let hi = hi, hr > hi {
+                out.append(band != nil ? "HR high for \(band!)" : "HR high")
+            }
+        }
+
+        if let rr = rr, let a = ageY {
+            let (lo, hi) = rrRange(forYears: a)
+            if let lo = lo, rr < lo {
+                out.append(band != nil ? "RR low for \(band!)" : "RR low")
+            } else if let hi = hi, rr > hi {
+                out.append(band != nil ? "RR high for \(band!)" : "RR high")
+            }
+        }
+
+        // Temperature flags
+        if let t = temp {
+            if t >= 38.0 {
+                out.append("Fever")
+            } else if t < 35.5 {
+                out.append("Hypothermia")
+            }
+        }
+
+        // SpO₂ flags
+        if let s2 = s2, s2 < 95 {
+            out.append("SpO₂ low")
+        }
+
+        // Pediatric BP category (AAP 2017) via VitalsBP
+        if let a = ageY,
+           let sx = sex, !sx.isEmpty,
+           let sysInt = i(bpSysField), let diaInt = i(bpDiaField) {
+            let heightOpt = d(heightCmField)
+            let res = VitalsBP.classify(
+                sex: sx,
+                ageYears: a,
+                heightCm: heightOpt,
+                sys: Double(sysInt),
+                dia: Double(diaInt)
+            )
+            // Append badge only for non-normal, known categories
+            switch res.category {
+            case .normal, .unknown:
+                break
+            case .elevated, .stage1, .stage2:
+                if let msg = res.message, !msg.isEmpty {
+                    out.append(msg)
+                } else {
+                    let label: String
+                    switch res.category {
+                    case .elevated: label = "Elevated"
+                    case .stage1:   label = "Stage 1"
+                    case .stage2:   label = "Stage 2"
+                    default:        label = "Abnormal"
+                    }
+                    out.append("BP \(sysInt)/\(diaInt) \(label)")
+                }
+            default:
+                // Handles any future/extra categories (e.g., low‑for‑age / hypotension)
+                if let msg = res.message, !msg.isEmpty {
+                    out.append(msg)
+                } else {
+                    out.append("BP \(sysInt)/\(diaInt) Abnormal")
+                }
+            }
+        }
+
+        return out
+    }
+
+    /// Parse "YYYY-MM-DD" → years as Double
+    private func ageYears(from iso: String?) -> Double? {
+        guard let s = iso, !s.isEmpty else { return nil }
+        let parts = s.split(separator: "-").compactMap { Int($0) }
+        guard parts.count >= 3 else { return nil }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = .current
+        let dob = DateComponents(calendar: cal, year: parts[0], month: parts[1], day: parts[2]).date ?? Date()
+        let now = Date()
+        let days = cal.dateComponents([.day], from: dob, to: now).day ?? 0
+        return Double(days) / 365.25
+    }
+
+    /// Human-readable band label ("neonate", "infant", "toddler", etc.)
+    private func ageBandLabel(forYears y: Double?) -> String? {
+        guard let y = y else { return nil }
+        let neonate = 28.0 / 365.25
+        if y < neonate { return "neonate" }
+        else if y < 1.0 { return "infant" }
+        else if y < 3.0 { return "toddler" }
+        else if y < 6.0 { return "preschool" }
+        else if y < 12.0 { return "school age" }
+        else if y < 16.0 { return "adolescent" }
+        else { return "adult-like" }
+    }
+
+    /// Heart-rate normal range (low, high) for given age in years
+    private func hrRange(forYears y: Double) -> (Int?, Int?) {
+        let neonate = 28.0 / 365.25
+        if y < neonate { return (100, 205) }      // neonate
+        else if y < 1.0 { return (100, 190) }     // infant
+        else if y < 3.0 { return (98, 140) }      // toddler
+        else if y < 6.0 { return (80, 120) }      // preschool
+        else if y < 12.0 { return (75, 118) }     // school age
+        else if y < 16.0 { return (60, 100) }     // adolescent
+        else { return (60, 100) }                 // adult-like
+    }
+
+    /// Respiratory-rate normal range (low, high) for given age in years
+    private func rrRange(forYears y: Double) -> (Int?, Int?) {
+        let neonate = 28.0 / 365.25
+        if y < neonate { return (30, 53) }        // neonate
+        else if y < 1.0 { return (30, 53) }       // infant
+        else if y < 3.0 { return (22, 37) }       // toddler
+        else if y < 6.0 { return (20, 28) }       // preschool
+        else if y < 12.0 { return (18, 25) }      // school age
+        else if y < 16.0 { return (12, 20) }      // adolescent
+        else { return (12, 20) }                  // adult-like
+    }
+    private func prefillVitalsIfEditing() {
+        guard let eid = editingEpisodeID,
+              let dbURL = appState.currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else { return }
+        if let latest = latestVitalsRow(dbURL: dbURL, episodeID: Int64(eid)) {
+            weightKgField = latest.weightKg.map { String(format: "%.1f", $0) } ?? ""
+            heightCmField = latest.heightCm.map { String(format: "%.1f", $0) } ?? ""
+            headCircumferenceField = latest.headCircumferenceCm.map { String(format: "%.1f", $0) } ?? ""
+            temperatureCField = latest.temperatureC.map { String(format: "%.1f", $0) } ?? ""
+            heartRateField = latest.heartRate.map(String.init) ?? ""
+            respiratoryRateField = latest.respiratoryRate.map(String.init) ?? ""
+            spo2Field = latest.spo2.map(String.init) ?? ""
+            bpSysField = latest.bpSys.map(String.init) ?? ""
+            bpDiaField = latest.bpDia.map(String.init) ?? ""
+            recordedAtField = latest.recordedAt
+        } else {
+            recordedAtField = isoNow()
+        }
+    }
+
+    private func loadVitalsHistory() {
+        guard let eid = editingEpisodeID,
+              let dbURL = appState.currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            vitalsHistory = []
+            vitalsDeleteSelection = nil
+            return
+        }
+        vitalsHistory = listVitalsForEpisode(dbURL: dbURL, episodeID: Int64(eid))
+        vitalsDeleteSelection = nil
+    }
+
+    private func saveVitalsTapped() {
+        guard let eid = editingEpisodeID,
+              let pid = appState.selectedPatientID,
+              let dbURL = appState.currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else { return }
+        do {
+            try ensureVitalsTable(dbURL: dbURL)
+
+            // Parse numeric inputs; blank → nil
+            func d(_ s: String) -> Double? { let t = s.trimmingCharacters(in: .whitespaces); return t.isEmpty ? nil : Double(t) }
+            func i(_ s: String) -> Int? { let t = s.trimmingCharacters(in: .whitespaces); return t.isEmpty ? nil : Int(t) }
+
+            let w  = d(weightKgField)
+            let h  = d(heightCmField)
+            let hc = d(headCircumferenceField)
+            let t  = d(temperatureCField)
+            let hr = i(heartRateField)
+            let rr = i(respiratoryRateField)
+            let s2 = i(spo2Field)
+            var bs = i(bpSysField)
+            var bd = i(bpDiaField)
+            if let x = bs, let y = bd, x < y { bs = y; bd = x } // swap if reversed
+
+            // Skip if all empty
+            if [w,h,hc,t].allSatisfy({ $0 == nil }) &&
+               [hr,rr,s2,bs,bd].allSatisfy({ $0 == nil }) {
+                log.info("Vitals not saved: all fields empty")
+                return
+            }
+
+            if replacePreviousVitals {
+                _ = deleteAllVitalsForEpisode(dbURL: dbURL, episodeID: Int64(eid))
+            }
+
+            _ = try insertVitals(
+                dbURL: dbURL,
+                patientID: Int64(pid),
+                episodeID: Int64(eid),
+                weightKg: w, heightCm: h, headCircumferenceCm: hc,
+                temperatureC: t, heartRate: hr, respiratoryRate: rr, spo2: s2,
+                bpSys: bs, bpDia: bd,
+                recordedAtISO: recordedAtField.trimmingCharacters(in: .whitespaces).isEmpty ? nil : recordedAtField
+            )
+
+            // Refresh list + keep fields as-is
+            loadVitalsHistory()
+        } catch {
+            log.error("saveVitalsTapped failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func deleteSelectedVitals() {
+        guard let sel = vitalsDeleteSelection,
+              let dbURL = appState.currentDBURL else { return }
+        if deleteVitalsRow(dbURL: dbURL, id: sel) {
+            loadVitalsHistory()
+        }
+    }
+}

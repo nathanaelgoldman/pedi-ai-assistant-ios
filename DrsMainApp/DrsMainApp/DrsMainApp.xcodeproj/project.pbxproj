@@ -27,6 +27,9 @@
 		BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */; };
 		BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C052EB486980065EF3E /* AliasGenerator.swift */; };
 		BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */; };
+		BB6E2F832EC858650044F225 /* VitalsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6E2F822EC858600044F225 /* VitalsStore.swift */; };
+		BB6E2F852EC8665C0044F225 /* VitalsRanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6E2F842EC866470044F225 /* VitalsRanges.swift */; };
+		BB6E2F8D2EC8722A0044F225 /* VitalsBP.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6E2F8C2EC872250044F225 /* VitalsBP.swift */; };
 		BB9186852EC6E29D00A8AA8A /* PmhStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9186842EC6E29800A8AA8A /* PmhStore.swift */; };
 		BB9186872EC6E9F100A8AA8A /* PmhForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9186862EC6E9E900A8AA8A /* PmhForm.swift */; };
 		BB9186892EC6F48F00A8AA8A /* VaccinationStatusForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9186882EC6F48A00A8AA8A /* VaccinationStatusForm.swift */; };
@@ -68,6 +71,9 @@
 		BB654B1C2EB4619400FDAA71 /* DocumentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentListView.swift; sourceTree = "<group>"; };
 		BB6D4C052EB486980065EF3E /* AliasGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliasGenerator.swift; sourceTree = "<group>"; };
 		BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MRNGenerator.swift; sourceTree = "<group>"; };
+		BB6E2F822EC858600044F225 /* VitalsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsStore.swift; sourceTree = "<group>"; };
+		BB6E2F842EC866470044F225 /* VitalsRanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsRanges.swift; sourceTree = "<group>"; };
+		BB6E2F8C2EC872250044F225 /* VitalsBP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsBP.swift; sourceTree = "<group>"; };
 		BB9186842EC6E29800A8AA8A /* PmhStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PmhStore.swift; sourceTree = "<group>"; };
 		BB9186862EC6E9E900A8AA8A /* PmhForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PmhForm.swift; sourceTree = "<group>"; };
 		BB9186882EC6F48A00A8AA8A /* VaccinationStatusForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaccinationStatusForm.swift; sourceTree = "<group>"; };
@@ -162,6 +168,7 @@
 		BB564AED2EAE0BB900870007 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				BB6E2F822EC858600044F225 /* VitalsStore.swift */,
 				BB91868A2EC707EF00A8AA8A /* EpisodeStore.swift */,
 				BB9186842EC6E29800A8AA8A /* PmhStore.swift */,
 				BBE1E2A82EC58383004C6280 /* PerinatalStore.swift */,
@@ -207,6 +214,8 @@
 		BB564AF02EAE0BB900870007 /* Util */ = {
 			isa = PBXGroup;
 			children = (
+				BB6E2F8C2EC872250044F225 /* VitalsBP.swift */,
+				BB6E2F842EC866470044F225 /* VitalsRanges.swift */,
 				BB3E159D2EB7058E008E1472 /* WHO */,
 				BBA6AD562EB5C48C00BDA924 /* GrowthDataFetcher.swift */,
 				BB6D4C072EB486F50065EF3E /* MRNGenerator.swift */,
@@ -357,6 +366,7 @@
 				BBE1E2A92EC58389004C6280 /* PerinatalStore.swift in Sources */,
 				BB6D4C062EB486A70065EF3E /* AliasGenerator.swift in Sources */,
 				BB96A56F2EBB3355003F5C44 /* GrowthChartRenderer.swift in Sources */,
+				BB6E2F832EC858650044F225 /* VitalsStore.swift in Sources */,
 				BB564AFD2EAF1F6100870007 /* BundleDetailView.swift in Sources */,
 				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
 				BB96A56B2EBB3311003F5C44 /* GrowthModels.swift in Sources */,
@@ -371,6 +381,7 @@
 				BB96A56D2EBB3334003F5C44 /* GrowthWHO.swift in Sources */,
 				BB6D4C082EB487170065EF3E /* MRNGenerator.swift in Sources */,
 				BB564ADC2EADC30A00870007 /* ContentView.swift in Sources */,
+				BB6E2F852EC8665C0044F225 /* VitalsRanges.swift in Sources */,
 				BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */,
 				BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
@@ -380,6 +391,7 @@
 				BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */,
 				BBA6AD552EB5B5D900BDA924 /* GrowthTableView.swift in Sources */,
 				BB564B012EAF3C6400870007 /* PatientDetailView.swift in Sources */,
+				BB6E2F8D2EC8722A0044F225 /* VitalsBP.swift in Sources */,
 				BBA6AD5D2EB5F6BB00BDA924 /* GrowthChartView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -427,9 +427,15 @@ struct PatientDetailView: View {
             if showVaccinationStatus, let openID = vaxPatientIDForSheet, openID != id {
                 showVaccinationStatus = false
             }
-            if showEpisodeForm { showEpisodeForm = false }
+            if showEpisodeForm { showEpisodeForm = false; editingEpisodeID = nil }
             appState.loadVisits(for: id)
             appState.loadPatientProfile(for: Int64(id))
+        }
+        .onChange(of: showEpisodeForm) { open in
+            // When the sheet closes, forget the editing target to avoid stale state on the next open
+            if !open {
+                editingEpisodeID = nil
+            }
         }
         .sheet(isPresented: $showDocuments) {
             DocumentListView()
@@ -483,6 +489,7 @@ struct PatientDetailView: View {
             }
         }) {
             SickEpisodeForm(editingEpisodeID: editingEpisodeID)
+                .id(editingEpisodeID ?? -1)
                 .environmentObject(appState)
         }
         .sheet(item: $visitForDetail) { v in
