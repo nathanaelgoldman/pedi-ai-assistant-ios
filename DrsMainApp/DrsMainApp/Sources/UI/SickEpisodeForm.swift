@@ -27,6 +27,9 @@ struct SickEpisodeForm: View {
     /// If non-nil, the form is editing that specific episode id.
     let editingEpisodeID: Int?
 
+    /// Active episode id for this form; once a new episode is first saved, this becomes non-nil.
+    @State private var activeEpisodeID: Int64? = nil
+
     // MARK: - Core HPI
     @State private var presetComplaints: Set<String> = []
     @State private var otherComplaints: String = ""
@@ -189,7 +192,7 @@ struct SickEpisodeForm: View {
                             }
                             .padding(.bottom, 4)
                         }
-                        if editingEpisodeID == nil {
+                        if activeEpisodeID == nil {
                             Text("Save the episode first to enable vitals entry.")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
@@ -236,7 +239,7 @@ struct SickEpisodeForm: View {
                                     Label("Save vitals", systemImage: "heart.text.square")
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(editingEpisodeID == nil)
+                                .disabled(activeEpisodeID == nil)
 
                                 Spacer()
                             }
@@ -357,6 +360,16 @@ struct SickEpisodeForm: View {
                             .textFieldStyle(.roundedBorder)
                     }
                     .padding(.top, 8)
+
+                    // Inline Done button so the user can close the form after saving without relying on the toolbar
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            dismiss()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.top, 8)
                 }
                 .padding(20)
             }
@@ -370,8 +383,15 @@ struct SickEpisodeForm: View {
                     Button("Save") { saveTapped() }
                         .keyboardShortcut(.defaultAction)
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Done") { dismiss() }
+                }
             }
             .onAppear {
+                // If we are editing an existing episode, initialise activeEpisodeID from it
+                if activeEpisodeID == nil, let eid = editingEpisodeID {
+                    activeEpisodeID = Int64(eid)
+                }
                 loadEditingIfNeeded()
                 prefillVitalsIfEditing()
                 loadVitalsHistory()
@@ -1081,6 +1101,7 @@ struct SickEpisodeForm: View {
     private func generateProblemList() {
         var lines: [String] = []
 
+        // Demographics
         if let pid = appState.selectedPatientID,
            let dbURL = appState.currentDBURL,
            FileManager.default.fileExists(atPath: dbURL.path) {
@@ -1094,11 +1115,15 @@ struct SickEpisodeForm: View {
             if let sx = demo.sex, !sx.isEmpty {
                 lines.append("Sex: \(sx)")
             }
-            if let vax = demo.vax, !vax.isEmpty, vax.lowercased() != "up to date", vax.lowercased() != "up‑to‑date" {
+            if let vax = demo.vax,
+               !vax.isEmpty,
+               vax.lowercased() != "up to date",
+               vax.lowercased() != "up-to-date" {
                 lines.append("Vaccination status: \(vax)")
             }
         }
 
+        // Main complaint + duration
         let mc = currentMainComplaintString()
         if !mc.isEmpty { lines.append("Main complaint: \(mc)") }
         if !duration.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -1113,7 +1138,50 @@ struct SickEpisodeForm: View {
         if pain != "None" { lines.append("Pain: \(pain)") }
         if stools != "Normal" { lines.append("Stools: \(stools)") }
         let ctx = Array(context).filter { $0 != "None" }
-        if !ctx.isEmpty { lines.append("Context: \(ctx.sorted().joined(separator: ", "))") }
+        if !ctx.isEmpty {
+            lines.append("Context: \(ctx.sorted().joined(separator: ", "))")
+        }
+
+        // Vitals abnormalities – use current UI fields + classification badges
+        let vitalsFlags = vitalsBadges()
+        if !vitalsFlags.isEmpty {
+            var vitalsPieces: [String] = []
+
+            let tText = temperatureCField.trimmingCharacters(in: .whitespaces)
+            if !tText.isEmpty {
+                vitalsPieces.append("T \(tText)°C")
+            }
+
+            let hrText = heartRateField.trimmingCharacters(in: .whitespaces)
+            if !hrText.isEmpty {
+                vitalsPieces.append("HR \(hrText)")
+            }
+
+            let rrText = respiratoryRateField.trimmingCharacters(in: .whitespaces)
+            if !rrText.isEmpty {
+                vitalsPieces.append("RR \(rrText)")
+            }
+
+            let s2Text = spo2Field.trimmingCharacters(in: .whitespaces)
+            if !s2Text.isEmpty {
+                vitalsPieces.append("SpO₂ \(s2Text)%")
+            }
+
+            let sysText = bpSysField.trimmingCharacters(in: .whitespaces)
+            let diaText = bpDiaField.trimmingCharacters(in: .whitespaces)
+            if !sysText.isEmpty && !diaText.isEmpty {
+                vitalsPieces.append("BP \(sysText)/\(diaText)")
+            }
+
+            let valuesPart = vitalsPieces.joined(separator: ", ")
+            let flagsPart = vitalsFlags.joined(separator: ", ")
+
+            if !valuesPart.isEmpty {
+                lines.append("Abnormal vitals: \(valuesPart) [\(flagsPart)]")
+            } else {
+                lines.append("Abnormal vitals: \(flagsPart)")
+            }
+        }
 
         // PE abnormalities
         if generalAppearance != "Well" { lines.append("General Appearance: \(generalAppearance)") }
@@ -1216,18 +1284,23 @@ struct SickEpisodeForm: View {
         }
 
         do {
-            if let eid = editingEpisodeID {
-                try updateEpisode(dbURL: dbURL, episodeID: Int64(eid), payload: payload)
+            if let eid = activeEpisodeID {
+                // Existing episode: update in place
+                try updateEpisode(dbURL: dbURL, episodeID: eid, payload: payload)
                 debugCountEpisodes(dbURL: dbURL, patientID: Int64(pid))
             } else {
-                _ = try insertEpisode(dbURL: dbURL, patientID: Int64(pid), payload: payload)
+                // First save of a new episode: insert and capture id
+                let newID = try insertEpisode(dbURL: dbURL, patientID: Int64(pid), payload: payload)
+                activeEpisodeID = newID
                 debugCountEpisodes(dbURL: dbURL, patientID: Int64(pid))
+                // Newly created: prepare vitals UI
+                prefillVitalsIfEditing()
+                loadVitalsHistory()
             }
 
-            // Refresh visits/profile and close
+            // Refresh visits/profile but keep the form open
             appState.loadVisits(for: pid)
             appState.loadPatientProfile(for: Int64(pid))
-            dismiss()
         } catch {
             log.error("Episode save failed: \(String(describing: error), privacy: .public)")
         }
@@ -1390,7 +1463,7 @@ extension SickEpisodeForm {
                     out.append("BP \(sysInt)/\(diaInt) \(label)")
                 }
             default:
-                // Handles any future/extra categories (e.g., low‑for‑age / hypotension)
+                // Handles any future/extra categories (e.g., low-for-age / hypotension)
                 if let msg = res.message, !msg.isEmpty {
                     out.append(msg)
                 } else {
@@ -1451,11 +1524,12 @@ extension SickEpisodeForm {
         else if y < 16.0 { return (12, 20) }      // adolescent
         else { return (12, 20) }                  // adult-like
     }
+
     private func prefillVitalsIfEditing() {
-        guard let eid = editingEpisodeID,
+        guard let eid = activeEpisodeID,
               let dbURL = appState.currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else { return }
-        if let latest = latestVitalsRow(dbURL: dbURL, episodeID: Int64(eid)) {
+        if let latest = latestVitalsRow(dbURL: dbURL, episodeID: eid) {
             weightKgField = latest.weightKg.map { String(format: "%.1f", $0) } ?? ""
             heightCmField = latest.heightCm.map { String(format: "%.1f", $0) } ?? ""
             headCircumferenceField = latest.headCircumferenceCm.map { String(format: "%.1f", $0) } ?? ""
@@ -1472,19 +1546,19 @@ extension SickEpisodeForm {
     }
 
     private func loadVitalsHistory() {
-        guard let eid = editingEpisodeID,
+        guard let eid = activeEpisodeID,
               let dbURL = appState.currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else {
             vitalsHistory = []
             vitalsDeleteSelection = nil
             return
         }
-        vitalsHistory = listVitalsForEpisode(dbURL: dbURL, episodeID: Int64(eid))
+        vitalsHistory = listVitalsForEpisode(dbURL: dbURL, episodeID: eid)
         vitalsDeleteSelection = nil
     }
 
     private func saveVitalsTapped() {
-        guard let eid = editingEpisodeID,
+        guard let eid = activeEpisodeID,
               let pid = appState.selectedPatientID,
               let dbURL = appState.currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else { return }
@@ -1514,13 +1588,13 @@ extension SickEpisodeForm {
             }
 
             if replacePreviousVitals {
-                _ = deleteAllVitalsForEpisode(dbURL: dbURL, episodeID: Int64(eid))
+                _ = deleteAllVitalsForEpisode(dbURL: dbURL, episodeID: eid)
             }
 
             _ = try insertVitals(
                 dbURL: dbURL,
                 patientID: Int64(pid),
-                episodeID: Int64(eid),
+                episodeID: eid,
                 weightKg: w, heightCm: h, headCircumferenceCm: hc,
                 temperatureC: t, heartRate: hr, respiratoryRate: rr, spo2: s2,
                 bpSys: bs, bpDia: bd,
