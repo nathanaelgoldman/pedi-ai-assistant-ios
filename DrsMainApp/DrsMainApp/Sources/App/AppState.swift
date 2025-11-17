@@ -1629,6 +1629,581 @@ final class AppState: ObservableObject {
             }
         }
 
+        /// Build a lightweight, human-readable PMH summary for AI/guideline use.
+        /// Uses the boolean flags on `PastMedicalHistory` plus the free-text fields.
+        func pmhSummaryForSelectedPatient() -> String? {
+            guard let pmh = pastMedicalHistory else {
+                return nil
+            }
+
+            var conditions: [String] = []
+
+            // Boolean flags → simple condition labels
+            if (pmh.asthma ?? 0) != 0 {
+                conditions.append("asthma")
+            }
+            if (pmh.otitis ?? 0) != 0 {
+                conditions.append("recurrent otitis")
+            }
+            if (pmh.uti ?? 0) != 0 {
+                conditions.append("urinary tract infection")
+            }
+            if (pmh.allergies ?? 0) != 0 {
+                conditions.append("allergies")
+            }
+
+            var parts: [String] = []
+
+            if !conditions.isEmpty {
+                parts.append("Past medical history: " + conditions.joined(separator: "; ") + ".")
+            }
+
+            // Free-text allergy details (if present)
+            if let allergyDetails = pmh.allergyDetails?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !allergyDetails.isEmpty {
+                parts.append("Allergy details: \(allergyDetails).")
+            }
+
+            // Free-text 'other' PMH (if present)
+            if let other = pmh.other?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !other.isEmpty {
+                parts.append("Other PMH: \(other).")
+            }
+
+            let summary = parts.joined(separator: " ")
+
+            return summary.isEmpty ? nil : summary
+        }
+
+        /// Convenience wrapper for AI context: return the patient's vaccination status
+        /// (if present) without mutating any UI state.
+        func vaccinationSummaryForSelectedPatient() -> String? {
+            return getVaccinationStatusForSelectedPatient()
+        }
+
+        // MARK: - AI assistance (per-episode; stub state)
+
+        /// Guideline flags derived for the active episode (local JSON rules will be wired later).
+        @Published var aiGuidelineFlagsForActiveEpisode: [String] = []
+
+        /// AI summaries per provider label (e.g., "OpenAI", "UpToDate"), for the active episode.
+        /// For now this is populated by a local stub.
+        @Published var aiSummariesForActiveEpisode: [String: String] = [:]
+
+        /// Optional ICD-10 code suggestion for the active episode (from AI/guidelines).
+        /// This is not persisted yet; the clinician can choose to apply it into the episode form.
+        @Published var icd10SuggestionForActiveEpisode: String? = nil
+
+        /// Optional resolver that lets the host app provide clinician-specific sick-visit JSON rules.
+        /// This keeps AppState decoupled from ClinicianStore while still allowing per-doctor config.
+        var sickRulesJSONResolver: (() -> String?)?
+
+        /// Optional resolver that lets the host app provide the clinician-specific sick-visit AI prompt.
+        /// This is typically bound to the active user's `aiSickPrompt` field.
+        var sickPromptResolver: (() -> String?)?
+        /// Optional resolver that yields an AI provider for sick episodes (per active clinician).
+        /// This keeps AppState decoupled from concrete implementations like OpenAIProvider.
+        var episodeAIProviderResolver: (() -> EpisodeAIProvider?)?
+
+        /// Lightweight snapshot of the clinically relevant data we want to feed into
+        /// guideline rules and AI prompts for a single sick visit.
+        struct EpisodeAIContext {
+            let patientID: Int
+            let episodeID: Int
+            let problemListing: String
+            let complementaryInvestigations: String
+            let vaccinationStatus: String?
+            let pmhSummary: String?
+        }
+
+        /// Sanitize problem listing text before sending to AI:
+        ///  - drop lines that look like they contain explicit identity labels (e.g. "Patient: ...")
+        ///  - drop lines that contain template field names like "first_name"/"last_name"/"full_name".
+        /// The goal is to keep the content clinically rich while avoiding identifiers.
+        private func sanitizeProblemListingForAI(_ text: String) -> String {
+            guard !text.isEmpty else { return text }
+
+            let lines = text.components(separatedBy: .newlines)
+            let filtered = lines.compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty { return nil }
+                let lower = trimmed.lowercased()
+
+                // Drop obvious identity lines
+                if lower.hasPrefix("patient:") { return nil }
+                if lower.hasPrefix("name:") { return nil }
+
+                // Drop lines that reference raw identity field names from templates
+                if lower.contains("first_name") { return nil }
+                if lower.contains("last_name") { return nil }
+                if lower.contains("full_name") { return nil }
+
+                return trimmed
+            }
+
+            return filtered.joined(separator: "\n")
+        }
+
+        /// Clear AI state when switching patient, bundle, or active episode.
+        func clearAIForEpisodeContext() {
+            aiGuidelineFlagsForActiveEpisode = []
+            aiSummariesForActiveEpisode = [:]
+            icd10SuggestionForActiveEpisode = nil
+        }
+        /// Very lightweight heuristic ICD-10 suggestion based on free-text context.
+        /// This is a stub used until real AI provider output is wired in.
+        private func deriveICD10Suggestion(from context: EpisodeAIContext) -> String? {
+            let combined = (context.problemListing + " " + context.complementaryInvestigations)
+                .lowercased()
+
+            func contains(_ needle: String) -> Bool {
+                combined.contains(needle)
+            }
+
+            // NOTE: These are intentionally broad, best-effort mappings for stub use only.
+            if contains("bronchiolitis") {
+                return "J21.9 – Acute bronchiolitis, unspecified"
+            }
+            if contains("pneumonia") {
+                return "J18.9 – Pneumonia, unspecified organism"
+            }
+            if contains("otitis") || (contains("ear") && contains("pain")) {
+                return "H66.9 – Otitis media, unspecified"
+            }
+            if contains("asthma") || contains("wheezing") {
+                return "J45.9 – Asthma, unspecified"
+            }
+            if contains("diarrhea") || contains("diarrhoea") {
+                return "R19.7 – Diarrhea, unspecified"
+            }
+            if contains("uti") || contains("urinary tract infection") || contains("cystitis") {
+                return "N39.0 – Urinary tract infection, site not specified"
+            }
+            if contains("fever") {
+                return "R50.9 – Fever, unspecified"
+            }
+
+            return nil
+        }
+
+        /// Temporary stub for local guideline flags.
+        /// This will later be replaced by a JSON rules engine using the clinician-configured rules.
+        func runGuidelineFlagsStub(using context: EpisodeAIContext) {
+            var flags: [String] = []
+
+            let trimmedProblems = context.problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedProblems.isEmpty {
+                flags.append("Problem listing present for this episode.")
+            }
+
+            let trimmedInv = context.complementaryInvestigations.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedInv.isEmpty {
+                flags.append("Complementary investigations documented.")
+            }
+
+            if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !vacc.isEmpty {
+                flags.append("Vaccination status documented.")
+            }
+
+            if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pmh.isEmpty {
+                flags.append("Past medical history documented.")
+            }
+
+            if flags.isEmpty {
+                flags = ["No guideline rules configured yet; JSON rules will be applied in a later step."]
+            }
+
+            aiGuidelineFlagsForActiveEpisode = flags
+        }
+
+        /// Simple JSON-decodable container for guideline rules.
+        /// Supports two shapes:
+        ///   { "flags": [...], "rules": [ ... ] }
+        /// The `flags` array is used as-is; `rules` are evaluated
+        /// against the current EpisodeAIContext.
+        private struct GuidelineRuleSet: Decodable {
+            struct Rule: Decodable {
+                struct Conditions: Decodable {
+                    /// Substrings that should appear in the problem listing.
+                    let problemContains: [String]?
+                    /// Substrings that should appear in the complementary investigations text.
+                    let investigationsContains: [String]?
+                    /// Substrings that should appear in the PMH summary.
+                    let pmhContains: [String]?
+                    /// Substrings that should appear in the vaccination summary.
+                    let vaccinationContains: [String]?
+                }
+
+                let id: String?
+                let description: String?
+                let flag: String?
+                let conditions: Conditions?
+            }
+
+            let flags: [String]?
+            let rules: [Rule]?
+        }
+
+        /// Evaluate whether a rule's conditions match the given episode context.
+        /// Empty/nil condition arrays are treated as "no constraint" for that field.
+        private func ruleConditionsMatch(_ cond: GuidelineRuleSet.Rule.Conditions?, context: EpisodeAIContext) -> Bool {
+            guard let cond = cond else {
+                // No conditions at all → always match
+                return true
+            }
+
+            func fieldContainsAny(_ needles: [String]?, in haystack: String?) -> Bool {
+                // If there are no needles for this field, treat as unconstrained (pass-through).
+                guard let needles = needles, !needles.isEmpty else { return true }
+                guard let haystack = haystack?.lowercased(), !haystack.isEmpty else { return false }
+
+                for raw in needles {
+                    let needle = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    if !needle.isEmpty, haystack.contains(needle) {
+                        return true
+                    }
+                }
+                return false
+            }
+
+            let problemOK = fieldContainsAny(cond.problemContains, in: context.problemListing)
+            let invOK = fieldContainsAny(cond.investigationsContains, in: context.complementaryInvestigations)
+            let pmhOK = fieldContainsAny(cond.pmhContains, in: context.pmhSummary)
+            let vaccOK = fieldContainsAny(cond.vaccinationContains, in: context.vaccinationStatus)
+
+            // All fields that have constraints must be satisfied (AND semantics).
+            return problemOK && invOK && pmhOK && vaccOK
+        }
+
+        /// Entry point for JSON-based guideline flags.
+        /// - If `rulesJSON` is nil or empty, falls back to the stub behavior.
+        /// - For now we support very simple shapes:
+        ///     1) ["flag 1", "flag 2"]
+        ///     2) { "flags": ["flag 1", "flag 2"] }
+        ///   This keeps things safe while we evolve toward the full pediatric rules engine.
+        func runGuidelineFlags(using context: EpisodeAIContext, rulesJSON: String?) {
+            // Determine the effective JSON to use:
+            //  1) explicit `rulesJSON` parameter if non-empty
+            //  2) else, whatever the host app resolver provides (per-clinician rules)
+            let effectiveRaw: String? = {
+                if let supplied = rulesJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !supplied.isEmpty {
+                    return supplied
+                }
+                if let resolved = sickRulesJSONResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !resolved.isEmpty {
+                    return resolved
+                }
+                return nil
+            }()
+
+            // No rules configured anywhere? Use the existing stub so the UI still shows something helpful.
+            guard let raw = effectiveRaw else {
+                runGuidelineFlagsStub(using: context)
+                return
+            }
+
+            do {
+                let data = Data(raw.utf8)
+
+                // First, try to decode a structured rule set.
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                if let ruleSet = try? decoder.decode(GuidelineRuleSet.self, from: data) {
+                    var flags: [String] = []
+
+                    // Optional top-level flags
+                    if let baseFlags = ruleSet.flags {
+                        flags.append(contentsOf: baseFlags
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty })
+                    }
+
+                    // Rule-based flags derived from the episode context
+                    if let rules = ruleSet.rules {
+                        for rule in rules {
+                            if ruleConditionsMatch(rule.conditions, context: context) {
+                                let primary = rule.flag?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                let fallback = rule.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                let text = primary.isEmpty ? fallback : primary
+                                if !text.isEmpty {
+                                    flags.append(text)
+                                }
+                            }
+                        }
+                    }
+
+                    if !flags.isEmpty {
+                        aiGuidelineFlagsForActiveEpisode = flags
+                        return
+                    } else {
+                        // Structured rules present but none matched or produced text → fall back
+                        runGuidelineFlagsStub(using: context)
+                        return
+                    }
+                }
+
+                // Fallback: support very simple shapes for backwards compatibility.
+                let obj = try JSONSerialization.jsonObject(with: data, options: [])
+
+                var derivedFlags: [String] = []
+
+                // Case 1: array of strings → treat as flags directly
+                if let arr = obj as? [String] {
+                    derivedFlags = arr
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                }
+                // Case 2: dictionary with "flags": [String]
+                else if let dict = obj as? [String: Any],
+                        let arr = dict["flags"] as? [String] {
+                    derivedFlags = arr
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                }
+
+                if derivedFlags.isEmpty {
+                    // Structure not recognized yet → fall back to stub for now.
+                    runGuidelineFlagsStub(using: context)
+                } else {
+                    aiGuidelineFlagsForActiveEpisode = derivedFlags
+                }
+            } catch {
+                // JSON parse failed → keep behavior safe and predictable.
+                runGuidelineFlagsStub(using: context)
+            }
+        }
+
+        /// Build a concrete sick-visit AI prompt by combining:
+        ///  - the clinician's configured sick-visit prompt (if any), and
+        ///  - a structured patient/episode context.
+        ///
+        /// This string can be sent as-is to any text-based AI provider.
+        func buildSickAIPrompt(using context: EpisodeAIContext) -> String {
+            let basePrompt = sickPromptResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let header: String
+
+            if let bp = basePrompt, !bp.isEmpty {
+                header = bp
+            } else {
+                header = """
+                You are assisting with a pediatric sick visit. Read the clinical context below (problem listing, investigations, vaccination status, and past medical history) and provide:
+                1) A concise clinical summary.
+                2) A prioritized differential diagnosis list.
+                3) Suggested investigations only if they are clearly indicated.
+                4) A suggested ICD-10 code (or a short list), with brief justification.
+                """
+            }
+
+            var lines: [String] = []
+            lines.append(header)
+            lines.append("")
+            lines.append("---")
+            lines.append("Patient/episode context")
+            lines.append("---")
+            lines.append("")
+            lines.append("Problem listing:")
+            let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
+            lines.append(sanitizedProblems.isEmpty ? "(none provided)" : sanitizedProblems)
+            lines.append("")
+            lines.append("Complementary investigations:")
+            lines.append(context.complementaryInvestigations.isEmpty ? "(none documented)" : context.complementaryInvestigations)
+            lines.append("")
+            if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !vacc.isEmpty {
+                lines.append("Vaccination status: \(vacc)")
+            } else {
+                lines.append("Vaccination status: not documented.")
+            }
+            if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pmh.isEmpty {
+                lines.append("Past medical history: \(pmh)")
+            } else {
+                lines.append("Past medical history: not documented.")
+            }
+
+            return lines.joined(separator: "\n")
+        }
+
+        /// Persist an AI interaction for a specific episode into the `ai_inputs` table.
+        /// This keeps an audit trail of model, prompt, and response per episode.
+        private func saveAIInput(forEpisodeID episodeID: Int, model: String, prompt: String, response: String) {
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                log.info("saveAIInput: no DB URL; skipping persist")
+                return
+            }
+
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
+                log.error("saveAIInputForActiveEpisode: failed to open DB at \(dbURL.path, privacy: .public)")
+                return
+            }
+            defer { sqlite3_close(db) }
+
+            // Ensure ai_inputs table exists (idempotent).
+            let createSQL = """
+            CREATE TABLE IF NOT EXISTS ai_inputs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              episode_id INTEGER,
+              model TEXT,
+              prompt TEXT,
+              response TEXT,
+              created_at TEXT,
+              FOREIGN KEY (episode_id) REFERENCES episodes(id)
+            );
+            """
+            if sqlite3_exec(db, createSQL, nil, nil, nil) != SQLITE_OK {
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("saveAIInputForActiveEpisode: ai_inputs CREATE failed: \(msg, privacy: .public)")
+                return
+            }
+
+            let insertSQL = "INSERT INTO ai_inputs (episode_id, model, prompt, response, created_at) VALUES (?, ?, ?, ?, ?);"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt else {
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("saveAIInputForActiveEpisode: INSERT prepare failed: \(msg, privacy: .public)")
+                return
+            }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(episodeID))
+            _ = model.withCString { c in sqlite3_bind_text(stmt, 2, c, -1, SQLITE_TRANSIENT) }
+            _ = prompt.withCString { c in sqlite3_bind_text(stmt, 3, c, -1, SQLITE_TRANSIENT) }
+            _ = response.withCString { c in sqlite3_bind_text(stmt, 4, c, -1, SQLITE_TRANSIENT) }
+
+            let iso = ISO8601DateFormatter()
+            let nowISO = iso.string(from: Date())
+            _ = nowISO.withCString { c in sqlite3_bind_text(stmt, 5, c, -1, SQLITE_TRANSIENT) }
+
+            if sqlite3_step(stmt) != SQLITE_DONE {
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("saveAIInputForActiveEpisode: INSERT step failed: \(msg, privacy: .public)")
+                return
+            }
+
+            // Refresh in-memory AI history for this episode.
+            DispatchQueue.main.async {
+                self.loadAIInputs(forEpisodeID: episodeID)
+            }
+
+            log.info("Saved AI input for episode \(episodeID, privacy: .public) model=\(model, privacy: .public)")
+        }
+        /// Apply a provider-agnostic AI result to state and persistence.
+        /// All concrete AI provider clients should funnel through this helper.
+        func applyAIResult(_ result: EpisodeAIResult, for context: EpisodeAIContext) {
+            // Persist this AI interaction in the ai_inputs table.
+            let prompt = buildSickAIPrompt(using: context)
+            saveAIInput(
+                forEpisodeID: context.episodeID,
+                model: result.providerModel,
+                prompt: prompt,
+                response: result.summary
+            )
+
+            // Publish ICD-10 suggestion and summary for the active episode on the main queue.
+            DispatchQueue.main.async {
+                self.icd10SuggestionForActiveEpisode = result.icd10Suggestion
+                // For now keep a single-summary mapping per provider/model.
+                self.aiSummariesForActiveEpisode = [result.providerModel: result.summary]
+            }
+        }
+    
+        /// Entry point used by UI to run AI for a given sick episode context.
+        /// For now, this simply calls the local stub. Later it can dispatch to one
+        /// or more configured providers (OpenAI, UpToDate, local models, etc.).
+        /// Entry point used by UI to run AI for a given sick episode context.
+        /// For now, this prefers any configured provider (e.g. OpenAI) and falls
+        /// back to the local stub when none is available or on error.
+        func runAIForEpisode(using context: EpisodeAIContext) {
+            if let provider = episodeAIProviderResolver?() {
+                // Run the provider asynchronously so the UI remains responsive.
+                Task {
+                    do {
+                        let prompt = buildSickAIPrompt(using: context)
+                        let result = try await provider.evaluateEpisode(context: context, prompt: prompt)
+                        // Funnel all provider output through the common sink.
+                        self.applyAIResult(result, for: context)
+                    } catch {
+                        self.log.error("runAIForEpisode: provider error: \(String(describing: error), privacy: .public)")
+                        // Keep things safe and visible to the clinician.
+                        DispatchQueue.main.async {
+                            self.aiSummariesForActiveEpisode = [
+                                "error": "AI provider error: \(error.localizedDescription). Falling back to local stub."
+                            ]
+                        }
+                        // Fallback: still give a local stub summary and ICD-10 suggestion.
+                        self.runAIStub(using: context)
+                    }
+                }
+            } else {
+                // No provider configured yet → keep current behavior.
+                runAIStub(using: context)
+            }
+        }
+
+        /// Temporary stub for an AI call. This will later dispatch to provider-specific
+        /// clients (OpenAI, UpToDate, etc.) based on the clinician's AI setup.
+        func runAIStub(using context: EpisodeAIContext) {
+            var pieces: [String] = []
+
+            let trimmedProblems = context.problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedProblems.isEmpty {
+                pieces.append("Problem listing provided")
+            }
+
+            let trimmedInv = context.complementaryInvestigations.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedInv.isEmpty {
+                pieces.append("Investigations described")
+            }
+
+            if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !vacc.isEmpty {
+                pieces.append("Vaccination: \(vacc)")
+            }
+
+            if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pmh.isEmpty {
+                pieces.append("PMH included")
+            }
+
+            // Derive a very simple ICD-10 suggestion from the free-text context (stub only).
+            let icdSuggestion = deriveICD10Suggestion(from: context)
+            if let icdSuggestion {
+                pieces.append("ICD-10 suggestion available (\(icdSuggestion))")
+            }
+
+            // Check whether a clinician-specific sick prompt is configured.
+            let hasCustomPrompt: Bool = {
+                if let p = sickPromptResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !p.isEmpty {
+                    return true
+                }
+                return false
+            }()
+            pieces.append(hasCustomPrompt ? "Clinician sick-visit prompt configured" : "Using default sick-visit AI prompt")
+
+            let summary: String
+            if pieces.isEmpty {
+                summary = "Placeholder AI summary – no episode context was provided. Once configured, AI providers will analyze problem listing, investigations, vaccination status and past medical history."
+            } else {
+                summary = "Stub AI summary based on current episode → " + pieces.joined(separator: " • ")
+            }
+
+            // Wrap the stub output into a provider-agnostic result and funnel it
+            // through the shared apply helper. This keeps the wiring identical
+            // for future real providers.
+            let result = EpisodeAIResult(
+                providerModel: "local-stub",
+                summary: summary,
+                icd10Suggestion: icdSuggestion
+            )
+            applyAIResult(result, for: context)
+        }
+
     // MARK: - Vaccination Status (read/write on patients.vaccination_status)
 
     /// Return the vaccination_status for the currently selected patient (without mutating UI state).
@@ -1705,6 +2280,28 @@ final class AppState: ObservableObject {
     }
 
     @Published var episodesForActivePatient: [EpisodeRow] = []
+        
+    // MARK: - AI inputs (per-episode history)
+
+    /// Minimal row representing one AI interaction stored in `ai_inputs`.
+    struct AIInputRow: Identifiable, Hashable {
+        let id: Int
+        let createdAtISO: String
+        let model: String
+        let responsePreview: String
+    }
+
+    /// Provider-agnostic result of an AI evaluation for a sick episode.
+    /// All AI providers (OpenAI, UpToDate, local models, etc.) can populate this
+    /// and then call `applyAIResult(_:for:)` to update state and persistence.
+    struct EpisodeAIResult {
+        let providerModel: String
+        let summary: String
+        let icd10Suggestion: String?
+    }
+
+    /// Most recent AI interactions for the currently active episode.
+    @Published var aiInputsForActiveEpisode: [AIInputRow] = []
 
     /// Reload the episodes list for the currently selected patient.
     /// Safe to call after inserts/updates; reads from `currentDBURL` and publishes to `episodesForActivePatient`.
@@ -1772,6 +2369,70 @@ final class AppState: ObservableObject {
         self.log.info("loadEpisodeRows → \(rows.count) rows for pid \(patientID, privacy: .public)")
         DispatchQueue.main.async { self.episodesForActivePatient = rows }
     }
+    
+    /// Reload the AI inputs list for a given episode id from `ai_inputs`.
+    /// Safe to call whenever an episode is selected or a new AI call is recorded.
+    func loadAIInputs(forEpisodeID episodeID: Int) {
+        guard let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            DispatchQueue.main.async { self.aiInputsForActiveEpisode = [] }
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+            DispatchQueue.main.async { self.aiInputsForActiveEpisode = [] }
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT id,
+               COALESCE(created_at, '') AS created_at,
+               COALESCE(model, '') AS model,
+               COALESCE(response, '') AS response
+        FROM ai_inputs
+        WHERE episode_id = ?
+        ORDER BY datetime(COALESCE(created_at, '1970-01-01T00:00:00')) DESC, id DESC;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt else {
+            DispatchQueue.main.async { self.aiInputsForActiveEpisode = [] }
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(episodeID))
+
+        var rows: [AIInputRow] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = Int(sqlite3_column_int64(stmt, 0))
+            let created = sqlite3_column_text(stmt, 1).flatMap { String(cString: $0) } ?? ""
+            let model = sqlite3_column_text(stmt, 2).flatMap { String(cString: $0) } ?? ""
+            let resp = sqlite3_column_text(stmt, 3).flatMap { String(cString: $0) } ?? ""
+
+            // Build a short, single-line preview of the response.
+            let trimmed = resp
+                .replacingOccurrences(of: "\r\n", with: " ")
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview: String = {
+                if trimmed.count <= 160 { return trimmed }
+                let idx = trimmed.index(trimmed.startIndex, offsetBy: 160)
+                return String(trimmed[..<idx]) + "…"
+            }()
+
+            rows.append(AIInputRow(id: id,
+                                   createdAtISO: created,
+                                   model: model,
+                                   responsePreview: preview))
+        }
+
+        DispatchQueue.main.async {
+            self.aiInputsForActiveEpisode = rows
+        }
+    }
 
     // MARK: - Episodes (create + edit window helpers)
 
@@ -1783,6 +2444,11 @@ final class AppState: ObservableObject {
     /// Set the currently active episode id for editing.
     func setActiveEpisode(_ id: Int?) {
         self.activeEpisodeID = id
+        if let eid = id {
+            loadAIInputs(forEpisodeID: eid)
+        } else {
+            aiInputsForActiveEpisode = []
+        }
     }
 
     /// Return true if the episode can still be edited (within 24 hours of `created_at`).

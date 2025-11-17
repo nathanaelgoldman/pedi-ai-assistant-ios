@@ -28,8 +28,14 @@ struct Clinician: Identifiable, Equatable {
     var wechat: String?
     var instagram: String?
     var linkedin: String?
-    var aiEndpoint: String?
-    var aiAPIKey: String?
+
+    // AI configuration (per clinician)
+    var aiEndpoint: String?         // default endpoint for primary provider (e.g., OpenAI)
+    var aiAPIKey: String?          // stored as plain text for now; later can move to Keychain
+    var aiSickPrompt: String?      // full prompt text for sick visits
+    var aiWellPrompt: String?      // full prompt text for well visits
+    var aiSickRulesJSON: String?   // JSON rules blob for sick guidelines
+    var aiWellRulesJSON: String?   // JSON rules blob for well visit guidelines
 
     var fullName: String { "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces) }
 }
@@ -138,6 +144,10 @@ final class ClinicianStore: ObservableObject {
         addIfMissing("linkedin")
         addIfMissing("ai_endpoint")
         addIfMissing("ai_api_key")
+        addIfMissing("ai_sick_prompt")
+        addIfMissing("ai_well_prompt")
+        addIfMissing("ai_sick_rules_json")
+        addIfMissing("ai_well_rules_json")
     }
 
     // MARK: - Lifecycle
@@ -160,7 +170,8 @@ final class ClinicianStore: ObservableObject {
                TRIM(first_name) AS first_name,
                TRIM(last_name)  AS last_name,
                title, email, societies, website, twitter, wechat, instagram, linkedin,
-               ai_endpoint, ai_api_key
+               ai_endpoint, ai_api_key,
+               ai_sick_prompt, ai_well_prompt, ai_sick_rules_json, ai_well_rules_json
         FROM users
         ORDER BY last_name, first_name, id;
         """
@@ -198,7 +209,11 @@ final class ClinicianStore: ObservableObject {
                 instagram: s(9),
                 linkedin: s(10),
                 aiEndpoint: s(11),
-                aiAPIKey: s(12)
+                aiAPIKey: s(12),
+                aiSickPrompt: s(13),
+                aiWellPrompt: s(14),
+                aiSickRulesJSON: s(15),
+                aiWellRulesJSON: s(16)
             )
             out.append(user)
         }
@@ -363,6 +378,53 @@ final class ClinicianStore: ObservableObject {
         bindOpt(1, endpoint)
         bindOpt(2, apiKey)
         sqlite3_bind_int64(stmt, 3, sqlite3_int64(id))
+
+        _ = sqlite3_step(stmt)
+        reloadUsers()
+
+        if let active = activeUser, active.id == id {
+            activeUser = users.first(where: { $0.id == id })
+        }
+    }
+
+    /// Update per-clinician AI prompts and JSON rules.
+    /// These values are stored as TEXT columns on the users table.
+    func updateAIPromptsAndRules(
+        id: Int,
+        sickPrompt: String?,
+        wellPrompt: String?,
+        sickRulesJSON: String?,
+        wellRulesJSON: String?
+    ) {
+        guard let db = openDB() else { return }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        UPDATE users SET
+          ai_sick_prompt     = ?,
+          ai_well_prompt     = ?,
+          ai_sick_rules_json = ?,
+          ai_well_rules_json = ?
+        WHERE id = ?;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        func bindText(_ idx: Int32, _ value: String?) {
+            if let v = value?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty {
+                sqlite3_bind_text(stmt, idx, v, -1, SQLITE_TRANSIENT)
+            } else {
+                sqlite3_bind_null(stmt, idx)
+            }
+        }
+
+        bindText(1, sickPrompt)
+        bindText(2, wellPrompt)
+        bindText(3, sickRulesJSON)
+        bindText(4, wellRulesJSON)
+        sqlite3_bind_int64(stmt, 5, sqlite3_int64(id))
 
         _ = sqlite3_step(stmt)
         reloadUsers()

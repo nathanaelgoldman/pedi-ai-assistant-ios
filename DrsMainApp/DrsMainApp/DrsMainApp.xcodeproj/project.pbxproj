@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB01DB712ECB543100F412D8 /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB01DB702ECB542C00F412D8 /* OpenAIProvider.swift */; };
 		BB26FA232EC1ED8E00EB3280 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA222EC1ED8E00EB3280 /* ZIPFoundation */; };
 		BB26FA262EC1EF9600EB3280 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA252EC1EF9600EB3280 /* PediaShared */; };
 		BB26FA292EC1EFE700EB3280 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA282EC1EFE700EB3280 /* PediaShared */; };
@@ -53,6 +54,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		BB01DB702ECB542C00F412D8 /* OpenAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIProvider.swift; sourceTree = "<group>"; };
 		BB3E15A22EB71C5A008E1472 /* ReportBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportBuilder.swift; sourceTree = "<group>"; };
 		BB3E15A92EB74899008E1472 /* GoldenDB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoldenDB.swift; sourceTree = "<group>"; };
 		BB3E15AD2EB89901008E1472 /* ReportDataLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportDataLoader.swift; sourceTree = "<group>"; };
@@ -129,6 +131,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BB01DB6F2ECB53B500F412D8 /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				BB01DB702ECB542C00F412D8 /* OpenAIProvider.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
 		BB3E15A12EB71C36008E1472 /* Reports */ = {
 			isa = PBXGroup;
 			children = (
@@ -227,6 +237,7 @@
 		BB564AF12EAE0BB900870007 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				BB01DB6F2ECB53B500F412D8 /* AI */,
 				BB564AF02EAE0BB900870007 /* Util */,
 				BB9EB0D92EC0CCE300308D39 /* Export */,
 				BB96A5692EBB32F0003F5C44 /* Growth */,
@@ -358,6 +369,7 @@
 				BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */,
 				BB3E15AA2EB7489D008E1472 /* GoldenDB.swift in Sources */,
 				BB91868D2EC7141800A8AA8A /* SickEpisodeForm.swift in Sources */,
+				BB01DB712ECB543100F412D8 /* OpenAIProvider.swift in Sources */,
 				BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */,
 				BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */,
 				BB3E15AE2EB89905008E1472 /* ReportDataLoader.swift in Sources */,
@@ -529,8 +541,19 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6Q54BDS5LK;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -556,8 +579,19 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6Q54BDS5LK;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (

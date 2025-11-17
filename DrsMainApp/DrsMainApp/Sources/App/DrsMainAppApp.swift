@@ -31,6 +31,63 @@ struct DrsMainAppApp: App {
                     if appState.activeUserID == nil {
                         showSignIn = true
                     }
+
+                    // Wire clinician-specific sick-visit JSON rules into AppState so that
+                    // guideline flags can use the active clinician's configured rules.
+                    appState.sickRulesJSONResolver = {
+                        if let uid = appState.activeUserID {
+                            return clinicianStore.users.first(where: { $0.id == uid })?.aiSickRulesJSON
+                        }
+                        return nil
+                    }
+
+                    // Wire clinician-specific sick-visit AI prompt into AppState so that
+                    // AI queries can use the active clinician's configured sick prompt.
+                    appState.sickPromptResolver = {
+                        if let uid = appState.activeUserID {
+                            return clinicianStore.users.first(where: { $0.id == uid })?.aiSickPrompt
+                        }
+                        return nil
+                    }
+
+                    // Wire clinician-specific AI provider into AppState. If the active clinician
+                    // has configured an API key (and optionally a custom endpoint), AppState will
+                    // prefer that provider over the local stub when running episode AI.
+                    appState.episodeAIProviderResolver = {
+                        guard
+                            let uid = appState.activeUserID,
+                            let clinician = clinicianStore.users.first(where: { $0.id == uid })
+                        else {
+                            return nil
+                        }
+
+                        // Require at least an API key; if missing, fall back to the local stub.
+                        guard let apiKeyRaw = clinician.aiAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              !apiKeyRaw.isEmpty
+                        else {
+                            return nil
+                        }
+
+                        // Optional custom endpoint; defaults to the public OpenAI API.
+                        let baseURL: URL = {
+                            if let endpointRaw = clinician.aiEndpoint?.trimmingCharacters(in: .whitespacesAndNewlines),
+                               !endpointRaw.isEmpty,
+                               let url = URL(string: endpointRaw) {
+                                return url
+                            }
+                            return URL(string: "https://api.openai.com/v1")!
+                        }()
+
+                        // For now we hard-code a reasonable default chat model. This can be
+                        // exposed per-clinician later if needed.
+                        let model = "gpt-4o-mini"
+
+                        return OpenAIProvider(
+                            apiKey: apiKeyRaw,
+                            model: model,
+                            apiBaseURL: baseURL
+                        )
+                    }
                 }
                 .sheet(isPresented: $showSignIn) {
                     SignInSheet(showSignIn: $showSignIn)
@@ -48,7 +105,7 @@ struct DrsMainAppApp: App {
                         }(),
                         onClose: { showClinicianProfile = false }
                     )
-                    .frame(minWidth: 640, minHeight: 610)
+                    .frame(minWidth: 640, minHeight: 760)
                 }
                 .toolbar {
                     ToolbarItem(placement: .automatic) {
@@ -249,88 +306,162 @@ private struct ClinicianProfileForm: View {
     @State private var aiEndpoint = ""
     @State private var aiAPIKey   = ""
 
+    // Per-clinician AI prompts and JSON rules
+    @State private var aiSickPrompt: String = ""
+    @State private var aiWellPrompt: String = ""
+    @State private var aiSickRulesJSON: String = ""
+    @State private var aiWellRulesJSON: String = ""
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(user == nil ? "Create Clinician" : "Clinician Profile")
-                .font(.title2)
-                .padding(.horizontal)
-                .padding(.top)
+        NavigationView {
+            ScrollView {
+                Form {
+                    Section("Identity") {
+                        TextField("First name", text: $firstName)
+                        TextField("Last name",  text: $lastName)
+                        TextField("Title (e.g., MD, FAAP)", text: $title)
+                    }
+                    Section("Contact") {
+                        TextField("Email", text: $email)
+                        TextField("Website", text: $website)
+                    }
+                    Section("Professional") {
+                        TextField("Societies (comma-separated)", text: $societies)
+                    }
+                    Section("Social") {
+                        TextField("Twitter/X", text: $twitter)
+                        TextField("WeChat",    text: $wechat)
+                        TextField("Instagram", text: $instagram)
+                        TextField("LinkedIn",  text: $linkedin)
+                    }
+                    Section("AI Assistant (optional)") {
+                        TextField("Endpoint URL", text: $aiEndpoint)
+                        SecureField("API Key",     text: $aiAPIKey)
+                            .textContentType(.password)
+                    }
+                    Section("AI Prompts & Rules") {
+                        DisclosureGroup("Sick visit prompts & rules") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Sick visit AI prompt")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextEditor(text: $aiSickPrompt)
+                                    .frame(minHeight: 100)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.secondary.opacity(0.2))
+                                    )
 
-            Divider()
+                                Text("Sick visit JSON rules (paste JSON here)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 4)
+                                TextEditor(text: $aiSickRulesJSON)
+                                    .frame(minHeight: 100)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.secondary.opacity(0.2))
+                                    )
+                            }
+                            .padding(.vertical, 4)
+                        }
 
-            Form {
-                Section("Identity") {
-                    TextField("First name", text: $firstName)
-                    TextField("Last name",  text: $lastName)
-                    TextField("Title (e.g., MD, FAAP)", text: $title)
-                }
-                Section("Contact") {
-                    TextField("Email", text: $email)
-                    TextField("Website", text: $website)
-                }
-                Section("Professional") {
-                    TextField("Societies (comma-separated)", text: $societies)
-                }
-                Section("Social") {
-                    TextField("Twitter/X", text: $twitter)
-                    TextField("WeChat",    text: $wechat)
-                    TextField("Instagram", text: $instagram)
-                    TextField("LinkedIn",  text: $linkedin)
-                }
-                Section("AI Assistant (optional)") {
-                    TextField("Endpoint URL", text: $aiEndpoint)
-                    SecureField("API Key",     text: $aiAPIKey)
-                        .textContentType(.password)
-                }
-            }
+                        DisclosureGroup("Well visit prompts & rules") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Well visit AI prompt")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextEditor(text: $aiWellPrompt)
+                                    .frame(minHeight: 80)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.secondary.opacity(0.2))
+                                    )
 
-            Divider()
-
-            HStack {
-                Spacer()
-                Button("Close") { onClose() }
-                Button(user == nil ? "Create" : "Save") {
-                    if let u = user {
-                        clinicianStore.updateUser(
-                            id: u.id,
-                            firstName: firstName.isEmpty ? nil : firstName,
-                            lastName:  lastName.isEmpty  ? nil : lastName,
-                            title:     title,
-                            email:     email,
-                            societies: societies,
-                            website:   website,
-                            twitter:   twitter,
-                            wechat:    wechat,
-                            instagram: instagram,
-                            linkedin:  linkedin
-                        )
-                        clinicianStore.updateAISettings(id: u.id,
-                                                        endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
-                                                        apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey)
-                    } else {
-                        if let new = clinicianStore.createUser(
-                            firstName: firstName,
-                            lastName:  lastName,
-                            title:     title,
-                            email:     email,
-                            societies: societies,
-                            website:   website,
-                            twitter:   twitter,
-                            wechat:    wechat,
-                            instagram: instagram,
-                            linkedin:  linkedin
-                        ) {
-                            clinicianStore.updateAISettings(id: new.id,
-                                                            endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
-                                                            apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey)
-                            clinicianStore.setActiveUser(new)
+                                Text("Well visit JSON rules (optional, future use)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 4)
+                                TextEditor(text: $aiWellRulesJSON)
+                                    .frame(minHeight: 80)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.secondary.opacity(0.2))
+                                    )
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
-                    onClose()
+                    Section {
+                        HStack {
+                            Spacer()
+                            Button("Close") { onClose() }
+                            Button(user == nil ? "Create" : "Save") {
+                                if let u = user {
+                                    // Update existing clinician
+                                    clinicianStore.updateUser(
+                                        id: u.id,
+                                        firstName: firstName.isEmpty ? nil : firstName,
+                                        lastName:  lastName.isEmpty  ? nil : lastName,
+                                        title:     title,
+                                        email:     email,
+                                        societies: societies,
+                                        website:   website,
+                                        twitter:   twitter,
+                                        wechat:    wechat,
+                                        instagram: instagram,
+                                        linkedin:  linkedin
+                                    )
+                                    clinicianStore.updateAISettings(
+                                        id: u.id,
+                                        endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
+                                        apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey
+                                    )
+                                    clinicianStore.updateAIPromptsAndRules(
+                                        id: u.id,
+                                        sickPrompt: aiSickPrompt.isEmpty ? nil : aiSickPrompt,
+                                        wellPrompt: aiWellPrompt.isEmpty ? nil : aiWellPrompt,
+                                        sickRulesJSON: aiSickRulesJSON.isEmpty ? nil : aiSickRulesJSON,
+                                        wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
+                                    )
+                                } else {
+                                    // Create new clinician
+                                    if let new = clinicianStore.createUser(
+                                        firstName: firstName,
+                                        lastName:  lastName,
+                                        title:     title,
+                                        email:     email,
+                                        societies: societies,
+                                        website:   website,
+                                        twitter:   twitter,
+                                        wechat:    wechat,
+                                        instagram: instagram,
+                                        linkedin:  linkedin
+                                    ) {
+                                        clinicianStore.updateAISettings(
+                                            id: new.id,
+                                            endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
+                                            apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey
+                                        )
+                                        clinicianStore.updateAIPromptsAndRules(
+                                            id: new.id,
+                                            sickPrompt: aiSickPrompt.isEmpty ? nil : aiSickPrompt,
+                                            wellPrompt: aiWellPrompt.isEmpty ? nil : aiWellPrompt,
+                                            sickRulesJSON: aiSickRulesJSON.isEmpty ? nil : aiSickRulesJSON,
+                                            wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
+                                        )
+                                        clinicianStore.setActiveUser(new)
+                                    }
+                                }
+                                onClose()
+                            }
+                            .keyboardShortcut(.defaultAction)
+                            Spacer()
+                        }
+                    }
                 }
-                .keyboardShortcut(.defaultAction)
             }
-            .padding()
+            .navigationTitle(user == nil ? "Create Clinician" : "Clinician Profile")
         }
         .onAppear {
             if let u = user {
@@ -346,6 +477,10 @@ private struct ClinicianProfileForm: View {
                 linkedin  = u.linkedin ?? ""
                 aiEndpoint = u.aiEndpoint ?? ""
                 aiAPIKey   = u.aiAPIKey ?? ""
+                aiSickPrompt    = u.aiSickPrompt ?? ""
+                aiWellPrompt    = u.aiWellPrompt ?? ""
+                aiSickRulesJSON = u.aiSickRulesJSON ?? ""
+                aiWellRulesJSON = u.aiWellRulesJSON ?? ""
             }
         }
     }

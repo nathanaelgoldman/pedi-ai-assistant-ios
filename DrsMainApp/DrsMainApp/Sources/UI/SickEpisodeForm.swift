@@ -74,6 +74,10 @@ struct SickEpisodeForm: View {
     @State private var anticipatoryGuidance: String = "URI"
     @State private var comments: String = ""
 
+    // MARK: - AI assistance
+    @State private var aiIsRunning: Bool = false
+    @State private var aiPromptPreview: String = ""
+
     // MARK: - Vitals (UI fields)
     @State private var weightKgField: String = ""
     @State private var heightCmField: String = ""
@@ -361,6 +365,173 @@ struct SickEpisodeForm: View {
                     }
                     .padding(.top, 8)
 
+                    // AI assistance (JSON flags + API – stubbed for now)
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionHeader("AI Assistance")
+                        Text("JSON guideline flags run locally and do not change the record; AI queries will later be configured in the clinician profile.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        HStack {
+                            Button {
+                                triggerGuidelineFlags()
+                            } label: {
+                                Label("Check guideline flags", systemImage: "exclamationmark.triangle")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button {
+                                triggerAIForEpisode()
+                            } label: {
+                                if aiIsRunning {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                        .padding(.trailing, 4)
+                                    Text("Asking AI…")
+                                } else {
+                                    Label("Ask AI", systemImage: "sparkles")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(aiIsRunning)
+
+                            Button {
+                                previewAIPrompt()
+                            } label: {
+                                Label("Preview AI prompt", systemImage: "doc.plaintext")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Spacer()
+                        }
+
+                        // ICD-10 suggestion UI (AI Assistance)
+                        if let icdSuggestion = appState.icd10SuggestionForActiveEpisode,
+                           !icdSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Suggested ICD-10")
+                                    .font(.subheadline.bold())
+                                Text(icdSuggestion)
+                                    .font(.caption)
+                                    .textSelection(.enabled)
+
+                                HStack {
+                                    Button {
+                                        // Apply the suggestion into the editable ICD-10 field.
+                                        icd10 = icdSuggestion
+                                    } label: {
+                                        Label("Apply to ICD-10 field", systemImage: "arrow.down.doc")
+                                    }
+                                    .buttonStyle(.bordered)
+
+                                    if !icd10.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Text("Current ICD-10 will be replaced.")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+                                }
+                            }
+                            .padding(8)
+                            .background(Color.green.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        if !appState.aiGuidelineFlagsForActiveEpisode.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Guideline flags (local JSON)")
+                                    .font(.subheadline.bold())
+                                ForEach(appState.aiGuidelineFlagsForActiveEpisode, id: \.self) { flag in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Image(systemName: "info.circle")
+                                            .foregroundStyle(.yellow)
+                                        Text(flag)
+                                            .font(.caption)
+                                    }
+                                }
+                            }
+                            .padding(8)
+                            .background(Color.yellow.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        if !appState.aiSummariesForActiveEpisode.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("AI notes (per provider)")
+                                    .font(.subheadline.bold())
+                                ForEach(appState.aiSummariesForActiveEpisode.keys.sorted(), id: \.self) { provider in
+                                    if let text = appState.aiSummariesForActiveEpisode[provider] {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(provider == "local-stub" ? "AI (stub)" : provider)
+                                                .font(.caption.bold())
+                                                .foregroundStyle(.secondary)
+                                            Text(text)
+                                                .font(.caption)
+                                        }
+                                        .padding(6)
+                                        .background(Color.blue.opacity(0.04))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    }
+                                }
+                            }
+                            .padding(8)
+                            .background(Color.blue.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        if !appState.aiInputsForActiveEpisode.isEmpty {
+                            DisclosureGroup {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    // Simple chronological list, newest → oldest (already sorted in AppState)
+                                    ForEach(appState.aiInputsForActiveEpisode) { row in
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack {
+                                                Text(row.createdAtISO.isEmpty ? "Time: n/a" : row.createdAtISO)
+                                                    .font(.caption2.monospaced())
+                                                Spacer()
+                                                Text(row.model.isEmpty ? "provider: unknown" : row.model)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            Text(row.responsePreview.isEmpty ? "(no response stored)" : row.responsePreview)
+                                                .font(.caption)
+                                        }
+                                        .padding(6)
+                                        .background(Color.gray.opacity(0.04))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    }
+                                }
+                                .padding(.top, 4)
+                            } label: {
+                                Text("AI history for this episode")
+                                    .font(.subheadline.bold())
+                            }
+                            .padding(8)
+                            .background(Color.gray.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        if !aiPromptPreview.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("AI prompt (debug)")
+                                    .font(.subheadline.bold())
+                                ScrollView {
+                                    Text(aiPromptPreview)
+                                        .font(.caption.monospacedDigit())
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .frame(minHeight: 120)
+                                .padding(6)
+                                .background(Color.gray.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .padding(8)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+
                     // Inline Done button so the user can close the form after saving without relying on the toolbar
                     HStack {
                         Spacer()
@@ -392,6 +563,8 @@ struct SickEpisodeForm: View {
                 if activeEpisodeID == nil, let eid = editingEpisodeID {
                     activeEpisodeID = Int64(eid)
                 }
+                // Clear any AI state from previous episodes
+                appState.clearAIForEpisodeContext()
                 loadEditingIfNeeded()
                 prefillVitalsIfEditing()
                 loadVitalsHistory()
@@ -1106,9 +1279,7 @@ struct SickEpisodeForm: View {
            let dbURL = appState.currentDBURL,
            FileManager.default.fileExists(atPath: dbURL.path) {
             let demo = fetchPatientDemographics(dbURL: dbURL, patientID: Int64(pid))
-            if let f = demo.first, let l = demo.last, (!f.isEmpty || !l.isEmpty) {
-                lines.append("Patient: \(f) \(l)".trimmingCharacters(in: .whitespaces))
-            }
+            // Intentionally omit patient name from the problem listing to avoid identifiers.
             if let a = ageText(from: demo.dobISO) {
                 lines.append("Age: \(a)")
             }
@@ -1215,6 +1386,67 @@ struct SickEpisodeForm: View {
         }
 
         problemListing = lines.joined(separator: "\n")
+    }
+
+    // MARK: - AI assistance wiring
+
+    /// Build a lightweight AI context for the current episode, if possible.
+    private func buildEpisodeAIContext() -> AppState.EpisodeAIContext? {
+        guard let pid = appState.selectedPatientID,
+              let eid = activeEpisodeID else {
+            return nil
+        }
+
+        // Pull PMH and vaccination summaries from AppState so they can be fed into
+        // guideline rules and AI prompts.
+        let pmhSummary: String? = appState.pmhSummaryForSelectedPatient()
+        let vaccinationStatus: String? = appState.vaccinationSummaryForSelectedPatient()
+
+        return AppState.EpisodeAIContext(
+            patientID: pid,
+            episodeID: Int(eid),
+            problemListing: problemListing,
+            complementaryInvestigations: complementaryInvestigations,
+            vaccinationStatus: vaccinationStatus,
+            pmhSummary: pmhSummary
+        )
+    }
+
+    /// Trigger local guideline flags via AppState using the current episode context.
+    private func triggerGuidelineFlags() {
+        guard let ctx = buildEpisodeAIContext() else {
+            appState.aiGuidelineFlagsForActiveEpisode = [
+                "Cannot run guideline flags: please ensure a patient and saved episode are selected."
+            ]
+            return
+        }
+        // Use the central JSON-based entry point; for now we pass nil so AppState
+        // falls back to the existing stub when no clinician-specific rules are used.
+        appState.runGuidelineFlags(using: ctx, rulesJSON: nil)
+    }
+
+    /// Trigger the AI call via AppState using the current episode context.
+    private func triggerAIForEpisode() {
+        guard let ctx = buildEpisodeAIContext() else {
+            appState.aiSummariesForActiveEpisode = [
+                "local-stub": "Cannot run AI: please ensure a patient and saved episode are selected."
+            ]
+            return
+        }
+
+        aiIsRunning = true
+        appState.runAIForEpisode(using: ctx)
+        aiIsRunning = false
+    }
+
+    /// Build and store a debug preview of the sick-visit AI prompt for the current episode.
+    private func previewAIPrompt() {
+        guard let ctx = buildEpisodeAIContext() else {
+            aiPromptPreview = "Cannot build AI prompt: please ensure a patient and saved episode are selected, and that problem listing and complementary investigations are filled in as appropriate."
+            return
+        }
+        let prompt = appState.buildSickAIPrompt(using: ctx)
+        aiPromptPreview = prompt
     }
 
     // MARK: - Save (commit to db + refresh UI)
