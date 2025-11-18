@@ -1717,6 +1717,18 @@ final class AppState: ObservableObject {
             let complementaryInvestigations: String
             let vaccinationStatus: String?
             let pmhSummary: String?
+
+            /// Patient age in days at the time of the episode (if known).
+            /// This allows JSON rules to express age bands like 0–28d, 29–90d, etc.
+            let patientAgeDays: Int? = nil
+
+            /// Patient sex, normalized if possible to "male"/"female".
+            /// JSON rules can then use `sex_in: ["male"]`, etc.
+            let patientSex: String? = nil
+
+            /// Maximum recorded temperature in °C around this episode (if available).
+            /// Enables rules like `min_temp_c: 38.0` or `requires_fever: true`.
+            let maxTempC: Double? = nil
         }
 
         /// Sanitize problem listing text before sending to AI:
@@ -1829,14 +1841,42 @@ final class AppState: ObservableObject {
         private struct GuidelineRuleSet: Decodable {
             struct Rule: Decodable {
                 struct Conditions: Decodable {
+                    // -------- Text-based conditions --------
+
                     /// Substrings that should appear in the problem listing.
                     let problemContains: [String]?
+
                     /// Substrings that should appear in the complementary investigations text.
                     let investigationsContains: [String]?
+
                     /// Substrings that should appear in the PMH summary.
                     let pmhContains: [String]?
+
                     /// Substrings that should appear in the vaccination summary.
                     let vaccinationContains: [String]?
+
+                    // -------- Numeric / categorical constraints --------
+                    // These rely on JSONDecoder.keyDecodingStrategy = .convertFromSnakeCase,
+                    // so JSON keys such as `min_age_days` map onto `minAgeDays`, etc.
+
+                    /// Minimum patient age in days (inclusive) for this rule to apply.
+                    let minAgeDays: Int?
+
+                    /// Maximum patient age in days (inclusive) for this rule to apply.
+                    let maxAgeDays: Int?
+
+                    /// Minimum maximum temperature in °C (inclusive).
+                    let minTempC: Double?
+
+                    /// Maximum maximum temperature in °C (inclusive).
+                    let maxTempC: Double?
+
+                    /// If true, the patient must be febrile (based on temperature and/or text).
+                    let requiresFever: Bool?
+
+                    /// Allowed sex values (case-insensitive), e.g. ["male"], ["female"], or
+                    /// ["male","female"]. If nil/empty, sex is not constrained.
+                    let sexIn: [String]?
                 }
 
                 let id: String?
@@ -1863,7 +1903,7 @@ final class AppState: ObservableObject {
                 guard let haystack = haystack?.lowercased(), !haystack.isEmpty else { return false }
 
                 for raw in needles {
-                    let needle = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    let needle = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).lowercased()
                     if !needle.isEmpty, haystack.contains(needle) {
                         return true
                     }
@@ -1871,13 +1911,81 @@ final class AppState: ObservableObject {
                 return false
             }
 
+            // --- 1) Text constraints ---
             let problemOK = fieldContainsAny(cond.problemContains, in: context.problemListing)
-            let invOK = fieldContainsAny(cond.investigationsContains, in: context.complementaryInvestigations)
-            let pmhOK = fieldContainsAny(cond.pmhContains, in: context.pmhSummary)
-            let vaccOK = fieldContainsAny(cond.vaccinationContains, in: context.vaccinationStatus)
+            let invOK     = fieldContainsAny(cond.investigationsContains, in: context.complementaryInvestigations)
+            let pmhOK     = fieldContainsAny(cond.pmhContains, in: context.pmhSummary)
+            let vaccOK    = fieldContainsAny(cond.vaccinationContains, in: context.vaccinationStatus)
 
-            // All fields that have constraints must be satisfied (AND semantics).
-            return problemOK && invOK && pmhOK && vaccOK
+            // --- 2) Age constraints (in days) ---
+            let ageOK: Bool = {
+                if cond.minAgeDays == nil && cond.maxAgeDays == nil {
+                    // No age bounds at all → unconstrained.
+                    return true
+                }
+                guard let ageDays = context.patientAgeDays else {
+                    // Rule requires age info but we don't have it → rule cannot match.
+                    return false
+                }
+                if let min = cond.minAgeDays, ageDays < min { return false }
+                if let max = cond.maxAgeDays, ageDays > max { return false }
+                return true
+            }()
+
+            // --- 3) Temperature constraints (max temp in °C) ---
+            let tempOK: Bool = {
+                if cond.minTempC == nil && cond.maxTempC == nil {
+                    return true
+                }
+                guard let t = context.maxTempC else {
+                    // Rule requires temperature but none is available → no match.
+                    return false
+                }
+                if let minT = cond.minTempC, t < minT { return false }
+                if let maxT = cond.maxTempC, t > maxT { return false }
+                return true
+            }()
+
+            // --- 4) Fever flag (requires_fever) ---
+            let feverOK: Bool = {
+                guard let requires = cond.requiresFever else {
+                    // No explicit requirement → unconstrained.
+                    return true
+                }
+                // Compute a simple fever flag:
+                let hasFeverFromTemp: Bool = {
+                    if let t = context.maxTempC {
+                        return t >= 38.0
+                    }
+                    return false
+                }()
+                let hasFeverFromText: Bool = {
+                    let lower = context.problemListing.lowercased()
+                    return lower.contains("fever") || lower.contains("febrile")
+                }()
+                let hasFever = hasFeverFromTemp || hasFeverFromText
+
+                return requires ? hasFever : !hasFever
+            }()
+
+            // --- 5) Sex constraints ---
+            let sexOK: Bool = {
+                guard let allowed = cond.sexIn, !allowed.isEmpty else {
+                    // No constraint on sex.
+                    return true
+                }
+                guard let sexRaw = context.patientSex?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                      !sexRaw.isEmpty else {
+                    // Rule constrains sex but we don't know it → no match.
+                    return false
+                }
+                let normSex = sexRaw.lowercased()
+                let normAllowed = allowed.map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).lowercased() }
+                return normAllowed.contains(normSex)
+            }()
+
+            // All constrained dimensions must pass (AND semantics).
+            return problemOK && invOK && pmhOK && vaccOK && ageOK && tempOK && feverOK && sexOK
         }
 
         /// Entry point for JSON-based guideline flags.
@@ -1885,17 +1993,17 @@ final class AppState: ObservableObject {
         /// - For now we support very simple shapes:
         ///     1) ["flag 1", "flag 2"]
         ///     2) { "flags": ["flag 1", "flag 2"] }
-        ///   This keeps things safe while we evolve toward the full pediatric rules engine.
+        ///   plus the structured GuidelineRuleSet format above.
         func runGuidelineFlags(using context: EpisodeAIContext, rulesJSON: String?) {
             // Determine the effective JSON to use:
             //  1) explicit `rulesJSON` parameter if non-empty
             //  2) else, whatever the host app resolver provides (per-clinician rules)
             let effectiveRaw: String? = {
-                if let supplied = rulesJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
+                if let supplied = rulesJSON?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
                    !supplied.isEmpty {
                     return supplied
                 }
-                if let resolved = sickRulesJSONResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines),
+                if let resolved = sickRulesJSONResolver?()?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
                    !resolved.isEmpty {
                     return resolved
                 }
@@ -1920,7 +2028,7 @@ final class AppState: ObservableObject {
                     // Optional top-level flags
                     if let baseFlags = ruleSet.flags {
                         flags.append(contentsOf: baseFlags
-                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
                             .filter { !$0.isEmpty })
                     }
 
@@ -1928,8 +2036,8 @@ final class AppState: ObservableObject {
                     if let rules = ruleSet.rules {
                         for rule in rules {
                             if ruleConditionsMatch(rule.conditions, context: context) {
-                                let primary = rule.flag?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                                let fallback = rule.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                let primary = rule.flag?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+                                let fallback = rule.description?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
                                 let text = primary.isEmpty ? fallback : primary
                                 if !text.isEmpty {
                                     flags.append(text)
@@ -1956,14 +2064,14 @@ final class AppState: ObservableObject {
                 // Case 1: array of strings → treat as flags directly
                 if let arr = obj as? [String] {
                     derivedFlags = arr
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
                         .filter { !$0.isEmpty }
                 }
                 // Case 2: dictionary with "flags": [String]
                 else if let dict = obj as? [String: Any],
                         let arr = dict["flags"] as? [String] {
                     derivedFlags = arr
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
                         .filter { !$0.isEmpty }
                 }
 
