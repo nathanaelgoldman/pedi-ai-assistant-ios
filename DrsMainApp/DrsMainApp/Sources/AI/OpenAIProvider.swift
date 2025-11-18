@@ -89,15 +89,44 @@ final class OpenAIProvider: EpisodeAIProvider {
             throw OpenAIProviderError.emptyContent
         }
 
-        // For now we do not attempt to parse an ICD-10 code out of the free text.
-        // That can be done later either by:
-        // - asking OpenAI for structured JSON, or
-        // - reusing local heuristics on `content`.
+        // Try to heuristically extract an ICD-10-like code from the free-text
+        // response. This is intentionally simple and conservative; the clinician
+        // can always override the suggestion in the UI.
+        let icd10 = extractICD10Code(from: content)
+
         return AppState.EpisodeAIResult(
             providerModel: model,
             summary: content,
-            icd10Suggestion: nil
+            icd10Suggestion: icd10
         )
+    }
+
+    /// Attempt to extract the first ICD-10-like code from an AI response.
+    /// Pattern: a letter A–T or V–Z, followed by two alphanumeric characters,
+    /// optionally followed by a dot and 1–4 more alphanumerics, e.g. "A09",
+    /// "J10.1", "K52.9".
+    private func extractICD10Code(from text: String) -> String? {
+        // Use an NSRegularExpression for broad Swift compatibility.
+        let pattern = #"\b([A-TV-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?)\b"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return nil
+        }
+
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        guard let match = regex.firstMatch(in: text, options: [], range: range),
+              match.numberOfRanges >= 2 else {
+            return nil
+        }
+
+        let codeRange = match.range(at: 1)
+        guard codeRange.location != NSNotFound,
+              let swiftRange = Range(codeRange, in: text) else {
+            return nil
+        }
+
+        let candidate = String(text[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return candidate.isEmpty ? nil : candidate
     }
 }
 

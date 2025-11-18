@@ -1693,6 +1693,9 @@ final class AppState: ObservableObject {
         /// Optional ICD-10 code suggestion for the active episode (from AI/guidelines).
         /// This is not persisted yet; the clinician can choose to apply it into the episode form.
         @Published var icd10SuggestionForActiveEpisode: String? = nil
+        /// All ICD-10-like codes detected in the latest AI summary for the active episode.
+        /// Used by the UI to let the clinician pick one or more codes into the ICD-10 field.
+        @Published var aiICD10CandidatesForActiveEpisode: [String] = []
 
         /// Optional resolver that lets the host app provide clinician-specific sick-visit JSON rules.
         /// This keeps AppState decoupled from ClinicianStore while still allowing per-doctor config.
@@ -1976,6 +1979,46 @@ final class AppState: ObservableObject {
             }
         }
 
+        /// Build a structured JSON snapshot of the current sick-episode context.
+        /// This is designed to be provider-agnostic and safe to embed directly
+        /// into text prompts for LLMs.
+        private func buildSickEpisodeJSON(using context: EpisodeAIContext) -> String {
+            // Start from the already-sanitized problem listing text.
+            let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
+            let problemLines = sanitizedProblems
+                .split(separator: "\n")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            var payload: [String: Any] = [
+                "episode_id": context.episodeID,
+                "problem_listing_raw": context.problemListing,
+                "problem_listing_lines": problemLines,
+                "complementary_investigations": context.complementaryInvestigations
+            ]
+
+            if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !vacc.isEmpty {
+                payload["vaccination_status"] = vacc
+            }
+
+            if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pmh.isEmpty {
+                payload["past_medical_history"] = pmh
+            }
+
+            // Encode as pretty-printed JSON so it is easy to read in debug/preview
+            // and easy for LLMs to parse.
+            if JSONSerialization.isValidJSONObject(payload),
+               let data = try? JSONSerialization.data(withJSONObject: payload,
+                                                      options: [.prettyPrinted, .sortedKeys]),
+               let jsonString = String(data: data, encoding: .utf8) {
+                return jsonString
+            } else {
+                return "{}"
+            }
+        }
+
         /// Build a concrete sick-visit AI prompt by combining:
         ///  - the clinician's configured sick-visit prompt (if any), and
         ///  - a structured patient/episode context.
@@ -2023,6 +2066,15 @@ final class AppState: ObservableObject {
             } else {
                 lines.append("Past medical history: not documented.")
             }
+
+            // Append a machine-readable JSON snapshot of the same episode context.
+            lines.append("")
+            lines.append("---")
+            lines.append("Structured episode snapshot (JSON)")
+            lines.append("---")
+            lines.append("")
+            let jsonSnapshot = buildSickEpisodeJSON(using: context)
+            lines.append(jsonSnapshot)
 
             return lines.joined(separator: "\n")
         }
@@ -2092,6 +2144,39 @@ final class AppState: ObservableObject {
 
             log.info("Saved AI input for episode \(episodeID, privacy: .public) model=\(model, privacy: .public)")
         }
+        /// Extract all ICD-10-like codes from a free-text AI summary.
+        /// Pattern: a letter A–T or V–Z, followed by two alphanumeric characters,
+        /// optionally followed by a dot and 1–4 more alphanumerics (e.g. "A09", "J10.1").
+        private func extractICD10Codes(from text: String) -> [String] {
+            let pattern = #"\b([A-TV-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?)\b"#
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+                return []
+            }
+
+            let nsText = text as NSString
+            let range = NSRange(location: 0, length: nsText.length)
+            let matches = regex.matches(in: text, options: [], range: range)
+
+            var seen = Set<String>()
+            var codes: [String] = []
+
+            for match in matches {
+                guard match.numberOfRanges >= 2 else { continue }
+                let codeRange = match.range(at: 1)
+                guard codeRange.location != NSNotFound,
+                      let swiftRange = Range(codeRange, in: text) else {
+                    continue
+                }
+                let candidate = String(text[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !candidate.isEmpty && !seen.contains(candidate) {
+                    seen.insert(candidate)
+                    codes.append(candidate)
+                }
+            }
+
+            return codes
+        }
+        
         /// Apply a provider-agnostic AI result to state and persistence.
         /// All concrete AI provider clients should funnel through this helper.
         func applyAIResult(_ result: EpisodeAIResult, for context: EpisodeAIContext) {
@@ -2104,9 +2189,24 @@ final class AppState: ObservableObject {
                 response: result.summary
             )
 
-            // Publish ICD-10 suggestion and summary for the active episode on the main queue.
+            // Prefer any provider-supplied ICD-10 suggestion; if absent or blank,
+            // fall back to our local heuristic so the clinician still sees something.
+            let effectiveICD10: String? = {
+                if let code = result.icd10Suggestion,
+                   !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return code
+                }
+                return deriveICD10Suggestion(from: context)
+            }()
+
+            // Extract all ICD-10-like codes from the AI summary text so the UI
+            // can present them as pickable chips for the clinician.
+            let allCandidates = extractICD10Codes(from: result.summary)
+
+            // Publish ICD-10 suggestion, candidate list, and summary for the active episode.
             DispatchQueue.main.async {
-                self.icd10SuggestionForActiveEpisode = result.icd10Suggestion
+                self.icd10SuggestionForActiveEpisode = effectiveICD10
+                self.aiICD10CandidatesForActiveEpisode = allCandidates
                 // For now keep a single-summary mapping per provider/model.
                 self.aiSummariesForActiveEpisode = [result.providerModel: result.summary]
             }
@@ -2284,11 +2384,14 @@ final class AppState: ObservableObject {
     // MARK: - AI inputs (per-episode history)
 
     /// Minimal row representing one AI interaction stored in `ai_inputs`.
+    /// Includes both a short preview and the full response text so the UI can
+    /// show a compact list and a full read-only viewer per entry.
     struct AIInputRow: Identifiable, Hashable {
         let id: Int
         let createdAtISO: String
         let model: String
         let responsePreview: String
+        let fullResponse: String
     }
 
     /// Provider-agnostic result of an AI evaluation for a sick episode.
@@ -2426,7 +2529,8 @@ final class AppState: ObservableObject {
             rows.append(AIInputRow(id: id,
                                    createdAtISO: created,
                                    model: model,
-                                   responsePreview: preview))
+                                   responsePreview: preview,
+                                   fullResponse: resp))
         }
 
         DispatchQueue.main.async {

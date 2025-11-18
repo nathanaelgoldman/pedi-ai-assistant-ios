@@ -77,6 +77,7 @@ struct SickEpisodeForm: View {
     // MARK: - AI assistance
     @State private var aiIsRunning: Bool = false
     @State private var aiPromptPreview: String = ""
+    @State private var selectedAIHistoryID: Int? = nil
 
     // MARK: - Vitals (UI fields)
     @State private var weightKgField: String = ""
@@ -118,7 +119,7 @@ struct SickEpisodeForm: View {
     private let breathingChoices = ["Normal","Fast","Labored","Noisy"]
     private let urinationChoices = ["Normal","Decreased","Painful","Foul-smelling"]
     private let painChoices = ["None","Abdominal","Ear","Throat","Limb","Head","Neck"]
-    private let stoolsChoices = ["Normal","Soft","Liquid","Hard"]
+    private let stoolsChoices = ["Normal","Soft","Liquid","Hard","Bloody diarrhea"]
     private let contextChoices = ["Travel","Sick contact","Daycare","None"]
 
     private let generalChoices = ["Well","Tired","Irritable","Lethargic"]
@@ -398,7 +399,7 @@ struct SickEpisodeForm: View {
                             Button {
                                 previewAIPrompt()
                             } label: {
-                                Label("Preview AI prompt", systemImage: "doc.plaintext")
+                                Label("Preview AI JSON", systemImage: "doc.plaintext")
                             }
                             .buttonStyle(.bordered)
 
@@ -435,6 +436,40 @@ struct SickEpisodeForm: View {
                             }
                             .padding(8)
                             .background(Color.green.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        
+                        // All ICD-10-like codes detected in the latest AI note
+                        if !appState.aiICD10CandidatesForActiveEpisode.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("ICD-10 codes found in AI note")
+                                    .font(.subheadline.bold())
+
+                                Text("Tap a code to append it to the ICD-10 field. Duplicates are ignored.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+
+                                // Simple adaptive grid of code buttons
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: 70), spacing: 8)],
+                                    alignment: .leading,
+                                    spacing: 8
+                                ) {
+                                    ForEach(appState.aiICD10CandidatesForActiveEpisode, id: \.self) { code in
+                                        Button {
+                                            appendICD10Code(code)
+                                        } label: {
+                                            Text(code)
+                                                .font(.caption.bold())
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                        }
+                                        .buttonStyle(.bordered)
+                                    }
+                                }
+                            }
+                            .padding(8)
+                            .background(Color.orange.opacity(0.06))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
 
@@ -485,21 +520,52 @@ struct SickEpisodeForm: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     // Simple chronological list, newest → oldest (already sorted in AppState)
                                     ForEach(appState.aiInputsForActiveEpisode) { row in
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            HStack {
-                                                Text(row.createdAtISO.isEmpty ? "Time: n/a" : row.createdAtISO)
-                                                    .font(.caption2.monospaced())
-                                                Spacer()
-                                                Text(row.model.isEmpty ? "provider: unknown" : row.model)
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
+                                        Button {
+                                            selectedAIHistoryID = row.id
+                                        } label: {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                HStack {
+                                                    Text(row.createdAtISO.isEmpty ? "Time: n/a" : row.createdAtISO)
+                                                        .font(.caption2.monospaced())
+                                                    Spacer()
+                                                    Text(row.model.isEmpty ? "provider: unknown" : row.model)
+                                                        .font(.caption2)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                Text(row.responsePreview.isEmpty ? "(no response stored)" : row.responsePreview)
+                                                    .font(.caption)
+                                                    .lineLimit(2)
                                             }
-                                            Text(row.responsePreview.isEmpty ? "(no response stored)" : row.responsePreview)
-                                                .font(.caption)
+                                            .padding(6)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(
+                                                (selectedAIHistoryID == row.id
+                                                 ? Color.gray.opacity(0.12)
+                                                 : Color.gray.opacity(0.04))
+                                            )
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
                                         }
-                                        .padding(6)
-                                        .background(Color.gray.opacity(0.04))
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    // Full-response viewer for the selected history entry
+                                    if let selectedID = selectedAIHistoryID,
+                                       let selectedRow = appState.aiInputsForActiveEpisode.first(where: { $0.id == selectedID }) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Selected AI response")
+                                                .font(.subheadline.bold())
+                                            ScrollView {
+                                                Text(selectedRow.fullResponse.isEmpty ? "(no response stored)" : selectedRow.fullResponse)
+                                                    .font(.caption)
+                                                    .textSelection(.enabled)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                            }
+                                            .frame(minHeight: 120, maxHeight: 260)
+                                            .padding(6)
+                                            .background(Color.gray.opacity(0.06))
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        }
+                                        .padding(.top, 8)
                                     }
                                 }
                                 .padding(.top, 4)
@@ -514,7 +580,7 @@ struct SickEpisodeForm: View {
 
                         if !aiPromptPreview.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("AI prompt (debug)")
+                                Text("Structured episode JSON (debug)")
                                     .font(.subheadline.bold())
                                 ScrollView {
                                     Text(aiPromptPreview)
@@ -1300,6 +1366,10 @@ struct SickEpisodeForm: View {
         if !duration.trimmingCharacters(in: .whitespaces).isEmpty {
             lines.append("Duration: \(duration) hours")
         }
+        // Free-text HPI summary (so items like "blood in stool" are visible to AI)
+        if !hpi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("HPI summary: \(hpi)")
+        }
 
         // Structured HPI abnormalities
         if appearance != "Well" { lines.append("Appearance: \(appearance)") }
@@ -1387,6 +1457,30 @@ struct SickEpisodeForm: View {
 
         problemListing = lines.joined(separator: "\n")
     }
+    // MARK: - ICD-10 helper
+
+    /// Append a candidate ICD-10 code to the editable field, avoiding duplicates.
+    private func appendICD10Code(_ code: String) {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // Existing codes as a normalized list
+        let existing = icd10
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        // Avoid adding duplicates
+        if existing.contains(trimmed) {
+            return
+        }
+
+        if existing.isEmpty {
+            icd10 = trimmed
+        } else {
+            icd10 = (existing + [trimmed]).joined(separator: ", ")
+        }
+    }
 
     // MARK: - AI assistance wiring
 
@@ -1439,14 +1533,34 @@ struct SickEpisodeForm: View {
         aiIsRunning = false
     }
 
-    /// Build and store a debug preview of the sick-visit AI prompt for the current episode.
+    /// Build and store a debug preview of the structured JSON snapshot for the current episode.
     private func previewAIPrompt() {
         guard let ctx = buildEpisodeAIContext() else {
             aiPromptPreview = "Cannot build AI prompt: please ensure a patient and saved episode are selected, and that problem listing and complementary investigations are filled in as appropriate."
             return
         }
-        let prompt = appState.buildSickAIPrompt(using: ctx)
-        aiPromptPreview = prompt
+        let fullPrompt = appState.buildSickAIPrompt(using: ctx)
+
+        // We know AppState.buildSickAIPrompt appends a section:
+        // ---
+        // Structured episode snapshot (JSON)
+        // ---
+        // { ...json... }
+        // Try to extract from just after that marker so the preview shows the JSON payload.
+        if let markerRange = fullPrompt.range(of: "Structured episode snapshot (JSON)") {
+            // Take everything from the marker onward, then trim up to the first newline after the marker
+            let tail = fullPrompt[markerRange.upperBound...]
+            if let firstBraceIndex = tail.firstIndex(of: "{") {
+                let jsonPart = tail[firstBraceIndex...]
+                aiPromptPreview = jsonPart.trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                // Fallback: show the tail section if we didn't find a JSON object start
+                aiPromptPreview = tail.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        } else {
+            // Fallback: show the full prompt if we cannot locate the JSON marker.
+            aiPromptPreview = fullPrompt
+        }
     }
 
     // MARK: - Save (commit to db + refresh UI)
