@@ -1802,35 +1802,30 @@ final class AppState: ObservableObject {
         }
 
         /// Temporary stub for local guideline flags.
-        /// This will later be replaced by a JSON rules engine using the clinician-configured rules.
+        /// This is now intentionally minimal: it only reports that either
+        /// no rules are configured or that none matched the current episode.
         func runGuidelineFlagsStub(using context: EpisodeAIContext) {
-            var flags: [String] = []
+            // Check whether any clinician-specific rules JSON appears to be configured.
+            let hasRulesJSON: Bool = {
+                if let raw = sickRulesJSONResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !raw.isEmpty {
+                    return true
+                }
+                return false
+            }()
 
-            let trimmedProblems = context.problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedProblems.isEmpty {
-                flags.append("Problem listing present for this episode.")
+            if hasRulesJSON {
+                // JSON is present but either parsing failed or no rule produced a flag.
+                aiGuidelineFlagsForActiveEpisode = [
+                    "Guideline rules JSON loaded.",
+                    "No matching guideline criteria found for this episode."
+                ]
+            } else {
+                // No JSON rules configured at all.
+                aiGuidelineFlagsForActiveEpisode = [
+                    "No guideline rules configured yet. Add pediatric guideline rules JSON in your profile to enable guideline-based flags."
+                ]
             }
-
-            let trimmedInv = context.complementaryInvestigations.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedInv.isEmpty {
-                flags.append("Complementary investigations documented.")
-            }
-
-            if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !vacc.isEmpty {
-                flags.append("Vaccination status documented.")
-            }
-
-            if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !pmh.isEmpty {
-                flags.append("Past medical history documented.")
-            }
-
-            if flags.isEmpty {
-                flags = ["No guideline rules configured yet; JSON rules will be applied in a later step."]
-            }
-
-            aiGuidelineFlagsForActiveEpisode = flags
         }
 
         /// Simple JSON-decodable container for guideline rules.
@@ -1888,6 +1883,80 @@ final class AppState: ObservableObject {
             let flags: [String]?
             let rules: [Rule]?
         }
+    
+        /// Best-effort age parser from the problem listing text.
+        /// Supports formats like:
+        ///   "Age: 19 d"
+        ///   "Age: 3 mo"
+        ///   "Age: 1 y 4 mo"
+        ///   "Age: 10 y"
+        private func parseAgeDays(fromProblemListing listing: String) -> Int? {
+            // Look for a line starting with "Age:"
+            guard let ageLine = listing
+                .split(separator: "\n")
+                .first(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("Age:") })
+            else { return nil }
+
+            let s = ageLine
+                .replacingOccurrences(of: "Age:", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            // 1) "19 d"
+            if let r = s.range(of: "d") {
+                let numStr = s[..<r.lowerBound].trimmingCharacters(in: .whitespaces)
+                if let v = Int(numStr) { return v }
+            }
+
+            // 2) "3 mo"  → approx months → days
+            if let r = s.range(of: "mo") {
+                let numStr = s[..<r.lowerBound].trimmingCharacters(in: .whitespaces)
+                if let m = Int(numStr) {
+                    return m * 30
+                }
+            }
+
+            // 3) "1 y 4 mo" or "10 y"
+            if let rY = s.range(of: "y") {
+                let yearsPart = s[..<rY.lowerBound].trimmingCharacters(in: .whitespaces)
+                var totalDays = 0
+                if let y = Int(yearsPart) {
+                    totalDays += y * 365
+                }
+                if let rMo = s.range(of: "mo") {
+                    let between = s[rY.upperBound..<rMo.lowerBound]
+                    let moStr = between
+                        .replacingOccurrences(of: "mo", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+                    if let m = Int(moStr) {
+                        totalDays += m * 30
+                    }
+                }
+                return totalDays > 0 ? totalDays : nil
+            }
+
+            return nil
+        }
+
+        /// Best-effort max temperature parser from the "Abnormal vitals" line,
+        /// expecting something like: "Abnormal vitals: T 38.5°C, HR ..."
+        private func parseMaxTempC(fromProblemListing listing: String) -> Double? {
+            guard let vitalsLine = listing
+                .split(separator: "\n")
+                .first(where: { $0.contains("Abnormal vitals:") })
+            else { return nil }
+
+            let s = String(vitalsLine)
+
+            guard let rStart = s.range(of: "T "),
+                  let rEnd = s.range(of: "°C", range: rStart.upperBound..<s.endIndex)
+            else { return nil }
+
+            let numStr = s[rStart.upperBound..<rEnd.lowerBound]
+                .trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: ",", with: ".")
+
+            return Double(numStr)
+        }
 
         /// Evaluate whether a rule's conditions match the given episode context.
         /// Empty/nil condition arrays are treated as "no constraint" for that field.
@@ -1903,13 +1972,33 @@ final class AppState: ObservableObject {
                 guard let haystack = haystack?.lowercased(), !haystack.isEmpty else { return false }
 
                 for raw in needles {
-                    let needle = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).lowercased()
+                    let needle = raw
+                        .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                        .lowercased()
                     if !needle.isEmpty, haystack.contains(needle) {
                         return true
                     }
                 }
                 return false
             }
+
+            // --- Derived numeric context (with fallbacks from text) ---
+
+            // Prefer explicitly-populated values from EpisodeAIContext if ever
+            // provided; otherwise derive them from the problemListing text.
+            let effectiveAgeDays: Int? = {
+                if let d = context.patientAgeDays {
+                    return d
+                }
+                return parseAgeDays(fromProblemListing: context.problemListing)
+            }()
+
+            let effectiveMaxTempC: Double? = {
+                if let t = context.maxTempC {
+                    return t
+                }
+                return parseMaxTempC(fromProblemListing: context.problemListing)
+            }()
 
             // --- 1) Text constraints ---
             let problemOK = fieldContainsAny(cond.problemContains, in: context.problemListing)
@@ -1923,7 +2012,7 @@ final class AppState: ObservableObject {
                     // No age bounds at all → unconstrained.
                     return true
                 }
-                guard let ageDays = context.patientAgeDays else {
+                guard let ageDays = effectiveAgeDays else {
                     // Rule requires age info but we don't have it → rule cannot match.
                     return false
                 }
@@ -1937,7 +2026,7 @@ final class AppState: ObservableObject {
                 if cond.minTempC == nil && cond.maxTempC == nil {
                     return true
                 }
-                guard let t = context.maxTempC else {
+                guard let t = effectiveMaxTempC else {
                     // Rule requires temperature but none is available → no match.
                     return false
                 }
@@ -1954,7 +2043,7 @@ final class AppState: ObservableObject {
                 }
                 // Compute a simple fever flag:
                 let hasFeverFromTemp: Bool = {
-                    if let t = context.maxTempC {
+                    if let t = effectiveMaxTempC {
                         return t >= 38.0
                     }
                     return false
@@ -1974,13 +2063,56 @@ final class AppState: ObservableObject {
                     // No constraint on sex.
                     return true
                 }
-                guard let sexRaw = context.patientSex?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
-                      !sexRaw.isEmpty else {
-                    // Rule constrains sex but we don't know it → no match.
+
+                // Try to get sex from context first, then fall back to parsing the problem listing
+                // line "Sex: F" / "Sex: M" / "Sex: Male" / "Sex: Female".
+                func parseSex(from listing: String) -> String? {
+                    guard let sexLine = listing
+                        .split(separator: "\n")
+                        .first(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("Sex:") })
+                    else {
+                        return nil
+                    }
+
+                    let raw = sexLine
+                        .replacingOccurrences(of: "Sex:", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    if raw.isEmpty { return nil }
+
+                    let lower = raw.lowercased()
+                    if lower.hasPrefix("m") { return "male" }
+                    if lower.hasPrefix("f") { return "female" }
+                    return lower
+                }
+
+                // 1) Prefer any explicit sex passed in the context
+                var candidate: String? = nil
+                if let sexRaw = context.patientSex?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !sexRaw.isEmpty {
+                    candidate = sexRaw
+                } else {
+                    // 2) Else, derive it from the problem listing
+                    candidate = parseSex(from: context.problemListing)
+                }
+
+                guard let c = candidate, !c.isEmpty else {
+                    // Rule constrains sex but we still don't know it → no match.
                     return false
                 }
-                let normSex = sexRaw.lowercased()
-                let normAllowed = allowed.map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).lowercased() }
+
+                // Normalize to "male"/"female" if possible
+                let normSex: String = {
+                    let lower = c.lowercased()
+                    if lower.hasPrefix("m") { return "male" }
+                    if lower.hasPrefix("f") { return "female" }
+                    return lower
+                }()
+
+                let normAllowed = allowed.map {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                }
+
                 return normAllowed.contains(normSex)
             }()
 
@@ -3546,8 +3678,8 @@ final class AppState: ObservableObject {
             let dobStr = dob.map { iso.string(from: $0) }
 
             let sql = """
-                        INSERT INTO patients (alias_label, alias_id, mrn, first_name, last_name, full_name, dob, sex)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                        INSERT INTO patients (alias_label, alias_id, mrn, first_name, last_name, dob, sex)
+                        VALUES (?, ?, ?, ?, ?, ?, ?);
                         """
 
             var stmt: OpaquePointer?
@@ -3562,46 +3694,28 @@ final class AppState: ObservableObject {
             _ = aliasID.withCString    { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }  // alias_id
             _ = mrn.withCString        { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }  // mrn
 
-            if let fn = firstName, !fn.isEmpty {
+            if let fn = firstName?.trimmingCharacters(in: .whitespacesAndNewlines), !fn.isEmpty {
                 _ = fn.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }      // first_name
             } else {
                 sqlite3_bind_null(stmt, 4)
             }
 
-            if let ln = lastName, !ln.isEmpty {
+            if let ln = lastName?.trimmingCharacters(in: .whitespacesAndNewlines), !ln.isEmpty {
                 _ = ln.withCString { sqlite3_bind_text(stmt, 5, $0, -1, SQLITE_TRANSIENT) }      // last_name
             } else {
                 sqlite3_bind_null(stmt, 5)
             }
 
-            if let full = fullName, !full.isEmpty {
-                _ = full.withCString { sqlite3_bind_text(stmt, 6, $0, -1, SQLITE_TRANSIENT) }    // full_name
+            if let ds = dobStr, !ds.isEmpty {
+                _ = ds.withCString { sqlite3_bind_text(stmt, 6, $0, -1, SQLITE_TRANSIENT) }      // dob
             } else {
                 sqlite3_bind_null(stmt, 6)
             }
 
-            if let ds = dobStr {
-                _ = ds.withCString { sqlite3_bind_text(stmt, 7, $0, -1, SQLITE_TRANSIENT) }      // dob
+            if let sx = sex?.trimmingCharacters(in: .whitespacesAndNewlines), !sx.isEmpty {
+                _ = sx.withCString { sqlite3_bind_text(stmt, 7, $0, -1, SQLITE_TRANSIENT) }      // sex
             } else {
                 sqlite3_bind_null(stmt, 7)
-            }
-
-            if let sx = sex, !sx.isEmpty {
-                _ = sx.withCString { sqlite3_bind_text(stmt, 8, $0, -1, SQLITE_TRANSIENT) }      // sex
-            } else {
-                sqlite3_bind_null(stmt, 8)
-            }
-
-            if let dobStr = dobStr {
-                sqlite3_bind_text(stmt, 7, dobStr, -1, SQLITE_TRANSIENT)  // dob
-            } else {
-                sqlite3_bind_null(stmt, 7)
-            }
-
-            if let sex = sex, !sex.isEmpty {
-                sqlite3_bind_text(stmt, 8, sex, -1, SQLITE_TRANSIENT)     // sex
-            } else {
-                sqlite3_bind_null(stmt, 8)
             }
 
             if sqlite3_step(stmt) != SQLITE_DONE {

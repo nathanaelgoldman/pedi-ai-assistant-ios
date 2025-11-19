@@ -1316,24 +1316,45 @@ struct SickEpisodeForm: View {
     }
 
     /// Render age as a human-friendly string from ISO DOB "YYYY-MM-DD".
+    /// Logic:
+    /// - ≥2 years: "X y"
+    /// - Exactly 1 year: "1 y" or "1 y N mo" if extra months
+    /// - <1 year: "N mo" or "N d"
     private func ageText(from dobISO: String?) -> String? {
         guard let s = dobISO, !s.isEmpty else { return nil }
         let comps = s.split(separator: "-").map(String.init)
         guard comps.count >= 3,
-              let y = Int(comps[0]), let m = Int(comps[1]), let d = Int(comps[2]) else { return nil }
+              let y = Int(comps[0]),
+              let m = Int(comps[1]),
+              let d = Int(comps[2]) else { return nil }
+
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = .current
         let dob = DateComponents(calendar: cal, year: y, month: m, day: d).date ?? Date()
         let now = Date()
-        let diff = cal.dateComponents([.year, .month, .day], from: dob, to: now)
-        if let yr = diff.year, yr >= 2 {
-            return "\(yr) y"
-        } else if let mo = diff.month, mo >= 1 {
-            return "\(mo) mo"
-        } else if let day = diff.day {
-            return "\(day) d"
+        let diff = cal.dateComponents([ .year, .month, .day ], from: dob, to: now)
+
+        let yrs = diff.year ?? 0
+        let mos = diff.month ?? 0
+        let days = diff.day ?? 0
+
+        if yrs >= 2 {
+            // For older kids we keep it simple: "10 y"
+            return "\(yrs) y"
+        } else if yrs == 1 {
+            // This is the case that was wrong before (e.g. 1 y 4 mo)
+            if mos > 0 {
+                return "1 y \(mos) mo"
+            } else {
+                return "1 y"
+            }
+        } else if mos >= 1 {
+            // Under 1 year → months only
+            return "\(mos) mo"
+        } else {
+            // Newborns / very young infants → days
+            return "\(days) d"
         }
-        return nil
     }
 
     /// Build an aggregated problem list and place it in `problemListing`.
