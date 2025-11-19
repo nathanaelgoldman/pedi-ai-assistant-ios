@@ -11,6 +11,8 @@ import PDFKit
 import UniformTypeIdentifiers
 import CoreText
 
+
+
 // MARK: - Report geometry (single source of truth)
 fileprivate let REPORT_PAGE_SIZE = CGSize(width: 595.0, height: 842.0) // US Letter; switch here if you use A4
 fileprivate let REPORT_INSET: CGFloat = 36.0
@@ -2795,6 +2797,7 @@ extension ReportBuilder {
             return docs.appendingPathComponent(suggested)
         }
     }
+    
 }
 
 // MARK: - Convenience overloads kept for callers
@@ -2812,7 +2815,11 @@ extension ReportBuilder {
         NSLog("[ReportExport] (RTF shim) returned DOCX instead: %@", url.path)
         return url
     }
+    
+    
 }
+
+
 
 // MARK: - Rendering
 
