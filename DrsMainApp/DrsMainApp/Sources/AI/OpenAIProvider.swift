@@ -59,12 +59,23 @@ final class OpenAIProvider: EpisodeAIProvider {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Some newer GPT‑5 family models only support the default temperature (1.0).
+        // To keep compatibility, we send 1.0 for any model whose name starts with "gpt-5"
+        // and keep a lower temperature for others.
+        let temperature: Double = {
+            if model.lowercased().hasPrefix("gpt-5") {
+                return 1.0
+            } else {
+                return 0.2
+            }
+        }()
+
         let body = OpenAIChatRequest(
             model: model,
             messages: [
                 .init(role: "user", content: prompt)
             ],
-            temperature: 0.2
+            temperature: temperature
         )
 
         request.httpBody = try JSONEncoder().encode(body)

@@ -566,6 +566,18 @@ struct SickEpisodeForm: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 8))
                                         }
                                         .padding(.top, 8)
+                                        // Deletion controls for the selected AI history entry
+                                        if let selectedID = selectedAIHistoryID {
+                                            HStack {
+                                                Spacer()
+                                                Button(role: .destructive) {
+                                                    deleteSelectedAIHistory()
+                                                } label: {
+                                                    Label("Delete this AI entry", systemImage: "trash")
+                                                }
+                                            }
+                                            .padding(.top, 4)
+                                        }
                                     }
                                 }
                                 .padding(.top, 4)
@@ -924,6 +936,108 @@ struct SickEpisodeForm: View {
     }
 
     // MARK: - Vitals DB helpers
+
+    /// Ensure the `manual_growth` table exists *and* has the expected schema.
+    /// Some legacy/imported bundles may have an old or placeholder `manual_growth`
+    /// definition that does not include weight_kg/height_cm/head_circumference_cm,
+    /// which breaks the vitals→manual_growth triggers. Here we:
+    ///  - check if the table exists
+    ///  - if it exists, inspect its columns via PRAGMA table_info
+    ///  - if the schema is missing the key growth columns, we DROP and recreate it
+    ///  - if it does not exist, we create it with the canonical schema
+    private func ensureManualGrowthTable(dbURL: URL) throws {
+        var db: OpaquePointer?
+        db = try dbOpen(dbURL)
+        defer { if db != nil { sqlite3_close(db) } }
+
+        // Helper to throw with a consistent NSError
+        func makeError(_ message: String) -> NSError {
+            return NSError(
+                domain: "SickEpisodeForm.DB",
+                code: 19,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+
+        // 1. Does manual_growth exist?
+        var stmt: OpaquePointer?
+        let existsSQL = "SELECT name FROM sqlite_master WHERE type='table' AND name='manual_growth';"
+        var tableExists = false
+        if sqlite3_prepare_v2(db, existsSQL, -1, &stmt, nil) == SQLITE_OK {
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                tableExists = true
+            }
+        } else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            sqlite3_finalize(stmt)
+            throw makeError("check manual_growth existence failed: \(msg)")
+        }
+        sqlite3_finalize(stmt)
+
+        var needsRecreate = false
+
+        if tableExists {
+            // 2. Inspect schema; we expect weight_kg, height_cm, head_circumference_cm
+            let pragmaSQL = "PRAGMA table_info(manual_growth);"
+            if sqlite3_prepare_v2(db, pragmaSQL, -1, &stmt, nil) != SQLITE_OK {
+                let msg = String(cString: sqlite3_errmsg(db))
+                throw makeError("PRAGMA table_info(manual_growth) failed: \(msg)")
+            }
+
+            var hasWeight = false
+            var hasHeight = false
+            var hasHC = false
+
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                if let cName = sqlite3_column_text(stmt, 1) { // column name is at index 1
+                    let name = String(cString: cName)
+                    if name == "weight_kg" { hasWeight = true }
+                    if name == "height_cm" { hasHeight = true }
+                    if name == "head_circumference_cm" { hasHC = true }
+                }
+            }
+            sqlite3_finalize(stmt)
+
+            if !(hasWeight && hasHeight && hasHC) {
+                // Schema is not compatible with the triggers that expect these columns.
+                needsRecreate = true
+            }
+        }
+
+        if needsRecreate {
+            // 3. Drop the incompatible table so we can recreate it cleanly
+            let dropSQL = "DROP TABLE IF EXISTS manual_growth;"
+            if sqlite3_exec(db, dropSQL, nil, nil, nil) != SQLITE_OK {
+                let msg = String(cString: sqlite3_errmsg(db))
+                throw makeError("drop manual_growth failed: \(msg)")
+            }
+            tableExists = false
+        }
+
+        if !tableExists {
+            // 4. Create with the canonical schema used by your main DB:
+            //    id, patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm,
+            //    source, created_at, updated_at
+            let createSQL = """
+            CREATE TABLE IF NOT EXISTS manual_growth (
+              id INTEGER PRIMARY KEY,
+              patient_id INTEGER NOT NULL,
+              recorded_at TEXT NOT NULL,  -- ISO date or datetime
+              weight_kg REAL,
+              height_cm REAL,
+              head_circumference_cm REAL,
+              source TEXT DEFAULT 'manual',
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+            );
+            """
+            if sqlite3_exec(db, createSQL, nil, nil, nil) != SQLITE_OK {
+                let msg = String(cString: sqlite3_errmsg(db))
+                throw makeError("create manual_growth failed: \(msg)")
+            }
+        }
+    }
 
     private func ensureVitalsTable(dbURL: URL) throws {
         var db: OpaquePointer?
@@ -1584,6 +1698,15 @@ struct SickEpisodeForm: View {
         }
     }
 
+    /// Delete the currently selected AI history entry (both from DB and the in-memory list).
+    private func deleteSelectedAIHistory() {
+        guard let selectedID = selectedAIHistoryID else { return }
+        // Ask AppState to delete the row from the DB and update its published list.
+        appState.deleteAIInputRow(withID: Int64(selectedID))
+        // Clear the local selection so the UI collapses the detail view.
+        selectedAIHistoryID = nil
+    }
+
     // MARK: - Save (commit to db + refresh UI)
     private func saveTapped() {
         let free = otherComplaints
@@ -1930,6 +2053,7 @@ extension SickEpisodeForm {
               let dbURL = appState.currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else { return }
         do {
+            try ensureManualGrowthTable(dbURL: dbURL)
             try ensureVitalsTable(dbURL: dbURL)
 
             // Parse numeric inputs; blank → nil

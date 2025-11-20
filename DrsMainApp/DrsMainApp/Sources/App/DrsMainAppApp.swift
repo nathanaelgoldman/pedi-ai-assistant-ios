@@ -78,9 +78,15 @@ struct DrsMainAppApp: App {
                             return URL(string: "https://api.openai.com/v1")!
                         }()
 
-                        // For now we hard-code a reasonable default chat model. This can be
-                        // exposed per-clinician later if needed.
-                        let model = "gpt-4o-mini"
+                        // Determine model: use clinician-specific value if present, otherwise fall back to a reasonable default.
+                        let model: String = {
+                            if let raw = clinician.aiModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                               !raw.isEmpty {
+                                return raw
+                            }
+                            // Default: you can change this to any supported OpenAI model string.
+                            return "gpt-5.1-mini"
+                        }()
 
                         return OpenAIProvider(
                             apiKey: apiKeyRaw,
@@ -305,6 +311,7 @@ private struct ClinicianProfileForm: View {
     @State private var linkedin  = ""
     @State private var aiEndpoint = ""
     @State private var aiAPIKey   = ""
+    @State private var aiModel    = ""
 
     // Per-clinician AI prompts and JSON rules
     @State private var aiSickPrompt: String = ""
@@ -336,6 +343,7 @@ private struct ClinicianProfileForm: View {
                     }
                     Section("AI Assistant (optional)") {
                         TextField("Endpoint URL", text: $aiEndpoint)
+                        TextField("Model (e.g. gpt-5.1-mini)", text: $aiModel)
                         SecureField("API Key",     text: $aiAPIKey)
                             .textContentType(.password)
                     }
@@ -415,7 +423,8 @@ private struct ClinicianProfileForm: View {
                                     clinicianStore.updateAISettings(
                                         id: u.id,
                                         endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
-                                        apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey
+                                        apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
+                                        model:    aiModel.isEmpty    ? nil : aiModel
                                     )
                                     clinicianStore.updateAIPromptsAndRules(
                                         id: u.id,
@@ -441,7 +450,8 @@ private struct ClinicianProfileForm: View {
                                         clinicianStore.updateAISettings(
                                             id: new.id,
                                             endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
-                                            apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey
+                                            apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
+                                            model:    aiModel.isEmpty    ? nil : aiModel
                                         )
                                         clinicianStore.updateAIPromptsAndRules(
                                             id: new.id,
@@ -477,6 +487,7 @@ private struct ClinicianProfileForm: View {
                 linkedin  = u.linkedin ?? ""
                 aiEndpoint = u.aiEndpoint ?? ""
                 aiAPIKey   = u.aiAPIKey ?? ""
+                aiModel    = u.aiModel ?? ""
                 aiSickPrompt    = u.aiSickPrompt ?? ""
                 aiWellPrompt    = u.aiWellPrompt ?? ""
                 aiSickRulesJSON = u.aiSickRulesJSON ?? ""

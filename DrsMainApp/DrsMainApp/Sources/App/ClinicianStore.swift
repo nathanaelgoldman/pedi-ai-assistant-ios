@@ -31,11 +31,12 @@ struct Clinician: Identifiable, Equatable {
 
     // AI configuration (per clinician)
     var aiEndpoint: String?         // default endpoint for primary provider (e.g., OpenAI)
-    var aiAPIKey: String?          // stored as plain text for now; later can move to Keychain
-    var aiSickPrompt: String?      // full prompt text for sick visits
-    var aiWellPrompt: String?      // full prompt text for well visits
-    var aiSickRulesJSON: String?   // JSON rules blob for sick guidelines
-    var aiWellRulesJSON: String?   // JSON rules blob for well visit guidelines
+    var aiAPIKey: String?           // stored as plain text for now; later can move to Keychain
+    var aiModel: String?            // e.g., "gpt-5.1-mini", "gpt-5.1"
+    var aiSickPrompt: String?       // full prompt text for sick visits
+    var aiWellPrompt: String?       // full prompt text for well visits
+    var aiSickRulesJSON: String?    // JSON rules blob for sick guidelines
+    var aiWellRulesJSON: String?    // JSON rules blob for well visit guidelines
 
     var fullName: String { "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces) }
 }
@@ -94,6 +95,7 @@ final class ClinicianStore: ObservableObject {
             instagram  TEXT,
             linkedin   TEXT,
             ai_endpoint TEXT,
+            ai_model    TEXT,
             ai_api_key  TEXT,
             created_at TEXT
         );
@@ -144,6 +146,7 @@ final class ClinicianStore: ObservableObject {
         addIfMissing("linkedin")
         addIfMissing("ai_endpoint")
         addIfMissing("ai_api_key")
+        addIfMissing("ai_model")
         addIfMissing("ai_sick_prompt")
         addIfMissing("ai_well_prompt")
         addIfMissing("ai_sick_rules_json")
@@ -170,7 +173,7 @@ final class ClinicianStore: ObservableObject {
                TRIM(first_name) AS first_name,
                TRIM(last_name)  AS last_name,
                title, email, societies, website, twitter, wechat, instagram, linkedin,
-               ai_endpoint, ai_api_key,
+               ai_endpoint, ai_model, ai_api_key,
                ai_sick_prompt, ai_well_prompt, ai_sick_rules_json, ai_well_rules_json
         FROM users
         ORDER BY last_name, first_name, id;
@@ -209,11 +212,12 @@ final class ClinicianStore: ObservableObject {
                 instagram: s(9),
                 linkedin: s(10),
                 aiEndpoint: s(11),
-                aiAPIKey: s(12),
-                aiSickPrompt: s(13),
-                aiWellPrompt: s(14),
-                aiSickRulesJSON: s(15),
-                aiWellRulesJSON: s(16)
+                aiAPIKey: s(13),
+                aiModel: s(12),
+                aiSickPrompt: s(14),
+                aiWellPrompt: s(15),
+                aiSickRulesJSON: s(16),
+                aiWellRulesJSON: s(17)
             )
             out.append(user)
         }
@@ -353,14 +357,15 @@ final class ClinicianStore: ObservableObject {
         }
     }
 
-    func updateAISettings(id: Int, endpoint: String?, apiKey: String?) {
+    func updateAISettings(id: Int, endpoint: String?, apiKey: String?, model: String?) {
         guard let db = openDB() else { return }
         defer { sqlite3_close(db) }
 
         let sql = """
         UPDATE users SET
           ai_endpoint = COALESCE(?, ai_endpoint),
-          ai_api_key  = COALESCE(?, ai_api_key)
+          ai_api_key  = COALESCE(?, ai_api_key),
+          ai_model    = COALESCE(?, ai_model)
         WHERE id = ?;
         """
         var stmt: OpaquePointer?
@@ -377,7 +382,8 @@ final class ClinicianStore: ObservableObject {
 
         bindOpt(1, endpoint)
         bindOpt(2, apiKey)
-        sqlite3_bind_int64(stmt, 3, sqlite3_int64(id))
+        bindOpt(3, model)
+        sqlite3_bind_int64(stmt, 4, sqlite3_int64(id))
 
         _ = sqlite3_step(stmt)
         reloadUsers()
@@ -385,6 +391,11 @@ final class ClinicianStore: ObservableObject {
         if let active = activeUser, active.id == id {
             activeUser = users.first(where: { $0.id == id })
         }
+    }
+
+    // Backwards-compatible overload that doesn't touch ai_model
+    func updateAISettings(id: Int, endpoint: String?, apiKey: String?) {
+        updateAISettings(id: id, endpoint: endpoint, apiKey: apiKey, model: nil)
     }
 
     /// Update per-clinician AI prompts and JSON rules.

@@ -47,6 +47,12 @@ public enum VitalsBP {
             let msg = "BP \(Int(s))/\(Int(d)) mmHg is Low for age (threshold \(Int(lowThresh)) systolic)."
             return BPClassification(category: .low, message: msg)
         }
+        // For infants < 1 year, we only apply PALS hypotension thresholds;
+        // AAP 2017 hypertension tables are not intended for this age group.
+        if age < 1.0 {
+            let msg = "BP \(Int(s))/\(Int(d)) mmHg is within acceptable range for infants (PALS hypotension threshold \(Int(lowThresh)) systolic)."
+            return BPClassification(category: .normal, message: msg)
+        }
         guard let rows = loadRows(for: sex), !rows.isEmpty else {
             return BPClassification(category: .unknown, message: "BP reference table not available.")
         }

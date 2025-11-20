@@ -3959,10 +3959,68 @@ final class AppState: ObservableObject {
     
 
 
-    // Safe index extension for arrays
-    private extension Array {
-        subscript(safe index: Int) -> Element? {
-            indices.contains(index) ? self[index] : nil
+// Safe index extension for arrays
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
+// MARK: - AI input deletion helpers
+extension AppState {
+    /// Delete a single AI input row by its primary key and update the in-memory
+    /// `aiInputsForActiveEpisode` list so the UI stays in sync.
+    func deleteAIInputRow(withID id: Int64) {
+        guard let dbURL = currentDBURL else {
+            return
+        }
+        do {
+            try deleteAIInputRowFromDB(dbURL: dbURL, id: id)
+            // Remove the row from the published history list on the main thread.
+            DispatchQueue.main.async {
+                self.aiInputsForActiveEpisode.removeAll { $0.id == id }
+            }
+        } catch {
+            // Keep it simple to avoid extra logger dependencies.
+            print("deleteAIInputRow failed: \(error)")
         }
     }
+
+    /// Low-level SQLite delete for a single `ai_inputs` row.
+    private func deleteAIInputRowFromDB(dbURL: URL, id: Int64) throws {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw NSError(
+                domain: "AppState.DB",
+                code: 201,
+                userInfo: [NSLocalizedDescriptionKey: "open failed: \(msg)"]
+            )
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = "DELETE FROM ai_inputs WHERE id = ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw NSError(
+                domain: "AppState.DB",
+                code: 202,
+                userInfo: [NSLocalizedDescriptionKey: "prepare delete ai_input failed: \(msg)"]
+            )
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, id)
+
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            throw NSError(
+                domain: "AppState.DB",
+                code: 203,
+                userInfo: [NSLocalizedDescriptionKey: "delete ai_input step failed: \(msg)"]
+            )
+        }
+    }
+}
 

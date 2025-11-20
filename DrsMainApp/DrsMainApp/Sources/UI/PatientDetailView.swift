@@ -5,17 +5,7 @@
 //  Created by yunastic on 10/27/25.
 //
 //
-//  PatientDetailView.swift
-//  DrsMainApp
-//
-//  Created by yunastic on 10/27/25.
-//
-//
-//  PatientDetailView.swift
-//  DrsMainApp
-//
-//  Created by yunastic on 10/27/25.
-//
+
 
 
 import SwiftUI
@@ -603,6 +593,25 @@ private struct SummarySection: View {
     }
 }
 
+private struct MilestonesSection: View {
+    let summary: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Milestones")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                BubbleText(text: summary)
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
 /// Lightweight detail for a selected visit (no extra DB fetch yet).
 struct VisitDetailView: View {
     @EnvironmentObject var appState: AppState
@@ -682,6 +691,14 @@ struct VisitDetailView: View {
                     SummarySection(summary: s)
                 }
 
+                // --- Milestones summary card (if available from AppState.visitDetails) ---
+                if let details = appState.visitDetails,
+                   let ms = details.milestonesSummary,
+                   !ms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Divider().padding(.top, 4)
+                    MilestonesSection(summary: ms)
+                }
+
                 Spacer()
             }
         }
@@ -690,6 +707,7 @@ struct VisitDetailView: View {
                minHeight: 520, idealHeight: 600, maxHeight: 900)
         .onAppear {
             appState.loadVisitSummary(for: visit)
+            appState.loadVisitDetails(for: visit)
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
