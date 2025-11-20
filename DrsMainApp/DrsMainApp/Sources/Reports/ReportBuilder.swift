@@ -205,7 +205,7 @@ final class ReportBuilder {
         case .sick(let episodeID):
             let data = try dataLoader.loadSick(episodeID: episodeID)
             let (_, fallbackSections) = buildContent(for: kind)
-            let all = assembleAttributedSick(data: data, fallbackSections: fallbackSections)
+            let all = assembleAttributedSick(data: data, fallbackSections: fallbackSections, episodeID: episodeID)
             return (all, nil)
         }
     }
@@ -893,7 +893,7 @@ extension ReportBuilder {
         case .sick(let episodeID):
             let data = try dataLoader.loadSick(episodeID: episodeID)
             let (_, fallbackSections) = buildContent(for: kind)
-            let attributed = assembleAttributedSick(data: data, fallbackSections: fallbackSections)
+            let attributed = assembleAttributedSick(data: data, fallbackSections: fallbackSections, episodeID: episodeID)
             let stem = makeFileStem(from: data.meta, fallbackType: "sick")
             return (attributed, stem)
         }
@@ -1234,7 +1234,7 @@ extension ReportBuilder {
     }
 
     // Assemble Sick Visit header parity; append current fallback sections.
-    func assembleAttributedSick(data: SickReportData, fallbackSections: [Section]) -> NSAttributedString {
+    func assembleAttributedSick(data: SickReportData, fallbackSections: [Section], episodeID: Int) -> NSAttributedString {
         let content = NSMutableAttributedString()
 
         func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
@@ -1372,7 +1372,27 @@ extension ReportBuilder {
         // 23) Follow-up / Next Visit
         section("Follow-up / Next Visit", data.nextVisitDate)
         
-
+        // 24) AI Assistant – latest model response (if any)
+        if let ai = dataLoader.loadLatestAIInputForEpisode(episodeID) {
+            para("AI Assistant", font: headerFont)
+            
+            var metaLine = "Model: \(ai.model)"
+            let ts = ai.createdAt.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !ts.isEmpty {
+                let pretty = humanDateTime(ts) ?? ts
+                metaLine += "   •   Time: \(pretty)"
+            }
+            para(metaLine, font: bodyFont)
+            content.append(NSAttributedString(string: "\n"))
+            
+            let resp = ai.response.trimmingCharacters(in: .whitespacesAndNewlines)
+            if resp.isEmpty {
+                para("—", font: bodyFont)
+            } else {
+                para(resp, font: bodyFont)
+            }
+            content.append(NSAttributedString(string: "\n"))
+        }
         
         return content
     }
