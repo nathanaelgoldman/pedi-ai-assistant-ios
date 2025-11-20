@@ -140,6 +140,9 @@ final class AppState: ObservableObject {
     private let profileLog = Logger(subsystem: "DrsMainApp", category: "PatientProfile")
     // Clinicians: injected at init so AppState and Views share the same instance
     let clinicianStore: ClinicianStore
+
+    // Well-visit data access layer (used by the macOS well-visit form)
+    private let wellVisitStore = WellVisitStore()
     
     // The db.sqlite inside the currently selected bundle
     var currentDBURL: URL? {
@@ -956,6 +959,83 @@ final class AppState: ObservableObject {
             if rows.isEmpty {
                 let tablesStr = parts.map { $0.table }.joined(separator: ", ")
                 log.info("Visit-like tables exist but no rows matched patient \(patientID). Checked: \(tablesStr, privacy: .public)")
+            }
+        }
+        
+        // MARK: - Well visits (store-backed helpers)
+        
+        /// List well visits for the currently selected patient.
+        /// Returns newest-first headers using WellVisitStore.
+        func fetchWellVisitHeadersForSelectedPatient() -> [WellVisitHeader] {
+            guard let pid = selectedPatientID,
+                  let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                return []
+            }
+        
+            do {
+                return try wellVisitStore.fetchList(dbURL: dbURL, for: Int64(pid))
+            } catch {
+                log.error("WellVisitStore.fetchList failed: \(String(describing: error), privacy: .public)")
+                return []
+            }
+        }
+        
+        /// Load a single well visit by id for editing.
+        func loadWellVisit(id: Int64) -> WellVisit? {
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                return nil
+            }
+        
+            do {
+                return try wellVisitStore.fetch(dbURL: dbURL, id: id)
+            } catch {
+                log.error("WellVisitStore.fetch failed: \(String(describing: error), privacy: .public)")
+                return nil
+            }
+        }
+        
+        /// Insert or update a well visit using a payload from the SwiftUI form.
+        /// - If `existingID` is nil → INSERT and return new id
+        /// - If `existingID` is non-nil → UPDATE and return same id if successful
+        @discardableResult
+        func upsertWellVisit(
+            existingID: Int64?,
+            payload: WellVisitPayload
+        ) -> Int64? {
+            guard let pid = selectedPatientID,
+                  let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                return nil
+            }
+        
+            do {
+                let userID = activeUserID.map(Int64.init)
+        
+                if let id = existingID {
+                    let ok = try wellVisitStore.update(dbURL: dbURL, id: id, payload: payload)
+                    if ok {
+                        // Keep the generic visits list in sync (episodes + well_visits)
+                        reloadVisitsForSelectedPatient()
+                        return id
+                    } else {
+                        return nil
+                    }
+                } else {
+                    let newID = try wellVisitStore.insert(
+                        dbURL: dbURL,
+                        for: Int64(pid),
+                        userID: userID,
+                        payload: payload
+                    )
+                    // New row → refresh visit listing as well
+                    reloadVisitsForSelectedPatient()
+                    return newID
+                }
+            } catch {
+                log.error("WellVisitStore upsert failed: \(String(describing: error), privacy: .public)")
+                return nil
             }
         }
         

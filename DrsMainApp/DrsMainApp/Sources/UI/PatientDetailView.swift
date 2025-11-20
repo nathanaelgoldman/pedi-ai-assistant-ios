@@ -96,6 +96,8 @@ struct PatientDetailView: View {
     @State private var vaxPatientIDForSheet: Int? = nil
     @State private var showEpisodeForm = false
     @State private var editingEpisodeID: Int? = nil
+    @State private var showWellVisitForm = false
+    @State private var editingWellVisitID: Int? = nil
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -228,6 +230,13 @@ struct PatientDetailView: View {
                 Task { await MacBundleExporter.run(appState: appState) }
             } label: {
                 Label("Export peMR Bundle…", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                editingWellVisitID = nil
+                showWellVisitForm = true
+                visitForDetail = nil
+            } label: {
+                Label("New Well Visit…", systemImage: "checkmark.seal")
             }
             Button {
                 editingEpisodeID = nil
@@ -427,6 +436,11 @@ struct PatientDetailView: View {
                 editingEpisodeID = nil
             }
         }
+        .onChange(of: showWellVisitForm) { open in
+            if !open {
+                editingWellVisitID = nil
+            }
+        }
         .sheet(isPresented: $showDocuments) {
             DocumentListView()
                 .environmentObject(appState)
@@ -468,6 +482,18 @@ struct PatientDetailView: View {
             }
         }) {
             VaccinationStatusForm()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showWellVisitForm, onDismiss: {
+            // Refresh visits and profile after closing the well-visit form
+            if let id = appState.selectedPatientID {
+                appState.loadVisits(for: id)
+                appState.loadPatientProfile(for: Int64(id))
+                visitTab = .all
+            }
+        }) {
+            WellVisitForm(editingVisitID: editingWellVisitID)
+                .id(editingWellVisitID ?? -1)
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showEpisodeForm, onDismiss: {
