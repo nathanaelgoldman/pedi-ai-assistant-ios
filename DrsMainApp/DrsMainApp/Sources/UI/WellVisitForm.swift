@@ -203,6 +203,7 @@ struct WellVisitLayoutProfile {
     let showsPlan: Bool
     let showsClinicianComment: Bool
     let showsNextVisit: Bool
+    let showsAISection: Bool
 }
 
 /// Return the layout profile for a given age group.
@@ -220,7 +221,8 @@ func layoutProfile(for ageGroup: WellVisitAgeGroup) -> WellVisitLayoutProfile {
             showsConclusions: true,
             showsPlan: true,
             showsClinicianComment: true,
-            showsNextVisit: true
+            showsNextVisit: true,
+            showsAISection: true
         )
     case .toddler, .preschool:
         return WellVisitLayoutProfile(
@@ -234,7 +236,8 @@ func layoutProfile(for ageGroup: WellVisitAgeGroup) -> WellVisitLayoutProfile {
             showsConclusions: true,
             showsPlan: true,
             showsClinicianComment: true,
-            showsNextVisit: true
+            showsNextVisit: true,
+            showsAISection: true
         )
     }
 }
@@ -259,12 +262,78 @@ struct WellVisitForm: View {
 
     // History & narrative sections
     @State private var parentsConcerns: String = ""
+
+    // Legacy free-text feeding comment (used mainly for older visits)
     @State private var feeding: String = ""
+
+    // Structured feeding fields for early visits (first-after-maternity, 1–4 months)
+    @State private var milkTypeBreast: Bool = false
+    @State private var milkTypeFormula: Bool = false
+    @State private var feedVolumeMl: String = ""       // per feed, in mL
+    @State private var feedFreqPer24h: String = ""     // feeds per 24h
+    @State private var regurgitationPresent: Bool = false
+    @State private var feedingIssue: String = ""       // brief description of any difficulty
+    @State private var poopStatus: String = ""         // "normal", "abnormal", "hard"
+    @State private var poopComment: String = ""        // optional details
+    @State private var solidFoodStarted: Bool = false
+    @State private var solidFoodStartDate: Date = Date()
+    @State private var solidFoodQuality: String = ""
+    @State private var solidFoodComment: String = ""
+    @State private var foodVarietyQuality: String = ""
+    @State private var dairyAmountCode: String = ""
+
     @State private var supplementation: String = ""
     @State private var vitaminDGiven: Bool = false
-    @State private var sleep: String = ""
 
-    // Physical examination (stored in lab_text for now)
+    // Sleep: structured fields for early visits + legacy free-text
+    @State private var wakesForFeedsPerNight: String = ""   // e.g. "3"
+    @State private var longerSleepAtNight: Bool = false
+    @State private var sleepIssueReported: Bool = false
+    @State private var sleep: String = ""                   // free-text issue / general comment
+
+    // Additional structured sleep fields for older visits (12-month+)
+    @State private var sleepHoursText: String = ""          // e.g. "lt10", "10_15"
+    @State private var sleepRegular: String = ""            // e.g. "regular", "irregular"
+    @State private var sleepSnoring: Bool = false           // snoring reported
+
+    // Physical examination (structured + free text, stored in lab_text for now)
+    @State private var peFontanelleNormal: Bool = true
+    @State private var peFontanelleComment: String = ""
+    @State private var pePupilsRRNormal: Bool = true
+    @State private var pePupilsRRComment: String = ""
+    @State private var peOcularMotilityNormal: Bool = true
+    @State private var peOcularMotilityComment: String = ""
+    @State private var peTrophicNormal: Bool = true
+    @State private var peTrophicComment: String = ""
+    @State private var peHydrationNormal: Bool = true
+    @State private var peHydrationComment: String = ""
+    @State private var peColor: String = "normal"       // normal, jaundice, pale
+    @State private var peColorComment: String = ""
+
+    @State private var peToneNormal: Bool = true
+    @State private var peToneComment: String = ""
+    @State private var peWakefulnessNormal: Bool = true
+    @State private var peWakefulnessComment: String = ""
+    @State private var peMoroNormal: Bool = true
+    @State private var peMoroComment: String = ""
+    @State private var peHandsFistNormal: Bool = true
+    @State private var peHandsFistComment: String = ""
+    @State private var peSymmetryNormal: Bool = true
+    @State private var peSymmetryComment: String = ""
+    @State private var peFollowsMidlineNormal: Bool = true
+    @State private var peFollowsMidlineComment: String = ""
+
+    @State private var peBreathingNormal: Bool = true
+    @State private var peBreathingComment: String = ""
+    @State private var peHeartNormal: Bool = true
+    @State private var peHeartComment: String = ""
+
+    @State private var peAbdomenNormal: Bool = true
+    @State private var peAbdomenComment: String = ""
+
+    @State private var peHipsLimbsNormal: Bool = true
+    @State private var peHipsLimbsComment: String = ""
+
     @State private var physicalExam: String = ""
 
     // Summary / plan
@@ -317,9 +386,164 @@ struct WellVisitForm: View {
         layout.showsVitaminD
     }
 
+    private var showsAISection: Bool {
+        layout.showsAISection
+    }
+
+    private var isSolidsVisit: Bool {
+        // Excel: solid_food_* fields at 4-month, 6-month, 9-month, 12-month
+        visitTypeID == "four_month"
+        || visitTypeID == "six_month"
+        || visitTypeID == "nine_month"
+        || visitTypeID == "twelve_month"
+    }
+
+    private var isOlderFeedingVisit: Bool {
+        // Excel: food_variety_quality + dairy_amount_text at 12–36 months
+        visitTypeID == "twelve_month"
+        || visitTypeID == "fifteen_month"
+        || visitTypeID == "eighteen_month"
+        || visitTypeID == "twentyfour_month"
+        || visitTypeID == "thirty_month"
+        || visitTypeID == "thirtysix_month"
+    }
+
+    private var isEarlySleepVisit: Bool {
+        // Structured sleep fields for early visits per Excel:
+        // first-after-maternity, 1-month, 2-month, 4-month, 6-month, 9-month
+        visitTypeID == "newborn_first"
+        || visitTypeID == "one_month"
+        || visitTypeID == "two_month"
+        || visitTypeID == "four_month"
+        || visitTypeID == "six_month"
+        || visitTypeID == "nine_month"
+    }
+
+    private var isOlderSleepVisit: Bool {
+        // Structured sleep fields for older visits per Excel:
+        // 12-month, 15-month, 18-month, 24-mo, 30-month, 36-month
+        visitTypeID == "twelve_month"
+        || visitTypeID == "fifteen_month"
+        || visitTypeID == "eighteen_month"
+        || visitTypeID == "twentyfour_month"
+        || visitTypeID == "thirty_month"
+        || visitTypeID == "thirtysix_month"
+    }
+
+    private var isFontanelleVisit: Bool {
+        // Fontanelle relevant up to 24-month visits (exclude preschool ages)
+        currentAgeGroup != .preschool
+    }
+
+    private var isPrimitiveNeuroVisit: Bool {
+        // Early neurologic primitives (hands in fists, symmetry, follows midline, wakefulness)
+        // first-after-maternity, 1-month, 2-month
+        visitTypeID == "newborn_first"
+        || visitTypeID == "one_month"
+        || visitTypeID == "two_month"
+    }
+
+    private var isMoroVisit: Bool {
+        // Moro reflex relevant up to 6-month visit
+        visitTypeID == "newborn_first"
+        || visitTypeID == "one_month"
+        || visitTypeID == "two_month"
+        || visitTypeID == "four_month"
+        || visitTypeID == "six_month"
+    }
+
+    private var isHipsVisit: Bool {
+        // Hips / limbs / posture explicitly focused in the first 6 months
+        visitTypeID == "newborn_first"
+        || visitTypeID == "one_month"
+        || visitTypeID == "two_month"
+        || visitTypeID == "four_month"
+        || visitTypeID == "six_month"
+    }
+
+        @ViewBuilder
+        private var solidsSection: some View {
+            Text("Solid foods")
+                .font(.subheadline.bold())
+
+            Toggle("Solid foods started", isOn: $solidFoodStarted)
+
+            if solidFoodStarted {
+                DatePicker(
+                    "Start date",
+                    selection: $solidFoodStartDate,
+                    displayedComponents: .date
+                )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Solid food intake")
+                        .font(.subheadline)
+                    Picker("Solid food quantity / quality", selection: $solidFoodQuality) {
+                        Text("Appears good").tag("appears_good")
+                        Text("Uncertain").tag("uncertain")
+                        Text("Probably limited").tag("probably_limited")
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Text("Solid food comment")
+                    .font(.subheadline)
+                TextEditor(text: $solidFoodComment)
+                    .frame(minHeight: 80)
+            }
+        }
+
+        @ViewBuilder
+        private var olderFeedingSection: some View {
+            Text("Variety & dairy intake")
+                .font(.subheadline.bold())
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Food variety quality")
+                    .font(.subheadline)
+                Picker("Food variety quality", selection: $foodVarietyQuality) {
+                    Text("Appears good").tag("appears_good")
+                    Text("Uncertain").tag("uncertain")
+                    Text("Probably limited").tag("probably_limited")
+                }
+                .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Dairy intake (per day)")
+                    .font(.subheadline)
+                Picker("Dairy intake (per day)", selection: $dairyAmountCode) {
+                    Text("1 cup or bottle").tag("1")
+                    Text("2 cups or bottles").tag("2")
+                    Text("3 cups or bottles").tag("3")
+                    Text("4 cups or bottles").tag("4")
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+    
+    private var isEarlyMilkOnlyVisit: Bool {
+        // First-after-maternity + 1-month + 2-month use the structured milk-only feeding view
+        visitTypeID == "newborn_first"
+        || visitTypeID == "one_month"
+        || visitTypeID == "two_month"
+    }
+
+    private var estimatedTotalIntakeMlPer24h: String {
+        guard let volume = Double(feedVolumeMl),
+              let freq = Double(feedFreqPer24h),
+              volume > 0, freq > 0 else {
+            return "–"
+        }
+        let total = volume * freq
+        return String(format: "%.0f ml / 24h", total)
+    }
+
     init(editingVisitID: Int? = nil) {
         self.editingVisitID = editingVisitID
     }
+
+   
 
     var body: some View {
         NavigationStack {
@@ -354,38 +578,423 @@ struct WellVisitForm: View {
                     if layout.showsFeeding {
                         GroupBox("Feeding & Supplementation") {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Feeding")
-                                    .font(.subheadline.bold())
-                                TextEditor(text: $feeding)
-                                    .frame(minHeight: 100)
-
-                                if showsSupplementationFields {
-                                    Text("Supplementation (free text)")
+                                if isEarlyMilkOnlyVisit {
+                                    // Structured feeding layout for first visit after maternity
+                                    Text("Milk type(s)")
                                         .font(.subheadline.bold())
-                                    TextEditor(text: $supplementation)
-                                        .frame(minHeight: 80)
-                                }
 
-                                if showsVitaminDField {
-                                    Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
+                                    HStack {
+                                        Toggle("Breastmilk", isOn: $milkTypeBreast)
+                                        Toggle("Formula", isOn: $milkTypeFormula)
+                                    }
+
+                                    HStack(spacing: 16) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Volume per feed (ml)")
+                                                .font(.subheadline)
+                                            TextField("e.g. 60", text: $feedVolumeMl)
+                                                .frame(width: 80)
+                                                .textFieldStyle(.roundedBorder)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Feeds per 24h")
+                                                .font(.subheadline)
+                                            TextField("e.g. 8", text: $feedFreqPer24h)
+                                                .frame(width: 80)
+                                                .textFieldStyle(.roundedBorder)
+                                        }
+                                    }
+
+                                    if estimatedTotalIntakeMlPer24h != "–" {
+                                        Text("Estimated intake: \(estimatedTotalIntakeMlPer24h)")
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Toggle("Significant regurgitation", isOn: $regurgitationPresent)
+
+                                    Text("Feeding difficulties / issues")
+                                        .font(.subheadline.bold())
+                                    TextEditor(text: $feedingIssue)
+                                        .frame(minHeight: 80)
+
+                                    Text("Stools")
+                                        .font(.subheadline.bold())
+
+                                    Picker("Stool pattern", selection: $poopStatus) {
+                                        Text("Normal / typical breastfed stool").tag("normal")
+                                        Text("Abnormal reported").tag("abnormal")
+                                        Text("Hard / constipated").tag("hard")
+                                    }
+                                    .pickerStyle(.segmented)
+
+                                    TextField("Stool comment (optional)", text: $poopComment)
+                                        .textFieldStyle(.roundedBorder)
+
+                                    if showsVitaminDField {
+                                        Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
+                                    }
+                                } else {
+                                    // Legacy, more generic feeding layout for other ages
+                                    Text("Feeding")
+                                        .font(.subheadline.bold())
+                                    TextEditor(text: $feeding)
+                                        .frame(minHeight: 100)
+
+                                    // Solids section for 4, 6, 9, 12-month visits (per Excel)
+                                    if isSolidsVisit {
+                                        Divider()
+                                            .padding(.vertical, 4)
+                                        solidsSection
+                                    }
+
+                                    // Variety & dairy for 12–36-month visits (per Excel)
+                                    if isOlderFeedingVisit {
+                                        Divider()
+                                            .padding(.vertical, 4)
+                                        olderFeedingSection
+                                    }
+
+                                    if showsSupplementationFields {
+                                        Text("Supplementation (free text)")
+                                            .font(.subheadline.bold())
+                                        TextEditor(text: $supplementation)
+                                            .frame(minHeight: 80)
+                                    }
+
+                                    if showsVitaminDField {
+                                        Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
+                                    }
                                 }
                             }
                         }
                     }
 
                     // Sleep
+                    // Sleep
                     if layout.showsSleep {
                         GroupBox("Sleep") {
-                            TextEditor(text: $sleep)
-                                .frame(minHeight: 100)
+                            VStack(alignment: .leading, spacing: 12) {
+                                if isEarlySleepVisit {
+                                    // Structured sleep layout for early visits
+                                    HStack(spacing: 16) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Wakes for feeds (per night)")
+                                                .font(.subheadline)
+                                            TextField("e.g. 3", text: $wakesForFeedsPerNight)
+                                                .frame(width: 80)
+                                                .textFieldStyle(.roundedBorder)
+                                        }
+
+                                        if isEarlyMilkOnlyVisit {
+                                            Toggle("Has a longer stretch of sleep at night", isOn: $longerSleepAtNight)
+                                                .toggleStyle(.switch)
+                                        }
+                                    }
+
+                                    Toggle("Sleep issues reported", isOn: $sleepIssueReported)
+                                        .toggleStyle(.switch)
+
+                                    if sleepIssueReported {
+                                        Text("Sleep issue description")
+                                            .font(.subheadline)
+                                        TextEditor(text: $sleep)
+                                            .frame(minHeight: 80)
+                                    }
+                                } else if isOlderSleepVisit {
+                                    // Structured sleep layout for older visits (12-month+)
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack(spacing: 16) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text("Wakes at night (per night)")
+                                                    .font(.subheadline)
+                                                TextField("e.g. 1", text: $wakesForFeedsPerNight)
+                                                    .frame(width: 80)
+                                                    .textFieldStyle(.roundedBorder)
+                                            }
+
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text("Total sleep in 24h")
+                                                    .font(.subheadline)
+                                                Picker("Total sleep in 24h", selection: $sleepHoursText) {
+                                                    Text("Less than 10 h").tag("lt10")
+                                                    Text("10–15 h").tag("10_15")
+                                                }
+                                                .pickerStyle(.segmented)
+                                            }
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Sleep regularity")
+                                                .font(.subheadline)
+                                            Picker("Sleep regularity", selection: $sleepRegular) {
+                                                Text("Regular").tag("regular")
+                                                Text("Irregular").tag("irregular")
+                                            }
+                                            .pickerStyle(.segmented)
+                                        }
+
+                                        Toggle("Snoring / noisy breathing during sleep", isOn: $sleepSnoring)
+                                            .toggleStyle(.switch)
+
+                                        Toggle("Sleep issues reported", isOn: $sleepIssueReported)
+                                            .toggleStyle(.switch)
+
+                                        if sleepIssueReported {
+                                            Text("Sleep issue description")
+                                                .font(.subheadline)
+                                            TextEditor(text: $sleep)
+                                                .frame(minHeight: 80)
+                                        }
+                                    }
+                                } else {
+                                    // Legacy / generic sleep comment for other ages (fallback)
+                                    TextEditor(text: $sleep)
+                                        .frame(minHeight: 100)
+                                }
+                            }
                         }
                     }
 
                     // Physical examination (stored in lab_text for now)
                     if layout.showsPhysicalExam {
                         GroupBox("Physical examination") {
-                            TextEditor(text: $physicalExam)
-                                .frame(minHeight: 160)
+                            VStack(alignment: .leading, spacing: 12) {
+                                // General / appearance
+                                Text("General / appearance")
+                                    .font(.subheadline.bold())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Trophic state / weight impression")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peTrophicNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Trophic comment (optional)", text: $peTrophicComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Hydration")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peHydrationNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Hydration comment (optional)", text: $peHydrationComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Color")
+                                        .font(.subheadline)
+                                    Picker("Color", selection: $peColor) {
+                                        Text("Normal").tag("normal")
+                                        Text("Jaundice").tag("jaundice")
+                                        Text("Pale").tag("pale")
+                                    }
+                                    .pickerStyle(.segmented)
+
+                                    TextField("Color comment (optional)", text: $peColorComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                if isFontanelleVisit {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Fontanelle")
+                                            Spacer()
+                                            Toggle("Normal", isOn: $peFontanelleNormal)
+                                                .toggleStyle(.switch)
+                                        }
+                                        TextField("Fontanelle comment (optional)", text: $peFontanelleComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Pupils (RR / symmetry)")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $pePupilsRRNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Pupils comment (optional)", text: $pePupilsRRComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Ocular motility / alignment")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peOcularMotilityNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Ocular motility comment (optional)", text: $peOcularMotilityComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                // Neurologic / behaviour
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                Text("Neurologic / behaviour")
+                                    .font(.subheadline.bold())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Tone")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peToneNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Tone comment (optional)", text: $peToneComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                if isPrimitiveNeuroVisit {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Wakefulness / reactivity")
+                                            Spacer()
+                                            Toggle("Normal", isOn: $peWakefulnessNormal)
+                                                .toggleStyle(.switch)
+                                        }
+                                        TextField("Wakefulness comment (optional)", text: $peWakefulnessComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Hands in fists / opening")
+                                            Spacer()
+                                            Toggle("Normal", isOn: $peHandsFistNormal)
+                                                .toggleStyle(.switch)
+                                        }
+                                        TextField("Hands comment (optional)", text: $peHandsFistComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Symmetry of movements")
+                                            Spacer()
+                                            Toggle("Normal", isOn: $peSymmetryNormal)
+                                                .toggleStyle(.switch)
+                                        }
+                                        TextField("Symmetry comment (optional)", text: $peSymmetryComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Follows to midline")
+                                            Spacer()
+                                            Toggle("Normal", isOn: $peFollowsMidlineNormal)
+                                                .toggleStyle(.switch)
+                                        }
+                                        TextField("Follows midline comment (optional)", text: $peFollowsMidlineComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+                                }
+
+                                if isMoroVisit {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Moro reflex")
+                                            Spacer()
+                                            Toggle("Normal", isOn: $peMoroNormal)
+                                                .toggleStyle(.switch)
+                                        }
+                                        TextField("Moro comment (optional)", text: $peMoroComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+                                }
+
+                                // Respiratory
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                Text("Respiratory")
+                                    .font(.subheadline.bold())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Breathing / auscultation")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peBreathingNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Respiratory comment (optional)", text: $peBreathingComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                // Cardiovascular
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                Text("Cardiovascular")
+                                    .font(.subheadline.bold())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Heart sounds / murmurs")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peHeartNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Cardiac comment (optional)", text: $peHeartComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                // Abdomen / digestive
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                Text("Abdomen / digestive")
+                                    .font(.subheadline.bold())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Abdomen (palpation / organomegaly)")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peAbdomenNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Abdomen comment (optional)", text: $peAbdomenComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                if isHipsVisit {
+                                    // Hips / limbs / posture
+                                    Divider()
+                                        .padding(.vertical, 4)
+
+                                    Text("Hips / limbs / posture")
+                                        .font(.subheadline.bold())
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Hips / limbs / posture")
+                                            Spacer()
+                                            Toggle("Normal", isOn: $peHipsLimbsNormal)
+                                                .toggleStyle(.switch)
+                                        }
+                                        TextField("Hips / limbs comment (optional)", text: $peHipsLimbsComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+                                }
+
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                Text("Additional notes")
+                                    .font(.subheadline.bold())
+                                TextEditor(text: $physicalExam)
+                                    .frame(minHeight: 120)
+                            }
                         }
                     }
 
@@ -474,21 +1083,23 @@ struct WellVisitForm: View {
                     }
 
                     // AI assistant placeholder
-                    GroupBox("AI Assistant (preview)") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("This area will later show AI-generated suggestions and summaries for this visit.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                    if showsAISection {
+                        GroupBox("AI Assistant (preview)") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("This area will later show AI-generated suggestions and summaries for this visit.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
 
-                            TextEditor(text: $aiNotes)
-                                .frame(minHeight: 120)
-                                .disabled(true)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .strokeBorder(Color.secondary.opacity(0.3))
-                                )
+                                TextEditor(text: $aiNotes)
+                                    .frame(minHeight: 120)
+                                    .disabled(true)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .strokeBorder(Color.secondary.opacity(0.3))
+                                    )
+                            }
+                            .padding(.top, 4)
                         }
-                        .padding(.top, 4)
                     }
                 }
                 .padding(20)
