@@ -546,12 +546,20 @@ struct PatientDetailView: View {
             .buttonStyle(.bordered)
 
             if isSickCategory(v.category) {
+                // Sick episode editing (24h window)
                 Button("Edit…") {
                     editingEpisodeID = v.id
                     showEpisodeForm = true
                 }
                 .buttonStyle(.bordered)
                 .disabled(!isWithin24Hours(v.dateISO))
+            } else if isWellCategory(v.category) {
+                // Well-visit editing – no time restriction for now
+                Button("Edit…") {
+                    editingWellVisitID = v.id
+                    showWellVisitForm = true
+                }
+                .buttonStyle(.bordered)
             }
         }
         .padding(8)
