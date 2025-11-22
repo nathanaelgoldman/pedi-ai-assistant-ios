@@ -330,11 +330,36 @@ struct WellVisitForm: View {
 
     @State private var peAbdomenNormal: Bool = true
     @State private var peAbdomenComment: String = ""
+    @State private var peAbdMassPresent: Bool = false
+    @State private var peGenitalia: String = ""
+    @State private var peTesticlesDescended: Bool = true
+    @State private var peFemoralPulsesNormal: Bool = true
+    @State private var peFemoralPulsesComment: String = ""
+    @State private var peLiverSpleenNormal: Bool = true
+    @State private var peLiverSpleenComment: String = ""
+    @State private var peUmbilicNormal: Bool = true
+    @State private var peUmbilicComment: String = ""
+
+    @State private var peSpineNormal: Bool = true
+    @State private var peSpineComment: String = ""
 
     @State private var peHipsLimbsNormal: Bool = true
     @State private var peHipsLimbsComment: String = ""
 
+    @State private var peSkinMarksNormal: Bool = true
+    @State private var peSkinMarksComment: String = ""
+    @State private var peSkinIntegrityNormal: Bool = true
+    @State private var peSkinIntegrityComment: String = ""
+    @State private var peSkinRashNormal: Bool = true
+    @State private var peSkinRashComment: String = ""
+
     @State private var physicalExam: String = ""
+
+    // Neurodevelopment screening (Milestones & Development section)
+    @State private var mchatScore: String = ""
+    @State private var mchatResult: String = ""
+    @State private var devTestScore: String = ""
+    @State private var devTestResult: String = ""
 
     // Summary / plan
     @State private var problemListing: String = ""
@@ -459,6 +484,35 @@ struct WellVisitForm: View {
         || visitTypeID == "two_month"
         || visitTypeID == "four_month"
         || visitTypeID == "six_month"
+    }
+
+    private var isMCHATVisit: Bool {
+        // Excel: mchat_score/result at 18-month, 24-mo, 30-month
+        visitTypeID == "eighteen_month"
+        || visitTypeID == "twentyfour_month"
+        || visitTypeID == "thirty_month"
+    }
+
+    private var isDevTestScoreVisit: Bool {
+        // Excel: devtest_score at 9-month, 12-month, 15-month, 18-month, 24-mo, 30-month, 36-month
+        visitTypeID == "nine_month"
+        || visitTypeID == "twelve_month"
+        || visitTypeID == "fifteen_month"
+        || visitTypeID == "eighteen_month"
+        || visitTypeID == "twentyfour_month"
+        || visitTypeID == "thirty_month"
+        || visitTypeID == "thirtysix_month"
+    }
+
+    private var isDevTestResultVisit: Bool {
+        // Excel: devtest_result at 9-month, 12-month, 15-month, 18-month, 24-mo, 30-month, 36-month
+        visitTypeID == "nine_month"
+        || visitTypeID == "twelve_month"
+        || visitTypeID == "fifteen_month"
+        || visitTypeID == "eighteen_month"
+        || visitTypeID == "twentyfour_month"
+        || visitTypeID == "thirty_month"
+        || visitTypeID == "thirtysix_month"
     }
 
         @ViewBuilder
@@ -967,17 +1021,86 @@ struct WellVisitForm: View {
                                         .textFieldStyle(.roundedBorder)
                                 }
 
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Abdominal mass palpable")
+                                        Spacer()
+                                        Toggle("Yes", isOn: $peAbdMassPresent)
+                                            .toggleStyle(.switch)
+                                    }
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Liver / spleen")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peLiverSpleenNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Liver/spleen comment (optional)", text: $peLiverSpleenComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Umbilicus")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peUmbilicNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Umbilicus comment (optional)", text: $peUmbilicComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Genitalia (exam)")
+                                        .font(.subheadline)
+                                    TextField("Genitalia description", text: $peGenitalia)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Testicles descended (if applicable)")
+                                        Spacer()
+                                        Toggle("Yes", isOn: $peTesticlesDescended)
+                                            .toggleStyle(.switch)
+                                    }
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Femoral pulses")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peFemoralPulsesNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Femoral pulses comment (optional)", text: $peFemoralPulsesComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                // Hips / limbs / posture
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                Text("Hips / limbs / posture")
+                                    .font(.subheadline.bold())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Spine / posture")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peSpineNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Spine comment (optional)", text: $peSpineComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
                                 if isHipsVisit {
-                                    // Hips / limbs / posture
-                                    Divider()
-                                        .padding(.vertical, 4)
-
-                                    Text("Hips / limbs / posture")
-                                        .font(.subheadline.bold())
-
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Hips / limbs / posture")
+                                            Text("Hips / limbs")
                                             Spacer()
                                             Toggle("Normal", isOn: $peHipsLimbsNormal)
                                                 .toggleStyle(.switch)
@@ -985,6 +1108,46 @@ struct WellVisitForm: View {
                                         TextField("Hips / limbs comment (optional)", text: $peHipsLimbsComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
+                                }
+
+                                // Skin
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                Text("Skin")
+                                    .font(.subheadline.bold())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Skin marks")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peSkinMarksNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Skin marks comment (optional)", text: $peSkinMarksComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Skin integrity")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peSkinIntegrityNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Skin integrity comment (optional)", text: $peSkinIntegrityComment)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Rash / lesions")
+                                        Spacer()
+                                        Toggle("Normal", isOn: $peSkinRashNormal)
+                                            .toggleStyle(.switch)
+                                    }
+                                    TextField("Rash comment (optional)", text: $peSkinRashComment)
+                                        .textFieldStyle(.roundedBorder)
                                 }
 
                                 Divider()
@@ -1027,6 +1190,51 @@ struct WellVisitForm: View {
                                         .textFieldStyle(.roundedBorder)
                                     }
                                     .padding(.vertical, 4)
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
+
+                    // Neurodevelopment screening (M-CHAT / Dev test)
+                    if isMCHATVisit || isDevTestScoreVisit || isDevTestResultVisit {
+                        GroupBox("Neurodevelopment screening") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                if isMCHATVisit {
+                                    Text("M-CHAT")
+                                        .font(.subheadline.bold())
+
+                                    HStack(alignment: .center, spacing: 12) {
+                                        Text("M-CHAT score")
+                                        TextField("e.g. 0–20", text: $mchatScore)
+                                            .frame(width: 80)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+
+                                    TextField("M-CHAT result (e.g. low / medium / high risk)", text: $mchatResult)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                if isDevTestScoreVisit || isDevTestResultVisit {
+                                    Divider()
+                                        .padding(.vertical, 4)
+
+                                    Text("Developmental test")
+                                        .font(.subheadline.bold())
+
+                                    if isDevTestScoreVisit {
+                                        HStack(alignment: .center, spacing: 12) {
+                                            Text("Dev test score")
+                                            TextField("score", text: $devTestScore)
+                                                .frame(width: 80)
+                                                .textFieldStyle(.roundedBorder)
+                                        }
+                                    }
+
+                                    if isDevTestResultVisit {
+                                        TextField("Dev test result (e.g. normal / delayed / borderline)", text: $devTestResult)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
                                 }
                             }
                             .padding(.top, 4)
