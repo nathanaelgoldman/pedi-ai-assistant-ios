@@ -36,8 +36,18 @@ public struct WellVisit: Identifiable, Equatable {
     public var milkTypes: String?
     public var expressedBM: Int?   // 0/1 or nil
 
-    // Plan / summary
+    // Narrative / summary and comments
     public var problemListing: String?
+    public var parentConcerns: String?
+    public var feedingComment: String?
+    public var sleepIssueText: String?
+    public var conclusions: String?
+    public var anticipatoryGuidance: String?
+    public var nextVisitDateISO: String?
+    public var comments: String?
+    public var labText: String?
+    public var dairyAmountText: String?
+    public var vitaminDGiven: Int?
 }
 
 /// Payload used by the UI for insert / update.
@@ -48,13 +58,25 @@ public struct WellVisitPayload: Equatable {
     public var visitType: String = ""         // e.g. "one_month", "six_month", "episode" (if ever reused)
     public var ageDays: Int? = nil
 
+    // Stool / early feeding bits
     public var poopStatus: String? = nil
     public var poopComment: String? = nil
     public var vitaminD: Int? = nil
     public var milkTypes: String? = nil
     public var expressedBM: Int? = nil       // 0/1
 
+    // Narrative / summary and comments
     public var problemListing: String? = nil
+    public var parentConcerns: String? = nil
+    public var feedingComment: String? = nil
+    public var sleepIssueText: String? = nil
+    public var conclusions: String? = nil
+    public var anticipatoryGuidance: String? = nil
+    public var nextVisitDateISO: String? = nil
+    public var comments: String? = nil
+    public var labText: String? = nil
+    public var dairyAmountText: String? = nil
+    public var vitaminDGiven: Int? = nil
 }
 
 /// Data access layer for the `well_visits` table.
@@ -128,7 +150,17 @@ public struct WellVisitStore {
             vitamin_d,
             milk_types,
             expressed_bm,
-            problem_listing
+            problem_listing,
+            parent_concerns,
+            feeding_comment,
+            sleep_issue_text,
+            conclusions,
+            anticipatory_guidance,
+            next_visit_date,
+            comments,
+            lab_text,
+            dairy_amount_text,
+            vitamin_d_given
         FROM well_visits
         WHERE id = ?
         LIMIT 1;
@@ -159,6 +191,16 @@ public struct WellVisitStore {
         let expressedBM = columnIntOptional(stmt, 10)
 
         let problemListing = columnText(stmt, 11)
+        let parentConcerns = columnText(stmt, 12)
+        let feedingComment = columnText(stmt, 13)
+        let sleepIssueText = columnText(stmt, 14)
+        let conclusions = columnText(stmt, 15)
+        let anticipatoryGuidance = columnText(stmt, 16)
+        let nextVisitDate = columnText(stmt, 17)
+        let comments = columnText(stmt, 18)
+        let labText = columnText(stmt, 19)
+        let dairyAmountText = columnText(stmt, 20)
+        let vitaminDGiven = columnIntOptional(stmt, 21)
 
         return WellVisit(
             id: rowID,
@@ -172,7 +214,17 @@ public struct WellVisitStore {
             vitaminD: vitaminD,
             milkTypes: milkTypes,
             expressedBM: expressedBM,
-            problemListing: problemListing
+            problemListing: problemListing,
+            parentConcerns: parentConcerns,
+            feedingComment: feedingComment,
+            sleepIssueText: sleepIssueText,
+            conclusions: conclusions,
+            anticipatoryGuidance: anticipatoryGuidance,
+            nextVisitDateISO: nextVisitDate,
+            comments: comments,
+            labText: labText,
+            dairyAmountText: dairyAmountText,
+            vitaminDGiven: vitaminDGiven
         )
     }
 
@@ -199,9 +251,19 @@ public struct WellVisitStore {
             vitamin_d,
             milk_types,
             expressed_bm,
-            problem_listing
+            problem_listing,
+            parent_concerns,
+            feeding_comment,
+            sleep_issue_text,
+            conclusions,
+            anticipatory_guidance,
+            next_visit_date,
+            comments,
+            lab_text,
+            dairy_amount_text,
+            vitamin_d_given
         )
-        VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
+        VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
         """
 
         var stmt: OpaquePointer?
@@ -232,8 +294,18 @@ public struct WellVisitStore {
         bindText(stmt, index: idx, value: payload.milkTypes); idx += 1
         bindOptionalInt64(stmt, index: idx, value: payload.expressedBM); idx += 1
 
-        // problem listing
+        // problem listing + narrative fields
         bindText(stmt, index: idx, value: payload.problemListing); idx += 1
+        bindText(stmt, index: idx, value: payload.parentConcerns); idx += 1
+        bindText(stmt, index: idx, value: payload.feedingComment); idx += 1
+        bindText(stmt, index: idx, value: payload.sleepIssueText); idx += 1
+        bindText(stmt, index: idx, value: payload.conclusions); idx += 1
+        bindText(stmt, index: idx, value: payload.anticipatoryGuidance); idx += 1
+        bindText(stmt, index: idx, value: payload.nextVisitDateISO); idx += 1
+        bindText(stmt, index: idx, value: payload.comments); idx += 1
+        bindText(stmt, index: idx, value: payload.labText); idx += 1
+        bindText(stmt, index: idx, value: payload.dairyAmountText); idx += 1
+        bindOptionalInt64(stmt, index: idx, value: payload.vitaminDGiven); idx += 1
 
         try stepDone(stmt)
         return sqlite3_last_insert_rowid(db)
@@ -259,7 +331,17 @@ public struct WellVisitStore {
             vitamin_d = ?,
             milk_types = ?,
             expressed_bm = ?,
-            problem_listing = ?
+            problem_listing = ?,
+            parent_concerns = ?,
+            feeding_comment = ?,
+            sleep_issue_text = ?,
+            conclusions = ?,
+            anticipatory_guidance = ?,
+            next_visit_date = ?,
+            comments = ?,
+            lab_text = ?,
+            dairy_amount_text = ?,
+            vitamin_d_given = ?
         WHERE id = ?;
         """
 
@@ -280,6 +362,16 @@ public struct WellVisitStore {
         bindOptionalInt64(stmt, index: idx, value: payload.expressedBM); idx += 1
 
         bindText(stmt, index: idx, value: payload.problemListing); idx += 1
+        bindText(stmt, index: idx, value: payload.parentConcerns); idx += 1
+        bindText(stmt, index: idx, value: payload.feedingComment); idx += 1
+        bindText(stmt, index: idx, value: payload.sleepIssueText); idx += 1
+        bindText(stmt, index: idx, value: payload.conclusions); idx += 1
+        bindText(stmt, index: idx, value: payload.anticipatoryGuidance); idx += 1
+        bindText(stmt, index: idx, value: payload.nextVisitDateISO); idx += 1
+        bindText(stmt, index: idx, value: payload.comments); idx += 1
+        bindText(stmt, index: idx, value: payload.labText); idx += 1
+        bindText(stmt, index: idx, value: payload.dairyAmountText); idx += 1
+        bindOptionalInt64(stmt, index: idx, value: payload.vitaminDGiven); idx += 1
 
         try bindInt64(stmt, index: idx, value: id)
 
@@ -351,8 +443,10 @@ public struct WellVisitStore {
     }
 
     private func sqliteError(_ db: OpaquePointer?, context: String) -> NSError {
-        let code = sqlite3_errcode(db)
-        if let cmsg = sqlite3_errmsg(db) {
+        // Be defensive: `db` may be nil in some call sites (e.g. stepDone)
+        let code: Int32 = (db != nil) ? sqlite3_errcode(db) : 0
+
+        if let db = db, let cmsg = sqlite3_errmsg(db) {
             let msg = String(cString: cmsg)
             return NSError(
                 domain: "WellVisitStore",
@@ -360,6 +454,7 @@ public struct WellVisitStore {
                 userInfo: [NSLocalizedDescriptionKey: "\(context): \(msg)"]
             )
         }
+
         return NSError(
             domain: "WellVisitStore",
             code: Int(code),
