@@ -352,6 +352,9 @@ struct WellVisitForm: View {
     @State private var peSkinIntegrityComment: String = ""
     @State private var peSkinRashNormal: Bool = true
     @State private var peSkinRashComment: String = ""
+    @State private var peTeethPresent: Bool = false
+    @State private var peTeethCount: String = ""
+    @State private var peTeethComment: String = ""
 
     @State private var physicalExam: String = ""
 
@@ -373,6 +376,23 @@ struct WellVisitForm: View {
 
     // Placeholder for future AI content
     @State private var aiNotes: String = ""
+    // MARK: - Weight delta (early visits)
+    @State private var latestWeightSummary: String = ""
+    @State private var previousWeightSummary: String = ""
+    @State private var deltaWeightPerDaySummary: String = ""
+    @State private var deltaWeightPerDayValue: Int32? = nil
+    @State private var deltaWeightIsNormal: Bool = false
+
+    /// We only show the weight-delta helper box for the first 3 well visits
+    /// (1, 2 and 4-month visits).
+    private var isWeightDeltaVisit: Bool {
+        let earlyTypes: Set<String> = [
+            "newborn_first",
+            "one_month",
+            "two_month"
+        ]
+        return earlyTypes.contains(visitTypeID)
+    }
 
     // Milestone state: per-code status + optional note
     @State private var milestoneStatuses: [String: MilestoneStatus] = [:]
@@ -403,9 +423,6 @@ struct WellVisitForm: View {
         layoutProfile(for: currentAgeGroup)
     }
 
-    private var showsSupplementationFields: Bool {
-        layout.showsSupplementation
-    }
 
     private var showsVitaminDField: Bool {
         layout.showsVitaminD
@@ -416,11 +433,20 @@ struct WellVisitForm: View {
     }
 
     private var isSolidsVisit: Bool {
-        // Excel: solid_food_* fields at 4-month, 6-month, 9-month, 12-month
+        // Solid-food infancy block only for 4-, 6- and 9-month visits
         visitTypeID == "four_month"
         || visitTypeID == "six_month"
         || visitTypeID == "nine_month"
-        || visitTypeID == "twelve_month"
+    }
+    
+    private var isStructuredFeedingUnder12: Bool {
+        // Structured feeding (milk checkboxes, volumes, etc.) from newborn to 9-month visits
+        visitTypeID == "newborn_first"
+        || visitTypeID == "one_month"
+        || visitTypeID == "two_month"
+        || visitTypeID == "four_month"
+        || visitTypeID == "six_month"
+        || visitTypeID == "nine_month"
     }
 
     private var isOlderFeedingVisit: Bool {
@@ -539,42 +565,42 @@ struct WellVisitForm: View {
                     }
                     .pickerStyle(.segmented)
                 }
-
-                Text("Solid food comment")
-                    .font(.subheadline)
-                TextEditor(text: $solidFoodComment)
-                    .frame(minHeight: 80)
             }
         }
 
-        @ViewBuilder
-        private var olderFeedingSection: some View {
-            Text("Variety & dairy intake")
-                .font(.subheadline.bold())
+    @ViewBuilder
+    private var olderFeedingSection: some View {
+        Text("Variety & dairy intake")
+            .font(.subheadline.bold())
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Food variety quality")
-                    .font(.subheadline)
-                Picker("Food variety quality", selection: $foodVarietyQuality) {
-                    Text("Appears good").tag("appears_good")
-                    Text("Uncertain").tag("uncertain")
-                    Text("Probably limited").tag("probably_limited")
-                }
-                .pickerStyle(.segmented)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Food variety quality")
+                .font(.subheadline)
+            Picker("Food variety quality", selection: $foodVarietyQuality) {
+                Text("Appears good").tag("appears_good")
+                Text("Uncertain").tag("uncertain")
+                Text("Probably limited").tag("probably_limited")
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Dairy intake (per day)")
-                    .font(.subheadline)
-                Picker("Dairy intake (per day)", selection: $dairyAmountCode) {
-                    Text("1 cup or bottle").tag("1")
-                    Text("2 cups or bottles").tag("2")
-                    Text("3 cups or bottles").tag("3")
-                    Text("4 cups or bottles").tag("4")
-                }
-                .pickerStyle(.segmented)
-            }
+            .pickerStyle(.segmented)
         }
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Dairy intake (per day)")
+                .font(.subheadline)
+            Picker("Dairy intake (per day)", selection: $dairyAmountCode) {
+                Text("1 cup or bottle").tag("1")
+                Text("2 cups or bottles").tag("2")
+                Text("3 cups or bottles").tag("3")
+                Text("4 cups or bottles").tag("4")
+            }
+            .pickerStyle(.segmented)
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Still breastfeeding", isOn: $milkTypeBreast)
+                .toggleStyle(.switch)
+        }
+    }
     
     private var isEarlyMilkOnlyVisit: Bool {
         // First-after-maternity + 1-month + 2-month use the structured milk-only feeding view
@@ -621,6 +647,42 @@ struct WellVisitForm: View {
                         }
                         .padding(.top, 4)
                     }
+                    
+                    if isWeightDeltaVisit {
+                        GroupBox("Weight change since last measurement") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(latestWeightSummary.isEmpty
+                                     ? "Latest weight: not available"
+                                     : "Latest weight: \(latestWeightSummary)")
+                                    .font(.subheadline)
+
+                                if !previousWeightSummary.isEmpty {
+                                    Text("Previous weight: \(previousWeightSummary)")
+                                        .font(.subheadline)
+                                } else {
+                                    Text("Previous weight: not available")
+                                        .font(.subheadline)
+                                }
+
+                                HStack {
+                                    Text(deltaWeightPerDaySummary.isEmpty
+                                         ? "Δ weight: not available"
+                                         : deltaWeightPerDaySummary)
+                                        .font(.subheadline)
+
+                                    Spacer()
+
+                                    if let delta = deltaWeightPerDayValue,
+                                       delta >= 20,
+                                       deltaWeightIsNormal {
+                                        Label("OK", systemImage: "checkmark.circle.fill")
+                                            .font(.subheadline)
+                                            .foregroundColor(.green)
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Parent's concerns  → parent_concerns
                     GroupBox("Parent's Concerns") {
@@ -632,8 +694,10 @@ struct WellVisitForm: View {
                     if layout.showsFeeding {
                         GroupBox("Feeding & Supplementation") {
                             VStack(alignment: .leading, spacing: 12) {
-                                if isEarlyMilkOnlyVisit {
-                                    // Structured feeding layout for first visit after maternity
+
+                                if isStructuredFeedingUnder12 {
+                                    // NEWBORN → 9-month visits:
+                                    // milk checkboxes, volumes, regurgitation, one issues text, ±solids, Vit D
                                     Text("Milk type(s)")
                                         .font(.subheadline.bold())
 
@@ -673,49 +737,27 @@ struct WellVisitForm: View {
                                     TextEditor(text: $feedingIssue)
                                         .frame(minHeight: 80)
 
-                                    Text("Stools")
-                                        .font(.subheadline.bold())
-
-                                    Picker("Stool pattern", selection: $poopStatus) {
-                                        Text("Normal / typical breastfed stool").tag("normal")
-                                        Text("Abnormal reported").tag("abnormal")
-                                        Text("Hard / constipated").tag("hard")
-                                    }
-                                    .pickerStyle(.segmented)
-
-                                    TextField("Stool comment (optional)", text: $poopComment)
-                                        .textFieldStyle(.roundedBorder)
-
-                                    if showsVitaminDField {
-                                        Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
-                                    }
-                                } else {
-                                    // Legacy, more generic feeding layout for other ages
-                                    Text("Feeding")
-                                        .font(.subheadline.bold())
-                                    TextEditor(text: $feeding)
-                                        .frame(minHeight: 100)
-
-                                    // Solids section for 4, 6, 9, 12-month visits (per Excel)
+                                    // Solid foods only for 4, 6, 9-month visits,
+                                    // using the shared solidsSection WITHOUT its own comment box
                                     if isSolidsVisit {
                                         Divider()
                                             .padding(.vertical, 4)
                                         solidsSection
                                     }
 
-                                    // Variety & dairy for 12–36-month visits (per Excel)
-                                    if isOlderFeedingVisit {
-                                        Divider()
-                                            .padding(.vertical, 4)
-                                        olderFeedingSection
+                                    if showsVitaminDField {
+                                        Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
                                     }
 
-                                    if showsSupplementationFields {
-                                        Text("Supplementation (free text)")
-                                            .font(.subheadline.bold())
-                                        TextEditor(text: $supplementation)
-                                            .frame(minHeight: 80)
-                                    }
+                                } else {
+                                    // 12–36-month visits:
+                                    // food variety / dairy intake, breastfeeding, ONE issues text, Vit D
+                                    olderFeedingSection
+
+                                    Text("Feeding difficulties / issues")
+                                        .font(.subheadline.bold())
+                                    TextEditor(text: $feedingIssue)
+                                        .frame(minHeight: 80)
 
                                     if showsVitaminDField {
                                         Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
@@ -725,7 +767,25 @@ struct WellVisitForm: View {
                         }
                     }
 
-                    // Sleep
+                    if isStructuredFeedingUnder12 {
+                        GroupBox("Stools") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Stool pattern")
+                                    .font(.subheadline)
+
+                                Picker("Stool pattern", selection: $poopStatus) {
+                                    Text("Normal / typical breastfed stool").tag("normal")
+                                    Text("Abnormal reported").tag("abnormal")
+                                    Text("Hard / constipated").tag("hard")
+                                }
+                                .pickerStyle(.segmented)
+
+                                TextField("Stool comment (optional)", text: $poopComment)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                        }
+                    }
+
                     // Sleep
                     if layout.showsSleep {
                         GroupBox("Sleep") {
@@ -888,6 +948,35 @@ struct WellVisitForm: View {
                                     }
                                     TextField("Ocular motility comment (optional)", text: $peOcularMotilityComment)
                                         .textFieldStyle(.roundedBorder)
+                                }
+
+                                if isTeethVisit {
+                                    Divider()
+                                        .padding(.vertical, 4)
+
+                                    Text("Teeth / oral cavity")
+                                        .font(.subheadline.bold())
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Teeth present")
+                                            Spacer()
+                                            Toggle("Yes", isOn: $peTeethPresent)
+                                                .toggleStyle(.switch)
+                                        }
+
+                                        if peTeethPresent {
+                                            HStack(spacing: 12) {
+                                                Text("Number of teeth (approx)")
+                                                TextField("e.g. 4", text: $peTeethCount)
+                                                    .frame(width: 80)
+                                                    .textFieldStyle(.roundedBorder)
+                                            }
+                                        }
+
+                                        TextField("Teeth / oral comment (optional)", text: $peTeethComment)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
                                 }
 
                                 // Neurologic / behaviour
@@ -1242,10 +1331,20 @@ struct WellVisitForm: View {
                     }
 
                     // Problem listing
+                    // Problem listing
                     if layout.showsProblemListing {
                         GroupBox("Problem listing") {
-                            TextEditor(text: $problemListing)
-                                .frame(minHeight: 140)
+                            VStack(alignment: .leading, spacing: 8) {
+                                TextEditor(text: $problemListing)
+                                    .frame(minHeight: 140)
+
+                                Button {
+                                    regenerateProblemListingFromFindings()
+                                } label: {
+                                    Label("Update from findings", systemImage: "list.bullet.clipboard")
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
                         }
                     }
 
@@ -1336,6 +1435,10 @@ struct WellVisitForm: View {
             }
             .onAppear {
                 loadIfEditing()
+                refreshWeightTrend()
+            }
+            .onChange(of: visitDate) { _ in
+                refreshWeightTrend()
             }
         }
         .frame(
@@ -1346,6 +1449,190 @@ struct WellVisitForm: View {
             idealHeight: 900,
             maxHeight: 1100
         )
+    }
+    
+    private var isTeethVisit: Bool {
+        // Show teeth section from 4-month visit onwards
+        let teethVisitTypes: Set<String> = [
+            "four_month",
+            "six_month",
+            "nine_month",
+            "twelve_month",
+            "fifteen_month",
+            "eighteen_month",
+            "twentyfour_month",
+            "thirty_month",
+            "thirtysix_month"
+        ]
+        return teethVisitTypes.contains(visitTypeID)
+    }
+    
+    private var isPostTwelveMonthVisit: Bool {
+        let visitTypes: Set<String> = [
+            "fifteen_month",
+            "eighteen_month",
+            "twentyfour_month",
+            "thirty_month",
+            "thirtysix_month"
+        ]
+        return visitTypes.contains(visitTypeID)
+    }
+
+    // MARK: - Weight trend helper
+
+    private func refreshWeightTrend() {
+        // Only relevant for the early well visits
+        guard isWeightDeltaVisit else {
+            latestWeightSummary = ""
+            previousWeightSummary = ""
+            deltaWeightPerDaySummary = ""
+            deltaWeightPerDayValue = nil
+            deltaWeightIsNormal = false
+            return
+        }
+
+        guard let dbURL = appState.currentDBURL,
+              let patientID = appState.selectedPatientID,
+              FileManager.default.fileExists(atPath: dbURL.path)
+        else {
+            latestWeightSummary = "No weight data available"
+            previousWeightSummary = ""
+            deltaWeightPerDaySummary = ""
+            deltaWeightPerDayValue = nil
+            deltaWeightIsNormal = false
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db = db
+        else {
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        let dateISO = Self.isoDateOnly.string(from: visitDate)
+
+        let sql = """
+        WITH all_weights AS (
+            SELECT weight_kg * 1000.0 AS weight_g, recorded_at AS date_str
+            FROM vitals
+            WHERE patient_id = ? AND weight_kg IS NOT NULL
+
+            UNION ALL
+
+            SELECT weight_kg * 1000.0 AS weight_g, recorded_at AS date_str
+            FROM manual_growth
+            WHERE patient_id = ? AND weight_kg IS NOT NULL
+
+            UNION ALL
+
+            SELECT discharge_weight_g AS weight_g, maternity_discharge_date AS date_str
+            FROM perinatal_history
+            WHERE patient_id = ?
+              AND discharge_weight_g IS NOT NULL
+              AND maternity_discharge_date IS NOT NULL
+        )
+        SELECT weight_g, date_str
+        FROM all_weights
+        WHERE date_str IS NOT NULL
+          AND date_str <= ?
+        ORDER BY date_str DESC
+        LIMIT 2;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+        sqlite3_bind_int64(stmt, 2, sqlite3_int64(patientID))
+        sqlite3_bind_int64(stmt, 3, sqlite3_int64(patientID))
+        _ = dateISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
+
+        var points: [(weightG: Double, dateStr: String)] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let w = sqlite3_column_double(stmt, 0)
+            let d: String
+            if let c = sqlite3_column_text(stmt, 1) {
+                d = String(cString: c)
+            } else {
+                d = ""
+            }
+            points.append((w, d))
+        }
+
+        guard !points.isEmpty else {
+            latestWeightSummary = "No weight data available"
+            previousWeightSummary = ""
+            deltaWeightPerDaySummary = ""
+            deltaWeightPerDayValue = nil
+            deltaWeightIsNormal = false
+            return
+        }
+
+        func cleanDate(_ raw: String) -> String {
+            if raw.isEmpty { return "" }
+            if let space = raw.firstIndex(of: " ") {
+                return String(raw[..<space])
+            }
+            return raw
+        }
+
+        let latest = points[0]
+        let latestKg = latest.weightG / 1000.0
+        let latestDateDisplay = cleanDate(latest.dateStr)
+        latestWeightSummary = String(format: "%.2f kg (%@)", latestKg, latestDateDisplay)
+
+        guard points.count >= 2 else {
+            previousWeightSummary = ""
+            deltaWeightPerDaySummary = ""
+            deltaWeightPerDayValue = nil
+            deltaWeightIsNormal = false
+            return
+        }
+
+        let previous = points[1]
+        let previousKg = previous.weightG / 1000.0
+        let previousDateDisplay = cleanDate(previous.dateStr)
+        previousWeightSummary = String(format: "%.2f kg (%@)", previousKg, previousDateDisplay)
+
+        // Parse dates to compute day difference
+        let rawLatest = latest.dateStr
+        let rawPrevious = previous.dateStr
+
+        let dateTimeFormatter = DateFormatter()
+        dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateTimeFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        dateTimeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+
+        let dateOnlyFormatter = DateFormatter()
+        dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateOnlyFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+
+        let dLatest = dateTimeFormatter.date(from: rawLatest) ?? dateOnlyFormatter.date(from: rawLatest)
+        let dPrevious = dateTimeFormatter.date(from: rawPrevious) ?? dateOnlyFormatter.date(from: rawPrevious)
+
+        guard let start = dPrevious, let end = dLatest else {
+            deltaWeightPerDaySummary = ""
+            deltaWeightPerDayValue = nil
+            deltaWeightIsNormal = false
+            return
+        }
+
+        var dayDiff = Int((end.timeIntervalSince(start) / 86400.0).rounded())
+        if dayDiff <= 0 { dayDiff = 1 }
+
+        let deltaTotalG = latest.weightG - previous.weightG
+        let deltaPerDay = deltaTotalG / Double(dayDiff)
+        let roundedPerDay = Int32(deltaPerDay.rounded())
+
+        deltaWeightPerDayValue = roundedPerDay
+        deltaWeightPerDaySummary = "Δ weight: \(roundedPerDay) g/day"
+        deltaWeightIsNormal = roundedPerDay >= 20
     }
 
     // MARK: - Load existing visit (edit mode)
@@ -1637,7 +1924,10 @@ struct WellVisitForm: View {
                 pe_skin_integrity_normal,
                 COALESCE(pe_skin_integrity_comment,''),
                 pe_skin_rash_normal,
-                COALESCE(pe_skin_rash_comment,'')
+                COALESCE(pe_skin_rash_comment,''),
+                pe_teeth_present,
+                pe_teeth_count,
+                COALESCE(pe_teeth_comment,'')
             FROM well_visits
             WHERE id = ?
             LIMIT 1;
@@ -1740,6 +2030,17 @@ struct WellVisitForm: View {
 
                 peSkinRashNormal      = boolDefaultTrue(45)
                 peSkinRashComment     = text(46)
+                
+                peTeethPresent        = boolDefaultFalse(47)
+
+                let teethCountInt     = sqlite3_column_int(stmt, 48)
+                if teethCountInt > 0 {
+                    peTeethCount = String(teethCountInt)
+                } else {
+                    peTeethCount = ""
+                                }
+
+                peTeethComment        = text(49)
             }
         }
 
@@ -1778,6 +2079,277 @@ struct WellVisitForm: View {
             milestoneStatuses = statuses
             milestoneNotes = notes
         }
+        
+        // After loading all fields (including visit date), recompute the weight trend
+        refreshWeightTrend()
+    }
+    
+    /// Rebuilds the problem listing from abnormal fields / comments.
+    /// This does NOT touch the database – it only updates the TextEditor content.
+    private func regenerateProblemListingFromFindings() {
+        var lines: [String] = []
+
+        func add(_ text: String) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                lines.append("• " + trimmed)
+            }
+        }
+
+        // 1) Parents' concerns
+        if !parentsConcerns.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Parents' concerns: \(parentsConcerns)")
+        }
+
+        // 2) Feeding
+        if isEarlyMilkOnlyVisit {
+            if regurgitationPresent {
+                add("Feeding: significant regurgitation reported.")
+            }
+            if !feedingIssue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Feeding difficulty: \(feedingIssue)")
+            }
+            if poopStatus == "abnormal" {
+                add("Stools: abnormal pattern reported.")
+            } else if poopStatus == "hard" {
+                add("Stools: hard / constipation reported.")
+            }
+            if !poopComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Stools comment: \(poopComment)")
+            }
+        } else {
+            if !feeding.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Feeding / diet: \(feeding)")
+            }
+            if solidFoodStarted {
+                add("Solid food started.")
+            }
+            if !solidFoodQuality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Solid food quality: \(solidFoodQuality)")
+            }
+            if !solidFoodComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Solid food comment: \(solidFoodComment)")
+            }
+
+            // Food variety: only if NOT "appears good"
+            let foodVarietyTrim = foodVarietyQuality.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !foodVarietyTrim.isEmpty && foodVarietyTrim.lowercased() != "appears good" {
+                add("Food variety: \(foodVarietyTrim)")
+            }
+
+            // Dairy intake: only if more than 3 cups (code "4")
+            let dairyTrim = dairyAmountCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            if dairyTrim == "4" {
+                add("Dairy intake: >3 cups/day.")
+            }
+        }
+
+        // 3) Sleep
+        // 3) Sleep
+        if sleepIssueReported || !sleep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let wakesTrim = wakesForFeedsPerNight.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Waking to feed is only a problem after 12 months
+            if !wakesTrim.isEmpty && isPostTwelveMonthVisit {
+                add("Sleep: wakes \(wakesTrim) time(s) per night.")
+            }
+
+            if isOlderSleepVisit {
+                let sleepHoursTrim = sleepHoursText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !sleepHoursTrim.isEmpty {
+                    var shouldAddSleepDuration = false
+
+                    let lower = sleepHoursTrim.lowercased()
+                    // Heuristic: either explicitly "<10" or parses as a numeric value < 10
+                    if lower.contains("<10") || lower.contains("less than 10") {
+                        shouldAddSleepDuration = true
+                    } else {
+                        let digits = sleepHoursTrim.filter { "0123456789.".contains($0) }
+                        if let v = Double(digits), v < 10 {
+                            shouldAddSleepDuration = true
+                        }
+                    }
+
+                    if shouldAddSleepDuration {
+                        add("Sleep duration: \(sleepHoursTrim)")
+                    }
+                }
+
+                if !sleepRegular.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    add("Sleep regularity: \(sleepRegular)")
+                }
+                if sleepSnoring {
+                    add("Sleep: snoring / noisy breathing reported.")
+                }
+            }
+
+            if !sleep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Sleep issue: \(sleep)")
+            }
+        }
+
+        // 4) Physical exam – only add when not normal or when there is a comment
+        if !peTrophicNormal || !peTrophicComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Trophic state: " + (peTrophicComment.isEmpty ? "abnormal impression." : peTrophicComment))
+        }
+        if !peHydrationNormal || !peHydrationComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Hydration: " + (peHydrationComment.isEmpty ? "abnormal impression." : peHydrationComment))
+        }
+        if peColor != "normal" || !peColorComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Color: \(peColor)" + (peColorComment.isEmpty ? "" : " – \(peColorComment)"))
+        }
+        if isFontanelleVisit,
+           (!peFontanelleNormal || !peFontanelleComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+            add("Fontanelle: " + (peFontanelleComment.isEmpty ? "abnormal." : peFontanelleComment))
+        }
+        if !pePupilsRRNormal || !pePupilsRRComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Pupils: " + (pePupilsRRComment.isEmpty ? "abnormal." : pePupilsRRComment))
+        }
+        if !peOcularMotilityNormal || !peOcularMotilityComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Ocular motility: " + (peOcularMotilityComment.isEmpty ? "abnormal." : peOcularMotilityComment))
+        }
+
+        if !peToneNormal || !peToneComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Tone: " + (peToneComment.isEmpty ? "abnormal." : peToneComment))
+        }
+        if isPrimitiveNeuroVisit {
+            if !peWakefulnessNormal || !peWakefulnessComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Wakefulness / reactivity: " + (peWakefulnessComment.isEmpty ? "abnormal." : peWakefulnessComment))
+            }
+            if !peHandsFistNormal || !peHandsFistComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Hands / opening: " + (peHandsFistComment.isEmpty ? "abnormal." : peHandsFistComment))
+            }
+            if !peSymmetryNormal || !peSymmetryComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Symmetry of movements: " + (peSymmetryComment.isEmpty ? "abnormal." : peSymmetryComment))
+            }
+            if !peFollowsMidlineNormal || !peFollowsMidlineComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Follows to midline: " + (peFollowsMidlineComment.isEmpty ? "abnormal." : peFollowsMidlineComment))
+            }
+        }
+        if isMoroVisit,
+           (!peMoroNormal || !peMoroComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+            add("Moro reflex: " + (peMoroComment.isEmpty ? "abnormal." : peMoroComment))
+        }
+
+        if !peBreathingNormal || !peBreathingComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Respiratory: " + (peBreathingComment.isEmpty ? "abnormal." : peBreathingComment))
+        }
+        if !peHeartNormal || !peHeartComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Cardiac: " + (peHeartComment.isEmpty ? "abnormal." : peHeartComment))
+        }
+
+        if !peAbdomenNormal || !peAbdomenComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Abdomen: " + (peAbdomenComment.isEmpty ? "abnormal." : peAbdomenComment))
+        }
+        if peAbdMassPresent {
+            add("Abdomen: mass palpable.")
+        }
+        if !peLiverSpleenNormal || !peLiverSpleenComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Liver / spleen: " + (peLiverSpleenComment.isEmpty ? "abnormal." : peLiverSpleenComment))
+        }
+        if !peUmbilicNormal || !peUmbilicComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Umbilicus: " + (peUmbilicComment.isEmpty ? "abnormal." : peUmbilicComment))
+        }
+
+        if !peGenitalia.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Genitalia: \(peGenitalia)")
+        }
+        if !peTesticlesDescended {
+            add("Testicles: not fully descended.")
+        }
+        if !peFemoralPulsesNormal || !peFemoralPulsesComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Femoral pulses: " + (peFemoralPulsesComment.isEmpty ? "abnormal." : peFemoralPulsesComment))
+        }
+
+        if !peSpineNormal || !peSpineComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Spine / posture: " + (peSpineComment.isEmpty ? "abnormal." : peSpineComment))
+        }
+        if isHipsVisit,
+           (!peHipsLimbsNormal || !peHipsLimbsComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+            add("Hips / limbs: " + (peHipsLimbsComment.isEmpty ? "abnormal." : peHipsLimbsComment))
+        }
+
+        if !peSkinMarksNormal || !peSkinMarksComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Skin marks: " + (peSkinMarksComment.isEmpty ? "abnormal." : peSkinMarksComment))
+        }
+        if !peSkinIntegrityNormal || !peSkinIntegrityComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Skin integrity: " + (peSkinIntegrityComment.isEmpty ? "abnormal." : peSkinIntegrityComment))
+        }
+        if !peSkinRashNormal || !peSkinRashComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Rash / lesions: " + (peSkinRashComment.isEmpty ? "abnormal." : peSkinRashComment))
+        }
+
+        if isTeethVisit,
+           (peTeethPresent
+            || !peTeethCount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !peTeethComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+            var text = "Teeth: "
+            if peTeethPresent {
+                text += "present"
+            } else {
+                text += "absent"
+            }
+            if !peTeethCount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                text += " (\(peTeethCount) teeth)"
+            }
+            if !peTeethComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                text += " – \(peTeethComment)"
+            }
+            add(text)
+        }
+
+        // 5) Milestones (only if some are not achieved / uncertain)
+        if !currentMilestoneDescriptors.isEmpty {
+            var milestoneLines: [String] = []
+            for descriptor in currentMilestoneDescriptors {
+                let code = descriptor.code
+                let status = milestoneStatuses[code] ?? .uncertain
+                if status == .achieved { continue }
+
+                var line = descriptor.label + " – " + status.displayName
+                if let note = milestoneNotes[code],
+                   !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    line += " (\(note))"
+                }
+                milestoneLines.append(line)
+            }
+            if !milestoneLines.isEmpty {
+                add("Milestones of concern:")
+                for l in milestoneLines {
+                    add("  - \(l)")
+                }
+            }
+        }
+
+        // 6) Neurodevelopment tests
+        if isMCHATVisit {
+            if !mchatScore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !mchatResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("M-CHAT: score \(mchatScore) – \(mchatResult)")
+            }
+        }
+        if isDevTestScoreVisit || isDevTestResultVisit {
+            if !devTestScore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !devTestResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                add("Developmental test: score \(devTestScore) – \(devTestResult)")
+            }
+        }
+
+        // 7) Free PE notes block
+        if !physicalExam.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add("Additional PE notes: \(physicalExam)")
+        }
+        
+        // 1) Weight gain – only flag if < 20 g/day
+        if isWeightDeltaVisit,
+           let delta = deltaWeightPerDayValue {
+            if delta < 20 {
+                lines.append("Suboptimal weight gain: \(delta) g/day (target ≥ 20 g/day)")
+            }
+            // If delta >= 20 g/day, we do NOT add anything to problem listing.
+        }
+
+        // Finally, replace the problem listing with the auto-generated content
+        problemListing = lines.joined(separator: "\n")
     }
 
     // MARK: - Save logic
@@ -1838,6 +2410,7 @@ struct WellVisitForm: View {
         let trimmedDevScore = devTestScore.trimmingCharacters(in: .whitespacesAndNewlines)
         let devTestScoreInt = Int32(trimmedDevScore.isEmpty ? "0" : trimmedDevScore) ?? 0
         let devTestResultText = devTestResult
+        let deltaWeightDB: Int32? = deltaWeightPerDayValue
 
         let sleepHoursDB = sleepHoursText.trimmingCharacters(in: .whitespacesAndNewlines)
         let sleepRegularDB = sleepRegular.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1939,13 +2512,14 @@ struct WellVisitForm: View {
                 mchat_result,
                 devtest_score,
                 devtest_result,
+                delta_weight_g,
                 created_at,
                 updated_at
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, 
+                ?, ?, ?, ?, ?, ?, 
                 CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
             );
             """
@@ -2017,6 +2591,12 @@ struct WellVisitForm: View {
             _ = devTestResultText.withCString {
                 sqlite3_bind_text(stmt, 35, $0, -1, SQLITE_TRANSIENT)
             }
+            
+            if let delta = deltaWeightDB {
+                sqlite3_bind_int(stmt, 36, delta)
+            } else {
+                sqlite3_bind_null(stmt, 36)
+            }
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 showError("Failed to insert well visit.")
@@ -2063,6 +2643,7 @@ struct WellVisitForm: View {
                 mchat_result = ?,
                 devtest_score = ?,
                 devtest_result = ?,
+                delta_weight_g = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?;
             """
@@ -2133,7 +2714,13 @@ struct WellVisitForm: View {
             _ = devTestResultText.withCString {
                 sqlite3_bind_text(stmt, 34, $0, -1, SQLITE_TRANSIENT)
             }
-            sqlite3_bind_int64(stmt, 35, sqlite3_int64(visitID))
+            if let delta = deltaWeightDB {
+                sqlite3_bind_int(stmt, 35, delta)
+            } else {
+                sqlite3_bind_null(stmt, 35)
+            }
+
+            sqlite3_bind_int64(stmt, 36, sqlite3_int64(visitID))
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 showError("Failed to update well visit.")
@@ -2199,6 +2786,10 @@ struct WellVisitForm: View {
         let peSkinIntegrityCommentDB       = peSkinIntegrityComment.trimmingCharacters(in: .whitespacesAndNewlines)
         let peSkinRashNormalDB: Int32      = peSkinRashNormal ? 1 : 0
         let peSkinRashCommentDB            = peSkinRashComment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let peTeethPresentDB: Int32      = peTeethPresent ? 1 : 0
+        let peTeethCountTrim             = peTeethCount.trimmingCharacters(in: .whitespacesAndNewlines)
+        let peTeethCountDB: Int32?       = Int32(peTeethCountTrim).flatMap { $0 > 0 ? $0 : nil }
+        let peTeethCommentDB             = peTeethComment.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let sql = """
         UPDATE well_visits
@@ -2249,7 +2840,10 @@ struct WellVisitForm: View {
             pe_skin_integrity_normal = ?,
             pe_skin_integrity_comment = ?,
             pe_skin_rash_normal = ?,
-            pe_skin_rash_comment = ?
+            pe_skin_rash_comment = ?,
+            pe_teeth_present = ?,
+            pe_teeth_count = ?,
+            pe_teeth_comment = ?
         WHERE id = ?;
         """
 
@@ -2304,8 +2898,14 @@ struct WellVisitForm: View {
         _ = peSkinIntegrityCommentDB.withCString { sqlite3_bind_text(stmt, 45, $0, -1, SQLITE_TRANSIENT) }
         sqlite3_bind_int(stmt, 46, peSkinRashNormalDB)
         _ = peSkinRashCommentDB.withCString { sqlite3_bind_text(stmt, 47, $0, -1, SQLITE_TRANSIENT) }
-
-        sqlite3_bind_int64(stmt, 48, sqlite3_int64(visitID))
+        sqlite3_bind_int(stmt, 48, peTeethPresentDB)
+        if let cnt = peTeethCountDB {
+            sqlite3_bind_int(stmt, 49, cnt)
+        } else {
+            sqlite3_bind_null(stmt, 49)
+        }
+        _ = peTeethCommentDB.withCString { sqlite3_bind_text(stmt, 50, $0, -1, SQLITE_TRANSIENT) }
+        sqlite3_bind_int64(stmt, 51, sqlite3_int64(visitID))
         _ = sqlite3_step(stmt)
     }
 
