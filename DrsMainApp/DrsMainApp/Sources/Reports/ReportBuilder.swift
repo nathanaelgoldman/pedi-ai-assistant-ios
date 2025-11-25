@@ -70,6 +70,8 @@ final class ReportBuilder {
 
         // 3) Write
         do {
+            // DOCX EXPORT LOGIC (find the DOCX export block, e.g. "[ReportDebug] DOCX charts embedded count = %d")
+            // (We only need to change the WELL-visit logic for the main body.)
             switch format {
             case .pdf:
                 // Build report as two parts: body (no charts) and charts-only Pages.
@@ -123,6 +125,47 @@ final class ReportBuilder {
                 }
                 try finalPDF.write(to: dest, options: .atomic)
             case .rtf:
+            // --- DOCX Export Path (inserted here; adjust as appropriate for your codebase) ---
+            // (Assume this is the block that logs "[ReportDebug] DOCX charts embedded count = %d" and writes DOCX)
+            // Only update the .well(let visitID) branch as per instructions.
+            // Example:
+            /*
+            case .docx:
+                switch kind {
+                case .well(let visitID):
+                    let wellData = try dataLoader.loadWell(visitID: visitID)
+
+                    // Age-gating hook for DOCX as well: match the PDF logic.
+                    let ageMonths = computeAgeMonths(dobISO: wellData.meta.dobISO,
+                                                     refISO: wellData.meta.visitDateISO)
+                    let band = ageBand(forMonths: ageMonths)
+
+                    // Use the same body-only, age-gated layout as the PDF path.
+                    let bodyAttr = assembleAttributedWell_BodyOnly(data: wellData,
+                                                                   visitID: visitID,
+                                                                   ageBand: band)
+
+                    // From here on, leave existing DOCX code intact, but make sure it uses `bodyAttr`
+                    // as the main document body when building the DOCX (including charts embedding),
+                    // instead of any previous `fullBody` / `attributed` variable.
+                    // For example, if you had:
+                    // let fullBody = assembleAttributedWell(...)
+                    // let body = fullBody
+                    // ... docxWriter.write(body)
+                    // You should now use:
+                    // let body = bodyAttr
+                    // ... docxWriter.write(body)
+
+                case .sick(let episodeID):
+                    // Leave sick case unchanged.
+                    let sickData = try dataLoader.loadSick(episodeID: episodeID)
+                    let fullBody = assembleAttributedSick(data: sickData,
+                                                          fallbackSections: buildContent(for: kind).sections,
+                                                          episodeID: episodeID)
+                    // ... existing sick DOCX export logic ...
+                }
+                // ... rest of DOCX export logic, charts, logging, file write, etc. ...
+            */
                 do {
                     // Build a single‑file RTF that embeds charts inline as \pict\pngblip (no RTFD).
                     // We reuse the user‑chosen `dest` URL (already ".rtf" from the save panel).
@@ -199,18 +242,35 @@ final class ReportBuilder {
         switch kind {
         case .well(let visitID):
             let data = try dataLoader.loadWell(visitID: visitID)
-            let body = assembleAttributedWell_BodyOnly(data: data, visitID: visitID)
+
+            // Age-gating hook: compute numeric age at visit (in months).
+            // This will be used by later steps to decide which sections/charts to show per age band.
+            let ageMonths = computeAgeMonths(dobISO: data.meta.dobISO, refISO: data.meta.visitDateISO)
+            if DEBUG_REPORT_EXPORT, let age = ageMonths {
+                NSLog("[ReportBuilder] buildAttributedReportParts well visitID=%d ageMonths=%.2f", visitID, age)
+            }
+            let band = ageBand(forMonths: ageMonths)
+            if DEBUG_REPORT_EXPORT {
+                if let band = band {
+                    NSLog("[ReportBuilder] buildAttributedReportParts well visitID=%d ageBand=%@", visitID, band.rawValue)
+                } else {
+                    NSLog("[ReportBuilder] buildAttributedReportParts well visitID=%d ageBand=<unknown>", visitID)
+                }
+            }
+
+            let body = assembleAttributedWell_BodyOnly(data: data, visitID: visitID, ageBand: band)
             let charts = assembleWellChartsOnly(data: data, visitID: visitID)
             return (body, charts)
+
         case .sick(let episodeID):
             let data = try dataLoader.loadSick(episodeID: episodeID)
-            let (_, fallbackSections) = buildContent(for: kind)
-            let all = assembleAttributedSick(data: data, fallbackSections: fallbackSections, episodeID: episodeID)
-            return (all, nil)
+            // We now rely entirely on SickReportData-driven layout; no need for buildContent fallback.
+            let body = assembleAttributedSick(data: data, fallbackSections: [], episodeID: episodeID)
+            return (body, nil)
         }
     }
     // Body-only variant of Well report (steps 1–12), excluding Step 13 charts
-    func assembleAttributedWell_BodyOnly(data: WellReportData, visitID: Int) -> NSAttributedString {
+    fileprivate func assembleAttributedWell_BodyOnly(data: WellReportData, visitID: Int, ageBand: WellAgeBand?) -> NSAttributedString {
         let content = NSMutableAttributedString()
 
         func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
@@ -304,9 +364,21 @@ final class ReportBuilder {
             para("—", font: bodyFont)
         } else {
             let feedOrder = ["Breastfeeding","Formula","Solids","Notes"]
-            for key in feedOrder { if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
-            let extra = data.feeding.keys.filter { !["Breastfeeding","Formula","Solids","Notes"].contains($0) }.sorted()
-            for key in extra { if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            for key in feedOrder {
+                guard shouldShowFeedingField(key, in: ageBand) else { continue }
+                if let v = data.feeding[key], !v.isEmpty {
+                    para("\(key): \(v)", font: bodyFont)
+                }
+            }
+            let extra = data.feeding.keys
+                .filter { !["Breastfeeding","Formula","Solids","Notes"].contains($0) }
+                .sorted()
+            for key in extra {
+                guard shouldShowFeedingField(key, in: ageBand) else { continue }
+                if let v = data.feeding[key], !v.isEmpty {
+                    para("\(key): \(v)", font: bodyFont)
+                }
+            }
         }
         content.append(NSAttributedString(string: "\n"))
 
@@ -326,9 +398,21 @@ final class ReportBuilder {
             para("—", font: bodyFont)
         } else {
             let order = ["Total hours","Naps","Night wakings","Quality","Notes"]
-            for key in order { if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
-            let extra = data.sleep.keys.filter { !["Total hours","Naps","Night wakings","Quality","Notes"].contains($0) }.sorted()
-            for key in extra { if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            for key in order {
+                guard shouldShowSleepField(key, in: ageBand) else { continue }
+                if let v = data.sleep[key], !v.isEmpty {
+                    para("\(key): \(v)", font: bodyFont)
+                }
+            }
+            let extra = data.sleep.keys
+                .filter { !["Total hours","Naps","Night wakings","Quality","Notes"].contains($0) }
+                .sorted()
+            for key in extra {
+                guard shouldShowSleepField(key, in: ageBand) else { continue }
+                if let v = data.sleep[key], !v.isEmpty {
+                    para("\(key): \(v)", font: bodyFont)
+                }
+            }
         }
         content.append(NSAttributedString(string: "\n"))
 
@@ -337,9 +421,19 @@ final class ReportBuilder {
             para("—", font: bodyFont)
         } else {
             let devOrder = ["Parent Concerns", "M-CHAT", "Developmental Test"]
-            for key in devOrder { if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { para("\(key): \(v)", font: bodyFont) } }
-            let extra = data.developmental.keys.filter { !["Parent Concerns","M-CHAT","Developmental Test"].contains($0) }.sorted()
-            for key in extra { if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { para("\(key): \(v)", font: bodyFont) } }
+            for key in devOrder {
+                guard let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                guard shouldShowDevelopmentField(key, in: ageBand) else { continue }
+                para("\(key): \(v)", font: bodyFont)
+            }
+            let extra = data.developmental.keys
+                .filter { !["Parent Concerns","M-CHAT","Developmental Test"].contains($0) }
+                .sorted()
+            for key in extra {
+                if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    para("\(key): \(v)", font: bodyFont)
+                }
+            }
         }
         content.append(NSAttributedString(string: "\n"))
 
@@ -679,6 +773,81 @@ extension ReportBuilder {
         let effectiveMaxWidth = min(contentWidth, widthIfHeightBounds)
         return attachmentStringRTF(from: img, maxWidth: effectiveMaxWidth)
     }
+    
+    // Age banding for well visits – used for future layout gating
+    fileprivate enum WellAgeBand: String {
+        case under1Month               = "<1m"
+        case oneToThreeMonths          = "1–3m"
+        case threeToSixMonths          = "3–6m"
+        case sixToTwelveMonths         = "6–12m"
+        case twelveToTwentyFourMonths  = "12–24m"
+        case twoToFiveYears            = "2–5y"
+        case overFiveYears             = ">5y"
+    }
+
+    /// Map a numeric age in months (fractional) to a coarse age band for layout logic.
+    private func ageBand(forMonths months: Double?) -> WellAgeBand? {
+        guard let months = months, months >= 0 else { return nil }
+        switch months {
+        case ..<1.0:
+            return .under1Month
+        case 1.0..<3.0:
+            return .oneToThreeMonths
+        case 3.0..<6.0:
+            return .threeToSixMonths
+        case 6.0..<12.0:
+            return .sixToTwelveMonths
+        case 12.0..<24.0:
+            return .twelveToTwentyFourMonths
+        case 24.0..<60.0:
+            return .twoToFiveYears
+        default:
+            return .overFiveYears
+        }
+    }
+
+    // Gating helpers for hiding fields in newborns (<1 month)
+    private func shouldShowFeedingField(_ key: String, in band: WellAgeBand?) -> Bool {
+        guard let band = band else { return true }
+        switch band {
+        case .under1Month:
+            // Hide solids-related fields for true newborns; they shouldn’t appear in the first-visit report.
+            if key.localizedCaseInsensitiveContains("solid") {
+                return false
+            }
+        default:
+            break
+        }
+        return true
+    }
+
+    private func shouldShowSleepField(_ key: String, in band: WellAgeBand?) -> Bool {
+        guard let band = band else { return true }
+        switch band {
+        case .under1Month:
+            // Don’t show snoring questions in the newborn-first report.
+            if key.localizedCaseInsensitiveContains("snoring") {
+                return false
+            }
+        default:
+            break
+        }
+        return true
+    }
+
+    private func shouldShowDevelopmentField(_ key: String, in band: WellAgeBand?) -> Bool {
+        guard let band = band else { return true }
+        switch band {
+        case .under1Month:
+            // Suppress M-CHAT and formal developmental test entries for newborns.
+            if key == "M-CHAT" || key == "Developmental Test" {
+                return false
+            }
+        default:
+            break
+        }
+        return true
+    }
 
     // MARK: - Date helpers (human readable)
     private func parseISOorSQLite(_ s: String) -> Date? {
@@ -767,6 +936,23 @@ extension ReportBuilder {
         if y == 0 && m < 6 { return d > 0 ? "\(m)m \(d)d" : "\(m)m" } // < 6 months: m + d
         if y == 0 { return "\(m)m" }                           // 6–11 months: months only
         return m > 0 ? "\(y)y \(m)m" : "\(y)y"                 // ≥ 12 months: y + m
+    }
+
+    /// Compute numeric age in months (fractional) from DOB and reference date.
+    /// This is a low-level helper for age-gated layout logic; it does not change current behavior.
+    private func computeAgeMonths(dobISO: String, refISO: String) -> Double? {
+        guard let dob = parseISOorSQLite(dobISO),
+              let ref = parseISOorSQLite(refISO),
+              ref >= dob else { return nil }
+
+        let cal = Calendar(identifier: .gregorian)
+        let comps = cal.dateComponents([.year, .month, .day], from: dob, to: ref)
+        let years  = Double(comps.year  ?? 0)
+        let months = Double(comps.month ?? 0)
+        let days   = Double(comps.day   ?? 0)
+
+        // Approximate days-to-months using 30.4 days/month, good enough for layout bands.
+        return years * 12.0 + months + days / 30.4
     }
 
     struct Section { let title: String; let body: String }
@@ -881,19 +1067,33 @@ extension ReportBuilder {
 
     // Build rich text + suggested filename stem (no extension)
     func buildAttributedReport(for kind: VisitKind) throws -> (NSAttributedString, String) {
-        // Use the shared data loader to get header/meta parity with iOS.
         switch kind {
         case .well(let visitID):
             let data = try dataLoader.loadWell(visitID: visitID)
-            // Keep current sections for now; we will replace them section-by-section next steps.
-            let (_, fallbackSections) = buildContent(for: kind)
-            let attributed = assembleAttributedWell(data: data, fallbackSections: fallbackSections, visitID: visitID)
+
+            // Use the new body-only, age-gated layout (same logic as PDF path)
+            let ageMonths = computeAgeMonths(dobISO: data.meta.dobISO,
+                                             refISO: data.meta.visitDateISO)
+            let band = ageBand(forMonths: ageMonths)
+
+            if DEBUG_REPORT_EXPORT, let age = ageMonths {
+                NSLog("[ReportBuilder] buildAttributedReport well visitID=%d ageMonths=%.2f band=%@",
+                      visitID, age, band?.rawValue ?? "<nil>")
+            }
+
+            let attributed = assembleAttributedWell_BodyOnly(data: data,
+                                                             visitID: visitID,
+                                                             ageBand: band)
+
             let stem = makeFileStem(from: data.meta, fallbackType: "well")
             return (attributed, stem)
+
         case .sick(let episodeID):
             let data = try dataLoader.loadSick(episodeID: episodeID)
             let (_, fallbackSections) = buildContent(for: kind)
-            let attributed = assembleAttributedSick(data: data, fallbackSections: fallbackSections, episodeID: episodeID)
+            let attributed = assembleAttributedSick(data: data,
+                                                    fallbackSections: fallbackSections,
+                                                    episodeID: episodeID)
             let stem = makeFileStem(from: data.meta, fallbackType: "sick")
             return (attributed, stem)
         }
@@ -2490,7 +2690,101 @@ extension ReportBuilder {
     /// v1 focuses on verifying image embedding works reliably in Word.
     func exportDOCX(for kind: VisitKind) throws -> URL {
         // Build text (title) and decide destination folder
+
         let (attr, stem) = try buildAttributedReport(for: kind)
+
+        // For DOCX exports, apply a light-weight age-gating pass for very
+        // early visits so that fields like solid foods, snoring, and
+        // M-CHAT/dev tests don't appear. This mirrors the neonatal-focused
+        // layout you see in the PDF.
+        let rawText = attr.string
+
+        /// Determine if this looks like a neonatal visit based on the
+        /// "Age at Visit" header line. For now we treat any pure "Xd"
+        /// (days only, no "m") as neonatal-style and gate extra fields.
+        func isNeonatalVisit(from text: String) -> Bool {
+            guard case .well = kind else { return false }
+
+            guard let range = text.range(of: "Age at Visit:") else {
+                return false
+            }
+            let after = text[range.upperBound...]
+            let line = after.prefix { !$0.isNewline }
+            let lower = line.lowercased()
+
+            let hasD = lower.contains("d")
+            let hasM = lower.contains("m")
+            return hasD && !hasM
+        }
+
+        /// Additionally treat explicit "Visit Type: Newborn First" as neonatal,
+        /// regardless of how the age string is formatted.
+        func isNewbornFirstVisit(from text: String) -> Bool {
+            guard case .well = kind else { return false }
+            return text.contains("Visit Type: Newborn First")
+        }
+
+        /// For neonatal-style well visits (either pure-day age or explicit
+        /// "Newborn First" type), hide a few age-inappropriate lines:
+        ///  - Feeding: "Solid Foods Started"
+        ///  - Sleep: "Snoring"
+        ///  - Developmental Evaluation: "M-CHAT" and "Developmental Test".
+        func filteredDocxText(from text: String) -> String {
+            let byAge = isNeonatalVisit(from: text)
+            let byType = isNewbornFirstVisit(from: text)
+            let shouldGate = byAge || byType
+
+            if DEBUG_REPORT_EXPORT {
+                NSLog("[ReportDebug] DOCX neonatal gating: ageMatch=%d typeMatch=%d -> gate=%d",
+                      byAge ? 1 : 0,
+                      byType ? 1 : 0,
+                      shouldGate ? 1 : 0)
+            }
+
+            guard shouldGate else { return text }
+
+            let lines = text.components(separatedBy: .newlines)
+            var result: [String] = []
+            var currentSection: String? = nil
+
+            for line in lines {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+                // Update the current section for non-bullet, non-empty lines.
+                if !trimmed.isEmpty,
+                   !trimmed.hasPrefix("• "),
+                   !trimmed.hasPrefix("-"),
+                   !trimmed.hasPrefix("–"),
+                   !trimmed.hasPrefix("—") {
+                    currentSection = trimmed
+                }
+
+                if let section = currentSection {
+                    switch section {
+                    case "Feeding":
+                        if trimmed.hasPrefix("Solid Foods Started:") {
+                            continue
+                        }
+                    case "Sleep":
+                        if trimmed.hasPrefix("Snoring:") {
+                            continue
+                        }
+                    case "Developmental Evaluation":
+                        if trimmed.hasPrefix("M-CHAT:") || trimmed.hasPrefix("Developmental Test:") {
+                            continue
+                        }
+                    default:
+                        break
+                    }
+                }
+
+                result.append(line)
+            }
+
+            return result.joined(separator: "\n")
+        }
+
+        let bodyTextForDocx = filteredDocxText(from: rawText)
 
         let fm = FileManager.default
         let baseDir: URL = {
@@ -2552,7 +2846,7 @@ extension ReportBuilder {
         ]
         var inPrevDatesSection = false
 
-        for line in attr.string.components(separatedBy: .newlines) {
+        for line in bodyTextForDocx.components(separatedBy: .newlines) {
             let s = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !s.isEmpty else { continue }
 
@@ -2797,9 +3091,14 @@ extension ReportBuilder {
 
     // (Kept in case you want RTF by path later)
     func renderRTF(meta: [String:String], sections: [Section]) throws -> Data {
-        assembleAttributed(meta: meta, sections: sections)
-            .rtf(from: NSRange(location: 0, length: assembleAttributed(meta: meta, sections: sections).length),
-                 documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])!
+        let attributed = assembleAttributed(meta: meta, sections: sections)
+        let range = NSRange(location: 0, length: attributed.length)
+        guard let data = attributed.rtf(from: range,
+                                        documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+            throw NSError(domain: "ReportExport", code: 6001,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to generate RTF data"])
+        }
+        return data
     }
 
     /// If a patient bundle is open, save to its Docs/, else fallback to ~/Documents/DrsMainApp/Reports/
@@ -2839,7 +3138,168 @@ extension ReportBuilder {
     
 }
 
+// MARK: - Age-gated templates for well visits
 
+extension ReportBuilder {
+
+    /// High-level switches that decide which big blocks appear
+    /// in the report for a given well-visit age / type.
+    struct WellVisitTemplate {
+        let showPerinatalSummary: Bool
+        let showPreviousWellBlock: Bool
+        let showGrowthCharts: Bool
+        let showDevelopmentBlock: Bool
+        let showSleepBlock: Bool
+        // Easy to extend later (eg. showFeedingDetails, showSupplementation, etc.)
+    }
+
+    /// Broad age bands / visit types that we care about for layout.
+    /// For now we infer them heuristically from the human-readable visit type.
+    private enum WellVisitBand {
+        case firstAfterMaternity
+        case month0to2      // 1- and 2-month visits
+        case month4to6      // 4- and 6-month visits
+        case month9to12     // 9- and 12-month visits
+        case month15plus    // 15-, 18-, 24-, 30-, 36-month etc.
+        case unknown        // fallback
+    }
+
+    /// Best-effort mapping from ReportMeta to a coarse age band.
+    /// Later we can tighten this to use a milestone key from the DB if needed.
+    private func classifyBand(from meta: ReportMeta) -> WellVisitBand {
+        let t = (meta.visitTypeReadable ?? "").lowercased()
+
+        // You can adjust these string checks if your wording changes.
+        if t.contains("first") && t.contains("maternity") {
+            return .firstAfterMaternity
+        }
+        if t.contains("1-month") || t.contains("1-month")
+            || t.contains("one-month")
+            || t.contains("2-month") || t.contains("2-month") {
+            return .month0to2
+        }
+        if t.contains("4-month") || t.contains("4-month")
+            || t.contains("6-month") || t.contains("6-month") {
+            return .month4to6
+        }
+        if t.contains("9-month") || t.contains("9-month")
+            || t.contains("12-month") || t.contains("12-month") {
+            return .month9to12
+        }
+        if t.contains("15-month") || t.contains("15-month")
+            || t.contains("18-month") || t.contains("18-month")
+            || t.contains("24-month") || t.contains("24-month")
+            || t.contains("30-month") || t.contains("30-month")
+            || t.contains("36-month") || t.contains("36-month") {
+            return .month15plus
+        }
+        return .unknown
+    }
+
+    /// Public helper: given the report metadata for a well visit,
+    /// return the layout template that decides which sections to render.
+    func templateForWellVisit(meta: ReportMeta) -> WellVisitTemplate {
+        switch classifyBand(from: meta) {
+        case .firstAfterMaternity:
+            // Very neonatal-focused: strong perinatal block, no previous wells,
+            // no growth charts yet (or we can flip this to true later).
+            return WellVisitTemplate(
+                showPerinatalSummary: true,
+                showPreviousWellBlock: false,
+                showGrowthCharts: false,
+                showDevelopmentBlock: false,
+                showSleepBlock: true
+            )
+
+        case .month0to2:
+            return WellVisitTemplate(
+                showPerinatalSummary: true,
+                showPreviousWellBlock: false,
+                showGrowthCharts: true,
+                showDevelopmentBlock: false,
+                showSleepBlock: true
+            )
+
+        case .month4to6:
+            return WellVisitTemplate(
+                showPerinatalSummary: false,
+                showPreviousWellBlock: true,
+                showGrowthCharts: true,
+                showDevelopmentBlock: true,
+                showSleepBlock: true
+            )
+
+        case .month9to12:
+            return WellVisitTemplate(
+                showPerinatalSummary: false,
+                showPreviousWellBlock: true,
+                showGrowthCharts: true,
+                showDevelopmentBlock: true,
+                showSleepBlock: true
+            )
+
+        case .month15plus:
+            return WellVisitTemplate(
+                showPerinatalSummary: false,
+                showPreviousWellBlock: true,
+                showGrowthCharts: true,
+                showDevelopmentBlock: true,
+                showSleepBlock: false  // older kids: sleep less central; can flip later
+            )
+
+        case .unknown:
+            // Safe default: keep everything; we can tighten once all visit types are mapped.
+            return WellVisitTemplate(
+                showPerinatalSummary: true,
+                showPreviousWellBlock: true,
+                showGrowthCharts: true,
+                showDevelopmentBlock: true,
+                showSleepBlock: true
+            )
+        }
+    }
+
+    /// Decide whether a given well-visit report section should be included
+    /// for the provided metadata, using the age-banded WellVisitTemplate.
+    ///
+    /// This is a string-based router so we can keep the section-building
+    /// code simple and only consult a single predicate when assembling
+    /// the report.
+    func shouldIncludeWellSection(title: String, meta: ReportMeta) -> Bool {
+        let tmpl = templateForWellVisit(meta: meta)
+
+        // Normalise the title for comparison (case-insensitive, trim whitespace).
+        let key = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // Perinatal-focused block
+        if key == "perinatal summary" {
+            return tmpl.showPerinatalSummary
+        }
+
+        // Previous well visits / prior findings
+        if key == "previous well visits" || key == "findings from previous well visits" {
+            return tmpl.showPreviousWellBlock
+        }
+
+        // Development & milestones family
+        if key == "developmental evaluation" || key == "age-specific milestones" {
+            return tmpl.showDevelopmentBlock
+        }
+
+        // Sleep-specific block
+        if key == "sleep" {
+            return tmpl.showSleepBlock
+        }
+
+        // Growth chart pages/section marker
+        if key == "growth charts" {
+            return tmpl.showGrowthCharts
+        }
+
+        // All other sections remain always-on for now.
+        return true
+    }
+}
 
 // MARK: - Rendering
 

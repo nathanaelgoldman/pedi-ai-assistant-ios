@@ -767,22 +767,20 @@ struct WellVisitForm: View {
                         }
                     }
 
-                    if isStructuredFeedingUnder12 {
-                        GroupBox("Stools") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Stool pattern")
-                                    .font(.subheadline)
+                    GroupBox("Stools") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Stool pattern")
+                                .font(.subheadline)
 
-                                Picker("Stool pattern", selection: $poopStatus) {
-                                    Text("Normal / typical breastfed stool").tag("normal")
-                                    Text("Abnormal reported").tag("abnormal")
-                                    Text("Hard / constipated").tag("hard")
-                                }
-                                .pickerStyle(.segmented)
-
-                                TextField("Stool comment (optional)", text: $poopComment)
-                                    .textFieldStyle(.roundedBorder)
+                            Picker("Stool pattern", selection: $poopStatus) {
+                                Text("Normal / typical breastfed stool").tag("normal")
+                                Text("Abnormal reported").tag("abnormal")
+                                Text("Hard / constipated").tag("hard")
                             }
+                            .pickerStyle(.segmented)
+
+                            TextField("Stool comment (optional)", text: $poopComment)
+                                .textFieldStyle(.roundedBorder)
                         }
                     }
 
