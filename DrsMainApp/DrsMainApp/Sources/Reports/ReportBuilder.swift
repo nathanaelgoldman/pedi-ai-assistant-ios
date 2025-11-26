@@ -125,103 +125,58 @@ final class ReportBuilder {
                 }
                 try finalPDF.write(to: dest, options: .atomic)
             case .rtf:
-            // --- DOCX Export Path (inserted here; adjust as appropriate for your codebase) ---
-            // (Assume this is the block that logs "[ReportDebug] DOCX charts embedded count = %d" and writes DOCX)
-            // Only update the .well(let visitID) branch as per instructions.
-            // Example:
-            /*
-            case .docx:
-                switch kind {
-                case .well(let visitID):
-                    let wellData = try dataLoader.loadWell(visitID: visitID)
-
-                    // Age-gating hook for DOCX as well: match the PDF logic.
-                    let ageMonths = computeAgeMonths(dobISO: wellData.meta.dobISO,
-                                                     refISO: wellData.meta.visitDateISO)
-                    let band = ageBand(forMonths: ageMonths)
-
-                    // Use the same body-only, age-gated layout as the PDF path.
-                    let bodyAttr = assembleAttributedWell_BodyOnly(data: wellData,
-                                                                   visitID: visitID,
-                                                                   ageBand: band)
-
-                    // From here on, leave existing DOCX code intact, but make sure it uses `bodyAttr`
-                    // as the main document body when building the DOCX (including charts embedding),
-                    // instead of any previous `fullBody` / `attributed` variable.
-                    // For example, if you had:
-                    // let fullBody = assembleAttributedWell(...)
-                    // let body = fullBody
-                    // ... docxWriter.write(body)
-                    // You should now use:
-                    // let body = bodyAttr
-                    // ... docxWriter.write(body)
-
-                case .sick(let episodeID):
-                    // Leave sick case unchanged.
-                    let sickData = try dataLoader.loadSick(episodeID: episodeID)
-                    let fullBody = assembleAttributedSick(data: sickData,
-                                                          fallbackSections: buildContent(for: kind).sections,
-                                                          episodeID: episodeID)
-                    // ... existing sick DOCX export logic ...
-                }
-                // ... rest of DOCX export logic, charts, logging, file write, etc. ...
-            */
                 do {
-                    // Build a single‑file RTF that embeds charts inline as \pict\pngblip (no RTFD).
-                    // We reuse the user‑chosen `dest` URL (already ".rtf" from the save panel).
-                    
-                    // Helper: strip everything from the "Growth Charts" header onward (body only).
-                    func bodyWithoutCharts(_ full: NSAttributedString) -> NSAttributedString {
-                        let ns = full.string as NSString
-                        let r = ns.range(of: "Growth Charts")
-                        if r.location != NSNotFound && r.location > 0 {
-                            return full.attributedSubstring(from: NSRange(location: 0, length: r.location))
-                        }
-                        return full
-                    }
-                    
                     switch kind {
                     case .well(let visitID):
-                        // Build the well report body without the charts section.
-                        let wellData = try dataLoader.loadWell(visitID: visitID)
-                        // Use the same header/body formatting as elsewhere, then trim charts out.
-                        let fullBody = assembleAttributedWell(data: wellData,
-                                                              fallbackSections: buildContent(for: kind).sections,
-                                                              visitID: visitID)
-                        let bodyOnly = bodyWithoutCharts(fullBody)
-                        
+                        // Use the same age‑gated body as the PDF path.
+                        let (bodyOnly, _) = try buildAttributedReportParts(for: kind)
+
                         // Render charts sized like in PDF (cap width at ~18 cm, keep renderer aspect 700:450).
                         let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
                         let max18cm: CGFloat = (18.0 / 2.54) * 72.0
                         let renderWidth = min(contentWidth, max18cm)
                         let aspect: CGFloat = 450.0 / 700.0
                         let renderSize = CGSize(width: renderWidth, height: renderWidth * aspect)
-                        
+
                         if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
-                            let images = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
-                            let captions = ["Weight-for-Age", "Length/Height-for-Age", "Head Circumference-for-Age"]
-                            let tuples: [(image: NSImage, goalSizePts: CGSize)] = images.map { (image: $0, goalSizePts: renderSize) }
+                            let images = ReportGrowthRenderer.renderAllCharts(series: gs,
+                                                                              size: renderSize,
+                                                                              drawWHO: true)
+                            let captions = ["Weight-for-Age",
+                                            "Length/Height-for-Age",
+                                            "Head Circumference-for-Age"]
+                            let tuples: [(image: NSImage, goalSizePts: CGSize)] =
+                                images.map { (image: $0, goalSizePts: renderSize) }
+
                             // Assemble a single-file RTF by appending inline PNG/TIFF pictures to the body.
-                            let rtfData = try makeSingleFileRTFInline(body: bodyOnly, charts: tuples, captions: captions)
+                            let rtfData = try makeSingleFileRTFInline(body: bodyOnly,
+                                                                      charts: tuples,
+                                                                      captions: captions)
                             try rtfData.write(to: dest, options: .atomic)
                         } else {
                             // No charts available — export body-only as plain RTF.
                             let range = NSRange(location: 0, length: bodyOnly.length)
                             guard let rtfData = bodyOnly.rtf(from: range,
-                                                             documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+                                                             documentAttributes: [
+                                                                .documentType: NSAttributedString.DocumentType.rtf
+                                                             ]) else {
                                 throw NSError(domain: "ReportExport", code: 3004,
-                                              userInfo: [NSLocalizedDescriptionKey: "RTF body-only generation failed"])
+                                              userInfo: [NSLocalizedDescriptionKey:
+                                                            "RTF body-only generation failed"])
                             }
                             try rtfData.write(to: dest, options: .atomic)
                         }
-                        
+
                     case .sick:
                         // Sick reports have no charts; export the attributed body directly.
                         let range = NSRange(location: 0, length: attributed.length)
                         guard let rtfData = attributed.rtf(from: range,
-                                                           documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
+                                                           documentAttributes: [
+                                                            .documentType: NSAttributedString.DocumentType.rtf
+                                                           ]) else {
                             throw NSError(domain: "ReportExport", code: 3005,
-                                          userInfo: [NSLocalizedDescriptionKey: "RTF generation failed (sick)"])
+                                          userInfo: [NSLocalizedDescriptionKey:
+                                                        "RTF generation failed (sick)"])
                         }
                         try rtfData.write(to: dest, options: .atomic)
                     }
@@ -272,6 +227,7 @@ final class ReportBuilder {
     // Body-only variant of Well report (steps 1–12), excluding Step 13 charts
     fileprivate func assembleAttributedWell_BodyOnly(data: WellReportData, visitID: Int, ageBand: WellAgeBand?) -> NSAttributedString {
         let content = NSMutableAttributedString()
+        
 
         func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
             content.append(NSAttributedString(string: text + "\n",
@@ -1125,263 +1081,37 @@ extension ReportBuilder {
         return content
     }
 
-    // Assemble Well Visit header exactly like iOS; append current fallback sections for now.
     func assembleAttributedWell(data: WellReportData, fallbackSections: [Section], visitID: Int) -> NSAttributedString {
         let content = NSMutableAttributedString()
 
-        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
-            content.append(NSAttributedString(string: text + "\n",
-                                              attributes: [.font: font, .foregroundColor: color]))
+        // Compute age band for gating; reuse same logic as PDF/body-only path
+        let ageMonths = computeAgeMonths(dobISO: data.meta.dobISO,
+                                         refISO: data.meta.visitDateISO)
+        let band = ageBand(forMonths: ageMonths)
+        if DEBUG_REPORT_EXPORT, let age = ageMonths {
+            NSLog("[ReportBuilder] assembleAttributedWell visitID=%d ageMonths=%.2f band=%@",
+                  visitID, age, band?.rawValue ?? "<nil>")
         }
 
-        // Header block (Well)
-        para("Well Visit Summary", font: .systemFont(ofSize: 20, weight: .semibold))
-        let triad = "Created: \(humanDateTime(data.meta.createdAtISO) ?? "—")   •   Last Edited: \(humanDateTime(data.meta.updatedAtISO) ?? "—")   •   Report Generated: \(humanDateTime(data.meta.generatedAtISO) ?? "—")"
-        para(triad, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)
-        content.append(NSAttributedString(string: "\n"))
-
-        para("Alias: \(data.meta.alias)   •   MRN: \(data.meta.mrn)", font: .systemFont(ofSize: 12))
-        para("Name: \(data.meta.name)", font: .systemFont(ofSize: 12))
-        let dobShortWell = humanDateOnly(data.meta.dobISO) ?? "—"
-        let ageShortWell = {
-            let pre = data.meta.ageAtVisit.trimmingCharacters(in: .whitespacesAndNewlines)
-            if pre.isEmpty || pre == "—" { // treat em-dash placeholder as missing
-                return computeAgeShort(dobISO: data.meta.dobISO, refISO: data.meta.visitDateISO)
-            }
-            return pre
-        }()
-        para("DOB: \(dobShortWell)   •   Sex: \(data.meta.sex)   •   Age at Visit: \(ageShortWell)", font: .systemFont(ofSize: 12))
-        para("Visit Date: \(humanDateOnly(data.meta.visitDateISO) ?? "—")   •   Visit Type: \(data.meta.visitTypeReadable ?? "Well Visit")", font: .systemFont(ofSize: 12))
-        para("Clinician: \(data.meta.clinicianName)", font: .systemFont(ofSize: 12))
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 1: Perinatal Summary ---
-        let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        let bodyFont = NSFont.systemFont(ofSize: 12)
-        if let s = data.perinatalSummary, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            para("Perinatal Summary", font: headerFont)
-            para(s, font: bodyFont)
-            content.append(NSAttributedString(string: "\n"))
-        }
-        
-        // --- Step 2: Findings from Previous Well Visits ---
-        if !data.previousVisitFindings.isEmpty {
-            para("Findings from Previous Well Visits", font: headerFont)
-            for item in data.previousVisitFindings {
-                // Subheader for each prior visit (humanized date) — avoid conditional binding on non-optional
-                var sub = item.title
-                let rawDate = item.date.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !rawDate.isEmpty {
-                    let pretty = humanDateOnly(rawDate) ?? rawDate
-                    if !pretty.isEmpty {
-                        sub = sub.replacingOccurrences(of: rawDate, with: pretty)
-                    }
-                }
-                NSLog("[ReportBuilder] PrevWell sub='%@'  rawDate='%@'  hasAge=%@", sub, rawDate, sub.contains("Age ") ? "yes" : "no")
-                // If the loader didn't compute an age (or left "Age —"), compute it here using the bundle DOB + raw date
-                let dobForAge = data.meta.dobISO.trimmingCharacters(in: .whitespacesAndNewlines)
-                let rawForAge = rawDate
-                if !dobForAge.isEmpty && !rawForAge.isEmpty {
-                    let computed = computeAgeShort(dobISO: dobForAge, refISO: rawForAge)
-                    if computed != "—" {
-                        if let r = sub.range(of: "Age —") {
-                            sub.replaceSubrange(r, with: "Age \(computed)")
-                        } else if !sub.contains("Age ") {
-                            sub.append(" · Age \(computed)")
-                        }
-                    }
-                }
-                content.append(NSAttributedString(
-                    string: sub + "\n",
-                    attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-                                 .foregroundColor: NSColor.labelColor]
-                ))
-                // Render findings (split our joined bullets back into lines)
-                if let f = item.findings, !f.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    let lines = f.components(separatedBy: " • ")
-                    for line in lines {
-                        para("• \(line)", font: bodyFont)
-                    }
-                } else {
-                    para("—", font: bodyFont)
-                }
-                content.append(NSAttributedString(string: "\n"))
-            }
-        }
-
-        // --- Step 3: Current Visit (subtitle) + Parents' Concerns + Feeding + Supplementation + Sleep ---
-        let _currentTitle = data.currentVisitTitle
-        let _currentTitleTrimmed = _currentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !_currentTitleTrimmed.isEmpty {
-            para("Current Visit — \(_currentTitleTrimmed)", font: headerFont)
-            content.append(NSAttributedString(string: "\n"))
-        }
-
-        // Parents’ Concerns
-        para("Parents’ Concerns", font: headerFont)
-        let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? data.parentsConcerns! : "—"
-        para(parentsText, font: bodyFont)
-        content.append(NSAttributedString(string: "\n"))
-
-        // Feeding
-        para("Feeding", font: headerFont)
-        if data.feeding.isEmpty {
-            para("—", font: bodyFont)
-        } else {
-            let feedOrder = ["Breastfeeding","Formula","Solids","Notes"]
-            for key in feedOrder {
-                if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
-            }
-            let extraFeed = data.feeding.keys.filter { !["Breastfeeding","Formula","Solids","Notes"].contains($0) }.sorted()
-            for key in extraFeed {
-                if let v = data.feeding[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
-            }
-        }
-        content.append(NSAttributedString(string: "\n"))
-
-        // Supplementation
-        para("Supplementation", font: headerFont)
-        if data.supplementation.isEmpty {
-            para("—", font: bodyFont)
-        } else {
-            let suppOrder = ["Vitamin D","Iron","Other","Notes"]
-            for key in suppOrder {
-                if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
-            }
-            let extraSupp = data.supplementation.keys.filter { !["Vitamin D","Iron","Other","Notes"].contains($0) }.sorted()
-            for key in extraSupp {
-                if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
-            }
-        }
-        content.append(NSAttributedString(string: "\n"))
-
-        // Sleep
-        para("Sleep", font: headerFont)
-        if data.sleep.isEmpty {
-            para("—", font: bodyFont)
-        } else {
-            let sleepOrder = ["Total hours","Naps","Night wakings","Quality","Notes"]
-            for key in sleepOrder {
-                if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
-            }
-            let extraSleep = data.sleep.keys.filter { !["Total hours","Naps","Night wakings","Quality","Notes"].contains($0) }.sorted()
-            for key in extraSleep {
-                if let v = data.sleep[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) }
-            }
-        }
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 4: Developmental Evaluation (M-CHAT / Dev test / Parent Concerns) ---
-        para("Developmental Evaluation", font: headerFont)
-        if data.developmental.isEmpty {
-            para("—", font: bodyFont)
-        } else {
-            // Preferred order first, then any extras
-            let devOrder = ["Parent Concerns", "M-CHAT", "Developmental Test"]
-            for key in devOrder {
-                if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    para("\(key): \(v)", font: bodyFont)
-                }
-            }
-            let extraDev = data.developmental.keys
-                .filter { !["Parent Concerns","M-CHAT","Developmental Test"].contains($0) }
-                .sorted()
-            for key in extraDev {
-                if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    para("\(key): \(v)", font: bodyFont)
-                }
-            }
-        }
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 5: Age-specific Milestones (Achieved X/Y + Flags) ---
-        para("Age-specific Milestones", font: headerFont)
-        let achieved = data.milestonesAchieved.0
-        let total = data.milestonesAchieved.1
-        para("Achieved: \(achieved)/\(total)", font: bodyFont)
-        if data.milestoneFlags.isEmpty {
-            para("No flags.", font: bodyFont)
-        } else {
-            for line in data.milestoneFlags {
-                para("• \(line)", font: bodyFont)
-            }
-        }
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 6: Measurements (today’s W/L/HC + weight-gain since discharge) ---
-        para("Measurements", font: headerFont)
-        if data.measurements.isEmpty {
-            para("—", font: bodyFont)
-        } else {
-            let measOrder = ["Weight","Length","Head Circumference","Weight gain since discharge"]
-            for key in measOrder {
-                if let v = data.measurements[key], !v.isEmpty {
-                    para("\(key): \(v)", font: bodyFont)
-                }
-            }
-            let extraMeas = data.measurements.keys
-                .filter { !["Weight","Length","Head Circumference","Weight gain since discharge"].contains($0) }
-                .sorted()
-            for key in extraMeas {
-                if let v = data.measurements[key], !v.isEmpty {
-                    para("\(key): \(v)", font: bodyFont)
-                }
-            }
-        }
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 7: Physical Examination (grouped like iOS) ---
-        para("Physical Examination", font: headerFont)
-        if data.physicalExamGroups.isEmpty {
-            para("—", font: bodyFont)
-        } else {
-            for (groupTitle, lines) in data.physicalExamGroups {
-                content.append(NSAttributedString(
-                    string: groupTitle + "\n",
-                    attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-                                 .foregroundColor: NSColor.labelColor]
-                ))
-                for line in lines where !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    para("• \(line)", font: bodyFont)
-                }
-            }
-        }
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 8: Problem Listing ---
-        para("Problem Listing", font: headerFont)
-        let _problem = data.problemListing?.trimmingCharacters(in: .whitespacesAndNewlines)
-        para((_problem?.isEmpty == false ? _problem! : "—"), font: bodyFont)
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 9: Conclusions ---
-        para("Conclusions", font: headerFont)
-        let _conclusions = data.conclusions?.trimmingCharacters(in: .whitespacesAndNewlines)
-        para((_conclusions?.isEmpty == false ? _conclusions! : "—"), font: bodyFont)
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 10: Anticipatory Guidance ---
-        para("Anticipatory Guidance", font: headerFont)
-        let _ag = data.anticipatoryGuidance?.trimmingCharacters(in: .whitespacesAndNewlines)
-        para((_ag?.isEmpty == false ? _ag! : "—"), font: bodyFont)
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 11: Clinician Comments ---
-        para("Clinician Comments", font: headerFont)
-        let _cc = data.clinicianComments?.trimmingCharacters(in: .whitespacesAndNewlines)
-        para((_cc?.isEmpty == false ? _cc! : "—"), font: bodyFont)
-        content.append(NSAttributedString(string: "\n"))
-
-        // --- Step 12: Next Visit Date (optional) ---
-        para("Next Visit Date", font: headerFont)
-        if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines), !rawNext.isEmpty {
-            para(humanDateOnly(rawNext) ?? rawNext, font: bodyFont)
-        } else {
-            para("—", font: bodyFont)
-        }
-        content.append(NSAttributedString(string: "\n"))
+        // Reuse body-only, age-gated layout (Steps 1–12: header, perinatal, feeding, sleep, etc.)
+        let body = assembleAttributedWell_BodyOnly(data: data, visitID: visitID, ageBand: band)
+        content.append(body)
 
         // --- Step 13: Growth Charts (summary up to visit date) ---
+        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
+            content.append(
+                NSAttributedString(
+                    string: text + "\n",
+                    attributes: [
+                        .font: font,
+                        .foregroundColor: color
+                    ]
+                )
+            )
+        }
+        let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let bodyFont = NSFont.systemFont(ofSize: 12)
+
         para("Growth Charts", font: headerFont)
         if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
             let dobPretty = humanDateOnly(gs.dobISO) ?? gs.dobISO
@@ -1391,8 +1121,11 @@ extension ReportBuilder {
 
             func range(_ pts: [ReportGrowth.Point]) -> String {
                 guard let minA = pts.map({ $0.ageMonths }).min(),
-                      let maxA = pts.map({ $0.ageMonths }).max() else { return "0 points" }
-                let nf = NumberFormatter(); nf.maximumFractionDigits = 1
+                      let maxA = pts.map({ $0.ageMonths }).max() else {
+                    return "0 points"
+                }
+                let nf = NumberFormatter()
+                nf.maximumFractionDigits = 1
                 let lo = nf.string(from: NSNumber(value: minA)) ?? String(format: "%.1f", minA)
                 let hi = nf.string(from: NSNumber(value: maxA)) ?? String(format: "%.1f", maxA)
                 return "\(pts.count) point\(pts.count == 1 ? "" : "s") (\(lo)–\(hi) mo)"
@@ -1405,6 +1138,7 @@ extension ReportBuilder {
             para("—", font: bodyFont)
         }
         content.append(NSAttributedString(string: "\n"))
+
         // Force Growth Charts to start on a new page
         content.append(pageBreak())
 
@@ -1423,7 +1157,15 @@ extension ReportBuilder {
                 if idx > 0 {
                     content.append(pageBreak())
                 }
-                let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
+                let caption: String
+                switch idx {
+                case 0:
+                    caption = "Weight‑for‑Age"
+                case 1:
+                    caption = "Length/Height‑for‑Age"
+                default:
+                    caption = "Head Circumference‑for‑Age"
+                }
                 content.append(centeredTitle(caption))
                 content.append(attachmentStringFittedToContent(from: img, reservedTopBottom: 72))
                 content.append(NSAttributedString(string: "\n\n"))

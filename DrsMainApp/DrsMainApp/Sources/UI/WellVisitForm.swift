@@ -247,6 +247,32 @@ func layoutProfile(forVisitType id: String) -> WellVisitLayoutProfile {
     layoutProfile(for: ageGroupForVisitType(id))
 }
 
+/// Helper used by report/PDF/DOCX builders to keep section visibility
+/// in sync with the SwiftUI well‑visit form.
+///
+/// Call this from ReportBuilder (or any other reporting code) with the
+/// `visit_type` string stored in SQLite. The returned `WellVisitLayoutProfile`
+/// exposes booleans such as `showsFeeding`, `showsSleep`, `showsPhysicalExam`,
+/// `showsMilestones`, etc., which can be used to decide which sections
+/// to render in the exported report.
+///
+/// Example usage in a report builder:
+///
+///     let layout = reportLayoutProfile(forVisitType: visit.visitType)
+///     if layout.showsFeeding {
+///         appendFeedingSection(...)
+///     }
+///     if layout.showsSleep {
+///         appendSleepSection(...)
+///     }
+///
+/// Because this reuses the same `WellVisitAgeGroup` and `layoutProfile`
+/// logic as the on‑screen form, any future changes to age‑group gating
+/// will automatically apply to both UI and reports.
+func reportLayoutProfile(forVisitType id: String) -> WellVisitLayoutProfile {
+    return layoutProfile(forVisitType: id)
+}
+
 // MARK: - WellVisitForm
 
 struct WellVisitForm: View {
