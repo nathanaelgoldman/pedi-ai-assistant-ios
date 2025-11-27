@@ -281,24 +281,243 @@ struct WellVisitRules {
 
 extension WellVisitRules {
 
+    /// Attempt to extract a stable well-visit type identifier (e.g. "one_month")
+    /// from ReportMeta using reflection, without requiring explicit changes
+    /// to ReportMeta itself.
+    private static func extractVisitTypeID(from meta: ReportMeta) -> String? {
+        // All known visit type IDs used across forms/reports.
+        let knownIDs: Set<String> = [
+            "newborn_first",
+            "one_month",
+            "two_month",
+            "four_month",
+            "six_month",
+            "nine_month",
+            "twelve_month",
+            "fifteen_month",
+            "eighteen_month",
+            "twentyfour_month",
+            "thirty_month",
+            "thirtysix_month"
+        ]
+
+        func mapTitleToID(_ lower: String) -> String? {
+            if lower.contains("newborn") || lower.contains("first after maternity") {
+                return "newborn_first"
+            }
+            if lower.contains("1-month") || lower.contains("1 month") {
+                return "one_month"
+            }
+            if lower.contains("2-month") || lower.contains("2 month") {
+                return "two_month"
+            }
+            if lower.contains("4-month") || lower.contains("4 month") {
+                return "four_month"
+            }
+            if lower.contains("6-month") || lower.contains("6 month") {
+                return "six_month"
+            }
+            if lower.contains("9-month") || lower.contains("9 month") {
+                return "nine_month"
+            }
+            if lower.contains("12-month") || lower.contains("12 month") || lower.contains("1-year") {
+                return "twelve_month"
+            }
+            if lower.contains("15-month") || lower.contains("15 month") {
+                return "fifteen_month"
+            }
+            if lower.contains("18-month") || lower.contains("18 month") {
+                return "eighteen_month"
+            }
+            if lower.contains("24-month") || lower.contains("24 month") || lower.contains("2-year") {
+                return "twentyfour_month"
+            }
+            if lower.contains("30-month") || lower.contains("30 month") {
+                return "thirty_month"
+            }
+            if lower.contains("36-month") || lower.contains("36 month") || lower.contains("3-year") {
+                return "thirtysix_month"
+            }
+            return nil
+        }
+
+        func search(_ value: Any, depth: Int = 0) -> String? {
+            if depth > 4 { return nil }
+
+            if let s = value as? String {
+                if knownIDs.contains(s) {
+                    print("[WellVisitRules] extractVisitTypeID: found direct ID '" + s + "'")
+                    return s
+                }
+                if let mapped = mapTitleToID(s.lowercased()) {
+                    print("[WellVisitRules] extractVisitTypeID: mapped '" + s + "' -> '" + mapped + "'")
+                    return mapped
+                }
+            }
+
+            let mirror = Mirror(reflecting: value)
+            for child in mirror.children {
+                if let found = search(child.value, depth: depth + 1) {
+                    return found
+                }
+            }
+            return nil
+        }
+
+        return search(meta)
+    }
+
+    /// Lightweight helper used when we only have a human-readable title
+    /// such as "1-month visit" or "12-month visit" instead of a full
+    /// ReportMeta object.
+    private static func extractVisitTypeID(from visitTypeTitle: String?) -> String? {
+        guard let raw = visitTypeTitle, !raw.isEmpty else {
+            return nil
+        }
+
+        let lower = raw.lowercased()
+
+        // Allow passing a direct internal ID such as "one_month".
+        let knownIDs: Set<String> = [
+            "newborn_first",
+            "one_month",
+            "two_month",
+            "four_month",
+            "six_month",
+            "nine_month",
+            "twelve_month",
+            "fifteen_month",
+            "eighteen_month",
+            "twentyfour_month",
+            "thirty_month",
+            "thirtysix_month"
+        ]
+        if knownIDs.contains(lower) {
+            print("[WellVisitRules] extractVisitTypeID: found direct ID '\(lower)' from title")
+            return lower
+        }
+
+        // Map common human-readable titles to internal IDs.
+        if lower.contains("newborn") || lower.contains("first after maternity") {
+            return "newborn_first"
+        }
+        if lower.contains("1-month") || lower.contains("1 month") {
+            return "one_month"
+        }
+        if lower.contains("2-month") || lower.contains("2 month") {
+            return "two_month"
+        }
+        if lower.contains("4-month") || lower.contains("4 month") {
+            return "four_month"
+        }
+        if lower.contains("6-month") || lower.contains("6 month") {
+            return "six_month"
+        }
+        if lower.contains("9-month") || lower.contains("9 month") {
+            return "nine_month"
+        }
+        if lower.contains("12-month") || lower.contains("12 month") || lower.contains("1-year") {
+            return "twelve_month"
+        }
+        if lower.contains("15-month") || lower.contains("15 month") {
+            return "fifteen_month"
+        }
+        if lower.contains("18-month") || lower.contains("18 month") {
+            return "eighteen_month"
+        }
+        if lower.contains("24-month") || lower.contains("24 month") || lower.contains("2-year") {
+            return "twentyfour_month"
+        }
+        if lower.contains("30-month") || lower.contains("30 month") {
+            return "thirty_month"
+        }
+        if lower.contains("36-month") || lower.contains("36 month") || lower.contains("3-year") {
+            return "thirtysix_month"
+        }
+
+        return nil
+    }
+
     /// Central hook used by ReportBuilder to decide whether a given
     /// well-visit report section should be included for this visit.
     ///
-    /// For now:
-    /// - Always show perinatal summary in well-visit reports.
-    /// - Defer age-specific gating until ReportMeta exposes visit type cleanly.
-    static func shouldIncludeSection(title: String, meta: ReportMeta) -> Bool {
-        // For now:
-        // - Always show perinatal summary in well-visit reports.
-        // - Defer age-specific gating until ReportMeta exposes visit type cleanly.
-        let lower = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    /// Rules:
+    /// - Perinatal summary is always shown.
+    /// - If we cannot reliably infer the visit type, we default to
+    ///   including all sections (current behaviour).
+    /// - Otherwise, we apply simple age-based gating for the current visit.
+    static func shouldIncludeSection(title: String, visitTypeTitle: String?) -> Bool {
+        // Log the incoming query
+        print("[WellVisitRules] shouldIncludeSection? title='\(title)'")
 
-        // Keep perinatal summary visible in all well-visit reports
-        if lower.contains("perinatal") {
+        // Perinatal Summary must ALWAYS be present, regardless of age or visit type
+        if title == "Perinatal Summary" {
+            print("[WellVisitRules] shouldIncludeSection: always include Perinatal Summary")
             return true
         }
 
-        // Placeholder: no additional gating yet; preserve current behaviour
-        return true
+        // Map the human-readable visit type (e.g. "1-month visit", "12-month visit")
+        // to our internal ID (e.g. "one_month", "twelve_month")
+        let visitTypeID = extractVisitTypeID(from: visitTypeTitle)
+        print("[WellVisitRules] shouldIncludeSection: visitTypeID='\(visitTypeID ?? "nil")' for title='\(title)'")
+
+        // If we cannot resolve a visit type ID, fall back to showing the section
+        guard let visitTypeID else {
+            return true
+        }
+
+        // Group visit types into broad age bands for gating logic
+        let infantTypes: Set<String> = [
+            "newborn_first", // first visit after maternity
+            "one_month",
+            "two_month",
+            "four_month",
+            "six_month",
+            "nine_month",
+            "twelve_month"
+        ]
+
+        let toddlerPreschoolTypes: Set<String> = [
+            "fifteen_month",
+            "eighteen_month",
+            "twentyfour_month",
+            "thirty_month",
+            "thirtysix_month"
+        ]
+
+        let ageBand: String
+        if infantTypes.contains(visitTypeID) {
+            ageBand = "infant"
+        } else if toddlerPreschoolTypes.contains(visitTypeID) {
+            ageBand = "toddler_preschool"
+        } else {
+            ageBand = "other"
+        }
+
+        // Default is to include sections unless explicitly gated off
+        var show = true
+
+        switch ageBand {
+        case "infant":
+            // For now, all sections are shown for infant visits
+            show = true
+
+        case "toddler_preschool":
+            // Age gating example:
+            // For toddler / preschool visits, hide the standalone "Supplementation" section.
+            // (Those visits usually only need Feeding text, without infant-style supplementation block.)
+            if title == "Supplementation" {
+                show = false
+            } else {
+                show = true
+            }
+
+        default:
+            // For any other visit type, keep all sections visible by default
+            show = true
+        }
+
+        print("[WellVisitRules] shouldIncludeSection: ageBand='\(ageBand)' visitTypeID='\(visitTypeID)' title='\(title)' -> \(show)")
+        return show
     }
 }

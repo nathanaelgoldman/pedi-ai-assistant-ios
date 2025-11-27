@@ -247,14 +247,14 @@ final class ReportBuilder {
         let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
-        if WellVisitRules.shouldIncludeSection(title: "Perinatal Summary", meta: data.meta),
+        if WellVisitRules.shouldIncludeSection(title: "Perinatal Summary", visitTypeTitle: data.meta.visitTypeReadable),
            let s = data.perinatalSummary, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             para("Perinatal Summary", font: headerFont)
             para(s, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Findings from Previous Well Visits", meta: data.meta),
+        if WellVisitRules.shouldIncludeSection(title: "Findings from Previous Well Visits", visitTypeTitle: data.meta.visitTypeReadable),
            !data.previousVisitFindings.isEmpty {
             para("Findings from Previous Well Visits", font: headerFont)
             for item in data.previousVisitFindings {
@@ -295,20 +295,20 @@ final class ReportBuilder {
         }
 
         let _currentTitle = data.currentVisitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if WellVisitRules.shouldIncludeSection(title: "Current Visit", meta: data.meta),
+        if WellVisitRules.shouldIncludeSection(title: "Current Visit", visitTypeTitle: data.meta.visitTypeReadable),
            !_currentTitle.isEmpty {
             para("Current Visit — \(_currentTitle)", font: headerFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Parents’ Concerns", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Parents’ Concerns", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Parents’ Concerns", font: headerFont)
             let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? data.parentsConcerns! : "—"
             para(parentsText, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Feeding", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Feeding", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Feeding", font: headerFont)
             if data.feeding.isEmpty {
                 para("—", font: bodyFont)
@@ -331,7 +331,7 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Supplementation", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Supplementation", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Supplementation", font: headerFont)
             if data.supplementation.isEmpty {
                 para("—", font: bodyFont)
@@ -344,7 +344,7 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Sleep", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Sleep", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Sleep", font: headerFont)
             if data.sleep.isEmpty {
                 para("—", font: bodyFont)
@@ -367,7 +367,7 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Developmental Evaluation", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Developmental Evaluation", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Developmental Evaluation", font: headerFont)
             if data.developmental.isEmpty {
                 para("—", font: bodyFont)
@@ -389,7 +389,7 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Age-specific Milestones", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Age-specific Milestones", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Age-specific Milestones", font: headerFont)
             let achieved = data.milestonesAchieved.0
             let total = data.milestonesAchieved.1
@@ -398,7 +398,7 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Measurements", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Measurements", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Measurements", font: headerFont)
             if data.measurements.isEmpty {
                 para("—", font: bodyFont)
@@ -411,7 +411,7 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Physical Examination", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Physical Examination", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Physical Examination", font: headerFont)
             if data.physicalExamGroups.isEmpty {
                 para("—", font: bodyFont)
@@ -429,35 +429,35 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Problem Listing", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Problem Listing", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Problem Listing", font: headerFont)
             let _problem = data.problemListing?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_problem?.isEmpty == false ? _problem! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Conclusions", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Conclusions", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Conclusions", font: headerFont)
             let _conclusions = data.conclusions?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_conclusions?.isEmpty == false ? _conclusions! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Anticipatory Guidance", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Anticipatory Guidance", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Anticipatory Guidance", font: headerFont)
             let _ag = data.anticipatoryGuidance?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_ag?.isEmpty == false ? _ag! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Clinician Comments", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Clinician Comments", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Clinician Comments", font: headerFont)
             let _cc = data.clinicianComments?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_cc?.isEmpty == false ? _cc! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Next Visit Date", meta: data.meta) {
+        if WellVisitRules.shouldIncludeSection(title: "Next Visit Date", visitTypeTitle: data.meta.visitTypeReadable) {
             para("Next Visit Date", font: headerFont)
             if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines), !rawNext.isEmpty {
                 para(humanDateOnly(rawNext) ?? rawNext, font: bodyFont)
@@ -998,8 +998,8 @@ extension ReportBuilder {
         let content = NSMutableAttributedString()
 
         // Compute age band for gating; reuse same logic as PDF/body-only path
-        let attributed = assembleAttributedWell_BodyOnly(data: data,
-                                                         visitID: visitID)
+        _ = assembleAttributedWell_BodyOnly(data: data,
+                                            visitID: visitID)
 
         // --- Step 13: Growth Charts (summary up to visit date) ---
         func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
@@ -2748,7 +2748,11 @@ extension ReportBuilder {
         /// Decide whether a given well-visit report section should be included
         /// using the central WellVisitRules engine (single source of truth).
         func shouldIncludeWellSection(title: String, meta: ReportMeta) -> Bool {
-            return WellVisitRules.shouldIncludeSection(title: title, meta: meta)
+            // The rules engine currently keys off the *readable* visit type label
+            // (e.g. "1‑month visit", "Toddler / Preschool visit").
+            // If we don't have a readable title, fall back to an empty string (rules will default).
+            let visitTitle = meta.visitTypeReadable ?? ""
+            return WellVisitRules.shouldIncludeSection(title: title, visitTypeTitle: visitTitle)
         }
     }
 
@@ -2758,7 +2762,7 @@ private extension ReportBuilder {
 
     /// Lightweight container for well-visit report strings.
     /// This keeps the report assembly code simple and focused on presentation.
-    fileprivate struct WellVisitCore {
+    struct WellVisitCore {
         var summary: String?
         var perinatalSummary: String?
         var previousVisitsSummary: String?
