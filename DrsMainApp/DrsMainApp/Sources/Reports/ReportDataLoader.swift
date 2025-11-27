@@ -19,6 +19,7 @@ private let VISIT_TITLES: [String:String] = [
     "twentyfour_month": "24-month visit",
     "thirty_month": "30-month visit",
     "thirtysix_month": "36-month visit",
+    "newborn_1st_after_maternity": "Newborn 1st After Maternity",
     "episode": "Sick visit"
 ]
 

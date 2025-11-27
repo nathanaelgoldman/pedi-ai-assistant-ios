@@ -11,6 +11,99 @@ import Foundation
 struct WellVisitRules {
     let visitTypeID: String
 
+    struct ReportVisibility {
+        let showPerinatal: Bool
+        let showGrowth: Bool
+        let showFeeding: Bool
+        let showSupplementation: Bool
+        let showSleep: Bool
+        let showDevelopment: Bool
+        let showSchool: Bool
+        let showParentalConcerns: Bool
+        let showVaccines: Bool
+        let showScreening: Bool
+    }
+
+    static func reportVisibility(for visitTypeID: String) -> ReportVisibility {
+        switch visitTypeID {
+        case "newborn_first":
+            return ReportVisibility(
+                showPerinatal: true,
+                showGrowth: true,
+                showFeeding: true,
+                showSupplementation: true,
+                showSleep: true,
+                showDevelopment: true,
+                showSchool: false,
+                showParentalConcerns: true,
+                showVaccines: false,
+                showScreening: false
+            )
+
+        case "one_month", "two_month", "four_month":
+            return ReportVisibility(
+                showPerinatal: false,
+                showGrowth: true,
+                showFeeding: true,
+                showSupplementation: true,
+                showSleep: true,
+                showDevelopment: true,
+                showSchool: false,
+                showParentalConcerns: true,
+                showVaccines: true,
+                showScreening: false
+            )
+
+        case "six_month", "nine_month", "twelve_month":
+            return ReportVisibility(
+                showPerinatal: false,
+                showGrowth: true,
+                showFeeding: true,
+                showSupplementation: true,
+                showSleep: true,
+                showDevelopment: true,
+                showSchool: false,
+                showParentalConcerns: true,
+                showVaccines: true,
+                showScreening: true
+            )
+
+        case "fifteen_month", "eighteen_month", "twentyfour_month",
+             "thirty_month", "thirtysix_month":
+            return ReportVisibility(
+                showPerinatal: false,
+                showGrowth: true,
+                showFeeding: true,
+                showSupplementation: false,   // toddler / preschool: no vit D block
+                showSleep: true,
+                showDevelopment: true,
+                showSchool: true,
+                showParentalConcerns: true,
+                showVaccines: true,
+                showScreening: true
+            )
+
+        default:
+            // Fallback: treat as 6–12 month style visit
+            return ReportVisibility(
+                showPerinatal: false,
+                showGrowth: true,
+                showFeeding: true,
+                showSupplementation: true,
+                showSleep: true,
+                showDevelopment: true,
+                showSchool: false,
+                showParentalConcerns: true,
+                showVaccines: true,
+                showScreening: true
+            )
+        }
+    }
+
+    var reportVisibility: ReportVisibility {
+        Self.reportVisibility(for: visitTypeID)
+    }
+
     // MARK: - Core layout
 
     var ageGroup: WellVisitAgeGroup {
@@ -181,5 +274,31 @@ struct WellVisitRules {
         || visitTypeID == "twentyfour_month"
         || visitTypeID == "thirty_month"
         || visitTypeID == "thirtysix_month"
+    }
+}
+
+// MARK: - Report gating bridge
+
+extension WellVisitRules {
+
+    /// Central hook used by ReportBuilder to decide whether a given
+    /// well-visit report section should be included for this visit.
+    ///
+    /// For now:
+    /// - Always show perinatal summary in well-visit reports.
+    /// - Defer age-specific gating until ReportMeta exposes visit type cleanly.
+    static func shouldIncludeSection(title: String, meta: ReportMeta) -> Bool {
+        // For now:
+        // - Always show perinatal summary in well-visit reports.
+        // - Defer age-specific gating until ReportMeta exposes visit type cleanly.
+        let lower = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // Keep perinatal summary visible in all well-visit reports
+        if lower.contains("perinatal") {
+            return true
+        }
+
+        // Placeholder: no additional gating yet; preserve current behaviour
+        return true
     }
 }
