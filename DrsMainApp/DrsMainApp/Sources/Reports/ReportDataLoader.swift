@@ -93,14 +93,15 @@ final class ReportDataLoader {
         let prevFindings = buildPreviousWellVisitFindings(currentVisitID: visitID, dobISO: meta.dobISO, cutoffISO: meta.visitDateISO)
 
         // STEP 3: Compute age in months for age-gated CURRENT VISIT sections
-        var ageMonths: Int? = nil
+        // Use the same convention as growth logic (days / 30.4375) for consistency.
+        var ageMonthsDouble: Double? = nil
         if let dobDate = parseDateFlexible(meta.dobISO),
            let visitDate = parseDateFlexible(meta.visitDateISO) {
-            let comps = Calendar.current.dateComponents([.year, .month], from: dobDate, to: visitDate)
-            let totalMonths = (comps.year ?? 0) * 12 + (comps.month ?? 0)
-            ageMonths = max(totalMonths, 0)
+            let seconds = visitDate.timeIntervalSince(dobDate)
+            let days = seconds / 86400.0
+            let months = max(0.0, days / 30.4375)
+            ageMonthsDouble = months
         }
-
         // STEP 4: Current visit core fields (type subtitle, parents' concerns, feeding, supplementation, sleep)
         let core = loadCurrentWellCoreFields(visitID: visitID)
         let currentVisitTitle = core.visitType ?? (meta.visitTypeReadable ?? "Well Visit")
@@ -122,8 +123,9 @@ final class ReportDataLoader {
         // Per REPORT CONTRACT:
         // - Perinatal summary, growth charts, and previous well visits are NEVER age-gated.
         // - Age gating controls only which fields are populated inside the current visit sections.
-        let ageMonthsDouble: Double? = ageMonths.map { Double($0) }
-        let visibility = WellVisitReportRules.visibility(for: core.visitType, ageMonths: ageMonthsDouble)
+        
+        let rawVisitTypeID = rawVisitTypeIDForWell(visitID: visitID) ?? core.visitType
+        let visibility = WellVisitReportRules.visibility(for: rawVisitTypeID, ageMonths: ageMonthsDouble)
 
         var parentsConcerns = parentsConcernsRaw
         var feeding = feedingRaw
@@ -140,7 +142,9 @@ final class ReportDataLoader {
         var clinicianComments = pePack.comments
         var nextVisitDate = pePack.nextVisitDate
 
-        // If we have a visibility profile, apply it; otherwise default to "show everything"
+        // Use matrix visibility as the single source of truth for CURRENT VISIT sections.
+        // If there's no visibility profile, we hide all current-visit sections instead of
+        // inferring visibility from whether fields are filled.
         if let visibility = visibility {
             if !visibility.showParentsConcerns {
                 parentsConcerns = nil
@@ -182,6 +186,22 @@ final class ReportDataLoader {
             if !visibility.showNextVisit {
                 nextVisitDate = nil
             }
+        } else {
+            // No visibility profile defined for this visit type/age → hide all current-visit sections.
+            parentsConcerns = nil
+            feeding = [:]
+            supplementation = [:]
+            sleep = [:]
+            developmental = [:]
+            milestonesAchieved = (0, 0)
+            milestoneFlags = []
+            measurements = [:]
+            physicalExamGroups = []
+            problemListing = nil
+            conclusions = nil
+            anticipatoryGuidance = nil
+            clinicianComments = nil
+            nextVisitDate = nil
         }
 
         // Header + perinatal summary stay untouched; age gating only affects current visit sections above.
@@ -2656,24 +2676,110 @@ extension ReportDataLoader {
     func wellVisitVisibility(visitID: Int) -> WellVisitReportRules.WellVisitVisibility? {
         let age = wellVisitAgeMonths(visitID: visitID)
         let rawVisitTypeID = rawVisitTypeIDForWell(visitID: visitID)
-        return WellVisitReportRules.visibility(for: rawVisitTypeID, ageMonths: age)
+        let visibility = WellVisitReportRules.visibility(for: rawVisitTypeID, ageMonths: age)
+
+        #if DEBUG
+        if let vis = visibility {
+            let ageStr = age.map { String(format: "%.2f", $0) } ?? "nil"
+            let typeStr = rawVisitTypeID ?? "nil"
+            print("[ReportDataLoader] wellVisibility visitID=\(visitID) typeID='\(typeStr)' ageMonths=\(ageStr) " +
+                  "sections: feed=\(vis.showFeeding) supp=\(vis.showSupplementation) sleep=\(vis.showSleep) dev=\(vis.showDevelopment)")
+        } else {
+            let ageStr = age.map { String(format: "%.2f", $0) } ?? "nil"
+            let typeStr = rawVisitTypeID ?? "nil"
+            print("[ReportDataLoader] wellVisibility visitID=\(visitID) typeID='\(typeStr)' ageMonths=\(ageStr) -> nil")
+        }
+        #endif
+
+        return visibility
     }
 }
 
 extension WellVisitReportRules.WellVisitVisibility {
-    // Temporary: always show all sections.
-    // Fine-grained age/visit-type gating can be added later in the rules layer.
+    /// Section-level visibility used by ReportBuilder for the
+    /// "Current Visit — …" block. This is the only place where
+    /// age/visit-type gating for current-visit sections lives.
+    ///
+    /// Contract:
+    /// - Perinatal summary, previous well visits, and growth charts
+    ///   are never gated here (they are handled elsewhere).
+    /// - These booleans only control the *current visit* sections.
+    /// - Fine-grained, field-level logic remains in WellVisitReportRules
+    ///   (e.g. via the flags and any per-field helpers).
+
+    // MARK: - Subjective / global fields (always relevant)
+
+    /// Parents' concerns are relevant at any age.
     var showParentsConcerns: Bool { true }
-    var showFeeding: Bool { true }
-    var showSupplementation: Bool { true }
-    var showSleep: Bool { true }
-    var showDevelopment: Bool { true }
-    var showMilestones: Bool { true }
-    var showMeasurements: Bool { true }
-    var showPhysicalExam: Bool { true }
+
+    /// Problem listing is always useful when present.
     var showProblemListing: Bool { true }
+
+    /// Conclusions / assessment are always shown for the current visit.
     var showConclusions: Bool { true }
+
+    /// Anticipatory guidance is part of every well visit.
     var showAnticipatoryGuidance: Bool { true }
+
+    /// Free-text clinician comments are always allowed.
     var showClinicianComments: Bool { true }
+
+    /// Planned next visit is always allowed when provided.
     var showNextVisit: Bool { true }
+
+    // MARK: - Feeding & supplementation
+
+    /// Feeding block: shown whenever any age-group defines structured
+    /// feeding content (milk only, under-12m structure, solids, older feeding).
+    var showFeeding: Bool {
+        let f = flags
+        return f.isEarlyMilkOnlyVisit
+            || f.isStructuredFeedingUnder12
+            || f.isSolidsVisit
+            || f.isOlderFeedingVisit
+    }
+
+    /// Supplementation block: mirrors the broader feeding window; in practice
+    /// we show this for any visit where structured feeding is part of the layout.
+    var showSupplementation: Bool {
+        let f = flags
+        return f.isStructuredFeedingUnder12
+            || f.isSolidsVisit
+            || f.isOlderFeedingVisit
+    }
+
+    // MARK: - Sleep
+
+    /// Sleep block: we keep this available for all well visits so that
+    /// any recorded sleep details (including very early visits such as
+    /// the 1‑month visit) are always rendered in the report. Age‑specific
+    /// content is handled by the form/rules rather than by hiding the
+    /// entire section.
+    var showSleep: Bool { true }
+
+    // MARK: - Development / screening
+
+    /// Developmental screening / tests: reserved for visits where we actually
+    /// run Dev tests and/or M-CHAT according to the age matrix.
+    var showDevelopment: Bool {
+        let f = flags
+        return f.isDevTestScoreVisit
+            || f.isDevTestResultVisit
+            || f.isMCHATVisit
+    }
+
+    /// Milestones summary: we keep this enabled for all milestone-based visits;
+    /// detailed age-filtering is handled by the milestone engine itself.
+    var showMilestones: Bool { true }
+
+    // MARK: - Measurements & physical examination
+
+    /// Measurements (weight/length/head circ, weight delta, etc.) are core
+    /// to all well visits and are not age-gated at the section level.
+    var showMeasurements: Bool { true }
+
+    /// Physical exam is always present; age-specific details (e.g. fontanelle,
+    /// primitive reflexes) are governed by the underlying form/rules, not by
+    /// hiding the entire PE block.
+    var showPhysicalExam: Bool { true }
 }

@@ -50,6 +50,37 @@ struct WellVisitReportFlags {
     let isDevTestResultVisit: Bool
 }
 
+/// Raw age‑matrix row loaded from `well_visit_age_mapping.csv`.
+/// This is intentionally kept very close to the CSV columns so that
+/// the CSV becomes the single source of truth.
+private struct AgeMatrixRow {
+    let visitTypeID: String
+
+    // Feeding & nutrition
+    let isWeightDeltaVisit: Bool
+    let isEarlyMilkOnlyVisit: Bool
+    let isStructuredFeedingUnder12: Bool
+    let isSolidsVisit: Bool
+    let isOlderFeedingVisit: Bool
+
+    // Sleep
+    let isEarlySleepVisit: Bool
+    let isOlderSleepVisit: Bool
+    let isPostTwelveMonthVisit: Bool
+
+    // Physical exam details
+    let isFontanelleVisit: Bool
+    let isPrimitiveNeuroVisit: Bool
+    let isMoroVisit: Bool
+    let isHipsVisit: Bool
+    let isTeethVisit: Bool
+
+    // Developmental tools
+    let isMCHATVisit: Bool
+    let isDevTestScoreVisit: Bool
+    let isDevTestResultVisit: Bool
+}
+
 /// Central entry point for age‑based report rules.
 ///
 /// Typical usage from the report side:
@@ -60,10 +91,162 @@ struct WellVisitReportFlags {
 ///
 enum WellVisitReportRules {
 
+    // MARK: - CSV‑driven age matrix
+
+    /// In‑memory age matrix loaded from `well_visit_age_mapping.csv`.
+    ///
+    /// Keyed by `VisitTypeID` (e.g. "newborn_first", "nine_month", ...).
+    /// This makes the CSV the single source of truth for age‑based
+    /// visibility of current‑visit fields.
+    private static let ageMatrix: [String: AgeMatrixRow] = {
+        loadAgeMatrix()
+    }()
+
+    /// Loads the CSV matrix from the app bundle.
+    ///
+    /// Expected columns (case‑sensitive):
+    /// - "VisitTypeID"
+    /// - "weightDelta", "structuredFeedingUnder12", "earlyMilkOnly",
+    ///   "solidsBlock", "olderFeeding",
+    ///   "earlySleep", "olderSleep", "post12mVisit",
+    ///   "fontanelle", "primitiveNeuro", "moro", "hipsFocus", "teeth",
+    ///   "MCHAT", "DevTestScore", "DevTestResult"
+    ///
+    /// Any missing or unparsable value is treated as `false`.
+    private static func loadAgeMatrix() -> [String: AgeMatrixRow] {
+        guard let url = Bundle.main.url(forResource: "well_visit_age_mapping", withExtension: "csv") else {
+            NSLog("⚠️ WellVisitReportRules: could not find well_visit_age_mapping.csv in bundle, falling back to legacy hard‑coded rules.")
+            return [:]
+        }
+
+        guard let data = try? Data(contentsOf: url),
+              let rawString = String(data: data, encoding: .utf8) else {
+            NSLog("⚠️ WellVisitReportRules: failed to read well_visit_age_mapping.csv, falling back to legacy hard‑coded rules.")
+            return [:]
+        }
+
+        var result: [String: AgeMatrixRow] = [:]
+
+        let lines = rawString
+            .split(whereSeparator: { $0.isNewline })
+            .map { String($0) }
+
+        guard let headerLine = lines.first else {
+            NSLog("⚠️ WellVisitReportRules: CSV appears empty, falling back to legacy hard‑coded rules.")
+            return [:]
+        }
+
+        let headers = headerLine.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        func index(of column: String) -> Int? {
+            headers.firstIndex { $0 == column }
+        }
+
+        guard
+            let idxVisitType = index(of: "VisitTypeID"),
+            let idxWeightDelta = index(of: "weightDelta"),
+            let idxStructuredFeeding = index(of: "structuredFeedingUnder12"),
+            let idxEarlyMilkOnly = index(of: "earlyMilkOnly"),
+            let idxSolidsBlock = index(of: "solidsBlock"),
+            let idxOlderFeeding = index(of: "olderFeeding"),
+            let idxEarlySleep = index(of: "earlySleep"),
+            let idxOlderSleep = index(of: "olderSleep"),
+            let idxPost12m = index(of: "post12mVisit"),
+            let idxFontanelle = index(of: "fontanelle"),
+            let idxPrimitiveNeuro = index(of: "primitiveNeuro"),
+            let idxMoro = index(of: "moro"),
+            let idxHipsFocus = index(of: "hipsFocus"),
+            let idxTeeth = index(of: "teeth"),
+            let idxMCHAT = index(of: "MCHAT"),
+            let idxDevTestScore = index(of: "DevTestScore"),
+            let idxDevTestResult = index(of: "DevTestResult")
+        else {
+            NSLog("⚠️ WellVisitReportRules: CSV header missing required columns, falling back to legacy hard‑coded rules.")
+            return [:]
+        }
+
+        for line in lines.dropFirst() {
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                continue
+            }
+
+            // Simple comma‑splitter: our CSV does not use embedded commas.
+            let cols = line.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard idxVisitType < cols.count else { continue }
+
+            let visitTypeID = cols[idxVisitType]
+            if visitTypeID.isEmpty { continue }
+
+            func boolAt(_ idx: Int) -> Bool {
+                guard idx < cols.count else { return false }
+                return boolFromCSV(cols[idx])
+            }
+
+            let row = AgeMatrixRow(
+                visitTypeID: visitTypeID,
+                isWeightDeltaVisit: boolAt(idxWeightDelta),
+                isEarlyMilkOnlyVisit: boolAt(idxEarlyMilkOnly),
+                isStructuredFeedingUnder12: boolAt(idxStructuredFeeding),
+                isSolidsVisit: boolAt(idxSolidsBlock),
+                isOlderFeedingVisit: boolAt(idxOlderFeeding),
+                isEarlySleepVisit: boolAt(idxEarlySleep),
+                isOlderSleepVisit: boolAt(idxOlderSleep),
+                isPostTwelveMonthVisit: boolAt(idxPost12m),
+                isFontanelleVisit: boolAt(idxFontanelle),
+                isPrimitiveNeuroVisit: boolAt(idxPrimitiveNeuro),
+                isMoroVisit: boolAt(idxMoro),
+                isHipsVisit: boolAt(idxHipsFocus),
+                isTeethVisit: boolAt(idxTeeth),
+                isMCHATVisit: boolAt(idxMCHAT),
+                isDevTestScoreVisit: boolAt(idxDevTestScore),
+                isDevTestResultVisit: boolAt(idxDevTestResult)
+            )
+
+            result[visitTypeID] = row
+        }
+
+        return result
+    }
+
+    /// Normalises CSV boolean values: "1", "true", "yes" → true; everything else → false.
+    private static func boolFromCSV(_ raw: String?) -> Bool {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return false
+        }
+
+        let lowered = raw.lowercased()
+        return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "y"
+    }
+
     /// Returns the age‑specific flags for a given visit type (e.g. "nine_month").
     static func flags(for visitTypeID: String) -> WellVisitReportFlags {
         let ageGroup = ageGroupForVisitType(visitTypeID)
 
+        // Prefer the CSV‑driven matrix if we have a row for this visit type.
+        if let row = ageMatrix[visitTypeID] {
+            return WellVisitReportFlags(
+                visitTypeID: visitTypeID,
+                isWeightDeltaVisit: row.isWeightDeltaVisit,
+                isEarlyMilkOnlyVisit: row.isEarlyMilkOnlyVisit,
+                isStructuredFeedingUnder12: row.isStructuredFeedingUnder12,
+                isSolidsVisit: row.isSolidsVisit,
+                isOlderFeedingVisit: row.isOlderFeedingVisit,
+                isEarlySleepVisit: row.isEarlySleepVisit,
+                isOlderSleepVisit: row.isOlderSleepVisit,
+                isPostTwelveMonthVisit: row.isPostTwelveMonthVisit,
+                isFontanelleVisit: row.isFontanelleVisit,
+                isPrimitiveNeuroVisit: row.isPrimitiveNeuroVisit,
+                isMoroVisit: row.isMoroVisit,
+                isHipsVisit: row.isHipsVisit,
+                isTeethVisit: row.isTeethVisit,
+                isMCHATVisit: row.isMCHATVisit,
+                isDevTestScoreVisit: row.isDevTestScoreVisit,
+                isDevTestResultVisit: row.isDevTestResultVisit
+            )
+        }
+
+        // Fallback: old hard‑coded behaviour if CSV row is missing.
         return WellVisitReportFlags(
             visitTypeID: visitTypeID,
             isWeightDeltaVisit: isWeightDeltaVisit(visitTypeID),
@@ -297,11 +480,7 @@ extension WellVisitReportRules {
     /// return a `WellVisitVisibility` wrapper that contains the
     /// correct age‑based flags and layout profile.
     ///
-    /// For now we assume `visitTypeRaw` is already one of the
-    /// canonical IDs used throughout the app (e.g. "nine_month").
-    /// If we ever pass a "pretty" label (e.g. "9‑month visit"),
-    /// we can add a normalization layer here without touching
-    /// the report caller.
+    /// Now normalizes human-readable visit type labels to internal IDs.
     static func visibility(for visitTypeRaw: String?, ageMonths: Double?) -> WellVisitVisibility? {
         guard let raw = visitTypeRaw,
               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -309,10 +488,11 @@ extension WellVisitReportRules {
             return nil
         }
 
-        // At this stage we treat the raw string as the internal visitTypeID.
-        // If the DB later stores human‑readable labels instead, we can map
-        // them back to the canonical IDs here.
-        let visitTypeID = raw
+        // Normalize any human‑readable labels (e.g. "1‑month visit") to the
+        // internal canonical visitTypeID used by the age matrix and layout
+        // profiles (e.g. "one_month").
+        let visitTypeID = normalizeVisitTypeID(raw)
+
         let profile = reportProfile(for: visitTypeID)
 
         return WellVisitVisibility(
@@ -334,5 +514,143 @@ extension WellVisitReportRules {
             layout: layout,
             flags: flags
         )
+    }
+
+    /// Normalises raw visit type strings from the DB (which may be
+    /// human‑readable labels such as "1‑month visit") into the
+    /// canonical internal IDs used by the age matrix and layout
+    /// profiles (e.g. "one_month").
+    private static func normalizeVisitTypeID(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch trimmed {
+        case "Newborn first visit":
+            return "newborn_first"
+        case "1-month visit":
+            return "one_month"
+        case "2-month visit":
+            return "two_month"
+        case "4-month visit":
+            return "four_month"
+        case "6-month visit":
+            return "six_month"
+        case "9-month visit":
+            return "nine_month"
+        case "12-month visit":
+            return "twelve_month"
+        case "15-month visit":
+            return "fifteen_month"
+        case "18-month visit":
+            return "eighteen_month"
+        case "24-month visit":
+            return "twentyfour_month"
+        case "30-month visit":
+            return "thirty_month"
+        case "36-month visit":
+            return "thirtysix_month"
+        default:
+            return trimmed
+        }
+    }
+}
+
+extension WellVisitReportRules {
+
+    // MARK: - Field-level gating for the current visit
+
+    /// Enumerates the individual current-visit fields that can be age-gated
+    /// in the report. The report / data loader layer should use these keys
+    /// instead of re-implementing age logic.
+    enum CurrentVisitField {
+        // Feeding & nutrition
+        case weightDelta
+        case earlyMilkOnlyFeeding
+        case structuredFeedingUnder12
+        case solids
+        case olderFeeding
+
+        // Sleep
+        case earlySleep
+        case olderSleep
+
+        // Physical exam details
+        case fontanelle
+        case primitiveNeuro
+        case moro
+        case hips
+        case teeth
+
+        // Developmental tools
+        case mchat
+        case devTestScore
+        case devTestResult
+    }
+
+    /// Central age-gating rule for a *single* current-visit field.
+    ///
+    /// - Parameters:
+    ///   - field: Which logical field we are deciding about.
+    ///   - visibility: Age/layout profile returned by `visibility(...)`.
+    ///   - hasContent: Whether the clinician actually entered non-placeholder content
+    ///                 for this field (e.g. non-empty, not just "—").
+    ///
+    /// - Returns: `true` if the field should be included in the report for this visit.
+    ///
+    /// Contract:
+    /// - The age matrix is the single source of truth: if it marks this field as part
+    ///   of the visit, the field is eligible to appear in the report.
+    /// - Fields that are not enabled by the age matrix are never shown in the
+    ///   current-visit sections, even if they contain data (this avoids leaking
+    ///   legacy / test content such as early solids into newborn visits).
+    static func shouldShow(field: CurrentVisitField,
+                           for visibility: WellVisitVisibility,
+                           hasContent: Bool) -> Bool {
+
+        let flags = visibility.flags
+        let ageAllows: Bool
+
+        switch field {
+        // Feeding & nutrition
+        case .weightDelta:
+            ageAllows = flags.isWeightDeltaVisit
+        case .earlyMilkOnlyFeeding:
+            ageAllows = flags.isEarlyMilkOnlyVisit
+        case .structuredFeedingUnder12:
+            ageAllows = flags.isStructuredFeedingUnder12
+        case .solids:
+            ageAllows = flags.isSolidsVisit
+        case .olderFeeding:
+            ageAllows = flags.isOlderFeedingVisit
+
+        // Sleep
+        case .earlySleep:
+            ageAllows = flags.isEarlySleepVisit
+        case .olderSleep:
+            ageAllows = flags.isOlderSleepVisit
+
+        // Physical exam details
+        case .fontanelle:
+            ageAllows = flags.isFontanelleVisit
+        case .primitiveNeuro:
+            ageAllows = flags.isPrimitiveNeuroVisit
+        case .moro:
+            ageAllows = flags.isMoroVisit
+        case .hips:
+            ageAllows = flags.isHipsVisit
+        case .teeth:
+            ageAllows = flags.isTeethVisit
+
+        // Developmental tools
+        case .mchat:
+            ageAllows = flags.isMCHATVisit
+        case .devTestScore, .devTestResult:
+            ageAllows = flags.isDevTestScoreVisit
+        }
+        // Mark parameter as "used" to avoid warnings; the age matrix alone drives visibility.
+        _ = hasContent
+
+        // Age matrix is the single source of truth: if it does not allow this field
+        // for the current visit type, we never show it in the current-visit sections.
+        return ageAllows
     }
 }
