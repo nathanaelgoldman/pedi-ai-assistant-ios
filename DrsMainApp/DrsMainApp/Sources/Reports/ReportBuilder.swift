@@ -5,6 +5,16 @@
 //  Created by yunastic on 11/2/25.
 //
 
+// REPORT CONTRACT (Well visits)
+// - Age gating lives in WellVisitReportRules + ReportDataLoader ONLY.
+// - Age gating controls ONLY which fields appear INSIDE the current visit sections.
+// - Growth charts, perinatal summary, and previous well visits are NEVER age-gated.
+// - ReportBuilder is a dumb renderer: it prints whatever WellReportData gives it.
+//- We don't make RTF (that is legacy from previous failed attempts)
+//- we don't touch GrowthCharts
+//- we work with PDF and Docx.
+//- the contract is to filter the age appropriate current visit field to include in the report. Everything else is left unchanged.
+
 import Foundation
 import AppKit
 import PDFKit
@@ -215,12 +225,15 @@ final class ReportBuilder {
     // Body-only variant of Well report (steps 1–12), excluding Step 13 charts
     fileprivate func assembleAttributedWell_BodyOnly(data: WellReportData, visitID: Int) -> NSAttributedString {
         let content = NSMutableAttributedString()
-        
 
         func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
             content.append(NSAttributedString(string: text + "\n",
                                               attributes: [.font: font, .foregroundColor: color]))
         }
+
+        // Age-gated section visibility is precomputed in WellVisitReportRules + ReportDataLoader.
+        // ReportBuilder only reads these flags and renders sections accordingly.
+        let visibility = data.visibility
 
         // Header block (Well)
         para("Well Visit Summary", font: .systemFont(ofSize: 20, weight: .semibold))
@@ -247,15 +260,16 @@ final class ReportBuilder {
         let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
-        if WellVisitRules.shouldIncludeSection(title: "Perinatal Summary", visitTypeTitle: data.meta.visitTypeReadable),
-           let s = data.perinatalSummary, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            para("Perinatal Summary", font: headerFont)
-            para(s, font: bodyFont)
-            content.append(NSAttributedString(string: "\n"))
-        }
+        // Perinatal Summary must always be present (never age‑gated or suppressed)
+        para("Perinatal Summary", font: headerFont)
+        let periText = (data.perinatalSummary?
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? data.perinatalSummary!
+            : "—"
+        para(periText, font: bodyFont)
+        content.append(NSAttributedString(string: "\n"))
 
-        if WellVisitRules.shouldIncludeSection(title: "Findings from Previous Well Visits", visitTypeTitle: data.meta.visitTypeReadable),
-           !data.previousVisitFindings.isEmpty {
+        if !data.previousVisitFindings.isEmpty {
             para("Findings from Previous Well Visits", font: headerFont)
             for item in data.previousVisitFindings {
                 var sub = item.title
@@ -295,20 +309,21 @@ final class ReportBuilder {
         }
 
         let _currentTitle = data.currentVisitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if WellVisitRules.shouldIncludeSection(title: "Current Visit", visitTypeTitle: data.meta.visitTypeReadable),
-           !_currentTitle.isEmpty {
+        if !_currentTitle.isEmpty {
             para("Current Visit — \(_currentTitle)", font: headerFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Parents’ Concerns", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showParentsConcerns ?? true {
             para("Parents’ Concerns", font: headerFont)
-            let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? data.parentsConcerns! : "—"
+            let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                ? data.parentsConcerns!
+                : "—"
             para(parentsText, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Feeding", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showFeeding ?? true {
             para("Feeding", font: headerFont)
             if data.feeding.isEmpty {
                 para("—", font: bodyFont)
@@ -331,20 +346,30 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Supplementation", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showSupplementation ?? true {
             para("Supplementation", font: headerFont)
             if data.supplementation.isEmpty {
                 para("—", font: bodyFont)
             } else {
                 let order = ["Vitamin D","Iron","Other","Notes"]
-                for key in order { if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
-                let extra = data.supplementation.keys.filter { !["Vitamin D","Iron","Other","Notes"].contains($0) }.sorted()
-                for key in extra { if let v = data.supplementation[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+                for key in order {
+                    if let v = data.supplementation[key], !v.isEmpty {
+                        para("\(key): \(v)", font: bodyFont)
+                    }
+                }
+                let extra = data.supplementation.keys
+                    .filter { !["Vitamin D","Iron","Other","Notes"].contains($0) }
+                    .sorted()
+                for key in extra {
+                    if let v = data.supplementation[key], !v.isEmpty {
+                        para("\(key): \(v)", font: bodyFont)
+                    }
+                }
             }
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Sleep", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showSleep ?? true {
             para("Sleep", font: headerFont)
             if data.sleep.isEmpty {
                 para("—", font: bodyFont)
@@ -367,21 +392,23 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Developmental Evaluation", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showDevelopment ?? true {
             para("Developmental Evaluation", font: headerFont)
             if data.developmental.isEmpty {
                 para("—", font: bodyFont)
             } else {
                 let devOrder = ["Parent Concerns", "M-CHAT", "Developmental Test"]
                 for key in devOrder {
-                    guard let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                    guard let v = data.developmental[key],
+                          !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                     para("\(key): \(v)", font: bodyFont)
                 }
                 let extra = data.developmental.keys
                     .filter { !["Parent Concerns","M-CHAT","Developmental Test"].contains($0) }
                     .sorted()
                 for key in extra {
-                    if let v = data.developmental[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if let v = data.developmental[key],
+                       !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         para("\(key): \(v)", font: bodyFont)
                     }
                 }
@@ -389,29 +416,45 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Age-specific Milestones", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showMilestones ?? true {
             para("Age-specific Milestones", font: headerFont)
             let achieved = data.milestonesAchieved.0
             let total = data.milestonesAchieved.1
             para("Achieved: \(achieved)/\(total)", font: bodyFont)
-            if data.milestoneFlags.isEmpty { para("No flags.", font: bodyFont) } else { for line in data.milestoneFlags { para("• \(line)", font: bodyFont) } }
+            if data.milestoneFlags.isEmpty {
+                para("No flags.", font: bodyFont)
+            } else {
+                for line in data.milestoneFlags {
+                    para("• \(line)", font: bodyFont)
+                }
+            }
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Measurements", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showMeasurements ?? true {
             para("Measurements", font: headerFont)
             if data.measurements.isEmpty {
                 para("—", font: bodyFont)
             } else {
                 let measOrder = ["Weight","Length","Head Circumference","Weight gain since discharge"]
-                for key in measOrder { if let v = data.measurements[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
-                let extra = data.measurements.keys.filter { !["Weight","Length","Head Circumference","Weight gain since discharge"].contains($0) }.sorted()
-                for key in extra { if let v = data.measurements[key], !v.isEmpty { para("\(key): \(v)", font: bodyFont) } }
+                for key in measOrder {
+                    if let v = data.measurements[key], !v.isEmpty {
+                        para("\(key): \(v)", font: bodyFont)
+                    }
+                }
+                let extra = data.measurements.keys
+                    .filter { !["Weight","Length","Head Circumference","Weight gain since discharge"].contains($0) }
+                    .sorted()
+                for key in extra {
+                    if let v = data.measurements[key], !v.isEmpty {
+                        para("\(key): \(v)", font: bodyFont)
+                    }
+                }
             }
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Physical Examination", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showPhysicalExam ?? true {
             para("Physical Examination", font: headerFont)
             if data.physicalExamGroups.isEmpty {
                 para("—", font: bodyFont)
@@ -419,7 +462,10 @@ final class ReportBuilder {
                 for (groupTitle, lines) in data.physicalExamGroups {
                     content.append(NSAttributedString(
                         string: groupTitle + "\n",
-                        attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: NSColor.labelColor]
+                        attributes: [
+                            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                            .foregroundColor: NSColor.labelColor
+                        ]
                     ))
                     for line in lines where !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         para("• \(line)", font: bodyFont)
@@ -429,37 +475,38 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Problem Listing", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showProblemListing ?? true {
             para("Problem Listing", font: headerFont)
             let _problem = data.problemListing?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_problem?.isEmpty == false ? _problem! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Conclusions", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showConclusions ?? true {
             para("Conclusions", font: headerFont)
             let _conclusions = data.conclusions?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_conclusions?.isEmpty == false ? _conclusions! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Anticipatory Guidance", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showAnticipatoryGuidance ?? true {
             para("Anticipatory Guidance", font: headerFont)
             let _ag = data.anticipatoryGuidance?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_ag?.isEmpty == false ? _ag! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Clinician Comments", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showClinicianComments ?? true {
             para("Clinician Comments", font: headerFont)
             let _cc = data.clinicianComments?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_cc?.isEmpty == false ? _cc! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
-        if WellVisitRules.shouldIncludeSection(title: "Next Visit Date", visitTypeTitle: data.meta.visitTypeReadable) {
+        if visibility?.showNextVisit ?? true {
             para("Next Visit Date", font: headerFont)
-            if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines), !rawNext.isEmpty {
+            if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !rawNext.isEmpty {
                 para(humanDateOnly(rawNext) ?? rawNext, font: bodyFont)
             } else {
                 para("—", font: bodyFont)
@@ -568,7 +615,7 @@ final class ReportBuilder {
 // MARK: - Content assembly from AppState
 
 extension ReportBuilder {
-
+    
     // Centered title for figure pages
     private func centeredTitle(_ text: String) -> NSAttributedString {
         let p = NSMutableParagraphStyle(); p.alignment = .center
@@ -1894,6 +1941,170 @@ extension ReportBuilder {
         return out
     }
 
+    /// Apply age/visibility gating at the text level.
+    /// Only gate *current-visit* sections after the "Current Visit — ..." heading.
+    /// Perinatal / previous-visit summaries / growth charts / top summary are never gated out.
+    private func gateCurrentVisitSections(in raw: String) -> String {
+        // Known headings used in the report text.
+        let wellTopSections: Set<String> = [
+            "Well Visit Summary",
+            "Perinatal Summary",
+            "Findings from Previous Well Visits"
+        ]
+        let wellCurrentVisitSections: Set<String> = [
+            "Previous Well Visits",
+            "Parents’ Concerns",
+            "Feeding",
+            "Supplementation",
+            "Sleep",
+            "Developmental Evaluation",
+            "Age-specific Milestones",
+            "Measurements",
+            "Physical Examination",
+            "Problem Listing",
+            "Conclusions",
+            "Anticipatory Guidance",
+            "Clinician Comments",
+            "Next Visit Date",
+            "Growth Charts"
+        ]
+        let sickSections: Set<String> = [
+            "Main Complaint",
+            "History of Present Illness",
+            "Duration",
+            "Basics",
+            "Past Medical History",
+            "Vaccination",
+            "Vitals Summary",
+            "Investigations",
+            "Working Diagnosis",
+            "ICD-10",
+            "Plan & Anticipatory Guidance",
+            "Medications",
+            "Follow-up / Next Visit",
+            "Sick Visit Report"
+        ]
+
+        // Sections we *never* gate out, even if empty.
+        let alwaysKeepSections: Set<String> =
+            wellTopSections.union(["Previous Well Visits", "Growth Charts"])
+
+        // All headings that delimit sections when scanning line-by-line.
+        let allHeadings: Set<String> =
+            wellTopSections
+            .union(wellCurrentVisitSections)
+            .union(sickSections)
+
+        let lines = raw.components(separatedBy: .newlines)
+
+        // Treat "placeholder-only" lines (just dashes, optionally with a leading bullet) as empty.
+        func isPlaceholderLine(_ line: String) -> Bool {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return true }
+
+            // Strip a leading bullet if present
+            let withoutBullet: String
+            if trimmed.hasPrefix("• ") {
+                withoutBullet = String(trimmed.dropFirst(2))
+            } else {
+                withoutBullet = trimmed
+            }
+
+            let dashSet = CharacterSet(charactersIn: "-–—‒")
+            // If the remaining characters are all in the dash set, it's a placeholder
+            if withoutBullet.unicodeScalars.allSatisfy({ dashSet.contains($0) }) {
+                return true
+            }
+            return false
+        }
+
+        func isHeading(_ trimmed: String) -> Bool {
+            if trimmed.hasPrefix("Current Visit —") { return true }
+            return allHeadings.contains(trimmed)
+        }
+
+        var result: [String] = []
+        var i = 0
+        var inCurrentVisit = false
+
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Empty lines are copied through; they don't affect section boundaries.
+            if trimmed.isEmpty {
+                result.append(line)
+                i += 1
+                continue
+            }
+
+            // Detect the start of the current-visit block explicitly.
+            if trimmed.hasPrefix("Current Visit —") {
+                inCurrentVisit = true
+                result.append(line)
+                i += 1
+                continue
+            }
+
+            // Always-keep headings (Well Visit Summary, Perinatal, previous visits, Growth Charts)
+            // are passed through unchanged, regardless of where they appear.
+            if alwaysKeepSections.contains(trimmed) {
+                result.append(line)
+                i += 1
+                continue
+            }
+
+            // Current-visit sections: we conditionally keep or drop the whole block (heading + content)
+            // based on whether the block has any real content beyond "—".
+            // This gating is *only* applied once we've entered the "Current Visit — …" block.
+            if inCurrentVisit && wellCurrentVisitSections.contains(trimmed) {
+                let headerLine = line
+                let startContent = i + 1
+                var j = startContent
+
+                // Walk forward until we hit the next heading (or end of document).
+                while j < lines.count {
+                    let t = lines[j].trimmingCharacters(in: .whitespacesAndNewlines)
+                    if t.isEmpty {
+                        j += 1
+                        continue
+                    }
+                    if isHeading(t) {
+                        break
+                    }
+                    j += 1
+                }
+
+                // Content block is [startContent ..< j)
+                let block = Array(lines[startContent..<j])
+                let meaningfulContentExists = block.contains { line in
+                    // Keep the section only if we find at least one non-placeholder line.
+                    return !isPlaceholderLine(line)
+                }
+
+                if meaningfulContentExists {
+                    // Keep the whole section: heading + content block.
+                    result.append(headerLine)
+                    if !block.isEmpty {
+                        result.append(contentsOf: block)
+                    }
+                } else {
+                    // Drop the entire section (no meaningful data, only placeholders).
+                    // We do not append anything for this heading or its block.
+                }
+
+                i = j
+                continue
+            }
+
+            // Any other line (non-heading or headings we don't treat specially) is copied through.
+            result.append(line)
+            i += 1
+        }
+
+        return result.joined(separator: "\n")
+    }
+
     /// EMU (English Metric Unit) from points. 1 pt = 12700 EMU.
     private func emuFromPoints(_ pts: CGFloat) -> Int {
         return Int((pts * 12700.0).rounded())
@@ -2387,7 +2598,7 @@ extension ReportBuilder {
         let (attr, stem) = try buildAttributedReport(for: kind)
 
         let rawText = attr.string
-        let bodyTextForDocx = rawText
+        let bodyTextForDocx = gateCurrentVisitSections(in: rawText)
 
         let fm = FileManager.default
         let baseDir: URL = {
@@ -2741,90 +2952,10 @@ extension ReportBuilder {
     
 }
 
-    // MARK: - Age-gated templates for well visits
-
-    extension ReportBuilder {
-
-        /// Decide whether a given well-visit report section should be included
-        /// using the central WellVisitRules engine (single source of truth).
-        func shouldIncludeWellSection(title: String, meta: ReportMeta) -> Bool {
-            // The rules engine currently keys off the *readable* visit type label
-            // (e.g. "1‑month visit", "Toddler / Preschool visit").
-            // If we don't have a readable title, fall back to an empty string (rules will default).
-            let visitTitle = meta.visitTypeReadable ?? ""
-            return WellVisitRules.shouldIncludeSection(title: title, visitTypeTitle: visitTitle)
-        }
-    }
 
 // MARK: - Rendering
 
 private extension ReportBuilder {
-
-    /// Lightweight container for well-visit report strings.
-    /// This keeps the report assembly code simple and focused on presentation.
-    struct WellVisitCore {
-        var summary: String?
-        var perinatalSummary: String?
-        var previousVisitsSummary: String?
-        var parentsConcerns: String?
-        var feeding: String?
-        var supplementation: String?
-        var sleep: String?
-        var developmentalEvaluation: String?
-        var ageSpecificMilestones: String?
-        var measurements: String?
-        var physicalExamination: String?
-        var problemListing: String?
-        var conclusions: String?
-        var anticipatoryGuidance: String?
-        var clinicianComments: String?
-        var nextVisitDate: String?
-    }
-
-    // ...existing functions...
-    // MARK: - Well Visit Report Assembly (extract, age-gate sections)
-    // (Find the function that assembles the well visit report using ReportMeta and WellVisitCore)
-    // (This is a representative insertion -- adjust to actual function as needed)
-    func assembleWellVisitReport(meta: ReportMeta, data: WellVisitCore) -> NSMutableAttributedString {
-        let content = NSMutableAttributedString()
-        let headerFont = NSFont.systemFont(ofSize: 15, weight: .bold)
-        let bodyFont = NSFont.systemFont(ofSize: 12)
-        func section(_ title: String, _ value: String?) {
-            guard let value = value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            let titleAttr = NSAttributedString(string: title + "\n", attributes: [.font: headerFont])
-            let valueAttr = NSAttributedString(string: value + "\n", attributes: [.font: bodyFont])
-            content.append(titleAttr)
-            content.append(valueAttr)
-            content.append(NSAttributedString(string: "\n"))
-        }
-        // --- Add gatedSection helper ---
-        func gatedSection(_ title: String, _ value: String?) {
-            if shouldIncludeWellSection(title: title, meta: meta) {
-                section(title, value)
-            }
-        }
-
-        // Use gatedSection for all well-visit sections:
-        gatedSection("Well Visit Summary", data.summary)
-        section("Perinatal Summary", data.perinatalSummary)
-        section("Previous Well Visits", data.previousVisitsSummary)
-        gatedSection("Parents’ Concerns", data.parentsConcerns)
-        gatedSection("Feeding", data.feeding)
-        gatedSection("Supplementation", data.supplementation)
-        gatedSection("Sleep", data.sleep)
-        gatedSection("Developmental Evaluation", data.developmentalEvaluation)
-        gatedSection("Age-specific Milestones", data.ageSpecificMilestones)
-        gatedSection("Measurements", data.measurements)
-        gatedSection("Physical Examination", data.physicalExamination)
-        gatedSection("Problem Listing", data.problemListing)
-        gatedSection("Conclusions", data.conclusions)
-        gatedSection("Anticipatory Guidance", data.anticipatoryGuidance)
-        gatedSection("Clinician Comments", data.clinicianComments)
-        gatedSection("Next Visit Date", data.nextVisitDate)
-
-        // ... (other content, e.g. charts, images, etc.) ...
-        return content
-    }
 
 
 

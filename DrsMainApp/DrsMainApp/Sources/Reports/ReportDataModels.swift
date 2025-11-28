@@ -10,6 +10,16 @@
 //
 //  Plain data structures for Well and Sick visit reports.
 //  Rendering happens in ReportBuilder; DB fetching in ReportDataLoader.
+
+// REPORT CONTRACT (Well visits)
+// - Age gating lives in WellVisitReportRules + ReportDataLoader ONLY.
+// - Age gating controls ONLY which fields appear INSIDE the current visit sections.
+// - Growth charts, perinatal summary, and previous well visits are NEVER age-gated.
+// - ReportBuilder is a dumb renderer: it prints whatever WellReportData gives it.
+//- We don't make RTF (that is legacy from previous failed attempts)
+//- we don't touch GrowthCharts
+//- we work with PDF and Docx.
+//- the contract is to filter the age appropriate current visit field to include in the report. Everything else is left unchanged.
 //
 
 import Foundation
@@ -55,6 +65,7 @@ struct WellReportData {
     let clinicianComments: String?
     let nextVisitDate: String?
     let growthCharts: [(title: String, imagePath: URL?)]
+    let visibility: WellVisitReportRules.WellVisitVisibility?
 }
 
 // MARK: - Sick Visit

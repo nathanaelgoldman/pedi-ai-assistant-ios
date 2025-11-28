@@ -50,6 +50,7 @@
 		BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */; };
 		BBA6AD5D2EB5F6BB00BDA924 /* GrowthChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */; };
 		BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCEA84F2EB32B4C009A9386 /* ClinicianStore.swift */; };
+		BBD60E352ED936BA008D7F46 /* WellVisitReportRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD60E342ED936B1008D7F46 /* WellVisitReportRules.swift */; };
 		BBE1E2A92EC58389004C6280 /* PerinatalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE1E2A82EC58383004C6280 /* PerinatalStore.swift */; };
 		BBE1E2AB2EC5CAF7004C6280 /* PerinatalHistoryForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE1E2AA2EC5CAF2004C6280 /* PerinatalHistoryForm.swift */; };
 		BBE216B82ECF344D00D4C281 /* WellVisitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B72ECF344600D4C281 /* WellVisitStore.swift */; };
@@ -98,6 +99,7 @@
 		BBA6AD5A2EB5CC3100BDA924 /* VitalsTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsTableView.swift; sourceTree = "<group>"; };
 		BBA6AD5C2EB5F6B600BDA924 /* GrowthChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthChartView.swift; sourceTree = "<group>"; };
 		BBCEA84F2EB32B4C009A9386 /* ClinicianStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicianStore.swift; sourceTree = "<group>"; };
+		BBD60E342ED936B1008D7F46 /* WellVisitReportRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitReportRules.swift; sourceTree = "<group>"; };
 		BBE1E2A82EC58383004C6280 /* PerinatalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerinatalStore.swift; sourceTree = "<group>"; };
 		BBE1E2AA2EC5CAF2004C6280 /* PerinatalHistoryForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerinatalHistoryForm.swift; sourceTree = "<group>"; };
 		BBE216B72ECF344600D4C281 /* WellVisitStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitStore.swift; sourceTree = "<group>"; };
@@ -232,6 +234,7 @@
 		BB564AF02EAE0BB900870007 /* Util */ = {
 			isa = PBXGroup;
 			children = (
+				BBD60E342ED936B1008D7F46 /* WellVisitReportRules.swift */,
 				BB4718AC2ED7342400839786 /* WellVisitRules.swift */,
 				BB6E2F8C2EC872250044F225 /* VitalsBP.swift */,
 				BB6E2F842EC866470044F225 /* VitalsRanges.swift */,
@@ -394,6 +397,7 @@
 				BB564AF42EAE15AE00870007 /* AppState.swift in Sources */,
 				BB96A56B2EBB3311003F5C44 /* GrowthModels.swift in Sources */,
 				BB3E15B02EB89917008E1472 /* ReportDataModels.swift in Sources */,
+				BBD60E352ED936BA008D7F46 /* WellVisitReportRules.swift in Sources */,
 				BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */,
 				BB9186892EC6F48F00A8AA8A /* VaccinationStatusForm.swift in Sources */,
 				BB9EB0DB2EC0CD0100308D39 /* MacBundleExporter.swift in Sources */,

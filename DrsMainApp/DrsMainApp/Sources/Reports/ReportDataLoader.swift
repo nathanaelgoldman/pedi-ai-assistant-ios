@@ -1,10 +1,46 @@
-//
+
+
+
 //  ReportDataLoader.swift
 //  DrsMainApp
 //
 
+// REPORT CONTRACT (Well visits)
+// - Age gating lives in WellVisitReportRules + ReportDataLoader ONLY.
+// - Age gating controls ONLY which fields appear INSIDE the current visit sections.
+// - Growth charts, perinatal summary, and previous well visits are NEVER age-gated.
+// - ReportBuilder is a dumb renderer: it prints whatever WellReportData gives it.
+//- We don't make RTF (that is legacy from previous failed attempts)
+//- we don't touch GrowthCharts
+//- we work with PDF and Docx.
+//- the contract is to filter the age appropriate current visit field to include in the report. Everything else is left unchanged.
+
 import Foundation
 import SQLite3
+
+// Ensure ordinal suffixes appear in lowercase (e.g., 1st, 2nd, 3rd, 4th)
+private func prettifyOrdinals(_ s: String) -> String {
+    do {
+        let regex = try NSRegularExpression(
+            pattern: "\\b(\\d+)([Ss][Tt]|[Nn][Dd]|[Rr][Dd]|[Tt][Hh])\\b"
+        )
+        let ns = s as NSString
+        var result = ""
+        var lastIndex = 0
+        for match in regex.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
+            let range = match.range
+            result += ns.substring(with: NSRange(location: lastIndex, length: range.location - lastIndex))
+            let num = ns.substring(with: match.range(at: 1))
+            let suf = ns.substring(with: match.range(at: 2)).lowercased()
+            result += num + suf
+            lastIndex = range.location + range.length
+        }
+        result += ns.substring(from: lastIndex)
+        return result
+    } catch {
+        return s
+    }
+}
 
 // MARK: - Visit type mapping (file-scope)
 private let VISIT_TITLES: [String:String] = [
@@ -26,8 +62,9 @@ private let VISIT_TITLES: [String:String] = [
 private func readableVisitType(_ raw: String?) -> String? {
     guard let r = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty else { return nil }
     if let mapped = VISIT_TITLES[r] { return mapped }
-    // Fallback: prettify snake_case → Title Case
-    return r.replacingOccurrences(of: "_", with: " ").capitalized
+    // Fallback: prettify snake_case → Title Case with nice ordinals
+    let pretty = r.replacingOccurrences(of: "_", with: " ").capitalized
+    return prettifyOrdinals(pretty)
 }
 
 @MainActor
@@ -55,23 +92,99 @@ final class ReportDataLoader {
         // STEP 2: Findings from previous well visits (aggregated)
         let prevFindings = buildPreviousWellVisitFindings(currentVisitID: visitID, dobISO: meta.dobISO, cutoffISO: meta.visitDateISO)
 
-        // STEP 3: Current visit core fields (type subtitle, parents' concerns, feeding, supplementation, sleep)
+        // STEP 3: Compute age in months for age-gated CURRENT VISIT sections
+        var ageMonths: Int? = nil
+        if let dobDate = parseDateFlexible(meta.dobISO),
+           let visitDate = parseDateFlexible(meta.visitDateISO) {
+            let comps = Calendar.current.dateComponents([.year, .month], from: dobDate, to: visitDate)
+            let totalMonths = (comps.year ?? 0) * 12 + (comps.month ?? 0)
+            ageMonths = max(totalMonths, 0)
+        }
+
+        // STEP 4: Current visit core fields (type subtitle, parents' concerns, feeding, supplementation, sleep)
         let core = loadCurrentWellCoreFields(visitID: visitID)
         let currentVisitTitle = core.visitType ?? (meta.visitTypeReadable ?? "Well Visit")
-        let parentsConcerns = core.parentsConcerns
-        let feeding = core.feeding
-        let supplementation = core.supplementation
-        let sleep = core.sleep
-        print("[ReportDataLoader] wellCore: type='\(currentVisitTitle)' parents=\(parentsConcerns?.count ?? 0) feed=\(feeding.count) supp=\(supplementation.count) sleep=\(sleep.count)")
-        // STEP 4: Developmental evaluation (M-CHAT / Dev test / Parents' Concerns) + Milestones (for this visit)
-        let devPack = loadDevelopmentForWellVisit(visitID: visitID)
-        // STEP 5: Measurements (today’s W/L/HC + weight-gain since discharge)
-        let measurements = loadMeasurementsForWellVisit(visitID: visitID)
+        let parentsConcernsRaw = core.parentsConcerns
+        let feedingRaw = core.feeding
+        let supplementationRaw = core.supplementation
+        let sleepRaw = core.sleep
+        print("[ReportDataLoader] wellCore: type='\(currentVisitTitle)' parents=\(parentsConcernsRaw?.count ?? 0) feed=\(feedingRaw.count) supp=\(supplementationRaw.count) sleep=\(sleepRaw.count)")
 
-        // STEP 6: Physical Exam + problem listing / conclusions / guidance / comments / next visit
+        // STEP 5: Developmental evaluation (M-CHAT / Dev test / Parents' Concerns) + Milestones (for this visit)
+        let devPack = loadDevelopmentForWellVisit(visitID: visitID)
+        // STEP 6: Measurements (today’s W/L/HC + weight-gain since discharge)
+        let measurementsRaw = loadMeasurementsForWellVisit(visitID: visitID)
+
+        // STEP 7: Physical Exam + problem listing / conclusions / guidance / comments / next visit
         let pePack = loadWellPEAndText(visitID: visitID)
 
-        // Header + perinatal summary for now; other sections will be filled in next steps.
+        // STEP 8: Apply age-based visibility for CURRENT VISIT sections ONLY.
+        // Per REPORT CONTRACT:
+        // - Perinatal summary, growth charts, and previous well visits are NEVER age-gated.
+        // - Age gating controls only which fields are populated inside the current visit sections.
+        let ageMonthsDouble: Double? = ageMonths.map { Double($0) }
+        let visibility = WellVisitReportRules.visibility(for: core.visitType, ageMonths: ageMonthsDouble)
+
+        var parentsConcerns = parentsConcernsRaw
+        var feeding = feedingRaw
+        var supplementation = supplementationRaw
+        var sleep = sleepRaw
+        var developmental = devPack.dev
+        var milestonesAchieved = (devPack.achieved, devPack.total)
+        var milestoneFlags = devPack.flags
+        var measurements = measurementsRaw
+        var physicalExamGroups = pePack.groups
+        var problemListing = pePack.problem
+        var conclusions = pePack.conclusions
+        var anticipatoryGuidance = pePack.anticipatory
+        var clinicianComments = pePack.comments
+        var nextVisitDate = pePack.nextVisitDate
+
+        // If we have a visibility profile, apply it; otherwise default to "show everything"
+        if let visibility = visibility {
+            if !visibility.showParentsConcerns {
+                parentsConcerns = nil
+            }
+            if !visibility.showFeeding {
+                feeding = [:]
+            }
+            if !visibility.showSupplementation {
+                supplementation = [:]
+            }
+            if !visibility.showSleep {
+                sleep = [:]
+            }
+            if !visibility.showDevelopment {
+                developmental = [:]
+            }
+            if !visibility.showMilestones {
+                milestonesAchieved = (0, 0)
+                milestoneFlags = []
+            }
+            if !visibility.showMeasurements {
+                measurements = [:]
+            }
+            if !visibility.showPhysicalExam {
+                physicalExamGroups = []
+            }
+            if !visibility.showProblemListing {
+                problemListing = nil
+            }
+            if !visibility.showConclusions {
+                conclusions = nil
+            }
+            if !visibility.showAnticipatoryGuidance {
+                anticipatoryGuidance = nil
+            }
+            if !visibility.showClinicianComments {
+                clinicianComments = nil
+            }
+            if !visibility.showNextVisit {
+                nextVisitDate = nil
+            }
+        }
+
+        // Header + perinatal summary stay untouched; age gating only affects current visit sections above.
         return WellReportData(
             meta: meta,
             perinatalSummary: perinatalSummary,
@@ -81,17 +194,18 @@ final class ReportDataLoader {
             feeding: feeding,
             supplementation: supplementation,
             sleep: sleep,
-            developmental: devPack.dev,
-            milestonesAchieved: (devPack.achieved, devPack.total),
-            milestoneFlags: devPack.flags,
+            developmental: developmental,
+            milestonesAchieved: milestonesAchieved,
+            milestoneFlags: milestoneFlags,
             measurements: measurements,
-            physicalExamGroups: pePack.groups,
-            problemListing: pePack.problem,
-            conclusions: pePack.conclusions,
-            anticipatoryGuidance: pePack.anticipatory,
-            clinicianComments: pePack.comments,
-            nextVisitDate: pePack.nextVisitDate,
-            growthCharts: []
+            physicalExamGroups: physicalExamGroups,
+            problemListing: problemListing,
+            conclusions: conclusions,
+            anticipatoryGuidance: anticipatoryGuidance,
+            clinicianComments: clinicianComments,
+            nextVisitDate: nextVisitDate,
+            growthCharts: [],
+            visibility: visibility
         )
     }
 
@@ -1560,51 +1674,8 @@ ORDER BY visit_date_raw DESC;
         return results
     }
 
-    private func readableVisitType(_ raw: String?) -> String? {
-        guard let r = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty else { return nil }
-        let map: [String:String] = [
-            "one_month": "1-month visit",
-            "two_month": "2-month visit",
-            "four_month": "4-month visit",
-            "six_month": "6-month visit",
-            "nine_month": "9-month visit",
-            "twelve_month": "12-month visit",
-            "fifteen_month": "15-month visit",
-            "eighteen_month": "18-month visit",
-            "twentyfour_month": "24-month visit",
-            "thirty_month": "30-month visit",
-            "thirtysix_month": "36-month visit",
-            "episode": "Sick visit",
-            "newborn_1st_after_maternity": "Newborn 1st After Maternity"
-        ]
-        if let v = map[r] { return v }
-        let pretty = r.replacingOccurrences(of: "_", with: " ").capitalized
-        return prettifyOrdinals(pretty)
-    }
+    
 
-    // Ensure ordinal suffixes appear in lowercase (e.g., 1st, 2nd, 3rd, 4th)
-    private func prettifyOrdinals(_ s: String) -> String {
-        do {
-            let regex = try NSRegularExpression(
-                pattern: "\\b(\\d+)([Ss][Tt]|[Nn][Dd]|[Rr][Dd]|[Tt][Hh])\\b"
-            )
-            let ns = s as NSString
-            var result = ""
-            var lastIndex = 0
-            for match in regex.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
-                let range = match.range
-                result += ns.substring(with: NSRange(location: lastIndex, length: range.location - lastIndex))
-                let num = ns.substring(with: match.range(at: 1))
-                let suf = ns.substring(with: match.range(at: 2)).lowercased()
-                result += num + suf
-                lastIndex = range.location + range.length
-            }
-            result += ns.substring(from: lastIndex)
-            return result
-        } catch {
-            return s
-        }
-    }
         struct LatestAIInput {
             let model: String
             let createdAt: String
@@ -1944,6 +2015,26 @@ ORDER BY visit_date_raw DESC;
     }
 
 extension ReportDataLoader {
+
+    /// Age at the given WELL visit, expressed in months (used for WellVisitReportRules age gating).
+    /// Returns nil if DOB or visit date cannot be parsed.
+    func wellVisitAgeMonths(visitID: Int) -> Double? {
+        do {
+            let meta = try buildMetaForWell(visitID: visitID)
+            guard let dob = parseDateFlexible(meta.dobISO),
+                  let visit = parseDateFlexible(meta.visitDateISO) else {
+                return nil
+            }
+            let seconds = visit.timeIntervalSince(dob)
+            let days = seconds / 86400.0
+            // Use the same month length convention as growth logic (30.4375 days)
+            let months = days / 30.4375
+            return max(0.0, months)
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - Date parsing helpers (SQLite & ISO tolerant)
     private static let _posix: Locale = Locale(identifier: "en_US_POSIX")
     private static let _gmt: TimeZone = TimeZone(secondsFromGMT: 0)!
@@ -2506,4 +2597,83 @@ extension ReportDataLoader {
 
         return out
     }
+}
+
+
+extension ReportDataLoader {
+
+    /// Resolve the raw internal visit_type ID for a WELL visit from the bundle DB.
+    /// This should return canonical IDs such as "one_month", "nine_month", etc.
+    /// Returns nil if the row or column cannot be found.
+    private func rawVisitTypeIDForWell(visitID: Int) -> String? {
+        do {
+            let dbPath = try currentBundleDBPath()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
+
+                // Discover which table is used for well visits
+                func columns(in table: String) -> Set<String> {
+                    var cols = Set<String>()
+                    var stmtCols: OpaquePointer?
+                    if sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
+                        defer { sqlite3_finalize(s) }
+                        while sqlite3_step(s) == SQLITE_ROW {
+                            if let c = sqlite3_column_text(s, 1) {
+                                cols.insert(String(cString: c))
+                            }
+                        }
+                    }
+                    return cols
+                }
+
+                let table = ["well_visits", "visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+                let cols = columns(in: table)
+
+                // If there is no visit_type column, we cannot resolve a canonical ID
+                guard cols.contains("visit_type") else { return nil }
+
+                let sql = "SELECT visit_type FROM \(table) WHERE id = ? LIMIT 1;"
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(visitID))
+                    if sqlite3_step(st) == SQLITE_ROW, let c = sqlite3_column_text(st, 0) {
+                        let raw = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                        return raw.isEmpty ? nil : raw
+                    }
+                }
+            }
+        } catch {
+            // fall through to nil
+        }
+        return nil
+    }
+
+    /// Returns the resolved WellVisitVisibility for a given WELL visit, using the raw
+    /// visit_type from the DB plus the computed age in months.
+    /// Returns nil if we cannot determine a canonical visit_type.
+    func wellVisitVisibility(visitID: Int) -> WellVisitReportRules.WellVisitVisibility? {
+        let age = wellVisitAgeMonths(visitID: visitID)
+        let rawVisitTypeID = rawVisitTypeIDForWell(visitID: visitID)
+        return WellVisitReportRules.visibility(for: rawVisitTypeID, ageMonths: age)
+    }
+}
+
+extension WellVisitReportRules.WellVisitVisibility {
+    // Temporary: always show all sections.
+    // Fine-grained age/visit-type gating can be added later in the rules layer.
+    var showParentsConcerns: Bool { true }
+    var showFeeding: Bool { true }
+    var showSupplementation: Bool { true }
+    var showSleep: Bool { true }
+    var showDevelopment: Bool { true }
+    var showMilestones: Bool { true }
+    var showMeasurements: Bool { true }
+    var showPhysicalExam: Bool { true }
+    var showProblemListing: Bool { true }
+    var showConclusions: Bool { true }
+    var showAnticipatoryGuidance: Bool { true }
+    var showClinicianComments: Bool { true }
+    var showNextVisit: Bool { true }
 }
