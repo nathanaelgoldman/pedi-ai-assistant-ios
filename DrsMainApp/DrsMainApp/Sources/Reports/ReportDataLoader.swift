@@ -102,6 +102,8 @@ final class ReportDataLoader {
             let months = max(0.0, days / 30.4375)
             ageMonthsDouble = months
         }
+        let ageDebug = ageMonthsDouble.map { String(format: "%.2f", $0) } ?? "nil"
+        print("[ReportDataLoader] well ageMonths for visitID=\(visitID): dob=\(meta.dobISO) visitDate=\(meta.visitDateISO) ageMonths=\(ageDebug)")
         // STEP 4: Current visit core fields (type subtitle, parents' concerns, feeding, supplementation, sleep)
         let core = loadCurrentWellCoreFields(visitID: visitID)
         let currentVisitTitle = core.visitType ?? (meta.visitTypeReadable ?? "Well Visit")
@@ -126,6 +128,8 @@ final class ReportDataLoader {
         
         let rawVisitTypeID = rawVisitTypeIDForWell(visitID: visitID) ?? core.visitType
         let visibility = WellVisitReportRules.visibility(for: rawVisitTypeID, ageMonths: ageMonthsDouble)
+        let rawTypeDebug = rawVisitTypeID ?? core.visitType ?? "nil"
+        print("[ReportDataLoader] well visibility lookup for visitID=\(visitID): rawTypeID=\(rawTypeDebug) ageMonths=\(ageDebug) visibility=\(String(describing: visibility))")
 
         var parentsConcerns = parentsConcernsRaw
         var feeding = feedingRaw
@@ -1547,6 +1551,8 @@ final class ReportDataLoader {
 
     // Returns a list of previous well visits for the same patient (excluding the current visit),
     // with robust date/age handling and patient DOB from DB if available.
+    // Returns a list of previous well visits for the same patient (excluding the current visit),
+    // with robust date/age handling and patient DOB from DB if available.
     func previousWellVisits(for currentVisitID: Int) -> [(title: String, date: String, findings: String?)] {
         var results: [(title: String, date: String, findings: String?)] = []
         do {
@@ -1562,31 +1568,22 @@ final class ReportDataLoader {
                     if sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
                         defer { sqlite3_finalize(s) }
                         while sqlite3_step(s) == SQLITE_ROW {
-                            if let c = sqlite3_column_text(s, 1) { cols.insert(String(cString: c)) }
+                            if let c = sqlite3_column_text(s, 1) {
+                                cols.insert(String(cString: c))
+                            }
                         }
                     }
                     return cols
                 }
-                let wellTable = ["well_visits","visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
 
-                // --- Begin block: resolve patient ID and DOB from patients table if possible ---
-                // Resolve patient ID for the current visit and fetch a reliable DOB from patients
+                // Decide which table holds well visits
+                let wellTable = ["well_visits", "visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+
+                // --- Resolve patient ID and DOB from patients table if possible ---
                 var effectiveDobISO = basicPatientStrings().dobISO
                 var currentPatientID: Int64 = -1
 
                 do {
-                    // Determine FK column name for patient linkage
-                    func columns(in table: String) -> Set<String> {
-                        var cols = Set<String>()
-                        var stmtCols: OpaquePointer?
-                        if sqlite3_prepare_v2(db, "PRAGMA table_info(\(wellTable));", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
-                            defer { sqlite3_finalize(s) }
-                            while sqlite3_step(s) == SQLITE_ROW {
-                                if let c = sqlite3_column_text(s, 1) { cols.insert(String(cString: c)) }
-                            }
-                        }
-                        return cols
-                    }
                     let wcols = columns(in: wellTable)
                     let patientFK = ["patient_id","patientId","patientID"].first(where: { wcols.contains($0) }) ?? "patient_id"
 
@@ -1604,55 +1601,64 @@ final class ReportDataLoader {
                     if currentPatientID > 0, let dobFromDB = fetchDOBFromPatients(patientID: currentPatientID) {
                         effectiveDobISO = dobFromDB
                     }
-                } // swallow errors; we'll keep the appState DOB fallback if needed
-                // --- End block ---
+                }
 
-                // Determine FK column name for patient linkage (again for the SQL)
+                // If we still don't have a valid patient ID, there is nothing to list
+                guard currentPatientID > 0 else {
+                    print("[ReportDataLoader] previousWell: no patient for visit \(currentVisitID)")
+                    return results
+                }
+
+                // Determine FK column name for patient linkage (for the main query)
                 let wcols = columns(in: wellTable)
                 let patientFK = ["patient_id","patientId","patientID"].first(where: { wcols.contains($0) }) ?? "patient_id"
 
-                // Build SQL for previous visits, coalescing visit_date and fallbacks, and extracting normalized date for age calculation
+                // Build SQL for previous visits, coalescing visit_date and fallbacks,
+                // and extracting normalized date for age calculation
                 let sqlPrev = """
-SELECT
-    id,
-    COALESCE(visit_date, created_at, updated_at, date) AS visit_date_raw,
-    CASE
-        WHEN visit_date LIKE '____-__-__%' THEN substr(visit_date,1,10)
-        WHEN created_at LIKE '____-__-__%' THEN substr(created_at,1,10)
-        WHEN updated_at LIKE '____-__-__%' THEN substr(updated_at,1,10)
-        WHEN date       LIKE '____-__-__%' THEN substr(date,1,10)
-        ELSE COALESCE(visit_date, created_at, updated_at, date)
-    END AS visit_date_for_age,
-    visit_type,
-    problem_listing,
-    conclusions,
-    parents_concerns,
-    issues_since_last,
-    comments
-FROM \(wellTable)
-WHERE \(patientFK) = ? AND id <> ?
-ORDER BY visit_date_raw DESC;
-"""
+                SELECT
+                    id,
+                    COALESCE(visit_date, created_at, updated_at, date) AS visit_date_raw,
+                    CASE
+                        WHEN visit_date LIKE '____-__-__%' THEN substr(visit_date,1,10)
+                        WHEN created_at LIKE '____-__-__%' THEN substr(created_at,1,10)
+                        WHEN updated_at LIKE '____-__-__%' THEN substr(updated_at,1,10)
+                        WHEN date       LIKE '____-__-__%' THEN substr(date,1,10)
+                        ELSE COALESCE(visit_date, created_at, updated_at, date)
+                    END AS visit_date_for_age,
+                    visit_type,
+                    problem_listing,
+                    conclusions,
+                    parents_concerns,
+                    issues_since_last,
+                    comments
+                FROM \(wellTable)
+                WHERE \(patientFK) = ? AND id <> ?
+                ORDER BY visit_date_raw DESC;
+                """
+
                 var stmt: OpaquePointer?
                 if sqlite3_prepare_v2(db, sqlPrev, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
                     defer { sqlite3_finalize(st) }
                     sqlite3_bind_int64(st, 1, currentPatientID)
                     sqlite3_bind_int64(st, 2, Int64(currentVisitID))
+
                     while sqlite3_step(st) == SQLITE_ROW {
                         var idx: Int32 = 0
                         func col(_ i: Int32) -> String {
                             guard let c = sqlite3_column_text(st, i) else { return "" }
                             return String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
                         }
+
                         let _ = sqlite3_column_int64(st, idx); idx += 1 // id (unused in title)
-                        let visitDateRaw = col(idx); idx += 1          // visit_date_raw
-                        let visitDateForAge = col(idx); idx += 1       // visit_date_for_age
-                        let visitTypeRaw = col(idx); idx += 1
-                        let problems = col(idx); idx += 1
-                        let conclusions = col(idx); idx += 1
-                        let parents = col(idx); idx += 1
-                        let issues = col(idx); idx += 1
-                        let comments = col(idx); idx += 1
+                        let visitDateRaw      = col(idx); idx += 1      // visit_date_raw
+                        let visitDateForAge   = col(idx); idx += 1      // visit_date_for_age
+                        let visitTypeRaw      = col(idx); idx += 1
+                        let problems          = col(idx); idx += 1
+                        let conclusions       = col(idx); idx += 1
+                        let parents           = col(idx); idx += 1
+                        let issues            = col(idx); idx += 1
+                        let comments          = col(idx); idx += 1
 
                         // Title: Date · Visit Type · Age
                         let visitLabel = visitTypeRaw.isEmpty ? "Well Visit" : (readableVisitType(visitTypeRaw) ?? visitTypeRaw)
@@ -1670,11 +1676,11 @@ ORDER BY visit_date_raw DESC;
 
                         // Lines (short, prioritized)
                         var lines: [String] = []
-                        if !issues.isEmpty { lines.append("Issues since last: \(issues)") }
-                        if !problems.isEmpty { lines.append("Problems: \(problems)") }
+                        if !issues.isEmpty     { lines.append("Issues since last: \(issues)") }
+                        if !problems.isEmpty   { lines.append("Problems: \(problems)") }
                         if !conclusions.isEmpty { lines.append("Conclusions: \(conclusions)") }
-                        if !parents.isEmpty { lines.append("Parents’ concerns: \(parents)") }
-                        if !comments.isEmpty { lines.append("Comments: \(comments)") }
+                        if !parents.isEmpty    { lines.append("Parents’ concerns: \(parents)") }
+                        if !comments.isEmpty   { lines.append("Comments: \(comments)") }
 
                         // Keep it concise
                         if lines.count > 3 { lines = Array(lines.prefix(3)) }
@@ -2048,8 +2054,14 @@ extension ReportDataLoader {
             let seconds = visit.timeIntervalSince(dob)
             let days = seconds / 86400.0
             // Use the same month length convention as growth logic (30.4375 days)
-            let months = days / 30.4375
-            return max(0.0, months)
+            let months = max(0.0, days / 30.4375)
+
+            #if DEBUG
+            let dbgMonths = String(format: "%.2f", months)
+            print("[ReportDataLoader] wellVisitAgeMonths visitID=\(visitID) dob=\(meta.dobISO) visitDate=\(meta.visitDateISO) months=\(dbgMonths)")
+            #endif
+
+            return months
         } catch {
             return nil
         }
@@ -2370,6 +2382,11 @@ extension ReportDataLoader {
             guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
             return s
         }
+        #if DEBUG
+        func dbg(_ msg: String) {
+            print("[ReportDataLoader] loadCurrentWellCoreFields visitID=\(visitID): \(msg)")
+        }
+        #endif
         func put(_ key: String, _ raw: String?) {
             if let v = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty {
                 feeding[key] = v
@@ -2411,6 +2428,9 @@ extension ReportDataLoader {
                     return cols
                 }
                 let table = ["well_visits","visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+                #if DEBUG
+                print("[ReportDataLoader] loadCurrentWellCoreFields: using table=\(table)")
+                #endif
                 let cols = columns(in: table)
 
                 // Pull the entire row so we can map flexible column names
@@ -2421,6 +2441,7 @@ extension ReportDataLoader {
                     sqlite3_bind_int64(st, 1, Int64(visitID))
                     if sqlite3_step(st) == SQLITE_ROW {
                         // build dictionary: columnName -> string value
+                        
                         var row: [String:String] = [:]
                         let n = sqlite3_column_count(st)
                         for i in 0..<n {
@@ -2527,6 +2548,9 @@ extension ReportDataLoader {
     //  - delta_days_since_discharge -> appended as "over N days"
     @MainActor
     private func loadMeasurementsForWellVisit(visitID: Int) -> [String:String] {
+        #if DEBUG
+        print("[ReportDataLoader] loadMeasurementsForWellVisit visitID=\(visitID)")
+        #endif
         var out: [String:String] = [:]
 
         func nonEmpty(_ s: String?) -> String? {
@@ -2614,7 +2638,9 @@ extension ReportDataLoader {
         } catch {
             // leave empty; builder will skip section if empty
         }
-
+        #if DEBUG
+        print("[ReportDataLoader] loadMeasurementsForWellVisit out=\(out)")
+        #endif
         return out
     }
 }
@@ -2648,8 +2674,13 @@ extension ReportDataLoader {
                 }
 
                 let table = ["well_visits", "visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+                #if DEBUG
+                print("[ReportDataLoader] rawVisitTypeIDForWell: using table=\(table)")
+                #endif
                 let cols = columns(in: table)
-
+                #if DEBUG
+                print("[ReportDataLoader] rawVisitTypeIDForWell: columns=\(Array(cols).sorted())")
+                #endif
                 // If there is no visit_type column, we cannot resolve a canonical ID
                 guard cols.contains("visit_type") else { return nil }
 
@@ -2660,6 +2691,9 @@ extension ReportDataLoader {
                     sqlite3_bind_int64(st, 1, Int64(visitID))
                     if sqlite3_step(st) == SQLITE_ROW, let c = sqlite3_column_text(st, 0) {
                         let raw = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                        #if DEBUG
+                        print("[ReportDataLoader] rawVisitTypeIDForWell visitID=\(visitID) raw='\(raw)'")
+                        #endif
                         return raw.isEmpty ? nil : raw
                     }
                 }

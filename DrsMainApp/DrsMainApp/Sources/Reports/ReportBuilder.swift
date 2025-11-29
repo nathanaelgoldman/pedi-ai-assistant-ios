@@ -235,6 +235,40 @@ final class ReportBuilder {
         // ReportBuilder only reads these flags and renders sections accordingly.
         let visibility = data.visibility
 
+        // Debug: log which sections are enabled and how much data we have for each.
+        if DEBUG_REPORT_EXPORT {
+            func flag(_ b: Bool?) -> String { b == nil ? "nil" : (b! ? "Y" : "N") }
+            let parentsFlag = flag(visibility?.showParentsConcerns)
+            let feedFlag = flag(visibility?.showFeeding)
+            let suppFlag = flag(visibility?.showSupplementation)
+            let sleepFlag = flag(visibility?.showSleep)
+            let devFlag = flag(visibility?.showDevelopment)
+            let milestonesFlag = flag(visibility?.showMilestones)
+            let measFlag = flag(visibility?.showMeasurements)
+            let peFlag = flag(visibility?.showPhysicalExam)
+            let problemsFlag = flag(visibility?.showProblemListing)
+            let conclFlag = flag(visibility?.showConclusions)
+            let agFlag = flag(visibility?.showAnticipatoryGuidance)
+            let commentsFlag = flag(visibility?.showClinicianComments)
+            let nextFlag = flag(visibility?.showNextVisit)
+
+            NSLog("[ReportBuilder] well flags: parents=%@ feed=%@ supp=%@ sleep=%@ dev=%@ milestones=%@ meas=%@ pe=%@ problems=%@ concl=%@ ag=%@ comments=%@ next=%@",
+                  parentsFlag, feedFlag, suppFlag, sleepFlag, devFlag, milestonesFlag,
+                  measFlag, peFlag, problemsFlag, conclFlag, agFlag, commentsFlag, nextFlag)
+
+            let parentsCount = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? 1 : 0
+            let feedCount = data.feeding.count
+            let suppCount = data.supplementation.count
+            let sleepCount = data.sleep.count
+            let devCount = data.developmental.count
+            let measCount = data.measurements.count
+            let peGroups = data.physicalExamGroups.count
+            let milestoneFlags = data.milestoneFlags.count
+
+            NSLog("[ReportBuilder] well data: parents=%d feed=%d supp=%d sleep=%d dev=%d meas=%d peGroups=%d milestoneFlags=%d",
+                  parentsCount, feedCount, suppCount, sleepCount, devCount, measCount, peGroups, milestoneFlags)
+        }
+
         // Header block (Well)
         para("Well Visit Summary", font: .systemFont(ofSize: 20, weight: .semibold))
         let triad = "Created: \(humanDateTime(data.meta.createdAtISO) ?? "—")   •   Last Edited: \(humanDateTime(data.meta.updatedAtISO) ?? "—")   •   Report Generated: \(humanDateTime(data.meta.generatedAtISO) ?? "—")"
@@ -1941,169 +1975,6 @@ extension ReportBuilder {
         return out
     }
 
-    /// Apply age/visibility gating at the text level.
-    /// Only gate *current-visit* sections after the "Current Visit — ..." heading.
-    /// Perinatal / previous-visit summaries / growth charts / top summary are never gated out.
-    private func gateCurrentVisitSections(in raw: String) -> String {
-        // Known headings used in the report text.
-        let wellTopSections: Set<String> = [
-            "Well Visit Summary",
-            "Perinatal Summary",
-            "Findings from Previous Well Visits"
-        ]
-        let wellCurrentVisitSections: Set<String> = [
-            "Previous Well Visits",
-            "Parents’ Concerns",
-            "Feeding",
-            "Supplementation",
-            "Sleep",
-            "Developmental Evaluation",
-            "Age-specific Milestones",
-            "Measurements",
-            "Physical Examination",
-            "Problem Listing",
-            "Conclusions",
-            "Anticipatory Guidance",
-            "Clinician Comments",
-            "Next Visit Date",
-            "Growth Charts"
-        ]
-        let sickSections: Set<String> = [
-            "Main Complaint",
-            "History of Present Illness",
-            "Duration",
-            "Basics",
-            "Past Medical History",
-            "Vaccination",
-            "Vitals Summary",
-            "Investigations",
-            "Working Diagnosis",
-            "ICD-10",
-            "Plan & Anticipatory Guidance",
-            "Medications",
-            "Follow-up / Next Visit",
-            "Sick Visit Report"
-        ]
-
-        // Sections we *never* gate out, even if empty.
-        let alwaysKeepSections: Set<String> =
-            wellTopSections.union(["Previous Well Visits", "Growth Charts"])
-
-        // All headings that delimit sections when scanning line-by-line.
-        let allHeadings: Set<String> =
-            wellTopSections
-            .union(wellCurrentVisitSections)
-            .union(sickSections)
-
-        let lines = raw.components(separatedBy: .newlines)
-
-        // Treat "placeholder-only" lines (just dashes, optionally with a leading bullet) as empty.
-        func isPlaceholderLine(_ line: String) -> Bool {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty { return true }
-
-            // Strip a leading bullet if present
-            let withoutBullet: String
-            if trimmed.hasPrefix("• ") {
-                withoutBullet = String(trimmed.dropFirst(2))
-            } else {
-                withoutBullet = trimmed
-            }
-
-            let dashSet = CharacterSet(charactersIn: "-–—‒")
-            // If the remaining characters are all in the dash set, it's a placeholder
-            if withoutBullet.unicodeScalars.allSatisfy({ dashSet.contains($0) }) {
-                return true
-            }
-            return false
-        }
-
-        func isHeading(_ trimmed: String) -> Bool {
-            if trimmed.hasPrefix("Current Visit —") { return true }
-            return allHeadings.contains(trimmed)
-        }
-
-        var result: [String] = []
-        var i = 0
-        var inCurrentVisit = false
-
-        while i < lines.count {
-            let line = lines[i]
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            // Empty lines are copied through; they don't affect section boundaries.
-            if trimmed.isEmpty {
-                result.append(line)
-                i += 1
-                continue
-            }
-
-            // Detect the start of the current-visit block explicitly.
-            if trimmed.hasPrefix("Current Visit —") {
-                inCurrentVisit = true
-                result.append(line)
-                i += 1
-                continue
-            }
-
-            // Always-keep headings (Well Visit Summary, Perinatal, previous visits, Growth Charts)
-            // are passed through unchanged, regardless of where they appear.
-            if alwaysKeepSections.contains(trimmed) {
-                result.append(line)
-                i += 1
-                continue
-            }
-
-            // Current-visit sections: we conditionally keep or drop the whole block (heading + content)
-            // based on whether the block has any real content beyond "—".
-            // This gating is *only* applied once we've entered the "Current Visit — …" block.
-            if inCurrentVisit && wellCurrentVisitSections.contains(trimmed) {
-                let headerLine = line
-                let startContent = i + 1
-                var j = startContent
-
-                // Walk forward until we hit the next heading (or end of document).
-                while j < lines.count {
-                    let t = lines[j].trimmingCharacters(in: .whitespacesAndNewlines)
-                    if t.isEmpty {
-                        j += 1
-                        continue
-                    }
-                    if isHeading(t) {
-                        break
-                    }
-                    j += 1
-                }
-
-                // Content block is [startContent ..< j)
-                let block = Array(lines[startContent..<j])
-                let meaningfulContentExists = block.contains { line in
-                    // Keep the section only if we find at least one non-placeholder line.
-                    return !isPlaceholderLine(line)
-                }
-
-                if meaningfulContentExists {
-                    // Keep the whole section: heading + content block.
-                    result.append(headerLine)
-                    if !block.isEmpty {
-                        result.append(contentsOf: block)
-                    }
-                } else {
-                    // Drop the entire section (no meaningful data, only placeholders).
-                    // We do not append anything for this heading or its block.
-                }
-
-                i = j
-                continue
-            }
-
-            // Any other line (non-heading or headings we don't treat specially) is copied through.
-            result.append(line)
-            i += 1
-        }
-
-        return result.joined(separator: "\n")
-    }
 
     /// EMU (English Metric Unit) from points. 1 pt = 12700 EMU.
     private func emuFromPoints(_ pts: CGFloat) -> Int {
@@ -2597,8 +2468,9 @@ extension ReportBuilder {
 
         let (attr, stem) = try buildAttributedReport(for: kind)
 
-        let rawText = attr.string
-        let bodyTextForDocx = gateCurrentVisitSections(in: rawText)
+        // DOCX now uses the already age‑gated body from WellReportData / ReportDataLoader.
+        // No extra text‑level gating here; ReportBuilder is a dumb renderer.
+        let bodyTextForDocx = attr.string
 
         let fm = FileManager.default
         let baseDir: URL = {

@@ -1,0 +1,13 @@
+AgeLabel,VisitTypeID,AgeGroup,showsFeeding,showsSupplementation,showsVitaminD,showsSleep,showsPhysicalExam,showsMilestones,showsProblemListing,showsConclusions,showsPlan,showsClinicianComment,showsNextVisit,showsAISection,weightDelta,structuredFeedingUnder12,earlyMilkOnly,solidsBlock,olderFeeding,earlySleep,olderSleep,post12mVisit,fontanelle,primitiveNeuro,moro,hipsFocus,teeth,MCHAT,DevTestScore,DevTestResult
+Newborn – first visit,newborn_first,newborn,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,1,1,1,1,0,0,0,0
+1-month visit,one_month,newborn,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,1,1,1,1,0,0,0,0
+2-month visit,two_month,infant,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,1,0,0,1,0,0,0,0,0,0,0
+4-month visit,four_month,infant,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,0,1,0,1,1,1,0,0,0
+6-month visit,six_month,infant,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,0,1,0,1,1,1,0,0,0
+9-month visit,nine_month,infant,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,0,1,0,0,0,1,0,1,1
+12-month visit,twelve_month,infant,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,1,0,0,0,1,0,1,1
+15-month visit,fifteen_month,toddler,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,1,0,0,0,1,0,1,1
+18-month visit,eighteen_month,toddler,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,1,1,0,0,0,1,1,1,1
+24-month visit,twentyfour_month,toddler,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,1,1,0,0,0,1,1,1,1
+30-month visit,thirty_month,preschool,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,1,1,0,0,0,1,1,1,1
+36-month visit,thirtysix_month,preschool,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,1,0,0,0,1,0,1,1

@@ -221,8 +221,6 @@ enum WellVisitReportRules {
 
     /// Returns the age‑specific flags for a given visit type (e.g. "nine_month").
     static func flags(for visitTypeID: String) -> WellVisitReportFlags {
-        let ageGroup = ageGroupForVisitType(visitTypeID)
-
         // Prefer the CSV‑driven matrix if we have a row for this visit type.
         if let row = ageMatrix[visitTypeID] {
             return WellVisitReportFlags(
@@ -246,173 +244,30 @@ enum WellVisitReportRules {
             )
         }
 
-        // Fallback: old hard‑coded behaviour if CSV row is missing.
+        // If there is no CSV row, default to "all false" so we never leak
+        // unexpected content into the current‑visit sections.
+        NSLog("⚠️ WellVisitReportRules: no CSV age‑matrix row for visitTypeID \(visitTypeID); defaulting all flags to false.")
         return WellVisitReportFlags(
             visitTypeID: visitTypeID,
-            isWeightDeltaVisit: isWeightDeltaVisit(visitTypeID),
-            isEarlyMilkOnlyVisit: isEarlyMilkOnlyVisit(visitTypeID),
-            isStructuredFeedingUnder12: isStructuredFeedingUnder12(visitTypeID),
-            isSolidsVisit: isSolidsVisit(visitTypeID),
-            isOlderFeedingVisit: isOlderFeedingVisit(visitTypeID),
-            isEarlySleepVisit: isEarlySleepVisit(visitTypeID),
-            isOlderSleepVisit: isOlderSleepVisit(visitTypeID),
-            isPostTwelveMonthVisit: isPostTwelveMonthVisit(visitTypeID),
-            isFontanelleVisit: isFontanelleVisit(ageGroup: ageGroup),
-            isPrimitiveNeuroVisit: isPrimitiveNeuroVisit(visitTypeID),
-            isMoroVisit: isMoroVisit(visitTypeID),
-            isHipsVisit: isHipsVisit(visitTypeID),
-            isTeethVisit: isTeethVisit(visitTypeID),
-            isMCHATVisit: isMCHATVisit(visitTypeID),
-            isDevTestScoreVisit: isDevTestVisit(visitTypeID),
-            isDevTestResultVisit: isDevTestVisit(visitTypeID)
+            isWeightDeltaVisit: false,
+            isEarlyMilkOnlyVisit: false,
+            isStructuredFeedingUnder12: false,
+            isSolidsVisit: false,
+            isOlderFeedingVisit: false,
+            isEarlySleepVisit: false,
+            isOlderSleepVisit: false,
+            isPostTwelveMonthVisit: false,
+            isFontanelleVisit: false,
+            isPrimitiveNeuroVisit: false,
+            isMoroVisit: false,
+            isHipsVisit: false,
+            isTeethVisit: false,
+            isMCHATVisit: false,
+            isDevTestScoreVisit: false,
+            isDevTestResultVisit: false
         )
     }
 
-    // MARK: - Private helpers (mirrors the CSV & WellVisitForm logic)
-
-    private static func isWeightDeltaVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "newborn_first", "one_month", "two_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isEarlyMilkOnlyVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "newborn_first", "one_month", "two_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isStructuredFeedingUnder12(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "newborn_first", "one_month", "two_month", "four_month", "six_month", "nine_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isSolidsVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "four_month", "six_month", "nine_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isOlderFeedingVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "twelve_month", "fifteen_month", "eighteen_month",
-             "twentyfour_month", "thirty_month", "thirtysix_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isEarlySleepVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "newborn_first", "one_month", "two_month",
-             "four_month", "six_month", "nine_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isOlderSleepVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "twelve_month", "fifteen_month", "eighteen_month",
-             "twentyfour_month", "thirty_month", "thirtysix_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isPostTwelveMonthVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "fifteen_month", "eighteen_month",
-             "twentyfour_month", "thirty_month", "thirtysix_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isFontanelleVisit(ageGroup: WellVisitAgeGroup) -> Bool {
-        // Same logic as in WellVisitForm: all age groups except preschool
-        switch ageGroup {
-        case .preschool:
-            return false
-        default:
-            return true
-        }
-    }
-
-    private static func isPrimitiveNeuroVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "newborn_first", "one_month", "two_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isMoroVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "newborn_first", "one_month", "two_month", "four_month", "six_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isHipsVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "newborn_first", "one_month", "two_month", "four_month", "six_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isTeethVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "four_month", "six_month", "nine_month",
-             "twelve_month", "fifteen_month", "eighteen_month",
-             "twentyfour_month", "thirty_month", "thirtysix_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isMCHATVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "eighteen_month", "twentyfour_month", "thirty_month":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isDevTestVisit(_ visitTypeID: String) -> Bool {
-        switch visitTypeID {
-        case "nine_month", "twelve_month", "fifteen_month",
-             "eighteen_month", "twentyfour_month",
-             "thirty_month", "thirtysix_month":
-            return true
-        default:
-            return false
-        }
-    }
 }
 
 /// Convenience wrapper so the report layer can grab everything it needs
@@ -643,8 +498,10 @@ extension WellVisitReportRules {
         // Developmental tools
         case .mchat:
             ageAllows = flags.isMCHATVisit
-        case .devTestScore, .devTestResult:
+        case .devTestScore:
             ageAllows = flags.isDevTestScoreVisit
+        case .devTestResult:
+            ageAllows = flags.isDevTestResultVisit
         }
         // Mark parameter as "used" to avoid warnings; the age matrix alone drives visibility.
         _ = hasContent
