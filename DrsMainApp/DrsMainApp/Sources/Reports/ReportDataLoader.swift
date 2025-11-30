@@ -131,84 +131,27 @@ final class ReportDataLoader {
         let rawTypeDebug = rawVisitTypeID ?? core.visitType ?? "nil"
         print("[ReportDataLoader] well visibility lookup for visitID=\(visitID): rawTypeID=\(rawTypeDebug) ageMonths=\(ageDebug) visibility=\(String(describing: visibility))")
 
-        var parentsConcerns = parentsConcernsRaw
-        var feeding = feedingRaw
-        var supplementation = supplementationRaw
-        var sleep = sleepRaw
-        var developmental = devPack.dev
-        var milestonesAchieved = (devPack.achieved, devPack.total)
-        var milestoneFlags = devPack.flags
-        var measurements = measurementsRaw
-        var physicalExamGroups = pePack.groups
-        var problemListing = pePack.problem
-        var conclusions = pePack.conclusions
-        var anticipatoryGuidance = pePack.anticipatory
-        var clinicianComments = pePack.comments
-        var nextVisitDate = pePack.nextVisitDate
+        // At this stage, all age/visit-type gating has already been applied upstream
+        // (WellVisitReportRules + form logic). ReportDataLoader now only routes
+        // the already-filtered fields into the WellReportData sections and
+        // prettifies them downstream in ReportBuilder.
+        let parentsConcerns = parentsConcernsRaw
+        let feeding = feedingRaw
+        let supplementation = supplementationRaw
+        let sleep = sleepRaw
+        let developmental = devPack.dev
+        let milestonesAchieved = (devPack.achieved, devPack.total)
+        let milestoneFlags = devPack.flags
+        let measurements = measurementsRaw
+        let physicalExamGroups = pePack.groups
+        let problemListing = pePack.problem
+        let conclusions = pePack.conclusions
+        let anticipatoryGuidance = pePack.anticipatory
+        let clinicianComments = pePack.comments
+        let nextVisitDate = pePack.nextVisitDate
 
-        // Use matrix visibility as the single source of truth for CURRENT VISIT sections.
-        // If there's no visibility profile, we hide all current-visit sections instead of
-        // inferring visibility from whether fields are filled.
-        if let visibility = visibility {
-            if !visibility.showParentsConcerns {
-                parentsConcerns = nil
-            }
-            if !visibility.showFeeding {
-                feeding = [:]
-            }
-            if !visibility.showSupplementation {
-                supplementation = [:]
-            }
-            if !visibility.showSleep {
-                sleep = [:]
-            }
-            if !visibility.showDevelopment {
-                developmental = [:]
-            }
-            if !visibility.showMilestones {
-                milestonesAchieved = (0, 0)
-                milestoneFlags = []
-            }
-            if !visibility.showMeasurements {
-                measurements = [:]
-            }
-            if !visibility.showPhysicalExam {
-                physicalExamGroups = []
-            }
-            if !visibility.showProblemListing {
-                problemListing = nil
-            }
-            if !visibility.showConclusions {
-                conclusions = nil
-            }
-            if !visibility.showAnticipatoryGuidance {
-                anticipatoryGuidance = nil
-            }
-            if !visibility.showClinicianComments {
-                clinicianComments = nil
-            }
-            if !visibility.showNextVisit {
-                nextVisitDate = nil
-            }
-        } else {
-            // No visibility profile defined for this visit type/age → hide all current-visit sections.
-            parentsConcerns = nil
-            feeding = [:]
-            supplementation = [:]
-            sleep = [:]
-            developmental = [:]
-            milestonesAchieved = (0, 0)
-            milestoneFlags = []
-            measurements = [:]
-            physicalExamGroups = []
-            problemListing = nil
-            conclusions = nil
-            anticipatoryGuidance = nil
-            clinicianComments = nil
-            nextVisitDate = nil
-        }
-
-        // Header + perinatal summary stay untouched; age gating only affects current visit sections above.
+        // Header + perinatal summary stay untouched; ReportDataLoader does
+        // no additional gating here, it simply forwards the gated data.
         return WellReportData(
             meta: meta,
             perinatalSummary: perinatalSummary,
@@ -1718,6 +1661,26 @@ final class ReportDataLoader {
             let dobISO: String
             let visitDateISO: String
         }
+
+        /// Canonical current-visit block for WELL visit reports.
+        /// This is the only payload that ReportBuilder needs for the
+        /// "Current Visit — Feeding / Supplementation / Sleep" section.
+        struct WellCurrentVisitBlock {
+            /// Human-readable visit type subtitle (e.g. "1‑month visit").
+            let visitTypeSubtitle: String?
+
+            /// Parents' concerns (ungated: always relevant when present).
+            let parentsConcerns: String?
+
+            /// Age-gated, pretty-labelled feeding lines (key = pretty label).
+            let feeding: [String:String]
+
+            /// Age-gated, pretty-labelled supplementation lines.
+            let supplementation: [String:String]
+
+            /// Age-gated, pretty-labelled sleep lines.
+            let sleep: [String:String]
+        }
         private func ensureGrowthSchema(_ db: OpaquePointer?) {
                 guard let db = db else { return }
 
@@ -2223,6 +2186,54 @@ extension ReportDataLoader {
         var comments: String?
         var nextVisitDate: String?
 
+        // Age/visit-type gating for PE elements, driven by the canonical CSV.
+        // Important:
+        // - Only the age-dependent items (fontanelle, hips, teeth) are gated by the CSV.
+        // - All other PE elements should be considered always-allowed when present in the DB row.
+        let allowedCols = allowedDBColumnsForWellVisit(visitID)
+
+        // Columns that *may* be age-gated via the CSV. Everything else in PE
+        // is treated as always-on and will be rendered whenever data is present.
+        let ageGatedPEColumns: Set<String> = [
+            // Fontanelle
+            "pe_fontanelle_normal",
+            "pe_fontanelle_comment",
+            // Hips focus
+            "pe_hips_normal",
+            "pe_hips_comment",
+            // Teeth / dentition
+            "pe_teeth_normal",
+            "pe_teeth_comment",
+            "pe_teeth_present",
+            "pe_teeth_count",
+            // Primitive neuro / neonatal reflexes
+            "pe_moro_normal",
+            "pe_moro_comment",
+            "pe_primitive_neuro_normal",
+            "pe_primitive_neuro_comment"
+        ]
+
+        func isAllowedPE(_ keys: [String]) -> Bool {
+            // If none of the backing columns for this PE item are part of the
+            // age-gated set, then this item is *not* controlled by the CSV and
+            // should always be shown when data is present.
+            let gatedKeys = keys.filter { ageGatedPEColumns.contains($0) }
+            if gatedKeys.isEmpty {
+                return true
+            }
+
+            // For age-gated items, defer to the CSV-driven allowedCols set.
+            // If the CSV row for this visit type/age does not define any columns,
+            // we treat all PE as allowed (fail-open).
+            if allowedCols.isEmpty {
+                return true
+            }
+
+            // At least one of the age-gated DB columns for this PE element
+            // must be allowed for it to appear.
+            return gatedKeys.contains(where: { allowedCols.contains($0) })
+        }
+
         func nonEmpty(_ s: String?) -> String? {
             guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
             return s
@@ -2277,6 +2288,11 @@ extension ReportDataLoader {
                                 if !val.isEmpty { row[key] = val }
                             }
                         }
+                        #if DEBUG
+                        print("[ReportDataLoader] loadWellPEAndText visitID=\(visitID)")
+                        print("  allowedCols: \(Array(allowedCols).sorted())")
+                        print("  row keys: \(Array(row.keys).sorted())")
+                        #endif
 
                         // --- Build grouped PE lines ---
                         var groups: [String:[String]] = [:]
@@ -2284,6 +2300,16 @@ extension ReportDataLoader {
                             groups[group, default: []].append(line)
                         }
                         func addNormal(_ group: String, _ label: String, normalKey: String, commentKey: String?) {
+                            let keys = [normalKey] + (commentKey != nil ? [commentKey!] : [])
+                            // Respect CSV-driven age/visit-type gating *only* for the
+                            // explicitly age-gated PE elements (fontanelle, hips, teeth).
+                            // All other PE items will bypass this check inside isAllowedPE.
+                            if !isAllowedPE(keys) {
+                                #if DEBUG
+                                print("[ReportDataLoader] PE GATED OUT group=\(group) label=\(label) keys=\(keys)")
+                                #endif
+                                return
+                            }
                             let norm = isYes(row[normalKey])
                             let comment = nonEmpty(row[commentKey ?? ""])
                             if norm != nil || comment != nil {
@@ -2298,7 +2324,8 @@ extension ReportDataLoader {
                         // General
                         addNormal("General", "Trophic", normalKey: "pe_trophic_normal", commentKey: "pe_trophic_comment")
                         addNormal("General", "Hydration", normalKey: "pe_hydration_normal", commentKey: "pe_hydration_comment")
-                        if let color = nonEmpty(row["pe_color"]) ?? nonEmpty(row["pe_color_comment"]) {
+                        if isAllowedPE(["pe_color", "pe_color_comment"]),
+                           let color = nonEmpty(row["pe_color"]) ?? nonEmpty(row["pe_color_comment"]) {
                             add("General", "Color: \(color)")
                         }
                         addNormal("General", "Tone", normalKey: "pe_tone_normal", commentKey: "pe_tone_comment")
@@ -2307,6 +2334,18 @@ extension ReportDataLoader {
 
                         // Head & Eyes
                         addNormal("Head & Eyes", "Fontanelle", normalKey: "pe_fontanelle_normal", commentKey: "pe_fontanelle_comment")
+
+                        // Teeth / dentition (age-gated via CSV)
+                        addNormal("Head & Eyes", "Teeth / dentition", normalKey: "pe_teeth_normal", commentKey: "pe_teeth_comment")
+                        if isAllowedPE(["pe_teeth_present", "pe_teeth_count"]) {
+                            if let present = isYes(row["pe_teeth_present"]) {
+                                add("Head & Eyes", "Teeth present: \(present ? "yes" : "no")")
+                            }
+                            if let countStr = nonEmpty(row["pe_teeth_count"]) {
+                                add("Head & Eyes", "Number of teeth: \(countStr)")
+                            }
+                        }
+
                         addNormal("Head & Eyes", "Pupils RR", normalKey: "pe_pupils_rr_normal", commentKey: "pe_pupils_rr_comment")
                         addNormal("Head & Eyes", "Ocular motility", normalKey: "pe_ocular_motility_normal", commentKey: "pe_ocular_motility_comment")
 
@@ -2315,17 +2354,20 @@ extension ReportDataLoader {
                         addNormal("Cardio / Pulses", "Femoral pulses", normalKey: "pe_femoral_pulses_normal", commentKey: "pe_femoral_pulses_comment")
 
                         // Abdomen
-                        if let massYes = isYes(row["pe_abd_mass"]) {
+                        if isAllowedPE(["pe_abd_mass"]),
+                           let massYes = isYes(row["pe_abd_mass"]) {
                             if massYes { add("Abdomen", "Abdominal mass: present") }
                         }
                         addNormal("Abdomen", "Liver/Spleen", normalKey: "pe_liver_spleen_normal", commentKey: "pe_liver_spleen_comment")
                         addNormal("Abdomen", "Umbilic", normalKey: "pe_umbilic_normal", commentKey: "pe_umbilic_comment")
 
                         // Genitalia
-                        if let gen = nonEmpty(row["pe_genitalia"]) {
+                        if isAllowedPE(["pe_genitalia"]),
+                           let gen = nonEmpty(row["pe_genitalia"]) {
                             add("Genitalia", "Genitalia: \(gen)")
                         }
-                        if let desc = isYes(row["pe_testicles_descended"]) {
+                        if isAllowedPE(["pe_testicles_descended"]),
+                           let desc = isYes(row["pe_testicles_descended"]) {
                             add("Genitalia", "Testicles descended: \(desc ? "yes" : "no")")
                         }
 
@@ -2340,6 +2382,7 @@ extension ReportDataLoader {
 
                         // Neuro / Development
                         addNormal("Neuro / Development", "Moro", normalKey: "pe_moro_normal", commentKey: "pe_moro_comment")
+                        addNormal("Neuro / Development", "Primitive neuro", normalKey: "pe_primitive_neuro_normal", commentKey: "pe_primitive_neuro_comment")
                         addNormal("Neuro / Development", "Hands in fist", normalKey: "pe_hands_fist_normal", commentKey: "pe_hands_fist_comment")
                         addNormal("Neuro / Development", "Symmetry", normalKey: "pe_symmetry_normal", commentKey: "pe_symmetry_comment")
                         addNormal("Neuro / Development", "Follows midline", normalKey: "pe_follows_midline_normal", commentKey: "pe_follows_midline_comment")
@@ -2378,34 +2421,137 @@ extension ReportDataLoader {
         var supplementation: [String:String] = [:]
         var sleep: [String:String] = [:]
 
+        // Age-gated DB columns for this WELL visit (canonical CSV via WellVisitReportRules)
+        // Contract: this is the *only* source of truth for which current-visit fields
+        // may appear in the report for this visit type + age.
+        let allowedCols = allowedDBColumnsForWellVisit(visitID)
+        let hasGate = !allowedCols.isEmpty
+
         func nonEmpty(_ s: String?) -> String? {
             guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
             return s
         }
-        #if DEBUG
-        func dbg(_ msg: String) {
-            print("[ReportDataLoader] loadCurrentWellCoreFields visitID=\(visitID): \(msg)")
+
+        enum WellFieldSection {
+            case feeding
+            case supplementation
+            case sleep
         }
-        #endif
-        func put(_ key: String, _ raw: String?) {
-            if let v = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty {
-                feeding[key] = v
-            }
+
+        enum ValueKind {
+            case plain                 // as-is (after trimming)
+            case yesNo                 // normalize 1/0, yes/no, true/false → "yes"/"no"
+            case numeric(unit: String?)// parse numeric, pretty-print, attach unit
         }
-        func ynify(_ raw: String?) -> String? {
-            guard let s = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
-            let l = s.lowercased()
-            if ["1","true","yes","y"].contains(l) { return "yes" }
-            if ["0","false","no","n"].contains(l) { return "no" }
-            return s
+
+        struct MappedField {
+            let section: WellFieldSection
+            let prettyKey: String
+            let kind: ValueKind
         }
-        func addNumber(_ key: String, _ raw: String?, unit: String? = nil) {
-            guard let r = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty else { return }
-            if let d = Double(r) {
-                let s = d.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(d)) : String(d)
-                feeding[key] = unit != nil ? "\(s) \(unit!)" : s
-            } else {
-                feeding[key] = r
+
+        // Central mapping: DB column -> (section, pretty label, value kind)
+        // Gating (age/visit-type) is entirely handled by `allowedCols`.
+        let fieldMap: [String: MappedField] = [
+            // FEEDING NOTES & QUALITATIVE FIELDS
+            "feeding":              .init(section: .feeding, prettyKey: "Notes", kind: .plain),
+            "breastfeeding":        .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
+            "feeding_breast":       .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
+            "breast_milk":          .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
+            "nursing":              .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
+            "formula":              .init(section: .feeding, prettyKey: "Formula", kind: .plain),
+            "feeding_formula":      .init(section: .feeding, prettyKey: "Formula", kind: .plain),
+            "solids":               .init(section: .feeding, prettyKey: "Solids", kind: .plain),
+            "feeding_solids":       .init(section: .feeding, prettyKey: "Solids", kind: .plain),
+            "complementary_feeding":.init(section: .feeding, prettyKey: "Solids", kind: .plain),
+            "weaning":              .init(section: .feeding, prettyKey: "Solids", kind: .plain),
+
+            "feeding_comment":      .init(section: .feeding, prettyKey: "Feeding Comment", kind: .plain),
+            "milk_types":           .init(section: .feeding, prettyKey: "Milk Types", kind: .plain),
+            "food_variety_quality": .init(section: .feeding, prettyKey: "Food Variety / Quantity", kind: .plain),
+            "dairy_amount_text":    .init(section: .feeding, prettyKey: "Dairy Amount", kind: .plain),
+            "feeding_issue":        .init(section: .feeding, prettyKey: "Feeding Issue", kind: .plain),
+
+            // FREQUENCY & VOLUMES
+            "feed_freq_per_24h":    .init(section: .feeding, prettyKey: "Feeds / 24h", kind: .plain),
+            "feeds_per_24h":        .init(section: .feeding, prettyKey: "Feeds / 24h", kind: .plain),
+            "feeds_per_day":        .init(section: .feeding, prettyKey: "Feeds / 24h", kind: .plain),
+            "feed_volume_ml":       .init(section: .feeding, prettyKey: "Feed Volume (ml)", kind: .numeric(unit: "ml")),
+            "est_total_ml":         .init(section: .feeding, prettyKey: "Estimated Total (ml/24h)", kind: .numeric(unit: "ml")),
+            "est_ml_per_kg_24h":    .init(section: .feeding, prettyKey: "Estimated (ml/kg/24h)", kind: .numeric(unit: "ml/kg/24h")),
+
+            // FEEDING BOOLEANS / FLAGS
+            "regurgitation":        .init(section: .feeding, prettyKey: "Regurgitation", kind: .yesNo),
+            "wakes_for_feeds":      .init(section: .feeding, prettyKey: "Wakes for Feeds", kind: .yesNo),
+            "night_feeds":          .init(section: .feeding, prettyKey: "Wakes for Feeds", kind: .yesNo),
+            "wakes_to_feed":        .init(section: .feeding, prettyKey: "Wakes for Feeds", kind: .yesNo),
+            "expressed_bm":         .init(section: .feeding, prettyKey: "Expressed BM", kind: .yesNo),
+
+            // SOLID FOODS DETAIL
+            "solid_food_started":   .init(section: .feeding, prettyKey: "Solid Foods Started", kind: .yesNo),
+            "solid_food_start_date":.init(section: .feeding, prettyKey: "Solid Food Start", kind: .plain),
+            "solid_food_quality":   .init(section: .feeding, prettyKey: "Solid Food Quality", kind: .plain),
+            "solid_food_comment":   .init(section: .feeding, prettyKey: "Solid Food Notes", kind: .plain),
+
+            // SUPPLEMENTATION
+            "supplementation":      .init(section: .supplementation, prettyKey: "Notes", kind: .plain),
+            "supplements":          .init(section: .supplementation, prettyKey: "Notes", kind: .plain),
+            "vitamin_d":            .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
+            "vit_d":                .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
+            "vit_d_supplement":     .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
+            "vitamin_d_iu":         .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
+            "vitamin_d_given":      .init(section: .supplementation, prettyKey: "Vitamin D Given", kind: .yesNo),
+            "iron":                 .init(section: .supplementation, prettyKey: "Iron", kind: .plain),
+            "ferrous":              .init(section: .supplementation, prettyKey: "Iron", kind: .plain),
+            "others":               .init(section: .supplementation, prettyKey: "Other", kind: .plain),
+            "other_supplements":    .init(section: .supplementation, prettyKey: "Other", kind: .plain),
+
+            // SLEEP CORE FIELDS
+            "sleep":                .init(section: .sleep, prettyKey: "Notes", kind: .plain),
+            "sleep_hours":          .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
+            "sleep_total_hours":    .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
+            "sleep_total":          .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
+            "sleep_hours_text":     .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
+            "naps":                 .init(section: .sleep, prettyKey: "Naps", kind: .plain),
+            "daytime_naps":         .init(section: .sleep, prettyKey: "Naps", kind: .plain),
+            "night_wakings":        .init(section: .sleep, prettyKey: "Night wakings", kind: .plain),
+            "night_wakes":          .init(section: .sleep, prettyKey: "Night wakings", kind: .plain),
+            "night_awakenings":     .init(section: .sleep, prettyKey: "Night wakings", kind: .plain),
+            "sleep_quality":        .init(section: .sleep, prettyKey: "Quality", kind: .plain),
+            "sleep_regular":        .init(section: .sleep, prettyKey: "Regular", kind: .plain),
+            "sleep_snoring":        .init(section: .sleep, prettyKey: "Snoring", kind: .yesNo),
+            "sleep_issue_reported": .init(section: .sleep, prettyKey: "Issue Reported", kind: .yesNo),
+            "sleep_issue_text":     .init(section: .sleep, prettyKey: "Issue Notes", kind: .plain)
+        ]
+
+        func renderValue(_ raw: String, kind: ValueKind) -> String? {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            switch kind {
+            case .plain:
+                return trimmed
+            case .yesNo:
+                let l = trimmed.lowercased()
+                if ["1","true","yes","y"].contains(l) { return "yes" }
+                if ["0","false","no","n"].contains(l) { return "no" }
+                return trimmed
+            case .numeric(let unit):
+                if let d = Double(trimmed) {
+                    let isInt = d.truncatingRemainder(dividingBy: 1) == 0
+                    let base = isInt ? String(Int(d)) : String(d)
+                    if let u = unit {
+                        return "\(base) \(u)"
+                    } else {
+                        return base
+                    }
+                } else {
+                    // Fallback: keep raw text, optionally with unit appended
+                    if let u = unit, !trimmed.contains(u) {
+                        return "\(trimmed) \(u)"
+                    }
+                    return trimmed
+                }
             }
         }
 
@@ -2415,7 +2561,7 @@ extension ReportDataLoader {
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
                 defer { sqlite3_close(db) }
 
-                // Discover well visit table and column names
+                // Discover well visit table
                 func columns(in table: String) -> Set<String> {
                     var cols = Set<String>()
                     var stmtCols: OpaquePointer?
@@ -2427,11 +2573,11 @@ extension ReportDataLoader {
                     }
                     return cols
                 }
+
                 let table = ["well_visits","visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
                 #if DEBUG
                 print("[ReportDataLoader] loadCurrentWellCoreFields: using table=\(table)")
                 #endif
-                let cols = columns(in: table)
 
                 // Pull the entire row so we can map flexible column names
                 let sql = "SELECT * FROM \(table) WHERE id = ? LIMIT 1;"
@@ -2440,8 +2586,6 @@ extension ReportDataLoader {
                     defer { sqlite3_finalize(st) }
                     sqlite3_bind_int64(st, 1, Int64(visitID))
                     if sqlite3_step(st) == SQLITE_ROW {
-                        // build dictionary: columnName -> string value
-                        
                         var row: [String:String] = [:]
                         let n = sqlite3_column_count(st)
                         for i in 0..<n {
@@ -2453,80 +2597,43 @@ extension ReportDataLoader {
                             }
                         }
 
-                        // Visit type subtitle
-                        let vtRaw = nonEmpty(row["visit_type"]) ?? nonEmpty(row["type"]) ?? nonEmpty(row["milestone"]) ?? nonEmpty(row["title"])
+                        // Visit type subtitle (not age-gated: always relevant for the current visit)
+                        let vtRaw = nonEmpty(row["visit_type"])
+                            ?? nonEmpty(row["type"])
+                            ?? nonEmpty(row["milestone"])
+                            ?? nonEmpty(row["title"])
                         visitType = readableVisitType(vtRaw) ?? vtRaw
 
-                        // Parents' concerns
-                        parents = nonEmpty(row["parents_concerns"]) ?? nonEmpty(row["parent_concerns"]) ?? nonEmpty(row["concerns"])
+                        // Parents' concerns (also not age-gated)
+                        parents = nonEmpty(row["parents_concerns"])
+                            ?? nonEmpty(row["parent_concerns"])
+                            ?? nonEmpty(row["concerns"])
 
-                        // Feeding
-                        if let v = nonEmpty(row["feeding"]) { feeding["Notes"] = v }
-                        let bf = nonEmpty(row["breastfeeding"]) ?? nonEmpty(row["feeding_breast"]) ?? nonEmpty(row["breast_milk"]) ?? nonEmpty(row["nursing"])
-                        if let v = bf { feeding["Breastfeeding"] = v }
-                        let ff = nonEmpty(row["formula"]) ?? nonEmpty(row["feeding_formula"])
-                        if let v = ff { feeding["Formula"] = v }
-                        let solids = nonEmpty(row["solids"]) ?? nonEmpty(row["feeding_solids"]) ?? nonEmpty(row["complementary_feeding"]) ?? nonEmpty(row["weaning"])
-                        if let v = solids { feeding["Solids"] = v }
+                        // Core rule:
+                        //   - Only consider (key, value) pairs that:
+                        //       * are present in this visit row
+                        //       * are in the age-gated allowedCols (if any)
+                        //       * have a mapping entry in fieldMap
+                        for (key, rawVal) in row {
+                            if hasGate && !allowedCols.contains(key) {
+                                continue
+                            }
+                            guard let mapping = fieldMap[key] else {
+                                continue
+                            }
+                            guard let rendered = renderValue(rawVal, kind: mapping.kind) else {
+                                continue
+                            }
 
-                        // --- Extra Feeding fields from well_visits (print only if non-empty) ---
-                        put("Feeding Comment", row["feeding_comment"])
-                        put("Milk Types", row["milk_types"])
-                        put("Food Variety / Quantity", row["food_variety_quality"])
-                        put("Dairy Amount", row["dairy_amount_text"])
-                        put("Feeding Issue", row["feeding_issue"])
-
-                        // Frequency & volumes
-                        put("Feeds / 24h", row["feed_freq_per_24h"] ?? row["feeds_per_24h"] ?? row["feeds_per_day"])
-                        addNumber("Feed Volume (ml)", row["feed_volume_ml"], unit: "ml")
-                        addNumber("Estimated Total (ml/24h)", row["est_total_ml"], unit: "ml")
-                        addNumber("Estimated (ml/kg/24h)", row["est_ml_per_kg_24h"], unit: "ml/kg/24h")
-
-                        // Booleans
-                        if let r = ynify(row["regurgitation"]) { feeding["Regurgitation"] = r }
-                        if let w = ynify(row["wakes_for_feeds"] ?? row["night_feeds"] ?? row["wakes_to_feed"]) {
-                            feeding["Wakes for Feeds"] = w
+                            switch mapping.section {
+                            case .feeding:
+                                feeding[mapping.prettyKey] = rendered
+                            case .supplementation:
+                                supplementation[mapping.prettyKey] = rendered
+                            case .sleep:
+                                sleep[mapping.prettyKey] = rendered
+                            }
                         }
-                        if let ebm = ynify(row["expressed_bm"]) { feeding["Expressed BM"] = ebm }
-
-                        // Solid foods
-                        if let started = ynify(row["solid_food_started"]) { feeding["Solid Foods Started"] = started }
-                        put("Solid Food Start", row["solid_food_start_date"]) // raw date; builder will render as-is
-                        put("Solid Food Quality", row["solid_food_quality"])
-                        put("Solid Food Notes", row["solid_food_comment"])
-
-                        // Supplementation
-                        if let v = nonEmpty(row["supplementation"]) ?? nonEmpty(row["supplements"]) { supplementation["Notes"] = v }
-                        let vitd = nonEmpty(row["vitamin_d"]) ?? nonEmpty(row["vit_d"]) ?? nonEmpty(row["vit_d_supplement"]) ?? nonEmpty(row["vitamin_d_iu"])
-                        if let v = vitd { supplementation["Vitamin D"] = v }
-                        let iron = nonEmpty(row["iron"]) ?? nonEmpty(row["ferrous"])
-                        if let v = iron { supplementation["Iron"] = v }
-                        if let other = nonEmpty(row["others"]) ?? nonEmpty(row["other_supplements"]) { supplementation["Other"] = other }
-                        if let given = ynify(row["vitamin_d_given"]) { supplementation["Vitamin D Given"] = given }
-
-                        // Sleep
-                        if let v = nonEmpty(row["sleep"]) { sleep["Notes"] = v }
-                        let hours = nonEmpty(row["sleep_hours"]) ?? nonEmpty(row["sleep_total_hours"]) ?? nonEmpty(row["sleep_total"])
-                        if let v = hours { sleep["Total hours"] = v }
-                        let naps = nonEmpty(row["naps"]) ?? nonEmpty(row["daytime_naps"])
-                        if let v = naps { sleep["Naps"] = v }
-                        let wakes = nonEmpty(row["night_wakings"]) ?? nonEmpty(row["night_wakes"]) ?? nonEmpty(row["night_awakenings"])
-                        if let v = wakes { sleep["Night wakings"] = v }
-                        if let qual = nonEmpty(row["sleep_quality"]) { sleep["Quality"] = qual }
-
-                        // Additional sleep-related fields
-                        if let v = nonEmpty(row["sleep_hours_text"]) { sleep["Total hours"] = v } // override with text if present
-                        if let v = nonEmpty(row["sleep_regular"]) { sleep["Regular"] = v }
-                        if let sn = ynify(row["sleep_snoring"]) { sleep["Snoring"] = sn }
-
-                        // Optional: parent concerns (only if not already captured above) — use 'parents_concerns'
-                        if parents == nil, let pc = nonEmpty(row["parents_concerns"]) {
-                            sleep["Parent Concerns"] = pc
-                        }
-
-                        // Sleep issue flags
-                        if let rep = ynify(row["sleep_issue_reported"]) { sleep["Issue Reported"] = rep }
-                        if let txt = nonEmpty(row["sleep_issue_text"]) { sleep["Issue Notes"] = txt }
                     }
                 }
             }
@@ -2727,6 +2834,22 @@ extension ReportDataLoader {
 
         return visibility
     }
+    
+    /// Convenience: allowed DB column names for this WELL visit,
+    /// resolved via the canonical CSV (WellVisitReportRules).
+    private func allowedDBColumnsForWellVisit(_ visitID: Int) -> Set<String> {
+        let age = wellVisitAgeMonths(visitID: visitID)
+        let rawType = rawVisitTypeIDForWell(visitID: visitID)
+        let allowed = WellVisitReportRules.allowedDBColumns(for: rawType, ageMonths: age)
+
+        #if DEBUG
+        let ageStr = age.map { String(format: "%.2f", $0) } ?? "nil"
+        let typeStr = rawType ?? "nil"
+        print("[ReportDataLoader] allowedDBColumnsForWellVisit visitID=\(visitID) typeID='\(typeStr)' ageMonths=\(ageStr) -> \(Array(allowed).sorted())")
+        #endif
+
+        return allowed
+    }
 }
 
 extension WellVisitReportRules.WellVisitVisibility {
@@ -2816,4 +2939,30 @@ extension WellVisitReportRules.WellVisitVisibility {
     /// primitive reflexes) are governed by the underlying form/rules, not by
     /// hiding the entire PE block.
     var showPhysicalExam: Bool { true }
+}
+
+extension ReportDataLoader {
+
+    /// Build the age-gated, section-ready current visit block for a WELL visit.
+    ///
+    /// Contract:
+    /// - Age/visit-type gating is entirely handled by `loadCurrentWellCoreFields`,
+    ///   via `allowedDBColumnsForWellVisit` and the canonical CSV.
+    /// - Keys in `feeding`, `supplementation`, and `sleep` are already
+    ///   pretty labels expected by ReportBuilder (e.g. "Feeds / 24h").
+    /// - ReportBuilder should treat these dictionaries as-is and render
+    ///   them in the "Current Visit" section without re-implementing
+    ///   any age logic.
+    @MainActor
+    func buildWellCurrentVisitBlock(visitID: Int) -> WellCurrentVisitBlock {
+        let core = loadCurrentWellCoreFields(visitID: visitID)
+
+        return WellCurrentVisitBlock(
+            visitTypeSubtitle: core.visitType,
+            parentsConcerns: core.parentsConcerns,
+            feeding: core.feeding,
+            supplementation: core.supplementation,
+            sleep: core.sleep
+        )
+    }
 }

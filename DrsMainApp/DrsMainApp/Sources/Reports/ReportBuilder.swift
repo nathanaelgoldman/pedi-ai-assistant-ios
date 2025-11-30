@@ -359,6 +359,22 @@ final class ReportBuilder {
 
         if visibility?.showFeeding ?? true {
             para("Feeding", font: headerFont)
+            if DEBUG_REPORT_EXPORT {
+                let keys = data.feeding.keys.sorted()
+                if let profile = visibility?.profile {
+                    let f = profile.flags
+                    NSLog("[ReportBuilder] feeding keys visitID=%d: %@ | earlyMilk=%d solids=%d olderFeeding=%d",
+                          visitID,
+                          keys.joined(separator: ", "),
+                          f.isEarlyMilkOnlyVisit ? 1 : 0,
+                          f.isSolidsVisit ? 1 : 0,
+                          f.isOlderFeedingVisit ? 1 : 0)
+                } else {
+                    NSLog("[ReportBuilder] feeding keys visitID=%d: %@ | flags=nil",
+                          visitID,
+                          keys.joined(separator: ", "))
+                }
+            }
             if data.feeding.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -2463,13 +2479,14 @@ extension ReportBuilder {
     }
     /// Export a minimal Word (.docx) report with Growth Charts embedded.
     /// v1 focuses on verifying image embedding works reliably in Word.
+    /// Export a minimal Word (.docx) report with Growth Charts embedded.
+    /// v1 focuses on verifying image embedding works reliably in Word.
     func exportDOCX(for kind: VisitKind) throws -> URL {
         // Build text (title) and decide destination folder
-
         let (attr, stem) = try buildAttributedReport(for: kind)
 
-        // DOCX now uses the already age‑gated body from WellReportData / ReportDataLoader.
-        // No extra text‑level gating here; ReportBuilder is a dumb renderer.
+        // DOCX now uses the already age-gated body from WellReportData / ReportDataLoader.
+        // No extra text-level gating here; ReportBuilder is a dumb renderer.
         let bodyTextForDocx = attr.string
 
         let fm = FileManager.default
@@ -2486,72 +2503,56 @@ extension ReportBuilder {
         // Title derived from body text (patient + visit type when available)
         let title = makeDocxTitle(from: bodyTextForDocx)
 
-        // Body paragraphs with Heading detection and previous-visit date line promotion
+        // === Heading mapping for Word navigation / anchors ===
+        // Only true section titles + current visit title become Heading1.
         let headingSet: Set<String> = [
             // Well visit sections (top of report)
             "Well Visit Summary",
             "Perinatal Summary",
             "Findings from Previous Well Visits",
+
             // Existing well visit sections
-            "Previous Well Visits","Parents’ Concerns","Feeding","Supplementation","Sleep",
-            "Developmental Evaluation","Age-specific Milestones","Measurements",
-            "Physical Examination","Problem Listing","Conclusions","Anticipatory Guidance",
-            "Clinician Comments","Next Visit Date","Growth Charts",
+            "Parents’ Concerns",
+            "Feeding",
+            "Supplementation",
+            "Sleep",
+            "Developmental Evaluation",
+            "Age-specific Milestones",
+            "Measurements",
+            "Physical Examination",
+            "Problem Listing",
+            "Conclusions",
+            "Anticipatory Guidance",
+            "Clinician Comments",
+            "Next Visit Date",
+            "Growth Charts",
+
             // Sick visit sections
-            "Main Complaint","History of Present Illness","Duration","Basics",
-            "Past Medical History","Vaccination","Vitals Summary","Investigations",
-            "Working Diagnosis","ICD-10","Plan & Anticipatory Guidance","Medications",
-            "Follow-up / Next Visit","Sick Visit Report"
+            "Sick Visit Report",
+            "Main Complaint",
+            "History of Present Illness",
+            "Duration",
+            "Basics",
+            "Past Medical History",
+            "Vaccination",
+            "Vitals Summary",
+            "Investigations",
+            "Working Diagnosis",
+            "ICD-10",
+            "Plan & Anticipatory Guidance",
+            "Medications",
+            "Follow-up / Next Visit"
         ]
-        func classifyStyle(_ s: String) -> String? {
-            if s.hasPrefix("Current Visit —") { return "Heading1" }
-            if headingSet.contains(s) { return "Heading1" }
-            return nil
-        }
+
         var styledParagraphs: [(text: String, style: String?)] = []
 
-        // Detect date-looking lines (very tolerant: ISO, "Sep 15, 2025", "15 Sep 2025", etc.)
-        func isDateLine(_ s: String) -> Bool {
-            // Quick paths for ISO-like and Month-name patterns
-            let iso = #"^(?:•\s*)?\d{4}-\d{2}-\d{2}\b"#
-            let mdy = #"^(?:•\s*)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s*\d{4}\b"#
-            let dmy = #"^(?:•\s*)?\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b"#
-            return s.range(of: iso, options: .regularExpression) != nil
-                || s.range(of: mdy, options: .regularExpression) != nil
-                || s.range(of: dmy, options: .regularExpression) != nil
-        }
-        func stripLeadingBullet(_ s: String) -> String {
-            if s.hasPrefix("• ") { return String(s.dropFirst(2)) }
-            return s
-        }
-
-        // We only promote date lines that appear under these sections:
-        let prevDatesSections: Set<String> = [
-            "Previous Well Visits",
-            "Findings from Previous Well Visits"
-        ]
-        var inPrevDatesSection = false
-
+        // Each non-empty line becomes a paragraph; only section headings / current visit line are Heading1.
         for line in bodyTextForDocx.components(separatedBy: .newlines) {
             let s = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !s.isEmpty else { continue }
 
-            // Heading1 detection first (also flips the in-section flag)
             if s.hasPrefix("Current Visit —") || headingSet.contains(s) {
                 styledParagraphs.append((s, "Heading1"))
-                inPrevDatesSection = prevDatesSections.contains(s)
-                continue
-            }
-
-            // Under the previous-visits sections, promote clear date lines to Heading2
-            if inPrevDatesSection, isDateLine(s) {
-                styledParagraphs.append((stripLeadingBullet(s), "Heading2"))
-                continue
-            }
-
-            // Keep other bullets/lines as body text
-            if s.hasPrefix("• ") {
-                styledParagraphs.append((s, nil))
             } else {
                 styledParagraphs.append((s, nil))
             }
@@ -2571,20 +2572,25 @@ extension ReportBuilder {
                 let imgs = ReportGrowthRenderer.renderAllCharts(series: gs, size: renderSize, drawWHO: true)
 
                 for (i, img) in imgs.enumerated() {
-                    // Encode as PNG for docx
                     if let tiff = img.tiffRepresentation,
                        let rep  = NSBitmapImageRep(data: tiff),
                        let png  = rep.representation(using: .png, properties: [:]) {
                         images.append((data: png, filename: "image\(i+1).png", sizePts: renderSize))
                     }
                 }
-                NSLog("[ReportDebug] DOCX charts embedded count = %d  sizePts=(%.1f×%.1f)", images.count, renderSize.width, renderSize.height)
+                NSLog("[ReportDebug] DOCX charts embedded count = %d  sizePts=(%.1f×%.1f)",
+                      images.count, images.first?.sizePts.width ?? 0, images.first?.sizePts.height ?? 0)
             }
         case .sick:
             break
         }
 
-        try writeDocxPackage(title: title, styledParagraphs: styledParagraphs, images: images, destinationURL: outURL)
+        try writeDocxPackage(
+            title: title,
+            styledParagraphs: styledParagraphs,
+            images: images,
+            destinationURL: outURL
+        )
         NSLog("[ReportExport] wrote DOCX %@", outURL.path)
         return outURL
     }

@@ -441,6 +441,143 @@ extension WellVisitReportRules {
         case devTestResult
     }
 
+    /// Maps a logical current-visit field group to the underlying DB column keys
+    /// in the `well_visits` table. These keys are the canonical identifiers that
+    /// `ReportDataLoader` can use to filter its raw dictionaries.
+    private static func dbColumns(for field: CurrentVisitField) -> [String] {
+        switch field {
+        // Feeding & nutrition
+        case .weightDelta:
+            // Delta weight visits: we only gate the delta-related fields; growth
+            // charts and absolute measurements are handled elsewhere.
+            return [
+                "delta_weight_g",
+                "delta_days_since_discharge"
+            ]
+
+        case .earlyMilkOnlyFeeding,
+             .structuredFeedingUnder12:
+            // Early milk-only / structured feeding under 12 months share the
+            // same underlying DB columns. The age matrix decides which logical
+            // block is active for a given visit type.
+            return [
+                "feed_freq_per_24h",
+                "feed_volume_ml",
+                "milk_types",
+                "expressed_bm",
+                "est_total_ml",
+                "est_ml_per_kg_24h",
+                "wakes_for_feeds",
+                "dairy_amount_text",
+                "feeding_issue",
+                "feeding_comment",
+                "regurgitation"
+            ]
+
+        case .solids:
+            // Solids-specific fields, only relevant once solid foods are started.
+            return [
+                "solid_food_started",
+                "solid_food_start_date",
+                "solid_food_comment",
+                "solid_food_quality"
+            ]
+
+        case .olderFeeding:
+            // Older feeding focus: variety / quality plus general feeding issues.
+            return [
+                "food_variety_quality",
+                "dairy_amount_text",
+                "feeding_issue",
+                "feeding_comment",
+                "regurgitation"
+            ]
+
+        // Sleep
+        case .earlySleep:
+            // Early sleep profile (newborn / infant): structural sleep patterns only.
+            // Snoring is reserved for the older sleep profile.
+            return [
+                "sleep_hours_text",
+                "longer_sleep_night",
+                "sleep_regular",
+                "sleep_issue",
+                "sleep_issue_reported",
+                "sleep_issue_text"
+            ]
+
+        case .olderSleep:
+            // Older sleep profile: same base fields as early sleep, plus snoring.
+            return [
+                "sleep_hours_text",
+                "longer_sleep_night",
+                "sleep_regular",
+                "sleep_issue",
+                "sleep_issue_reported",
+                "sleep_issue_text",
+                "sleep_snoring"
+            ]
+
+        // Physical exam details
+        case .fontanelle:
+            return [
+                "pe_fontanelle_normal",
+                "pe_fontanelle_comment"
+            ]
+
+        case .primitiveNeuro:
+            // Primitive neuro signs and general tone / wakefulness.
+            return [
+                "pe_hands_fist_normal",
+                "pe_hands_fist_comment",
+                "pe_tone_normal",
+                "pe_tone_comment",
+                "pe_wakefulness_normal",
+                "pe_wakefulness_comment",
+                "pe_symmetry_normal",
+                "pe_symmetry_comment",
+                "pe_follows_midline_normal",
+                "pe_follows_midline_comment"
+            ]
+
+        case .moro:
+            return [
+                "pe_moro_normal",
+                "pe_moro_comment"
+            ]
+
+        case .hips:
+            return [
+                "pe_hips_normal",
+                "pe_hips_comment"
+            ]
+
+        case .teeth:
+            return [
+                "pe_teeth_present",
+                "pe_teeth_count",
+                "pe_teeth_comment"
+            ]
+
+        // Developmental tools
+        case .mchat:
+            return [
+                "mchat_score",
+                "mchat_result"
+            ]
+
+        case .devTestScore:
+            return [
+                "devtest_score"
+            ]
+
+        case .devTestResult:
+            return [
+                "devtest_result"
+            ]
+        }
+    }
+
     /// Central age-gating rule for a *single* current-visit field.
     ///
     /// - Parameters:
@@ -509,5 +646,67 @@ extension WellVisitReportRules {
         // Age matrix is the single source of truth: if it does not allow this field
         // for the current visit type, we never show it in the current-visit sections.
         return ageAllows
+    }
+
+    // MARK: - Allowed DB columns for the current visit
+
+    /// Returns the set of DB column keys (from the `well_visits` table) that are
+    /// age-allowed for the given visit, based solely on the age matrix.
+    ///
+    /// Content-based filtering (e.g. dropping empty fields) remains the
+    /// responsibility of `ReportDataLoader`, which can intersect these keys
+    /// with whatever non-empty values it has loaded from the database.
+    static func allowedDBColumns(for visibility: WellVisitVisibility) -> Set<String> {
+        var columns = Set<String>()
+
+        func consider(_ field: CurrentVisitField) {
+            // Age matrix is the single source of truth for whether this logical
+            // block belongs to the current visit type.
+            if shouldShow(field: field, for: visibility, hasContent: true) {
+                columns.formUnion(dbColumns(for: field))
+            }
+        }
+
+        // Feeding & nutrition
+        consider(.weightDelta)
+        consider(.earlyMilkOnlyFeeding)
+        consider(.structuredFeedingUnder12)
+        consider(.solids)
+        consider(.olderFeeding)
+
+        // Sleep
+        consider(.earlySleep)
+        consider(.olderSleep)
+
+        // Physical exam details
+        consider(.fontanelle)
+        consider(.primitiveNeuro)
+        consider(.moro)
+        consider(.hips)
+        consider(.teeth)
+
+        // Developmental tools
+        consider(.mchat)
+        consider(.devTestScore)
+        consider(.devTestResult)
+
+        // Vitamin D supplementation is relevant for all visit types and should
+        // never be age‑gated. Always allow these columns if they contain data.
+        columns.formUnion([
+            "vitamin_d",
+            "vitamin_d_given"
+        ])
+
+        return columns
+    }
+
+    /// Convenience overload: computes the allowed DB column keys directly from
+    /// the stored visit type label and age in months. If the visit type cannot
+    /// be normalised or has no age profile, this returns an empty set.
+    static func allowedDBColumns(for visitTypeRaw: String?, ageMonths: Double?) -> Set<String> {
+        guard let visibility = visibility(for: visitTypeRaw, ageMonths: ageMonths) else {
+            return []
+        }
+        return allowedDBColumns(for: visibility)
     }
 }
