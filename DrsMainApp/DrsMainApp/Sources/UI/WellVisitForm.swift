@@ -2133,14 +2133,6 @@ struct WellVisitForm: View {
             if !feedingIssue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 add("Feeding difficulty: \(feedingIssue)")
             }
-            if poopStatus == "abnormal" {
-                add("Stools: abnormal pattern reported.")
-            } else if poopStatus == "hard" {
-                add("Stools: hard / constipation reported.")
-            }
-            if !poopComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Stools comment: \(poopComment)")
-            }
         } else {
             if !feeding.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 add("Feeding / diet: \(feeding)")
@@ -2166,6 +2158,18 @@ struct WellVisitForm: View {
             if dairyTrim == "4" {
                 add("Dairy intake: >3 cups/day.")
             }
+        }
+
+        // 2b) Stools – added for any visit when abnormal
+        let poopStatusTrim = poopStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+        if poopStatusTrim == "abnormal" {
+            add("Stools: abnormal pattern reported.")
+        } else if poopStatusTrim == "hard" {
+            add("Stools: hard / constipation reported.")
+        }
+        let poopCommentTrim = poopComment.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !poopCommentTrim.isEmpty {
+            add("Stools comment: \(poopCommentTrim)")
         }
 
         // 3) Sleep

@@ -418,6 +418,34 @@ final class ReportBuilder {
             }
             content.append(NSAttributedString(string: "\n"))
         }
+        
+        // Stool (always shown; uses dictionary from WellReportData)
+        para("Stool", font: headerFont)
+        if data.stool.isEmpty {
+            para("—", font: bodyFont)
+        } else {
+            let order = ["Stool pattern", "Stool comment"]
+            for key in order {
+                if let raw = data.stool[key] {
+                    let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        para("\(key): \(trimmed)", font: bodyFont)
+                    }
+                }
+            }
+            let extra = data.stool.keys
+                .filter { !order.contains($0) }
+                .sorted()
+            for key in extra {
+                if let raw = data.stool[key] {
+                    let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        para("\(key): \(trimmed)", font: bodyFont)
+                    }
+                }
+            }
+        }
+        content.append(NSAttributedString(string: "\n"))
 
         if visibility?.showSleep ?? true {
             para("Sleep", font: headerFont)

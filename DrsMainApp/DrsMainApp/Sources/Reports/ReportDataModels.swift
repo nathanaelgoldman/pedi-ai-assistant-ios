@@ -53,6 +53,7 @@ struct WellReportData {
     let parentsConcerns: String?
     let feeding: [String: String]
     let supplementation: [String: String]
+    let stool: [String: String]
     let sleep: [String: String]
     let developmental: [String: String]       // includes M-CHAT if present
     let milestonesAchieved: (achieved: Int, total: Int)

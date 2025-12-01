@@ -110,8 +110,9 @@ final class ReportDataLoader {
         let parentsConcernsRaw = core.parentsConcerns
         let feedingRaw = core.feeding
         let supplementationRaw = core.supplementation
+        let stoolRaw = core.stool
         let sleepRaw = core.sleep
-        print("[ReportDataLoader] wellCore: type='\(currentVisitTitle)' parents=\(parentsConcernsRaw?.count ?? 0) feed=\(feedingRaw.count) supp=\(supplementationRaw.count) sleep=\(sleepRaw.count)")
+        print("[ReportDataLoader] wellCore: type='\(currentVisitTitle)' parents=\(parentsConcernsRaw?.count ?? 0) feed=\(feedingRaw.count) supp=\(supplementationRaw.count) stool=\(stoolRaw.count) sleep=\(sleepRaw.count)")
 
         // STEP 5: Developmental evaluation (M-CHAT / Dev test / Parents' Concerns) + Milestones (for this visit)
         let devPack = loadDevelopmentForWellVisit(visitID: visitID)
@@ -138,6 +139,7 @@ final class ReportDataLoader {
         let parentsConcerns = parentsConcernsRaw
         let feeding = feedingRaw
         let supplementation = supplementationRaw
+        let stool = stoolRaw
         let sleep = sleepRaw
         let developmental = devPack.dev
         let milestonesAchieved = (devPack.achieved, devPack.total)
@@ -160,6 +162,7 @@ final class ReportDataLoader {
             parentsConcerns: parentsConcerns,
             feeding: feeding,
             supplementation: supplementation,
+            stool: stool,
             sleep: sleep,
             developmental: developmental,
             milestonesAchieved: milestonesAchieved,
@@ -580,17 +583,22 @@ final class ReportDataLoader {
                             }
                         }
 
-                        // M-CHAT
-                        let mScore = nonEmpty(row["mchat_score"])
-                        let mRes   = nonEmpty(row["mchat_result"])
-                        if let s = mScore, let r = mRes {
-                            dev["M-CHAT"] = "\(s) (\(r))"
-                        } else if let s = mScore {
-                            dev["M-CHAT"] = s
-                        } else if let r = mRes {
-                            dev["M-CHAT"] = r
-                        }
 
+                        // M-CHAT, strictly CSV-driven (via allowedDBColumnsForWellVisit)
+                        let allowedCols = allowedDBColumnsForWellVisit(visitID)
+                        let hasGate = !allowedCols.isEmpty
+                        let mchatAllowed = !hasGate || allowedCols.contains("mchat_score") || allowedCols.contains("mchat_result")
+                        if mchatAllowed {
+                            let mScore = nonEmpty(row["mchat_score"])
+                            let mRes   = nonEmpty(row["mchat_result"])
+                            if let s = mScore, let r = mRes {
+                                dev["M-CHAT"] = "\(s) (\(r))"
+                            } else if let s = mScore {
+                                dev["M-CHAT"] = s
+                            } else if let r = mRes {
+                                dev["M-CHAT"] = r
+                            }
+                        }
                         // Developmental test
                         let dScore = nonEmpty(row["devtest_score"])
                         let dRes   = nonEmpty(row["devtest_result"])
@@ -1675,6 +1683,9 @@ final class ReportDataLoader {
             /// Age-gated, pretty-labelled feeding lines (key = pretty label).
             let feeding: [String:String]
 
+            /// Age-gated, pretty-labelled stool pattern lines.
+            let stool: [String:String]
+
             /// Age-gated, pretty-labelled supplementation lines.
             let supplementation: [String:String]
 
@@ -2210,28 +2221,39 @@ extension ReportDataLoader {
             "pe_moro_normal",
             "pe_moro_comment",
             "pe_primitive_neuro_normal",
-            "pe_primitive_neuro_comment"
+            "pe_primitive_neuro_comment",
+            // Early neuro / development items (also age‑dependent)
+            "pe_hands_fist_normal",
+            "pe_hands_fist_comment",
+            "pe_symmetry_normal",
+            "pe_symmetry_comment",
+            "pe_follows_midline_normal",
+            "pe_follows_midline_comment"
         ]
 
         func isAllowedPE(_ keys: [String]) -> Bool {
-            // If none of the backing columns for this PE item are part of the
-            // age-gated set, then this item is *not* controlled by the CSV and
-            // should always be shown when data is present.
+            // Only care about columns that are explicitly age-gated.
             let gatedKeys = keys.filter { ageGatedPEColumns.contains($0) }
+
+            // If this PE item does not use any age-gated columns,
+            // we don't apply CSV gating here.
             if gatedKeys.isEmpty {
                 return true
             }
 
-            // For age-gated items, defer to the CSV-driven allowedCols set.
-            // If the CSV row for this visit type/age does not define any columns,
-            // we treat all PE as allowed (fail-open).
-            if allowedCols.isEmpty {
-                return true
+            // For age-gated PE (fontanelle, primitive neuro, Moro, hips, teeth),
+            // if the CSV / flags gave us NO allowed columns for this visit type,
+            // we FAIL-CLOSED: do not show this block.
+            guard !allowedCols.isEmpty else {
+                #if DEBUG
+                print("[ReportDataLoader] PE gated OFF (no allowedCols) for keys=\(gatedKeys)")
+                #endif
+                return false
             }
 
-            // At least one of the age-gated DB columns for this PE element
-            // must be allowed for it to appear.
-            return gatedKeys.contains(where: { allowedCols.contains($0) })
+            // Otherwise, show only if at least one of this block's gated columns
+            // is actually allowed for this visit type.
+            return gatedKeys.contains { allowedCols.contains($0) }
         }
 
         func nonEmpty(_ s: String?) -> String? {
@@ -2381,6 +2403,8 @@ extension ReportDataLoader {
                         addNormal("Skin", "Rash", normalKey: "pe_skin_rash_normal", commentKey: "pe_skin_rash_comment")
 
                         // Neuro / Development
+                        // Insert Muscle tone first, using same config as e.g. "Hydration" or "Spine"
+                        addNormal("Neuro / Development", "Muscle tone", normalKey: "pe_tone_normal", commentKey: "pe_tone_comment")
                         addNormal("Neuro / Development", "Moro", normalKey: "pe_moro_normal", commentKey: "pe_moro_comment")
                         addNormal("Neuro / Development", "Primitive neuro", normalKey: "pe_primitive_neuro_normal", commentKey: "pe_primitive_neuro_comment")
                         addNormal("Neuro / Development", "Hands in fist", normalKey: "pe_hands_fist_normal", commentKey: "pe_hands_fist_comment")
@@ -2401,6 +2425,29 @@ extension ReportDataLoader {
                         anticipatory   = nonEmpty(row["anticipatory_guidance"])
                         comments       = nonEmpty(row["comments"])
                         nextVisitDate  = nonEmpty(row["next_visit_date"])
+
+                        // Add stool issues to Problem Listing when deemed abnormal (never age-gated).
+                        if let statusRaw = row["poop_status"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !statusRaw.isEmpty,
+                           statusRaw != "normal" {
+                            var stoolLine: String
+                            switch statusRaw {
+                            case "abnormal":
+                                stoolLine = "Stools: abnormal pattern reported"
+                            case "hard":
+                                stoolLine = "Stools: hard / constipated"
+                            default:
+                                stoolLine = "Stools: \(statusRaw)"
+                            }
+                            if let c = nonEmpty(row["poop_comment"]) {
+                                stoolLine += " — \(c)"
+                            }
+                            if let existing = problem, !existing.isEmpty {
+                                problem = existing + "\n" + stoolLine
+                            } else {
+                                problem = stoolLine
+                            }
+                        }
                     }
                 }
             }
@@ -2414,10 +2461,11 @@ extension ReportDataLoader {
 
 extension ReportDataLoader {
     // Read current WELL visit core fields from the bundle DB (robust to column name variants)
-    private func loadCurrentWellCoreFields(visitID: Int) -> (visitType: String?, parentsConcerns: String?, feeding: [String:String], supplementation: [String:String], sleep: [String:String]) {
+    private func loadCurrentWellCoreFields(visitID: Int) -> (visitType: String?, parentsConcerns: String?, feeding: [String:String], stool: [String:String], supplementation: [String:String], sleep: [String:String]) {
         var visitType: String?
         var parents: String?
         var feeding: [String:String] = [:]
+        var stool: [String:String] = [:]
         var supplementation: [String:String] = [:]
         var sleep: [String:String] = [:]
 
@@ -2434,6 +2482,7 @@ extension ReportDataLoader {
 
         enum WellFieldSection {
             case feeding
+            case stool
             case supplementation
             case sleep
         }
@@ -2492,6 +2541,10 @@ extension ReportDataLoader {
             "solid_food_start_date":.init(section: .feeding, prettyKey: "Solid Food Start", kind: .plain),
             "solid_food_quality":   .init(section: .feeding, prettyKey: "Solid Food Quality", kind: .plain),
             "solid_food_comment":   .init(section: .feeding, prettyKey: "Solid Food Notes", kind: .plain),
+
+            // STOOL / STOOL PATTERN
+            "poop_status":         .init(section: .stool, prettyKey: "Stool pattern", kind: .plain),
+            "poop_comment":        .init(section: .stool, prettyKey: "Stool comment", kind: .plain),
 
             // SUPPLEMENTATION
             "supplementation":      .init(section: .supplementation, prettyKey: "Notes", kind: .plain),
@@ -2612,15 +2665,30 @@ extension ReportDataLoader {
                         // Core rule:
                         //   - Only consider (key, value) pairs that:
                         //       * are present in this visit row
-                        //       * are in the age-gated allowedCols (if any)
                         //       * have a mapping entry in fieldMap
+                        //       * respect age-gating for Feeding / Supplementation / Sleep when allowedCols is non-empty
+                        //       * Stool fields are explicitly **not** age-gated and are always allowed when present.
                         for (key, rawVal) in row {
-                            if hasGate && !allowedCols.contains(key) {
-                                continue
-                            }
+                            // Only handle keys we know how to map
                             guard let mapping = fieldMap[key] else {
                                 continue
                             }
+
+                            // Apply age/visit-type gating only for selected sections.
+                            if hasGate {
+                                switch mapping.section {
+                                case .stool:
+                                    // Stool is not age-gated: always allowed when present.
+                                    break
+                                case .feeding, .supplementation, .sleep:
+                                    // For these sections, only include columns explicitly allowed
+                                    // for this visit type / age.
+                                    if !allowedCols.contains(key) {
+                                        continue
+                                    }
+                                }
+                            }
+
                             guard let rendered = renderValue(rawVal, kind: mapping.kind) else {
                                 continue
                             }
@@ -2628,6 +2696,8 @@ extension ReportDataLoader {
                             switch mapping.section {
                             case .feeding:
                                 feeding[mapping.prettyKey] = rendered
+                            case .stool:
+                                stool[mapping.prettyKey] = rendered
                             case .supplementation:
                                 supplementation[mapping.prettyKey] = rendered
                             case .sleep:
@@ -2641,7 +2711,7 @@ extension ReportDataLoader {
             // leave nil/empty dicts, renderer will show "—" or skip lines
         }
 
-        return (visitType, parents, feeding, supplementation, sleep)
+        return (visitType, parents, feeding, stool, supplementation, sleep)
     }
 }
 
@@ -2961,6 +3031,7 @@ extension ReportDataLoader {
             visitTypeSubtitle: core.visitType,
             parentsConcerns: core.parentsConcerns,
             feeding: core.feeding,
+            stool: core.stool,
             supplementation: core.supplementation,
             sleep: core.sleep
         )
