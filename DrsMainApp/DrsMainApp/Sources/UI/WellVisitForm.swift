@@ -629,6 +629,53 @@ struct WellVisitForm: View {
         }
     }
     
+    @ViewBuilder
+    private var aiAssistantSection: some View {
+        GroupBox("AI Assistant") {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Button {
+                        triggerAIForWellVisit()
+                    } label: {
+                        Label("Run AI summary", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    if aiIsRunning {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+
+                let entries = currentAIEntriesForVisit
+
+                if entries.isEmpty {
+                    Text("No AI summary yet. Click “Run AI summary” to generate suggestions for this visit.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(entries, id: \.key) { entry in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(entry.key)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            TextEditor(text: .constant(entry.value))
+                                .frame(minHeight: 140)
+                                .disabled(true)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .strokeBorder(Color.secondary.opacity(0.3))
+                                )
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+    
     private var isEarlyMilkOnlyVisit: Bool {
         // First-after-maternity + 1-month + 2-month use the structured milk-only feeding view
         visitTypeID == "newborn_first"
@@ -1327,6 +1374,12 @@ struct WellVisitForm: View {
 
                                     TextField("M-CHAT result (e.g. low / medium / high risk)", text: $mchatResult)
                                         .textFieldStyle(.roundedBorder)
+                                    
+                                    if let riskText = mchatRiskCategoryDescription {
+                                        Text(riskText)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
 
                                 if isDevTestScoreVisit || isDevTestResultVisit {
@@ -1413,52 +1466,13 @@ struct WellVisitForm: View {
                             .padding(.top, 4)
                         }
                     }
+                    
+                    
 
+                    
                     // AI assistant (well visits)
                     if showsAISection {
-                        GroupBox("AI Assistant") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 12) {
-                                    Button {
-                                        triggerAIForWellVisit()
-                                    } label: {
-                                        Label("Run AI summary", systemImage: "wand.and.stars")
-                                    }
-                                    .buttonStyle(.borderedProminent)
-
-                                    if aiIsRunning {
-                                        ProgressView()
-                                            .controlSize(.small)
-                                    }
-                                }
-
-                                let entries = Array(appState.aiSummariesForActiveWellVisit.sorted { $0.key < $1.key })
-
-                                if entries.isEmpty {
-                                    Text("No AI summary yet. Click “Run AI summary” to generate suggestions for this visit.")
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                } else {
-                                    ForEach(entries, id: \.key) { entry in
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(entry.key)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-
-                                            TextEditor(text: .constant(entry.value))
-                                                .frame(minHeight: 140)
-                                                .disabled(true)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 6)
-                                                        .strokeBorder(Color.secondary.opacity(0.3))
-                                                )
-                                        }
-                                        .padding(.top, 4)
-                                    }
-                                }
-                            }
-                            .padding(.top, 4)
-                        }
+                        aiAssistantSection
                     }
                 }
                 .padding(20)
@@ -1528,6 +1542,39 @@ struct WellVisitForm: View {
             "thirtysix_month"
         ]
         return visitTypes.contains(visitTypeID)
+    }
+    
+    private var currentAIEntriesForVisit: [(key: String, value: String)] {
+        guard
+            let visitID = editingVisitID,
+            let stored = appState.aiSummariesByWellVisit[visitID]
+        else {
+            return []
+        }
+        return Array(stored)
+    }
+
+    /// Derives the M-CHAT risk category from the current score, if valid.
+    /// Categories:
+    /// - 0–2   → Low risk
+    /// - 3–7   → Medium risk
+    /// - 8–20  → High risk
+    private var mchatRiskCategoryDescription: String? {
+        let trimmed = mchatScore.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let score = Int(trimmed) else {
+            return nil
+        }
+
+        switch score {
+        case 0...2:
+            return "Based on the M-CHAT score, this result falls into the Low risk (0–2) category."
+        case 3...7:
+            return "Based on the M-CHAT score, this result falls into the Medium risk (3–7) category."
+        case 8...20:
+            return "Based on the M-CHAT score, this result falls into the High risk (8–20) category."
+        default:
+            return nil
+        }
     }
 
     // MARK: - Weight trend helper

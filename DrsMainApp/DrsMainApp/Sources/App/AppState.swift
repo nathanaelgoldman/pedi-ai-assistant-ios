@@ -1778,6 +1778,8 @@ final class AppState: ObservableObject {
         /// AI summaries per provider/model for the active well visit (preventive context).
         /// Keys are provider/model labels (e.g. "gpt-4.1-mini", "local-stub").
         @Published var aiSummariesForActiveWellVisit: [String: String] = [:]
+        /// Per-well-visit AI summaries, keyed by well_visit_id.
+        @Published private(set) var aiSummariesByWellVisit: [Int: [String: String]] = [:]
         /// Optional ICD-10 code suggestion for the active episode (from AI/guidelines).
         /// This is not persisted yet; the clinician can choose to apply it into the episode form.
         @Published var icd10SuggestionForActiveEpisode: String? = nil
@@ -2821,11 +2823,15 @@ final class AppState: ObservableObject {
                             response: result.summary
                         )
 
-                        // Publish summary for the active well visit (no ICD-10 on well side for now).
+                        // Publish summary for this specific well visit (no ICD-10 on well side for now).
                         DispatchQueue.main.async {
-                            self.aiSummariesForActiveWellVisit = [
+                            // Store per-visit summary
+                            self.aiSummariesByWellVisit[context.wellVisitID] = [
                                 result.providerModel: result.summary
                             ]
+                            // Expose current visit summary to the UI
+                            self.aiSummariesForActiveWellVisit =
+                                self.aiSummariesByWellVisit[context.wellVisitID] ?? [:]
                         }
                     } catch {
                         self.log.error("runAIForWellVisit: provider error: \(String(describing: error), privacy: .public)")
@@ -2904,13 +2910,19 @@ final class AppState: ObservableObject {
         )
 
         DispatchQueue.main.async {
-            // For now keep a single-summary mapping per provider/model.
-            self.aiSummariesForActiveWellVisit = ["local-stub": summary]
+            // Store per-visit summary for the stub model
+            self.aiSummariesByWellVisit[context.wellVisitID] = [
+                "local-stub": summary
+            ]
+            // Expose current visit summary to the UI
+            self.aiSummariesForActiveWellVisit =
+                self.aiSummariesByWellVisit[context.wellVisitID] ?? [:]
         }
     }
     
     /// Clear AI state for the currently active well visit (summaries + history list).
     func clearAIForWellVisitContext() {
+        aiSummariesByWellVisit.removeAll()
         aiSummariesForActiveWellVisit = [:]
         aiInputsForActiveWellVisit = []
     }
@@ -3213,15 +3225,19 @@ final class AppState: ObservableObject {
     /// Reload the AI inputs list for a given well visit id from `well_ai_inputs`.
     /// Safe to call whenever a well visit is selected or a new AI call is recorded.
     func loadWellAIInputs(forWellVisitID wellVisitID: Int) {
+        // Always reset the in-memory well-visit AI state when switching context.
+        
+
         guard let dbURL = currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else {
-            DispatchQueue.main.async { self.aiInputsForActiveWellVisit = [] }
+            DispatchQueue.main.async {
+                self.aiInputsForActiveWellVisit = []
+            }
             return
         }
 
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
-            DispatchQueue.main.async { self.aiInputsForActiveWellVisit = [] }
             return
         }
         defer { sqlite3_close(db) }
@@ -3238,7 +3254,6 @@ final class AppState: ObservableObject {
 
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt else {
-            DispatchQueue.main.async { self.aiInputsForActiveWellVisit = [] }
             return
         }
         defer { sqlite3_finalize(stmt) }
@@ -3271,6 +3286,8 @@ final class AppState: ObservableObject {
 
         DispatchQueue.main.async {
             self.aiInputsForActiveWellVisit = rows
+            // We deliberately do NOT auto-populate aiSummariesForActiveWellVisit here,
+            // matching the sick-episode behavior (summary comes from the last run).
         }
     }
 
