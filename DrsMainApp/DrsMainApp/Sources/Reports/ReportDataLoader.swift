@@ -1496,7 +1496,74 @@ final class ReportDataLoader {
         }
         return nil
     }
+    
+    /// Load the most recent AI assistant entry for a given WELL visit, if any.
+    /// Reads from the `well_ai_inputs` table in the current patient bundle DB.
+    func loadLatestAIInputForWell(_ wellVisitID: Int) -> LatestAIInput? {
+        do {
+            let dbPath = try currentBundleDBPath()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
 
+                // Ensure the well_ai_inputs table exists
+                var checkStmt: OpaquePointer?
+                if sqlite3_prepare_v2(
+                    db,
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='well_ai_inputs' LIMIT 1;",
+                    -1,
+                    &checkStmt,
+                    nil
+                ) == SQLITE_OK, let st = checkStmt {
+                    defer { sqlite3_finalize(st) }
+                    // If no row, the table is missing → no AI entries for well visits
+                    if sqlite3_step(st) != SQLITE_ROW {
+                        return nil
+                    }
+                } else {
+                    return nil
+                }
+
+                // Fetch the most recent row for this well visit
+                let sql = """
+                SELECT model, response, created_at
+                FROM well_ai_inputs
+                WHERE well_visit_id = ?
+                ORDER BY datetime(created_at) DESC, id DESC
+                LIMIT 1;
+                """
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(wellVisitID))
+
+                    if sqlite3_step(st) == SQLITE_ROW {
+                        func colString(_ idx: Int32) -> String {
+                            guard let c = sqlite3_column_text(st, idx) else { return "" }
+                            return String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+
+                        let model     = colString(0)
+                        let response  = colString(1)
+                        let createdAt = colString(2)
+
+                        // Require some response text
+                        guard !response.isEmpty else { return nil }
+
+                        let finalModel = model.isEmpty ? "Unknown" : model
+                        return LatestAIInput(
+                            model: finalModel,
+                            createdAt: createdAt,
+                            response: response
+                        )
+                    }
+                }
+            }
+        } catch {
+            print("[ReportDataLoader] loadLatestAIInputForWell error: \(error)")
+        }
+        return nil
+    }
     
     // MARK: - Helpers
 

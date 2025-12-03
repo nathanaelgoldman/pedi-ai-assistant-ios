@@ -3226,6 +3226,10 @@ final class AppState: ObservableObject {
     /// Safe to call whenever a well visit is selected or a new AI call is recorded.
     func loadWellAIInputs(forWellVisitID wellVisitID: Int) {
         // Always reset the in-memory well-visit AI state when switching context.
+        DispatchQueue.main.async {
+            // Clear current active well-visit AI state for a clean reload.
+            self.aiSummariesForActiveWellVisit = [:]
+        }
         
 
         guard let dbURL = currentDBURL,
@@ -3285,9 +3289,24 @@ final class AppState: ObservableObject {
         }
 
         DispatchQueue.main.async {
+            // Full history list for the AI history sidebar.
             self.aiInputsForActiveWellVisit = rows
-            // We deliberately do NOT auto-populate aiSummariesForActiveWellVisit here,
-            // matching the sick-episode behavior (summary comes from the last run).
+
+            // Rebuild the per-visit summary map from the most recent AI entry
+            // for this well visit (Option A: latest row overall, regardless of model).
+            if let latest = rows.first {
+                let modelKey = latest.model.isEmpty ? "Unknown" : latest.model
+                self.aiSummariesByWellVisit[wellVisitID] = [
+                    modelKey: latest.fullResponse
+                ]
+                // Expose the same mapping as the active-visit summary for the UI.
+                self.aiSummariesForActiveWellVisit =
+                    self.aiSummariesByWellVisit[wellVisitID] ?? [:]
+            } else {
+                // No rows at all → clear any previous summary for this visit.
+                self.aiSummariesByWellVisit[wellVisitID] = [:]
+                self.aiSummariesForActiveWellVisit = [:]
+            }
         }
     }
 

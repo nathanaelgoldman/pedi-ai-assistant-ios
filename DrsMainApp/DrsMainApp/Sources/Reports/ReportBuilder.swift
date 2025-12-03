@@ -592,6 +592,28 @@ final class ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
 
+        // AI Assistant – latest model response for this WELL visit (if any)
+        if let ai = dataLoader.loadLatestAIInputForWell(visitID) {
+            para("AI Assistant", font: headerFont)
+
+            var metaLine = "Model: \(ai.model)"
+            let ts = ai.createdAt.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !ts.isEmpty {
+                let pretty = humanDateTime(ts) ?? ts
+                metaLine += "   •   Time: \(pretty)"
+            }
+            para(metaLine, font: bodyFont)
+            content.append(NSAttributedString(string: "\n"))
+
+            let resp = ai.response.trimmingCharacters(in: .whitespacesAndNewlines)
+            if resp.isEmpty {
+                para("—", font: bodyFont)
+            } else {
+                para(resp, font: bodyFont)
+            }
+            content.append(NSAttributedString(string: "\n"))
+        }
+
         return content
     }
 
