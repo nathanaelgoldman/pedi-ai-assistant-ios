@@ -402,6 +402,7 @@ struct WellVisitForm: View {
 
     // Placeholder for future AI content
     @State private var aiNotes: String = ""
+    @State private var aiIsRunning = false
     // MARK: - Weight delta (early visits)
     @State private var latestWeightSummary: String = ""
     @State private var previousWeightSummary: String = ""
@@ -1413,21 +1414,48 @@ struct WellVisitForm: View {
                         }
                     }
 
-                    // AI assistant placeholder
+                    // AI assistant (well visits)
                     if showsAISection {
-                        GroupBox("AI Assistant (preview)") {
+                        GroupBox("AI Assistant") {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("This area will later show AI-generated suggestions and summaries for this visit.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 12) {
+                                    Button {
+                                        triggerAIForWellVisit()
+                                    } label: {
+                                        Label("Run AI summary", systemImage: "wand.and.stars")
+                                    }
+                                    .buttonStyle(.borderedProminent)
 
-                                TextEditor(text: $aiNotes)
-                                    .frame(minHeight: 120)
-                                    .disabled(true)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .strokeBorder(Color.secondary.opacity(0.3))
-                                    )
+                                    if aiIsRunning {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    }
+                                }
+
+                                let entries = Array(appState.aiSummariesForActiveWellVisit.sorted { $0.key < $1.key })
+
+                                if entries.isEmpty {
+                                    Text("No AI summary yet. Click “Run AI summary” to generate suggestions for this visit.")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    ForEach(entries, id: \.key) { entry in
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(entry.key)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+
+                                            TextEditor(text: .constant(entry.value))
+                                                .frame(minHeight: 140)
+                                                .disabled(true)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .strokeBorder(Color.secondary.opacity(0.3))
+                                                )
+                                        }
+                                        .padding(.top, 4)
+                                    }
+                                }
                             }
                             .padding(.top, 4)
                         }
@@ -1666,6 +1694,8 @@ struct WellVisitForm: View {
               let dbURL = appState.currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path)
         else { return }
+        // Load stored AI inputs / summaries for this well visit
+        appState.loadWellAIInputs(forWellVisitID: visitID)
 
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
@@ -2379,7 +2409,58 @@ struct WellVisitForm: View {
         // Finally, replace the problem listing with the auto-generated content
         problemListing = lines.joined(separator: "\n")
     }
+    
+    // MARK: - AI helpers (well visits)
 
+    /// Build the AI context for the current well visit, mirroring the sick-episode flow.
+    /// For now we only allow AI when editing an existing saved visit.
+    private func buildWellVisitAIContext() -> AppState.WellVisitAIContext? {
+        guard let patientID = appState.selectedPatientID,
+              let visitID = editingVisitID else {
+            return nil
+        }
+
+        func cleaned(_ text: String?) -> String? {
+            guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !t.isEmpty else {
+                return nil
+            }
+            return t
+        }
+
+        let trimmedProblems = problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let perinatalSummary = cleaned(appState.perinatalSummaryForSelectedPatient())
+        let pmhSummary       = cleaned(appState.pmhSummaryForSelectedPatient())
+        let vaccSummary      = cleaned(appState.vaccinationSummaryForSelectedPatient())
+
+        return AppState.WellVisitAIContext(
+            patientID: patientID,
+            wellVisitID: visitID,
+            visitType: visitTypeID,
+            ageDays: nil,  // can be wired to well_visits.age_days later
+            problemListing: trimmedProblems,
+            perinatalSummary: perinatalSummary,
+            pmhSummary: pmhSummary,
+            vaccinationStatus: vaccSummary
+        )
+    }
+    
+    /// Trigger the AI call via AppState using the current well-visit context.
+    /// Mirrors `triggerAIForEpisode()` on the sick side.
+    private func triggerAIForWellVisit() {
+        guard let ctx = buildWellVisitAIContext() else {
+            appState.aiSummariesForActiveWellVisit = [
+                "local-stub": "Cannot run AI: please ensure a patient and saved well visit are selected."
+            ]
+            return
+        }
+
+        aiIsRunning = true
+        appState.runAIForWellVisit(using: ctx)
+        aiIsRunning = false
+    }
+    
     // MARK: - Save logic
 
     private func saveTapped() {

@@ -374,6 +374,16 @@ CREATE TABLE IF NOT EXISTS ai_inputs (
   FOREIGN KEY (episode_id) REFERENCES episodes(id)
 );
 
+CREATE TABLE IF NOT EXISTS well_ai_inputs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  well_visit_id INTEGER,
+  model TEXT,
+  prompt TEXT,
+  response TEXT,
+  created_at TEXT,
+  FOREIGN KEY (well_visit_id) REFERENCES well_visits(id)
+);
+
 -- ========== INDEXES (optional but helpful) ==========
 
 CREATE INDEX IF NOT EXISTS idx_patients_mrn ON patients(mrn);

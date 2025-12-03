@@ -1708,6 +1708,12 @@ final class AppState: ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "Failed to save PMH"])
             }
         }
+    
+        /// Convenience wrapper for AI context: return the patient's perinatal summary
+        /// (if present) without mutating any UI state.
+        func perinatalSummaryForSelectedPatient() -> String? {
+            return patientSummary?.perinatal
+        }
 
         /// Build a lightweight, human-readable PMH summary for AI/guideline use.
         /// Uses the boolean flags on `PastMedicalHistory` plus the free-text fields.
@@ -1769,7 +1775,9 @@ final class AppState: ObservableObject {
         /// AI summaries per provider label (e.g., "OpenAI", "UpToDate"), for the active episode.
         /// For now this is populated by a local stub.
         @Published var aiSummariesForActiveEpisode: [String: String] = [:]
-
+        /// AI summaries per provider/model for the active well visit (preventive context).
+        /// Keys are provider/model labels (e.g. "gpt-4.1-mini", "local-stub").
+        @Published var aiSummariesForActiveWellVisit: [String: String] = [:]
         /// Optional ICD-10 code suggestion for the active episode (from AI/guidelines).
         /// This is not persisted yet; the clinician can choose to apply it into the episode form.
         @Published var icd10SuggestionForActiveEpisode: String? = nil
@@ -1784,6 +1792,11 @@ final class AppState: ObservableObject {
         /// Optional resolver that lets the host app provide the clinician-specific sick-visit AI prompt.
         /// This is typically bound to the active user's `aiSickPrompt` field.
         var sickPromptResolver: (() -> String?)?
+
+        /// Optional resolver for clinician-specific well-visit AI prompt.
+        /// This can be bound to a future `aiWellPrompt` field on the user profile.
+        var wellPromptResolver: (() -> String?)?
+
         /// Optional resolver that yields an AI provider for sick episodes (per active clinician).
         /// This keeps AppState decoupled from concrete implementations like OpenAIProvider.
         var episodeAIProviderResolver: (() -> EpisodeAIProvider?)?
@@ -1809,6 +1822,18 @@ final class AppState: ObservableObject {
             /// Maximum recorded temperature in °C around this episode (if available).
             /// Enables rules like `min_temp_c: 38.0` or `requires_fever: true`.
             let maxTempC: Double? = nil
+        }
+        /// Lightweight snapshot of the clinically relevant data we want to feed into
+        /// AI prompts for a single *well* visit (preventive check).
+        struct WellVisitAIContext {
+            let patientID: Int
+            let wellVisitID: Int
+            let visitType: String          // e.g. "one_month", "six_month", "first_postnatal"
+            let ageDays: Int?              // from well_visits.age_days, if available
+            let problemListing: String     // snapshot from well_visits.problem_listing
+            let perinatalSummary: String?  // consolidated perinatal history
+            let pmhSummary: String?        // past medical history summary
+            let vaccinationStatus: String? // vaccination summary
         }
 
         /// Sanitize problem listing text before sending to AI:
@@ -1845,6 +1870,8 @@ final class AppState: ObservableObject {
             aiSummariesForActiveEpisode = [:]
             icd10SuggestionForActiveEpisode = nil
         }
+    
+        
         /// Very lightweight heuristic ICD-10 suggestion based on free-text context.
         /// This is a stub used until real AI provider output is wired in.
         private func deriveICD10Suggestion(from context: EpisodeAIContext) -> String? {
@@ -2299,6 +2326,52 @@ final class AppState: ObservableObject {
             }
         }
 
+        /// Build a structured JSON snapshot of the current well-visit context.
+        /// This is designed to be provider-agnostic and safe to embed directly
+        /// into text prompts for LLMs.
+        private func buildWellVisitJSON(using context: WellVisitAIContext) -> String {
+            let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
+            let problemLines = sanitizedProblems
+                .split(separator: "\n")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            var payload: [String: Any] = [
+                "well_visit_id": context.wellVisitID,
+                "visit_type": context.visitType,
+                "problem_listing_raw": context.problemListing,
+                "problem_listing_lines": problemLines
+            ]
+
+            if let age = context.ageDays {
+                payload["age_days"] = age
+            }
+
+            if let perinatal = context.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !perinatal.isEmpty {
+                payload["perinatal_summary"] = perinatal
+            }
+
+            if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pmh.isEmpty {
+                payload["past_medical_history"] = pmh
+            }
+
+            if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !vacc.isEmpty {
+                payload["vaccination_status"] = vacc
+            }
+
+            if JSONSerialization.isValidJSONObject(payload),
+               let data = try? JSONSerialization.data(withJSONObject: payload,
+                                                      options: [.prettyPrinted, .sortedKeys]),
+               let jsonString = String(data: data, encoding: .utf8) {
+                return jsonString
+            } else {
+                return "{}"
+            }
+        }
+        
         /// Build a structured JSON snapshot of the current sick-episode context.
         /// This is designed to be provider-agnostic and safe to embed directly
         /// into text prompts for LLMs.
@@ -2398,6 +2471,81 @@ final class AppState: ObservableObject {
 
             return lines.joined(separator: "\n")
         }
+    
+        /// Build a concrete well-visit AI prompt by combining:
+        ///  - the clinician's configured well-visit prompt (if any), and
+        ///  - a structured patient/well-visit context.
+        ///
+        /// This string can be sent as-is to any text-based AI provider.
+        func buildWellAIPrompt(using context: WellVisitAIContext) -> String {
+            let basePrompt = wellPromptResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let header: String
+
+            if let bp = basePrompt, !bp.isEmpty {
+                header = bp
+            } else {
+                header = """
+                You are assisting with a pediatric well-child visit (preventive care). Read the clinical context below (problem listing, perinatal history, past medical history, vaccination status, age and visit type) and provide:
+                1) A concise wellness assessment summary.
+                2) Key positive and negative findings relevant to growth and development.
+                3) Priority preventive care and anticipatory guidance topics for this visit.
+                4) Any red flags that would warrant further evaluation or investigations.
+                """
+            }
+
+            var lines: [String] = []
+            lines.append(header)
+            lines.append("")
+            lines.append("---")
+            lines.append("Patient/well-visit context")
+            lines.append("---")
+            lines.append("")
+
+            lines.append("Visit type: \(context.visitType)")
+            if let age = context.ageDays {
+                lines.append("Age (days): \(age)")
+            } else {
+                lines.append("Age (days): not documented.")
+            }
+            lines.append("")
+
+            lines.append("Problem listing:")
+            let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
+            lines.append(sanitizedProblems.isEmpty ? "(none provided)" : sanitizedProblems)
+            lines.append("")
+
+            if let perinatal = context.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !perinatal.isEmpty {
+                lines.append("Perinatal history: \(perinatal)")
+            } else {
+                lines.append("Perinatal history: not documented.")
+            }
+
+            if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pmh.isEmpty {
+                lines.append("Past medical history: \(pmh)")
+            } else {
+                lines.append("Past medical history: not documented.")
+            }
+
+            if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !vacc.isEmpty {
+                lines.append("Vaccination status: \(vacc)")
+            } else {
+                lines.append("Vaccination status: not documented.")
+            }
+
+            // Append a machine-readable JSON snapshot of the same well-visit context.
+            lines.append("")
+            lines.append("---")
+            lines.append("Structured well-visit snapshot (JSON)")
+            lines.append("---")
+            lines.append("")
+            let jsonSnapshot = buildWellVisitJSON(using: context)
+            lines.append(jsonSnapshot)
+
+            return lines.joined(separator: "\n")
+        }
 
         /// Persist an AI interaction for a specific episode into the `ai_inputs` table.
         /// This keeps an audit trail of model, prompt, and response per episode.
@@ -2464,6 +2612,73 @@ final class AppState: ObservableObject {
 
             log.info("Saved AI input for episode \(episodeID, privacy: .public) model=\(model, privacy: .public)")
         }
+        
+        /// Persist an AI interaction for a specific well visit into the `well_ai_inputs` table.
+        /// Mirrors `saveAIInput(forEpisodeID:)` but targets well visits.
+        private func saveWellAIInput(forWellVisitID wellVisitID: Int, model: String, prompt: String, response: String) {
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                log.info("saveWellAIInput: no DB URL; skipping persist")
+                return
+            }
+
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
+                log.error("saveWellAIInput: failed to open DB at \(dbURL.path, privacy: .public)")
+                return
+            }
+            defer { sqlite3_close(db) }
+
+            // Ensure well_ai_inputs table exists (idempotent).
+            let createSQL = """
+            CREATE TABLE IF NOT EXISTS well_ai_inputs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              well_visit_id INTEGER,
+              model TEXT,
+              prompt TEXT,
+              response TEXT,
+              created_at TEXT,
+              FOREIGN KEY (well_visit_id) REFERENCES well_visits(id)
+            );
+            """
+            if sqlite3_exec(db, createSQL, nil, nil, nil) != SQLITE_OK {
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("saveWellAIInput: well_ai_inputs CREATE failed: \(msg, privacy: .public)")
+                return
+            }
+
+            let insertSQL = "INSERT INTO well_ai_inputs (well_visit_id, model, prompt, response, created_at) VALUES (?, ?, ?, ?, ?);"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt else {
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("saveWellAIInput: INSERT prepare failed: \(msg, privacy: .public)")
+                return
+            }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(wellVisitID))
+            _ = model.withCString { c in sqlite3_bind_text(stmt, 2, c, -1, SQLITE_TRANSIENT) }
+            _ = prompt.withCString { c in sqlite3_bind_text(stmt, 3, c, -1, SQLITE_TRANSIENT) }
+            _ = response.withCString { c in sqlite3_bind_text(stmt, 4, c, -1, SQLITE_TRANSIENT) }
+
+            let iso = ISO8601DateFormatter()
+            let nowISO = iso.string(from: Date())
+            _ = nowISO.withCString { c in sqlite3_bind_text(stmt, 5, c, -1, SQLITE_TRANSIENT) }
+
+            if sqlite3_step(stmt) != SQLITE_DONE {
+                let msg = String(cString: sqlite3_errmsg(db))
+                log.error("saveWellAIInput: INSERT step failed: \(msg, privacy: .public)")
+                return
+            }
+
+            // Refresh in-memory AI history for this well visit.
+            DispatchQueue.main.async {
+                self.loadWellAIInputs(forWellVisitID: wellVisitID)
+            }
+
+            log.info("Saved AI input for well_visit \(wellVisitID, privacy: .public) model=\(model, privacy: .public)")
+        }
+        
         /// Extract all ICD-10-like codes from a free-text AI summary.
         /// Pattern: a letter A–T or V–Z, followed by two alphanumeric characters,
         /// optionally followed by a dot and 1–4 more alphanumerics (e.g. "A09", "J10.1").
@@ -2564,7 +2779,141 @@ final class AppState: ObservableObject {
                 runAIStub(using: context)
             }
         }
+    
+        /// Entry point used by UI to run AI for a given well-visit context.
+        /// For now, this uses a local stub summary; later it can dispatch to
+        /// one or more configured providers and persist to `well_ai_inputs`.
+        /// Entry point used by UI to run AI for a given well-visit context.
+        /// For now, this uses a local stub summary; later it can dispatch to
+        /// one or more configured providers and persist to `well_ai_inputs`.
+        /// Entry point used by UI to run AI for a given well-visit context.
+        /// For now, this prefers any configured provider (e.g. OpenAI) and falls
+        /// back to a local stub when none is available or on error. Results are
+        /// persisted to `well_ai_inputs`.
+        func runAIForWellVisit(using context: WellVisitAIContext) {
+            if let provider = episodeAIProviderResolver?() {
+                // Run the provider asynchronously so the UI remains responsive.
+                Task {
+                    do {
+                        let prompt = buildWellAIPrompt(using: context)
 
+                        // Reuse the existing episode provider interface by mapping the
+                        // well-visit context into a lightweight EpisodeAIContext.
+                        let shimContext = EpisodeAIContext(
+                            patientID: context.patientID,
+                            episodeID: context.wellVisitID,          // used only for provider internals
+                            problemListing: context.problemListing,
+                            complementaryInvestigations: "",
+                            vaccinationStatus: context.vaccinationStatus,
+                            pmhSummary: context.pmhSummary
+                        )
+
+                        let result = try await provider.evaluateEpisode(
+                            context: shimContext,
+                            prompt: prompt
+                        )
+
+                        // Persist to the well-specific history table.
+                        self.saveWellAIInput(
+                            forWellVisitID: context.wellVisitID,
+                            model: result.providerModel,
+                            prompt: prompt,
+                            response: result.summary
+                        )
+
+                        // Publish summary for the active well visit (no ICD-10 on well side for now).
+                        DispatchQueue.main.async {
+                            self.aiSummariesForActiveWellVisit = [
+                                result.providerModel: result.summary
+                            ]
+                        }
+                    } catch {
+                        self.log.error("runAIForWellVisit: provider error: \(String(describing: error), privacy: .public)")
+                        // Keep things safe and visible to the clinician.
+                        DispatchQueue.main.async {
+                            self.aiSummariesForActiveWellVisit = [
+                                "error": "AI provider error: \(error.localizedDescription). Falling back to local stub."
+                            ]
+                        }
+                        // Fallback: still provide a local stub-style summary.
+                        self.runWellAIStub(using: context)
+                    }
+                }
+            } else {
+                // No provider configured yet → keep current stub behavior.
+                runWellAIStub(using: context)
+            }
+        }
+
+    /// Temporary stub for a well-visit AI call.
+    /// Mirrors `runAIStub(using:)` but targets the well-visit context and
+    /// persists into `well_ai_inputs`.
+    private func runWellAIStub(using context: WellVisitAIContext) {
+        // Build the full prompt (even for the stub) so we can persist it alongside the response.
+        let prompt = buildWellAIPrompt(using: context)
+
+        var pieces: [String] = []
+
+        let trimmedProblems = context.problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedProblems.isEmpty {
+            pieces.append("Problem listing provided")
+        }
+
+        if let perinatal = context.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !perinatal.isEmpty {
+            pieces.append("Perinatal history included")
+        }
+
+        if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !pmh.isEmpty {
+            pieces.append("PMH included")
+        }
+
+        if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !vacc.isEmpty {
+            pieces.append("Vaccination summary included")
+        }
+
+        if let age = context.ageDays {
+            pieces.append("Age in days: \(age)")
+        }
+
+        let hasCustomPrompt: Bool = {
+            if let p = wellPromptResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !p.isEmpty {
+                return true
+            }
+            return false
+        }()
+        pieces.append(hasCustomPrompt ? "Clinician well-visit prompt configured"
+                                      : "Using default well-visit AI prompt")
+
+        let summary: String
+        if pieces.isEmpty {
+            summary = "Placeholder well-visit AI summary – no well-visit context was provided. Once configured, AI providers will analyze problem listing, perinatal history, PMH and vaccination status."
+        } else {
+            summary = "Stub well-visit AI summary based on current context → " + pieces.joined(separator: " • ")
+        }
+
+        // Persist this stub interaction into well_ai_inputs.
+        saveWellAIInput(
+            forWellVisitID: context.wellVisitID,
+            model: "local-stub",
+            prompt: prompt,
+            response: summary
+        )
+
+        DispatchQueue.main.async {
+            // For now keep a single-summary mapping per provider/model.
+            self.aiSummariesForActiveWellVisit = ["local-stub": summary]
+        }
+    }
+    
+    /// Clear AI state for the currently active well visit (summaries + history list).
+    func clearAIForWellVisitContext() {
+        aiSummariesForActiveWellVisit = [:]
+        aiInputsForActiveWellVisit = []
+    }
         /// Temporary stub for an AI call. This will later dispatch to provider-specific
         /// clients (OpenAI, UpToDate, etc.) based on the clinician's AI setup.
         func runAIStub(using context: EpisodeAIContext) {
@@ -2725,6 +3074,9 @@ final class AppState: ObservableObject {
 
     /// Most recent AI interactions for the currently active episode.
     @Published var aiInputsForActiveEpisode: [AIInputRow] = []
+    /// Most recent AI interactions for the currently active well visit.
+    /// This will be populated from `well_ai_inputs` once wired.
+    @Published var aiInputsForActiveWellVisit: [AIInputRow] = []
 
     /// Reload the episodes list for the currently selected patient.
     /// Safe to call after inserts/updates; reads from `currentDBURL` and publishes to `episodesForActivePatient`.
@@ -2855,6 +3207,70 @@ final class AppState: ObservableObject {
 
         DispatchQueue.main.async {
             self.aiInputsForActiveEpisode = rows
+        }
+    }
+    
+    /// Reload the AI inputs list for a given well visit id from `well_ai_inputs`.
+    /// Safe to call whenever a well visit is selected or a new AI call is recorded.
+    func loadWellAIInputs(forWellVisitID wellVisitID: Int) {
+        guard let dbURL = currentDBURL,
+              FileManager.default.fileExists(atPath: dbURL.path) else {
+            DispatchQueue.main.async { self.aiInputsForActiveWellVisit = [] }
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+            DispatchQueue.main.async { self.aiInputsForActiveWellVisit = [] }
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT id,
+               COALESCE(created_at, '') AS created_at,
+               COALESCE(model, '') AS model,
+               COALESCE(response, '') AS response
+        FROM well_ai_inputs
+        WHERE well_visit_id = ?
+        ORDER BY datetime(COALESCE(created_at, '1970-01-01T00:00:00')) DESC, id DESC;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt else {
+            DispatchQueue.main.async { self.aiInputsForActiveWellVisit = [] }
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(wellVisitID))
+
+        var rows: [AIInputRow] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = Int(sqlite3_column_int64(stmt, 0))
+            let created = sqlite3_column_text(stmt, 1).flatMap { String(cString: $0) } ?? ""
+            let model = sqlite3_column_text(stmt, 2).flatMap { String(cString: $0) } ?? ""
+            let resp = sqlite3_column_text(stmt, 3).flatMap { String(cString: $0) } ?? ""
+
+            let trimmed = resp
+                .replacingOccurrences(of: "\r\n", with: " ")
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview: String = {
+                if trimmed.count <= 160 { return trimmed }
+                let idx = trimmed.index(trimmed.startIndex, offsetBy: 160)
+                return String(trimmed[..<idx]) + "…"
+            }()
+
+            rows.append(AIInputRow(id: id,
+                                   createdAtISO: created,
+                                   model: model,
+                                   responsePreview: preview,
+                                   fullResponse: resp))
+        }
+
+        DispatchQueue.main.async {
+            self.aiInputsForActiveWellVisit = rows
         }
     }
 
