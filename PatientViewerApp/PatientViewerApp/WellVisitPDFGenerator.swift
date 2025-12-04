@@ -367,46 +367,116 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText("Feeding", font: UIFont.boldSystemFont(ofSize: 15))
 
-                let feedingFields: [(String, Any?)] = [
-                    ("Feeding Comment", visitRow[Expression<String?>("feeding_comment")]),
-                    ("Milk Types", visitRow[Expression<String?>("milk_types")]),
-                    ("Feeds / 24h", visitRow[Expression<Int?>("feed_freq_per_24h")]),
-                    ("Regurgitation", visitRow[Expression<Int?>("regurgitation")]),
-                    ("Wakes for Feeds", visitRow[Expression<Int?>("wakes_for_feeds")]),
-                    ("Food Variety / Quantity", visitRow[Expression<String?>("food_variety_quality")]),
-                    ("Dairy Amount", visitRow[Expression<String?>("dairy_amount_text")])
-                ]
+                var feedingLines: [String] = []
 
-                var hasFeedingContent = false
-
-                for (label, rawValue) in feedingFields {
-                    ensureSpace(for: 16)
-                    var display: String? = nil
-
-                    if let s = rawValue as? String {
-                        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty { display = trimmed }
-                    } else if let i = rawValue as? Int {
-                        // interpret booleans and numeric counts
-                        let booleanFields = Set(["Regurgitation", "Wakes for Feeds"])
-                        if booleanFields.contains(label) {
-                            display = (i == 1) ? "Yes" : "No"
-                        } else {
-                            display = "\(i)"
-                        }
-                    } else if let d = rawValue as? Double {
-                        display = String(format: "%g", d)
-                    }
-
-                    if let v = display, !v.isEmpty {
-                        hasFeedingContent = true
-                        drawWrappedText("\(label): \(v)", font: subFont, in: pageRect, at: &y, using: context)
-                        y += 2
+                // milk_types TEXT
+                if let milkTypesRaw = visitRow[Expression<String?>("milk_types")] {
+                    let milkTypes = milkTypesRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !milkTypes.isEmpty {
+                        feedingLines.append("Milk: \(milkTypes)")
                     }
                 }
 
-                if !hasFeedingContent {
+                // feed_volume_ml REAL
+                if let volume = visitRow[Expression<Double?>("feed_volume_ml")] {
+                    feedingLines.append(String(format: "Typical feed volume: %.0f ml", volume))
+                }
+
+                // feed_freq_per_24h INTEGER
+                if let freq = visitRow[Expression<Int?>("feed_freq_per_24h")] {
+                    feedingLines.append("Feeds per 24h: \(freq)")
+                }
+
+                // est_total_ml REAL
+                if let total = visitRow[Expression<Double?>("est_total_ml")] {
+                    feedingLines.append(String(format: "Estimated total intake: %.0f ml/24h", total))
+                }
+
+                // est_ml_per_kg_24h REAL
+                if let perKg = visitRow[Expression<Double?>("est_ml_per_kg_24h")] {
+                    feedingLines.append(String(format: "Estimated intake: %.0f ml/kg/24h", perKg))
+                }
+
+                // regurgitation INTEGER (boolean)
+                if let reg = visitRow[Expression<Int?>("regurgitation")] {
+                    let text = (reg == 1) ? "Yes" : "No"
+                    feedingLines.append("Regurgitation: \(text)")
+                }
+
+                // feeding_issue TEXT
+                if let issueRaw = visitRow[Expression<String?>("feeding_issue")] {
+                    let issue = issueRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !issue.isEmpty {
+                        feedingLines.append("Feeding issue: \(issue)")
+                    }
+                }
+
+                // solid_food_started INTEGER DEFAULT 0 (boolean)
+                if let solidStarted = visitRow[Expression<Int?>("solid_food_started")] {
+                    // Only meaningful to show this between about 4 and 9 months.
+                    let ageMonths = Double(ageDays) / 30.0
+                    if ageMonths >= 4.0 && ageMonths <= 9.0 {
+                        let text = (solidStarted == 1) ? "Yes" : "No"
+                        feedingLines.append("Solid foods started: \(text)")
+                    }
+                }
+
+                // solid_food_start_date TEXT
+                if let solidDateRaw = visitRow[Expression<String?>("solid_food_start_date")] {
+                    let solidDate = solidDateRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !solidDate.isEmpty {
+                        feedingLines.append("Solid foods since: \(solidDate)")
+                    }
+                }
+
+                // solid_food_quality TEXT
+                if let solidQualityRaw = visitRow[Expression<String?>("solid_food_quality")] {
+                    let solidQuality = solidQualityRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !solidQuality.isEmpty {
+                        feedingLines.append("Solid food quality: \(solidQuality)")
+                    }
+                }
+
+                // solid_food_comment TEXT
+                if let solidCommentRaw = visitRow[Expression<String?>("solid_food_comment")] {
+                    let solidComment = solidCommentRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !solidComment.isEmpty {
+                        feedingLines.append("Solid food comment: \(solidComment)")
+                    }
+                }
+
+                // food_variety_quality TEXT
+                if let varietyRaw = visitRow[Expression<String?>("food_variety_quality")] {
+                    let variety = varietyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !variety.isEmpty {
+                        feedingLines.append("Food variety / quantity: \(variety)")
+                    }
+                }
+
+                // dairy_amount_text TEXT
+                if let dairyRaw = visitRow[Expression<String?>("dairy_amount_text")] {
+                    let dairy = dairyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !dairy.isEmpty {
+                        feedingLines.append("Dairy amount: \(dairy)")
+                    }
+                }
+
+                // feeding_comment TEXT
+                if let commentRaw = visitRow[Expression<String?>("feeding_comment")] {
+                    let comment = commentRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !comment.isEmpty {
+                        feedingLines.append("Comment: \(comment)")
+                    }
+                }
+
+                if feedingLines.isEmpty {
                     drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                } else {
+                    for line in feedingLines {
+                        ensureSpace(for: 16)
+                        drawWrappedText(line, font: subFont, in: pageRect, at: &y, using: context)
+                        y += 2
+                    }
                 }
 
                 // Supplementation Section
