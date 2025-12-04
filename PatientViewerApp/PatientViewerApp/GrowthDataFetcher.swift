@@ -24,6 +24,12 @@ final class GrowthDataFetcher {
         return f
     }()
 
+    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     private static let fallbackFormatters: [DateFormatter] = {
         let posix = Locale(identifier: "en_US_POSIX")
         let tz = TimeZone(secondsFromGMT: 0)
@@ -43,6 +49,7 @@ final class GrowthDataFetcher {
     private static func parseDate(_ s: String) -> Date? {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if let d = isoFormatter.date(from: trimmed) { return d }
+        if let d = isoFormatterNoFrac.date(from: trimmed) { return d }
         for df in fallbackFormatters {
             if let d = df.date(from: trimmed) { return d }
         }
@@ -114,14 +121,14 @@ final class GrowthDataFetcher {
 
         var results: [GrowthDataPoint] = []
 
-        // --- Step 1: Vitals rows for this patient / measurement ---
-        let vitals = Table("vitals")
+        // --- Step 1: manual_growth rows for this patient / measurement ---
+        let manualGrowth = Table("manual_growth")
         let recAtCol = Expression<String>("recorded_at")
         let valueCol = Expression<Swift.Double?>(vitalsColumn) // allow NULLs
         let pidCol = Expression<Int64>("patient_id")
 
         do {
-            for row in try db.prepare(vitals.filter(pidCol == patientID && valueCol != nil)) {
+            for row in try db.prepare(manualGrowth.filter(pidCol == patientID && valueCol != nil)) {
                 guard let value = row[valueCol] else {
                     log.warning("fetchGrowthData: nil value for \(measurement, privacy: .public)")
                     continue
@@ -139,16 +146,27 @@ final class GrowthDataFetcher {
                 }
 
                 let ageDays = when.timeIntervalSince(dob) / secondsPerDay
-                let ageMonths = ageDays / daysPerMonth
-                guard ageMonths >= 0 else {
-                    log.warning("fetchGrowthData: negative age \(ageMonths, privacy: .public) for date '\(rawWhen, privacy: .public)'; skipping")
-                    continue
+                var ageMonths = ageDays / daysPerMonth
+
+                if ageMonths < 0 {
+                    log.warning("fetchGrowthData: negative age \(ageMonths, privacy: .public) for date '\(rawWhen, privacy: .public)'; clamping to 0.0")
+                    ageMonths = 0.0
                 }
 
                 results.append(GrowthDataPoint(ageMonths: ageMonths, value: value))
             }
         } catch {
-            log.error("fetchGrowthData: query vitals failed: \(String(describing: error), privacy: .public)")
+            log.error("fetchGrowthData: query manual_growth failed: \(String(describing: error), privacy: .public)")
+        }
+
+        // Helper to avoid double-counting obvious duplicates when adding perinatal baselines.
+        func hasPoint(nearAge targetAge: Swift.Double, value targetValue: Swift.Double,
+                      ageTolerance: Swift.Double = 0.02,
+                      valueTolerance: Swift.Double = 0.001) -> Bool {
+            results.contains { point in
+                abs(point.ageMonths - targetAge) <= ageTolerance &&
+                abs(point.value - targetValue) <= valueTolerance
+            }
         }
 
         // --- Step 2: Perinatal history (optional baseline points) ---
@@ -166,12 +184,18 @@ final class GrowthDataFetcher {
             case "weight":
                 let birthG: Int? = (try? row.get(bwGCol)) ?? nil
                 if let g = birthG, g > 0 {
-                    results.append(GrowthDataPoint(ageMonths: 0.0, value: Swift.Double(g) / 1000.0))
+                    let valKg = Swift.Double(g) / 1000.0
+                    if !hasPoint(nearAge: 0.0, value: valKg) {
+                        results.append(GrowthDataPoint(ageMonths: 0.0, value: valKg))
+                    }
                 }
                 let dischargeG: Int? = (try? row.get(dwGCol)) ?? nil
                 if let g = dischargeG, g > 0 {
+                    let valKg = Swift.Double(g) / 1000.0
                     // ~2 days ~ 0.07 months for a visible baseline before first check
-                    results.append(GrowthDataPoint(ageMonths: 0.07, value: Swift.Double(g) / 1000.0))
+                    if !hasPoint(nearAge: 0.07, value: valKg) {
+                        results.append(GrowthDataPoint(ageMonths: 0.07, value: valKg))
+                    }
                 }
 
             case "height":

@@ -158,7 +158,7 @@ struct SickEpisodeForm: View {
     private let neuroChoices = ["Alert","Sleepy","Irritable","Abnormal tone"]
     private let mskChoices = ["Normal","Limping","Swollen joint","Pain"]
 
-    private let guidanceChoices = ["URI","AGE","UTI","Otitis"]
+    private let guidanceChoices = ["See Plan","URI","AGE","UTI","Otitis"]
 
     private let log = Logger(subsystem: "DrsMainApp", category: "SickEpisodeForm")
 

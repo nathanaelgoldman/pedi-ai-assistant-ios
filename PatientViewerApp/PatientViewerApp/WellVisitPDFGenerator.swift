@@ -237,14 +237,19 @@ struct WellVisitPDFGenerator {
                 drawText("Visit Type: \(visitTypeReadable)", font: subFont)
 
                 let users = Table("users")
-                let userID = Expression<Int64>("user_id")
-                let userIdVal = visitRow[userID]
+                let userID = Expression<Int64?>("user_id")
                 let firstNameUser = Expression<String>("first_name")
                 let lastNameUser = Expression<String>("last_name")
 
-                if let userRow = try? db.pluck(users.filter(Expression<Int64>("id") == userIdVal)) {
-                    let clinicianName = "\(userRow[firstNameUser]) \(userRow[lastNameUser])"
-                    drawText("Clinician: \(clinicianName)", font: subFont)
+                // user_id may be NULL in the DB; handle that safely
+                if let userIdVal = visitRow[userID] {
+                    if let userRow = try? db.pluck(users.filter(Expression<Int64>("id") == userIdVal)) {
+                        let clinicianName = "\(userRow[firstNameUser]) \(userRow[lastNameUser])"
+                        drawText("Clinician: \(clinicianName)", font: subFont)
+                    }
+                } else {
+                    // Optionally, you could show something here:
+                    // drawText("Clinician: —", font: subFont)
                 }
                 
                 // MARK: - Perinatal Summary
@@ -372,6 +377,8 @@ struct WellVisitPDFGenerator {
                     ("Dairy Amount", visitRow[Expression<String?>("dairy_amount_text")])
                 ]
 
+                var hasFeedingContent = false
+
                 for (label, rawValue) in feedingFields {
                     ensureSpace(for: 16)
                     var display: String? = nil
@@ -392,11 +399,14 @@ struct WellVisitPDFGenerator {
                     }
 
                     if let v = display, !v.isEmpty {
+                        hasFeedingContent = true
                         drawWrappedText("\(label): \(v)", font: subFont, in: pageRect, at: &y, using: context)
-                    } else {
-                        drawText("\(label): —", font: UIFont.italicSystemFont(ofSize: 14))
+                        y += 2
                     }
-                    y += 2
+                }
+
+                if !hasFeedingContent {
+                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
                 }
 
                 // Supplementation Section
@@ -404,13 +414,16 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText("Supplementation", font: UIFont.boldSystemFont(ofSize: 15))
 
-                let vitaminDGiven = visitRow[Expression<Int?>("vitamin_d_given")] ?? -1
-                if vitaminDGiven == 1 {
-                    drawText("Vitamin D Given: Yes", font: UIFont.italicSystemFont(ofSize: 14))
-                } else if vitaminDGiven == 0 {
-                    drawText("Vitamin D Given: No", font: UIFont.italicSystemFont(ofSize: 14))
+                let vitaminDGiven = visitRow[Expression<Int?>("vitamin_d_given")]
+                if let val = vitaminDGiven {
+                    if val == 1 {
+                        drawText("Vitamin D Given: Yes", font: UIFont.italicSystemFont(ofSize: 14))
+                    } else if val == 0 {
+                        drawText("Vitamin D Given: No", font: UIFont.italicSystemFont(ofSize: 14))
+                    }
+                    // If other values are stored, we silently ignore them for now.
                 } else {
-                    drawText("Vitamin D Given: —", font: UIFont.italicSystemFont(ofSize: 14))
+                    // No supplementation info recorded for this visit; omit the line.
                 }
 
                 // MARK: - Sleep Section
@@ -424,6 +437,8 @@ struct WellVisitPDFGenerator {
                     ("Snoring", visitRow[Expression<Int?>("sleep_snoring")]),
                     ("Sleep Issue Reported", visitRow[Expression<Int?>("sleep_issue_reported")])
                 ]
+
+                var hasSleepContent = false
 
                 for (label, rawValue) in sleepFields {
                     ensureSpace(for: 16)
@@ -444,11 +459,14 @@ struct WellVisitPDFGenerator {
                     }
 
                     if let v = display, !v.isEmpty {
+                        hasSleepContent = true
                         drawWrappedText("\(label): \(v)", font: subFont, in: pageRect, at: &y, using: context)
-                    } else {
-                        drawText("\(label): —", font: UIFont.italicSystemFont(ofSize: 14))
+                        y += 2
                     }
-                    y += 2
+                }
+
+                if !hasSleepContent {
+                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
                 }
 
                 // Developmental Evaluation
