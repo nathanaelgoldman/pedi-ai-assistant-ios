@@ -40,6 +40,35 @@ struct WellVisitPDFGenerator {
             "thirty_month": "30-month visit",
             "thirtysix_month": "36-month visit"
         ]
+
+        // Helper to compute age in months, with fallback to DOB + visit date if age_days is missing
+        func computeAgeMonths(dobString: String, visitDateString: String, ageDays: Int?) -> Double? {
+            // If ageDays is available and positive, use it directly
+            if let ageDays = ageDays, ageDays > 0 {
+                return Double(ageDays) / 30.0
+            }
+
+            let dobFormatter = DateFormatter()
+            dobFormatter.dateFormat = "yyyy-MM-dd"
+            dobFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+            let visitFormatter = DateFormatter()
+            visitFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+            visitFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+            guard let dobDate = dobFormatter.date(from: dobString),
+                  let visitDate = visitFormatter.date(from: visitDateString) else {
+                WellVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse DOB='\(dobString)' or visitDate='\(visitDateString)'")
+                return nil
+            }
+
+            let interval = visitDate.timeIntervalSince(dobDate)
+            let days = interval / (60.0 * 60.0 * 24.0)
+            if days < 0 {
+                WellVisitPDFGenerator.log.warning("computeAgeMonths: negative age (days=\(days)) for DOB='\(dobString)' visitDate='\(visitDateString)'")
+            }
+            return max(0.0, days / 30.0)
+        }
         
         // Helper to draw wrapped text for long lines (e.g., summary sections)
         func drawWrappedText(_ text: String, font: UIFont, in rect: CGRect, at y: inout CGFloat, using rendererContext: UIGraphicsPDFRendererContext) {
@@ -399,8 +428,15 @@ struct WellVisitPDFGenerator {
 
                 // regurgitation INTEGER (boolean)
                 if let reg = visitRow[Expression<Int?>("regurgitation")] {
-                    let text = (reg == 1) ? "Yes" : "No"
-                    feedingLines.append("Regurgitation: \(text)")
+                    // Only meaningful to report regurgitation in early infancy.
+                    let ageDaysValue = visitRow[Expression<Int?>("age_days")]
+                    if let ageMonths = computeAgeMonths(dobString: dobText,
+                                                        visitDateString: visitDate,
+                                                        ageDays: ageDaysValue),
+                       ageMonths <= 4.0 {
+                        let text = (reg == 1) ? "Yes" : "No"
+                        feedingLines.append("Regurgitation: \(text)")
+                    }
                 }
 
                 // feeding_issue TEXT
@@ -414,8 +450,11 @@ struct WellVisitPDFGenerator {
                 // solid_food_started INTEGER DEFAULT 0 (boolean)
                 if let solidStarted = visitRow[Expression<Int?>("solid_food_started")] {
                     // Only meaningful to show this between about 4 and 9 months.
-                    let ageMonths = Double(ageDays) / 30.0
-                    if ageMonths >= 4.0 && ageMonths <= 9.0 {
+                    let ageDaysValue = visitRow[Expression<Int?>("age_days")]
+                    if let ageMonths = computeAgeMonths(dobString: dobText,
+                                                        visitDateString: visitDate,
+                                                        ageDays: ageDaysValue),
+                       ageMonths >= 4.0 && ageMonths <= 9.0 {
                         let text = (solidStarted == 1) ? "Yes" : "No"
                         feedingLines.append("Solid foods started: \(text)")
                     }
