@@ -949,14 +949,19 @@ struct WellVisitPDFGenerator {
                         for row in rows {
                             let recordedAtRaw = row[mgRecordedAt]
 
-                            // Try ISO8601 with and without fractional seconds
+                            // Try ISO8601 with and without fractional seconds, then plain date-only format
                             var recDate: Date? = isoFormatter.date(from: recordedAtRaw)
                             if recDate == nil {
                                 isoFormatter.formatOptions = [.withInternetDateTime]
                                 recDate = isoFormatter.date(from: recordedAtRaw)
                             }
+                            if recDate == nil {
+                                let dateOnlyFormatter = DateFormatter()
+                                dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                                dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                                recDate = dateOnlyFormatter.date(from: recordedAtRaw)
+                            }
 
-                            // If we still can't parse, skip this row
                             guard let recDateFinal = recDate else { continue }
 
                             if recDateFinal <= cutoffDate {
@@ -974,20 +979,11 @@ struct WellVisitPDFGenerator {
                     }
                 }
 
-                // If we couldn't parse dates or no row matched the cutoff, fall back to "latest overall"
-                if selectedMGRow == nil {
-                    selectedMGRow = try? db.pluck(
-                        manualGrowth
-                            .filter(mgPatientID == pid)
-                            .order(mgRecordedAt.desc)
-                    )
-                }
-
                 if let mgRow = selectedMGRow {
                     let recordedAtRaw = mgRow[mgRecordedAt]
                     var recordedAtPretty = recordedAtRaw
 
-                    // Try to pretty-print the recorded_at date if it is ISO8601; otherwise keep raw string.
+                    // Try to pretty-print the recorded_at date if it is ISO8601 or plain date; otherwise keep raw string.
                     let isoFormatter = ISO8601DateFormatter()
                     isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
                     if let date = isoFormatter.date(from: recordedAtRaw) {
@@ -1002,6 +998,16 @@ struct WellVisitPDFGenerator {
                             outFormatter.dateStyle = .medium
                             outFormatter.timeStyle = .none
                             recordedAtPretty = outFormatter.string(from: date)
+                        } else {
+                            let dateOnlyFormatter = DateFormatter()
+                            dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                            dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                            if let date = dateOnlyFormatter.date(from: recordedAtRaw) {
+                                let outFormatter = DateFormatter()
+                                outFormatter.dateStyle = .medium
+                                outFormatter.timeStyle = .none
+                                recordedAtPretty = outFormatter.string(from: date)
+                            }
                         }
                     }
 
