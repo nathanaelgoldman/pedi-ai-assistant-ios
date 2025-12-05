@@ -43,7 +43,7 @@ struct WellVisitPDFGenerator {
 
         // Helper to compute age in months, with fallback to DOB + visit date if age_days is missing
         func computeAgeMonths(dobString: String, visitDateString: String, ageDays: Int?) -> Double? {
-            // If ageDays is available and positive, use it directly
+            // Prefer explicit age_days when it is available and positive
             if let ageDays = ageDays, ageDays > 0 {
                 return Double(ageDays) / 30.0
             }
@@ -52,24 +52,132 @@ struct WellVisitPDFGenerator {
             dobFormatter.dateFormat = "yyyy-MM-dd"
             dobFormatter.locale = Locale(identifier: "en_US_POSIX")
 
-            let visitFormatter = DateFormatter()
-            visitFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-            visitFormatter.locale = Locale(identifier: "en_US_POSIX")
-
-            guard let dobDate = dobFormatter.date(from: dobString),
-                  let visitDate = visitFormatter.date(from: visitDateString) else {
-                WellVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse DOB='\(dobString)' or visitDate='\(visitDateString)'")
+            guard let dobDate = dobFormatter.date(from: dobString) else {
+                WellVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse DOB='\(dobString)'")
                 return nil
             }
 
-            let interval = visitDate.timeIntervalSince(dobDate)
+            // Try to parse visitDateString using ISO8601 (handles 'Z' and fractional seconds)
+            var visitDate: Date? = nil
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            visitDate = isoFormatter.date(from: visitDateString)
+
+            if visitDate == nil {
+                isoFormatter.formatOptions = [.withInternetDateTime]
+                visitDate = isoFormatter.date(from: visitDateString)
+            }
+
+            // Fallback to a legacy formatter with full datetime and fractional seconds
+            if visitDate == nil {
+                let legacyFormatter = DateFormatter()
+                legacyFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                legacyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = legacyFormatter.date(from: visitDateString)
+            }
+
+            // Final fallback: plain date-only format (e.g. "2027-10-24")
+            if visitDate == nil {
+                let dateOnlyFormatter = DateFormatter()
+                dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = dateOnlyFormatter.date(from: visitDateString)
+            }
+
+            guard let finalVisitDate = visitDate else {
+                WellVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse visitDate='\(visitDateString)' with ISO8601, legacy, or date-only formatter")
+                return nil
+            }
+
+            let interval = finalVisitDate.timeIntervalSince(dobDate)
             let days = interval / (60.0 * 60.0 * 24.0)
             if days < 0 {
                 WellVisitPDFGenerator.log.warning("computeAgeMonths: negative age (days=\(days)) for DOB='\(dobString)' visitDate='\(visitDateString)'")
             }
+            // Clamp at 0 months so misconfigured dates don't hide age-gated content
             return max(0.0, days / 30.0)
         }
         
+        // Helper to compute a human-readable age string for the header
+        func formatAgeString(dobString: String, visitDateString: String, ageDays: Int?) -> String? {
+            // Parse DOB
+            let dobFormatter = DateFormatter()
+            dobFormatter.dateFormat = "yyyy-MM-dd"
+            dobFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+            guard let dobDate = dobFormatter.date(from: dobString) else {
+                WellVisitPDFGenerator.log.warning("formatAgeString: unable to parse DOB='\(dobString)'")
+                return nil
+            }
+
+            // Parse visit date using same strategy as computeAgeMonths
+            var visitDate: Date? = nil
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            visitDate = isoFormatter.date(from: visitDateString)
+
+            if visitDate == nil {
+                isoFormatter.formatOptions = [.withInternetDateTime]
+                visitDate = isoFormatter.date(from: visitDateString)
+            }
+
+            if visitDate == nil {
+                let legacyFormatter = DateFormatter()
+                legacyFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                legacyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = legacyFormatter.date(from: visitDateString)
+            }
+
+            if visitDate == nil {
+                let dateOnlyFormatter = DateFormatter()
+                dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = dateOnlyFormatter.date(from: visitDateString)
+            }
+
+            guard let finalVisitDate = visitDate else {
+                WellVisitPDFGenerator.log.warning("formatAgeString: unable to parse visitDate='\(visitDateString)'")
+                return nil
+            }
+
+            // If misconfigured and visit is before DOB, clamp to 0 days
+            if finalVisitDate < dobDate {
+                return "0 days"
+            }
+
+            let calendar = Calendar(identifier: .gregorian)
+            let components = calendar.dateComponents([.year, .month, .day], from: dobDate, to: finalVisitDate)
+
+            let years = max(0, components.year ?? 0)
+            let months = max(0, components.month ?? 0)
+            let days = max(0, components.day ?? 0)
+
+            // Before 1 month: show days
+            if years == 0 && months == 0 {
+                return "\(days) day" + (days == 1 ? "" : "s")
+            }
+
+            // From 1 month to 12 months: month + days
+            if years == 0 && months >= 1 {
+                let monthPart = months == 1 ? "1 month" : "\(months) months"
+                if days > 0 {
+                    let dayPart = days == 1 ? "1 day" : "\(days) days"
+                    return "\(monthPart) \(dayPart)"
+                } else {
+                    return monthPart
+                }
+            }
+
+            // From 12 months onward: years + months
+            let yearPart = years == 1 ? "1 year" : "\(years) years"
+            if months > 0 {
+                let monthPart = months == 1 ? "1 month" : "\(months) months"
+                return "\(yearPart) \(monthPart)"
+            } else {
+                return yearPart
+            }
+        }
+
         // Helper to draw wrapped text for long lines (e.g., summary sections)
         func drawWrappedText(_ text: String, font: UIFont, in rect: CGRect, at y: inout CGFloat, using rendererContext: UIGraphicsPDFRendererContext) {
             let paragraphStyle = NSMutableParagraphStyle()
@@ -253,14 +361,22 @@ struct WellVisitPDFGenerator {
 
                 let visitDate = visitRow[Expression<String>("visit_date")]
                 let visitType = visitRow[Expression<String>("visit_type")]
-                let ageDays = visitRow[Expression<Int?>("age_days")] ?? 0
+                let ageDaysDB = visitRow[Expression<Int?>("age_days")]
 
                 drawText("Alias: \(aliasText)", font: subFont)
                 drawText("Name: \(name)", font: subFont)
                 drawText("DOB: \(dobText)", font: subFont)
                 drawText("Sex: \(sexText)", font: subFont)
                 drawText("MRN: \(mrnText)", font: subFont)
-                drawText("Age at Visit: \(ageDays) days", font: subFont)
+
+                if let ageString = formatAgeString(dobString: dobText, visitDateString: visitDate, ageDays: ageDaysDB) {
+                    drawText("Age at Visit: \(ageString)", font: subFont)
+                } else if let ageDays = ageDaysDB, ageDays > 0 {
+                    // Fallback: if age_days is somehow populated, at least show it
+                    drawText("Age at Visit: \(ageDays) days", font: subFont)
+                } else {
+                    drawText("Age at Visit: —", font: subFont)
+                }
                 drawText("Visit Date: \(WellVisitPDFGenerator.formatDate(visitDate))", font: subFont)
                 let visitTypeReadable = visitMap[visitType] ?? visitType
                 drawText("Visit Type: \(visitTypeReadable)", font: subFont)
@@ -413,7 +529,7 @@ struct WellVisitPDFGenerator {
 
                 // feed_freq_per_24h INTEGER
                 if let freq = visitRow[Expression<Int?>("feed_freq_per_24h")] {
-                    feedingLines.append("Feeds per 24h: \(freq)")
+                    feedingLines.append("Feeds per 24h: \(freq) times")
                 }
 
                 // est_total_ml REAL
@@ -472,7 +588,16 @@ struct WellVisitPDFGenerator {
                 if let solidQualityRaw = visitRow[Expression<String?>("solid_food_quality")] {
                     let solidQuality = solidQualityRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !solidQuality.isEmpty {
-                        feedingLines.append("Solid food quality: \(solidQuality)")
+                        let prettyQuality: String
+                        switch solidQuality {
+                        case "appears_good":
+                            prettyQuality = "appears good"
+                        case "probably_limited":
+                            prettyQuality = "probably limited"
+                        default:
+                            prettyQuality = solidQuality
+                        }
+                        feedingLines.append("Solid food quality: \(prettyQuality)")
                     }
                 }
 
@@ -488,7 +613,13 @@ struct WellVisitPDFGenerator {
                 if let varietyRaw = visitRow[Expression<String?>("food_variety_quality")] {
                     let variety = varietyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !variety.isEmpty {
-                        feedingLines.append("Food variety / quantity: \(variety)")
+                        let prettyVariety: String
+                        if variety == "appears_good" {
+                            prettyVariety = "appears good"
+                        } else {
+                            prettyVariety = variety
+                        }
+                        feedingLines.append("Food variety / quantity: \(prettyVariety)")
                     }
                 }
 
@@ -496,7 +627,7 @@ struct WellVisitPDFGenerator {
                 if let dairyRaw = visitRow[Expression<String?>("dairy_amount_text")] {
                     let dairy = dairyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !dairy.isEmpty {
-                        feedingLines.append("Dairy amount: \(dairy)")
+                        feedingLines.append("Dairy intake daily: \(dairy) cup(s) or bottle(s)")
                     }
                 }
 
@@ -535,90 +666,187 @@ struct WellVisitPDFGenerator {
                     // No supplementation info recorded for this visit; omit the line.
                 }
 
+                // MARK: - Stools
+                y += 12
+                ensureSpace(for: 18)
+                drawText("Stools", font: UIFont.boldSystemFont(ofSize: 15))
+
+                let poopStatusExp = Expression<String?>("poop_status")
+                let poopCommentExp = Expression<String?>("poop_comment")
+
+                var stoolLines: [String] = []
+
+                if let statusRaw = visitRow[poopStatusExp] {
+                    let status = statusRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !status.isEmpty {
+                        stoolLines.append("Stool pattern: \(status)")
+                    }
+                }
+
+                if let commentRaw = visitRow[poopCommentExp] {
+                    let comment = commentRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !comment.isEmpty {
+                        stoolLines.append("Comment: \(comment)")
+                    }
+                }
+
+                if stoolLines.isEmpty {
+                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                } else {
+                    for line in stoolLines {
+                        ensureSpace(for: 16)
+                        drawWrappedText(line, font: subFont, in: pageRect, at: &y, using: context)
+                        y += 2
+                    }
+                }
+
+                // Helper to prettify sleep duration string (e.g. "10_15" -> "10 to 15 hours")
+                func prettySleepDuration(_ raw: String) -> String {
+                    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // Expecting values like "10_15" -> "10 to 15 hours"
+                    let parts = trimmed.split(separator: "_", omittingEmptySubsequences: true)
+                    if parts.count == 2 {
+                        let first = parts[0]
+                        let second = parts[1]
+                        if !first.isEmpty && !second.isEmpty {
+                            return "\(first) to \(second) hours"
+                        }
+                    }
+                    return trimmed
+                }
+
                 // MARK: - Sleep Section
                 y += 12
                 ensureSpace(for: 18)
                 drawText("Sleep", font: UIFont.boldSystemFont(ofSize: 15))
 
-                let sleepFields: [(String, Any?)] = [
-                    ("Sleep Duration", visitRow[Expression<String?>("sleep_hours_text")]),
-                    ("Sleep Regularity", visitRow[Expression<String?>("sleep_regular")]),
-                    ("Snoring", visitRow[Expression<Int?>("sleep_snoring")]),
-                    ("Sleep Issue Reported", visitRow[Expression<Int?>("sleep_issue_reported")])
-                ]
+                var sleepLines: [String] = []
 
-                var hasSleepContent = false
-
-                for (label, rawValue) in sleepFields {
-                    ensureSpace(for: 16)
-                    var display: String? = nil
-
-                    if let s = rawValue as? String {
-                        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty { display = trimmed }
-                    } else if let i = rawValue as? Int {
-                        let booleanFields = Set(["Snoring", "Sleep Issue Reported"])
-                        if booleanFields.contains(label) {
-                            display = (i == 1) ? "Yes" : "No"
-                        } else {
-                            display = "\(i)"
-                        }
-                    } else if let d = rawValue as? Double {
-                        display = String(format: "%g", d)
+                // 1. Sleep duration (pretty-printed, e.g. "10_15" -> "10 to 15 hours")
+                if let durationRaw = visitRow[Expression<String?>("sleep_hours_text")] {
+                    let durationTrimmed = durationRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !durationTrimmed.isEmpty {
+                        let pretty = prettySleepDuration(durationTrimmed)
+                        sleepLines.append("Sleep duration: \(pretty)")
                     }
+                }
 
-                    if let v = display, !v.isEmpty {
-                        hasSleepContent = true
-                        drawWrappedText("\(label): \(v)", font: subFont, in: pageRect, at: &y, using: context)
+                // 2. Sleep regularity (free text)
+                if let regularRaw = visitRow[Expression<String?>("sleep_regular")] {
+                    let regular = regularRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !regular.isEmpty {
+                        sleepLines.append("Sleep regularity: \(regular)")
+                    }
+                }
+
+                // 3. Snoring (boolean, only meaningful from ~12 months onward)
+                do {
+                    let ageDaysValue = try visitRow.get(Expression<Int?>("age_days"))
+                    if let ageMonths = computeAgeMonths(dobString: dobText,
+                                                        visitDateString: visitDate,
+                                                        ageDays: ageDaysValue),
+                       ageMonths >= 12.0,
+                       let snoreVal = visitRow[Expression<Int?>("sleep_snoring")] {
+                        let text = (snoreVal == 1) ? "Yes" : "No"
+                        sleepLines.append("Snoring: \(text)")
+                    }
+                } catch {
+                    // If age_days is missing for some reason, we silently skip the Snoring line.
+                    WellVisitPDFGenerator.log.warning("Sleep section: unable to read age_days for snoring gating: \(error.localizedDescription, privacy: .public)")
+                }
+
+                // 4. Sleep issue reported (explicit Yes/No, plus text if Yes)
+                let issueReportedVal = visitRow[Expression<Int?>("sleep_issue_reported")] ?? 0
+                let issueTextRaw = visitRow[Expression<String?>("sleep_issue_text")] ?? ""
+                let issueText = issueTextRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if issueReportedVal == 1 {
+                    if issueText.isEmpty {
+                        sleepLines.append("Sleep issue reported: Yes")
+                    } else {
+                        sleepLines.append("Sleep issue reported: Yes – \(issueText)")
+                    }
+                } else {
+                    // Explicitly document absence of reported issues
+                    sleepLines.append("Sleep issue reported: No")
+                }
+
+                if sleepLines.isEmpty {
+                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                } else {
+                    for line in sleepLines {
+                        ensureSpace(for: 16)
+                        drawWrappedText(line, font: subFont, in: pageRect, at: &y, using: context)
                         y += 2
                     }
                 }
 
-                if !hasSleepContent {
-                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
-                }
-
-                // Developmental Evaluation
+                // MARK: - Development & Milestones
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Developmental Evaluation", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText("Development & Milestones", font: UIFont.boldSystemFont(ofSize: 15))
 
+                // Age in months for gating dev test and M-CHAT
+                let ageDaysValueForDev = visitRow[Expression<Int?>("age_days")]
+                let ageMonthsForDev = computeAgeMonths(
+                    dobString: dobText,
+                    visitDateString: visitDate,
+                    ageDays: ageDaysValueForDev
+                )
+
+                // Developmental test (devtest_*), shown from 9 to 36 months
                 let devTestScore = visitRow[Expression<Int?>("devtest_score")]
                 let devResult = visitRow[Expression<String?>("devtest_result")] ?? ""
 
-                if let score = devTestScore {
-                    var devString: String
-                    if !devResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        devString = "Developmental test: \(devResult) (score \(score))"
+                if let ageMonths = ageMonthsForDev,
+                   ageMonths >= 9.0, ageMonths <= 36.0 {
+                    if let score = devTestScore {
+                        let trimmedResult = devResult.trimmingCharacters(in: .whitespacesAndNewlines)
+                        var devString: String
+                        if !trimmedResult.isEmpty {
+                            devString = "Developmental test: \(trimmedResult) (score \(score))"
+                        } else {
+                            devString = "Developmental test score: \(score)"
+                        }
+                        ensureSpace(for: 16)
+                        drawWrappedText(devString, font: subFont, in: pageRect, at: &y, using: context)
                     } else {
-                        devString = "Developmental test score: \(score)"
+                        let trimmedResult = devResult.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmedResult.isEmpty {
+                            ensureSpace(for: 16)
+                            drawWrappedText("Developmental test: \(trimmedResult)", font: subFont, in: pageRect, at: &y, using: context)
+                        }
                     }
-                    drawWrappedText(devString, font: subFont, in: pageRect, at: &y, using: context)
-                } else if !devResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    drawWrappedText("Developmental test: \(devResult)", font: subFont, in: pageRect, at: &y, using: context)
-                } else {
-                    drawText("—", font: subFont)
                 }
-                // MARK: - M-CHAT Screening
+
+                // M-CHAT (mchat_*), shown from 18 to 30 months
                 let mchatScore = visitRow[Expression<Int?>("mchat_score")]
                 let mchatResult = visitRow[Expression<String?>("mchat_result")] ?? ""
 
-                if let score = mchatScore {
-                    var mchatLine: String
-                    if !mchatResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        mchatLine = "M-CHAT: \(mchatResult) (score \(score))"
+                if let ageMonths = ageMonthsForDev,
+                   ageMonths >= 18.0, ageMonths <= 30.0 {
+                    if let score = mchatScore {
+                        let trimmed = mchatResult.trimmingCharacters(in: .whitespacesAndNewlines)
+                        var mchatLine: String
+                        if !trimmed.isEmpty {
+                            mchatLine = "M-CHAT: \(trimmed) (score \(score))"
+                        } else {
+                            mchatLine = "M-CHAT score: \(score)"
+                        }
+                        ensureSpace(for: 16)
+                        drawWrappedText(mchatLine, font: subFont, in: pageRect, at: &y, using: context)
                     } else {
-                        mchatLine = "M-CHAT score: \(score)"
+                        let trimmed = mchatResult.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            ensureSpace(for: 16)
+                            drawWrappedText("M-CHAT: \(trimmed)", font: subFont, in: pageRect, at: &y, using: context)
+                        }
                     }
-                    drawWrappedText(mchatLine, font: subFont, in: pageRect, at: &y, using: context)
-                } else if !mchatResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    drawWrappedText("M-CHAT: \(mchatResult)", font: subFont, in: pageRect, at: &y, using: context)
                 }
 
-                // MARK: - Age-specific Milestones
+                // Milestones summary (from well_visit_milestones)
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Age-specific Milestones", font: UIFont.boldSystemFont(ofSize: 15))
 
                 let milestonesTable = Table("well_visit_milestones")
                 _ = Expression<String>("code")
@@ -664,26 +892,152 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText("Measurements", font: UIFont.boldSystemFont(ofSize: 15))
 
-                // 1. Today's weight (kg)
-                if let wt = visitRow[Expression<Double?>("weight_today_kg")] {
-                    drawText("Today's weight (kg): \(String(format: "%.2f", wt))", font: subFont)
+                // Collect measurement lines; prefer manual_growth, fall back to legacy visit fields.
+                var measurementLines: [String] = []
+
+                // 1. Try manual_growth (prefer measurements up to 24h after visit date)
+                let manualGrowth = Table("manual_growth")
+                let mgPatientID = Expression<Int64>("patient_id")
+                let mgRecordedAt = Expression<String>("recorded_at")
+                let mgWeight = Expression<Double?>("weight_kg")
+                let mgHeight = Expression<Double?>("height_cm")
+                let mgHeadCirc = Expression<Double?>("head_circumference_cm")
+
+                // We prefer measurements recorded up to 24h after the visit date.
+                var selectedMGRow: Row? = nil
+
+                // Try to parse the visit date string into a Date
+                var visitDateParsed: Date? = nil
+                do {
+                    let visitDateString = visitDate
+
+                    let isoFormatter = ISO8601DateFormatter()
+                    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    visitDateParsed = isoFormatter.date(from: visitDateString)
+
+                    if visitDateParsed == nil {
+                        isoFormatter.formatOptions = [.withInternetDateTime]
+                        visitDateParsed = isoFormatter.date(from: visitDateString)
+                    }
+
+                    if visitDateParsed == nil {
+                        let legacyFormatter = DateFormatter()
+                        legacyFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                        legacyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                        visitDateParsed = legacyFormatter.date(from: visitDateString)
+                    }
+
+                    if visitDateParsed == nil {
+                        let dateOnlyFormatter = DateFormatter()
+                        dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                        dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                        visitDateParsed = dateOnlyFormatter.date(from: visitDateString)
+                    }
                 }
 
-                // 2. Weight gain since discharge
-                let deltaWeight = visitRow[Expression<Int?>("delta_weight_g")]
-                let deltaDays = visitRow[Expression<Int?>("delta_days_since_discharge")]
-                if let dw = deltaWeight, let dd = deltaDays, dd > 0 {
-                    let dailyGain = Double(dw) / Double(dd)
-                    let line = String(format: "Weight gain since discharge: %.1f g/day (Δ +%d g over %d days)", dailyGain, dw, dd)
-                    drawWrappedText(line, font: subFont, in: pageRect, at: &y, using: context)
+                // If we have a parsed visit date, filter manual_growth rows to those up to visitDate+24h
+                if let visitDateDate = visitDateParsed {
+                    let cutoffDate = visitDateDate.addingTimeInterval(24 * 60 * 60) // +24h
+                    let rows = try? db.prepare(manualGrowth.filter(mgPatientID == pid))
+
+                    if let rows = rows {
+                        let isoFormatter = ISO8601DateFormatter()
+                        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+                        var latestDate: Date? = nil
+
+                        for row in rows {
+                            let recordedAtRaw = row[mgRecordedAt]
+
+                            // Try ISO8601 with and without fractional seconds
+                            var recDate: Date? = isoFormatter.date(from: recordedAtRaw)
+                            if recDate == nil {
+                                isoFormatter.formatOptions = [.withInternetDateTime]
+                                recDate = isoFormatter.date(from: recordedAtRaw)
+                            }
+
+                            // If we still can't parse, skip this row
+                            guard let recDateFinal = recDate else { continue }
+
+                            if recDateFinal <= cutoffDate {
+                                if let currentLatest = latestDate {
+                                    if recDateFinal > currentLatest {
+                                        latestDate = recDateFinal
+                                        selectedMGRow = row
+                                    }
+                                } else {
+                                    latestDate = recDateFinal
+                                    selectedMGRow = row
+                                }
+                            }
+                        }
+                    }
                 }
 
-                // 3. Length and Head Circumference
-                if let length = visitRow[Expression<Double?>("length_today_cm")] {
-                    drawText("Today's length (cm): \(String(format: "%.1f", length))", font: subFont)
+                // If we couldn't parse dates or no row matched the cutoff, fall back to "latest overall"
+                if selectedMGRow == nil {
+                    selectedMGRow = try? db.pluck(
+                        manualGrowth
+                            .filter(mgPatientID == pid)
+                            .order(mgRecordedAt.desc)
+                    )
                 }
-                if let hc = visitRow[Expression<Double?>("head_circ_today_cm")] {
-                    drawText("Today's head circumference (cm): \(String(format: "%.1f", hc))", font: subFont)
+
+                if let mgRow = selectedMGRow {
+                    let recordedAtRaw = mgRow[mgRecordedAt]
+                    var recordedAtPretty = recordedAtRaw
+
+                    // Try to pretty-print the recorded_at date if it is ISO8601; otherwise keep raw string.
+                    let isoFormatter = ISO8601DateFormatter()
+                    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    if let date = isoFormatter.date(from: recordedAtRaw) {
+                        let outFormatter = DateFormatter()
+                        outFormatter.dateStyle = .medium
+                        outFormatter.timeStyle = .none
+                        recordedAtPretty = outFormatter.string(from: date)
+                    } else {
+                        isoFormatter.formatOptions = [.withInternetDateTime]
+                        if let date = isoFormatter.date(from: recordedAtRaw) {
+                            let outFormatter = DateFormatter()
+                            outFormatter.dateStyle = .medium
+                            outFormatter.timeStyle = .none
+                            recordedAtPretty = outFormatter.string(from: date)
+                        }
+                    }
+
+                    if let wt = mgRow[mgWeight] {
+                        measurementLines.append(String(format: "Weight: %.2f kg (measured on %@)", wt, recordedAtPretty))
+                    }
+                    if let ht = mgRow[mgHeight] {
+                        measurementLines.append(String(format: "Length/Height: %.1f cm (measured on %@)", ht, recordedAtPretty))
+                    }
+                    if let hc = mgRow[mgHeadCirc] {
+                        measurementLines.append(String(format: "Head circumference: %.1f cm (measured on %@)", hc, recordedAtPretty))
+                    }
+                }
+
+                // 2. If nothing from manual_growth, fall back to legacy per-visit fields
+                if measurementLines.isEmpty {
+                    if let wt = visitRow[Expression<Double?>("weight_today_kg")] {
+                        measurementLines.append(String(format: "Today's weight: %.2f kg", wt))
+                    }
+                    if let length = visitRow[Expression<Double?>("length_today_cm")] {
+                        measurementLines.append(String(format: "Today's length: %.1f cm", length))
+                    }
+                    if let hc = visitRow[Expression<Double?>("head_circ_today_cm")] {
+                        measurementLines.append(String(format: "Today's head circumference: %.1f cm", hc))
+                    }
+                }
+
+                // 3. Render measurements or a placeholder if none
+                if measurementLines.isEmpty {
+                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                } else {
+                    for line in measurementLines {
+                        ensureSpace(for: 16)
+                        drawWrappedText(line, font: subFont, in: pageRect, at: &y, using: context)
+                        y += 2
+                    }
                 }
                 
                 // MARK: - Physical Examination
