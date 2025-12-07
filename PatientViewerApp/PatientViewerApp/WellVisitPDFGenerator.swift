@@ -247,22 +247,46 @@ struct WellVisitPDFGenerator {
         let dbPath: String = dbURL.appendingPathComponent("db.sqlite").path
         WellVisitPDFGenerator.log.debug("Opening SQLite at path=\(dbPath, privacy: .public)")
         var pid: Int64 = 0
+        // Approximate age in months at this visit for growth-chart gating (patient points only)
+        var ageMonthsForCharts: Double? = nil
+
         do {
             let db = try Connection(dbPath)
             let wellVisits = Table("well_visits")
             let visitID = Expression<Int64>("id")
             let patientID = Expression<Int64>("patient_id")
+            let visitDateCol = Expression<String>("visit_date")
+            let ageDaysCol = Expression<Int?>("age_days")
             let sex = Expression<String>("sex")
             guard let visitRow = try db.pluck(wellVisits.filter(visitID == visit.id)) else {
                 // If visit not found, skip chart images
                 return nil
             }
+
+            let visitDateString = visitRow[visitDateCol]
+            let ageDaysDBForCharts = visitRow[ageDaysCol]
+
             let patients = Table("patients")
             let id = Expression<Int64>("id")
+            let dob = Expression<String>("dob")
+
             pid = visitRow[patientID]
             if let patientRow = try db.pluck(patients.filter(id == pid)) {
                 sexTextForCharts = patientRow[sex]
-                WellVisitPDFGenerator.log.debug("Preloading growth charts for patient \(pid, privacy: .public) sex=\(sexTextForCharts, privacy: .public)")
+                let dobTextForCharts = patientRow[dob]
+
+                // Compute approximate age in months at this visit for chart gating
+                ageMonthsForCharts = computeAgeMonths(
+                    dobString: dobTextForCharts,
+                    visitDateString: visitDateString,
+                    ageDays: ageDaysDBForCharts
+                )
+
+                if let months = ageMonthsForCharts {
+                    WellVisitPDFGenerator.log.debug("Preloading growth charts for patient \(pid, privacy: .public) sex=\(sexTextForCharts, privacy: .public) ageMonthsForCharts=\(months, privacy: .public)")
+                } else {
+                    WellVisitPDFGenerator.log.debug("Preloading growth charts for patient \(pid, privacy: .public) sex=\(sexTextForCharts, privacy: .public); ageMonthsForCharts=nil (no cutoff will be applied)")
+                }
             }
         } catch {
             WellVisitPDFGenerator.log.error("Failed to read patient/sex for charts: \(error.localizedDescription, privacy: .public)")
@@ -275,12 +299,23 @@ struct WellVisitPDFGenerator {
                 ("head_circ", "Head Circumference-for-Age (0–24m)", "hcfa_0_24m_\(sexTextForCharts)")
             ]
             for (measurement, title, filename) in chartTypes {
+                if let cutoff = ageMonthsForCharts {
+                    WellVisitPDFGenerator.log.debug(
+                        "Calling GrowthChartRenderer for \(measurement, privacy: .public) with ageMonthsForCharts=\(cutoff, privacy: .public) (visit id=\(visit.id, privacy: .public))"
+                    )
+                } else {
+                    WellVisitPDFGenerator.log.debug(
+                        "Calling GrowthChartRenderer for \(measurement, privacy: .public) with no age cutoff (ageMonthsForCharts=nil) (visit id=\(visit.id, privacy: .public))"
+                    )
+                }
+
                 if let chartImage = await GrowthChartRenderer.generateChartImage(
                     dbPath: dbPath,
                     patientID: pid,
                     measurement: measurement,
                     sex: sexTextForCharts,
-                    filename: filename
+                    filename: filename,
+                    maxAgeMonths: ageMonthsForCharts
                 ) {
                     chartImagesToRender.append((title, chartImage))
                     WellVisitPDFGenerator.log.debug("Chart '\(title, privacy: .public)' generated (w=\(chartImage.size.width, privacy: .public), h=\(chartImage.size.height, privacy: .public))")
@@ -1020,6 +1055,165 @@ struct WellVisitPDFGenerator {
                     if let hc = mgRow[mgHeadCirc] {
                         measurementLines.append(String(format: "Head circumference: %.1f cm (measured on %@)", hc, recordedAtPretty))
                     }
+
+                    // Optional: weight gain (delta) for young infants (up to ~2 months)
+                    if let ageMonthsForDelta = computeAgeMonths(
+                        dobString: dobText,
+                        visitDateString: visitDate,
+                        ageDays: ageDaysDB
+                    ),
+                       ageMonthsForDelta <= 2.0,
+                       let currentWeightKg = mgRow[mgWeight] {
+
+                        // Parse current measurement date into currentDateFinal
+                        let recordedAtRawForDelta = mgRow[mgRecordedAt]
+                        var currentDateFinal: Date? = nil
+
+                        let isoFormatterForCurrent = ISO8601DateFormatter()
+                        isoFormatterForCurrent.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                        if let d = isoFormatterForCurrent.date(from: recordedAtRawForDelta) {
+                            currentDateFinal = d
+                        } else {
+                            isoFormatterForCurrent.formatOptions = [.withInternetDateTime]
+                            if let d2 = isoFormatterForCurrent.date(from: recordedAtRawForDelta) {
+                                currentDateFinal = d2
+                            } else {
+                                let dateOnlyFormatter = DateFormatter()
+                                dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                                dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                                currentDateFinal = dateOnlyFormatter.date(from: recordedAtRawForDelta)
+                            }
+                        }
+
+                        // If we still can't parse the date, skip the delta line but keep the measurements
+                        guard let currentDateParsed = currentDateFinal else {
+                            WellVisitPDFGenerator.log.warning("Measurements: unable to parse manual_growth recorded_at='\(recordedAtRawForDelta)' for delta weight")
+                            // Skip delta, do not append any additional line.
+                            // The raw measurements above have already been rendered.
+                            return
+                        }
+
+                        var baselineWeightGrams: Double? = nil
+                        var baselineDate: Date? = nil
+
+                        // For ages > ~30 days (1 month), try to use the most recent prior manual_growth as reference
+                        if ageMonthsForDelta > 1.0 {
+                            if let rows = try? db.prepare(manualGrowth.filter(mgPatientID == pid)) {
+                                var latestPrevDate: Date? = nil
+
+                                for row in rows {
+                                    let raw = row[mgRecordedAt]
+
+                                    var prevDate: Date? = nil
+                                    let isoPrev = ISO8601DateFormatter()
+                                    isoPrev.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                                    if let d = isoPrev.date(from: raw) {
+                                        prevDate = d
+                                    } else {
+                                        isoPrev.formatOptions = [.withInternetDateTime]
+                                        if let d2 = isoPrev.date(from: raw) {
+                                            prevDate = d2
+                                        } else {
+                                            let dateOnlyPrev = DateFormatter()
+                                            dateOnlyPrev.dateFormat = "yyyy-MM-dd"
+                                            dateOnlyPrev.locale = Locale(identifier: "en_US_POSIX")
+                                            prevDate = dateOnlyPrev.date(from: raw)
+                                        }
+                                    }
+
+                                    guard let prevDateFinal = prevDate, prevDateFinal < currentDateParsed else {
+                                        continue
+                                    }
+
+                                    if let existing = latestPrevDate {
+                                        if prevDateFinal > existing {
+                                            latestPrevDate = prevDateFinal
+                                            if let wPrev = row[mgWeight] {
+                                                baselineWeightGrams = wPrev * 1000.0
+                                                baselineDate = prevDateFinal
+                                            }
+                                        }
+                                    } else {
+                                        latestPrevDate = prevDateFinal
+                                        if let wPrev = row[mgWeight] {
+                                            baselineWeightGrams = wPrev * 1000.0
+                                            baselineDate = prevDateFinal
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // If no prior manual_growth reference, fall back to perinatal discharge, then birth weight
+                        if baselineWeightGrams == nil || baselineDate == nil {
+                            let perinatalTable = Table("perinatal_history")
+                            let perinatalPatientID = Expression<Int64>("patient_id")
+                            let dischargeWeightCol = Expression<Int?>("discharge_weight_g")
+                            let dischargeDateCol = Expression<String?>("maternity_discharge_date")
+                            let birthWeightCol = Expression<Int?>("birth_weight_g")
+
+                            if let peri = try? db.pluck(perinatalTable.filter(perinatalPatientID == pid)) {
+                                // 1) Try discharge weight + discharge date
+                                let dwOpt: Int?? = try? peri.get(dischargeWeightCol)
+                                let dischargeDateOpt: String?? = try? peri.get(dischargeDateCol)
+
+                                if let dwUnwrapped = dwOpt,
+                                   let dw = dwUnwrapped,
+                                   let dischargeDateUnwrapped = dischargeDateOpt,
+                                   let dischargeDateStr = dischargeDateUnwrapped {
+
+                                    let dateOnlyFormatter = DateFormatter()
+                                    dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                                    dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                                    if let dischargeDateFinal = dateOnlyFormatter.date(from: dischargeDateStr) {
+                                        baselineWeightGrams = Double(dw)
+                                        baselineDate = dischargeDateFinal
+                                    }
+                                }
+
+                                // 2) If still no baseline, try birth weight + DOB
+                                if (baselineWeightGrams == nil || baselineDate == nil) {
+                                    let bwOpt: Int?? = try? peri.get(birthWeightCol)
+                                    if let bwUnwrapped = bwOpt,
+                                       let bw = bwUnwrapped {
+
+                                        let dobFormatter = DateFormatter()
+                                        dobFormatter.dateFormat = "yyyy-MM-dd"
+                                        dobFormatter.locale = Locale(identifier: "en_US_POSIX")
+                                        if let dobDate = dobFormatter.date(from: dobText) {
+                                            baselineWeightGrams = Double(bw)
+                                            baselineDate = dobDate
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if let baselineWeight = baselineWeightGrams,
+                           let baselineDateFinal = baselineDate {
+                            let currentWeightGrams = currentWeightKg * 1000.0
+                            let deltaGrams = currentWeightGrams - baselineWeight
+                            let seconds = currentDateParsed.timeIntervalSince(baselineDateFinal)
+                            let daysDouble = seconds / (60.0 * 60.0 * 24.0)
+                            let days = Int(round(daysDouble))
+
+                            if days > 0 {
+                                let dailyGain = deltaGrams / Double(days)
+                                let deltaSign = deltaGrams >= 0 ? "+" : "-"
+                                let deltaAbs = abs(Int(round(deltaGrams)))
+                                let line = String(
+                                    format: "Weight gain since reference: %.1f g/day (Δ %@%d g over %d days)",
+                                    dailyGain,
+                                    deltaSign,
+                                    deltaAbs,
+                                    days
+                                )
+                                measurementLines.append(line)
+                            }
+                        } else {
+                            measurementLines.append("No reference weight found.")
+                        }
+                    }
                 }
 
                 // 2. If nothing from manual_growth, fall back to legacy per-visit fields
@@ -1051,6 +1245,13 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText("Physical Examination", font: UIFont.boldSystemFont(ofSize: 15))
 
+                // Age in months for PE-specific gating (hips, fontanelle, teeth, etc.)
+                let ageMonthsForPE = computeAgeMonths(
+                    dobString: dobText,
+                    visitDateString: visitDate,
+                    ageDays: ageDaysDB
+                )
+
                 func yesNo(_ value: Int?) -> String? {
                     if value == 1 { return "normal" }
                     if value == 0 { return "abnormal" }
@@ -1079,14 +1280,17 @@ struct WellVisitPDFGenerator {
                     ("Eyes & Head", [
                         ("Fontanelle", visitRow[Expression<Int?>("pe_fontanelle_normal")], visitRow[Expression<String?>("pe_fontanelle_comment")]),
                         ("Pupils RR", visitRow[Expression<Int?>("pe_pupils_rr_normal")], visitRow[Expression<String?>("pe_pupils_rr_comment")]),
-                        ("Ocular motility", visitRow[Expression<Int?>("pe_ocular_motility_normal")], visitRow[Expression<String?>("pe_ocular_motility_comment")])
+                        ("Ocular motility", visitRow[Expression<Int?>("pe_ocular_motility_normal")], visitRow[Expression<String?>("pe_ocular_motility_comment")]),
+                        // Teeth belong to Eyes & Head group, with age gating and dependency on presence flag
+                        ("Teeth present", visitRow[Expression<Int?>("pe_teeth_present")], visitRow[Expression<String?>("pe_teeth_comment")]),
+                        ("Teeth count", visitRow[Expression<Int?>("pe_teeth_count")], nil)
                     ]),
                     ("Abdomen & Genitalia", [
                         ("Liver/Spleen", visitRow[Expression<Int?>("pe_liver_spleen_normal")], visitRow[Expression<String?>("pe_liver_spleen_comment")]),
                         ("Abdominal mass", visitRow[Expression<Int?>("pe_abd_mass")], nil),
                         ("Genitalia", visitRow[Expression<String?>("pe_genitalia")], nil),
                         ("Umbilic", visitRow[Expression<Int?>("pe_umbilic_normal")], visitRow[Expression<String?>("pe_umbilic_comment")]),
-                        ("Testicles descended", testicleStatus(visitRow[Expression<Int?>("pe_testicles_descended")]), nil)
+                        ("Testicles descended", visitRow[Expression<Int?>("pe_testicles_descended")], nil)
                     ]),
                     ("Skin", [
                         ("Marks", visitRow[Expression<Int?>("pe_skin_marks_normal")], visitRow[Expression<String?>("pe_skin_marks_comment")]),
@@ -1105,41 +1309,134 @@ struct WellVisitPDFGenerator {
                     var groupParts: [String] = []
 
                     for (label, rawValue, commentRaw) in fields {
+                        // Sex gating: never show testicles for girls
+                        if label == "Testicles descended", sexText != "M" {
+                            continue
+                        }
+
+                        // Age gating rules – fail open if ageMonthsForPE is nil
+                        if let ageMonths = ageMonthsForPE {
+                            switch label {
+                            case "Hips":
+                                // Hips visible only up to 6 months
+                                if ageMonths > 6.0 { continue }
+                            case "Fontanelle":
+                                // Fontanelle visible only up to 24 months
+                                if ageMonths > 24.0 { continue }
+                            case "Teeth present", "Teeth count":
+                                // Teeth visible from 4 months onward
+                                if ageMonths < 4.0 { continue }
+                            default:
+                                break
+                            }
+                        }
+
                         var displayValue: String?
 
                         switch rawValue {
                         case let b as Int:
-                            displayValue = yesNo(b)
+                            if label == "Abdominal mass" {
+                                // 0 == no mass, 1 == mass present
+                                if b == 1 { displayValue = "yes" }
+                                else if b == 0 { displayValue = "no" }
+                            } else if label == "Teeth present" {
+                                // Teeth present as yes/no
+                                displayValue = (b == 1 ? "yes" : "no")
+                            } else if label == "Testicles descended" {
+                                // Testicles descended as yes/no
+                                displayValue = (b == 1 ? "yes" : "no")
+                            } else {
+                                displayValue = yesNo(b)
+                            }
+
                         case let s as String:
                             if !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 displayValue = s
                             }
-                        case let s as Optional<String>:
-                            if let s = s, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+
+                        case let optStr as Optional<String>:
+                            if let s = optStr,
+                               !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 displayValue = s
                             }
-                        case let s as Optional<Int>:
-                            if label == "Testicles descended" {
-                                displayValue = s.flatMap(testicleStatus)
-                            } else {
-                                displayValue = s != nil ? "\(s!)" : nil
+
+                        case let optInt as Optional<Int>:
+                            if let v = optInt {
+                                if label == "Testicles descended" {
+                                    // yes/no semantics for testicles descended
+                                    displayValue = (v == 1 ? "yes" : "no")
+                                } else if label == "Teeth present" {
+                                    // yes/no semantics for teeth present
+                                    displayValue = (v == 1 ? "yes" : "no")
+                                } else if label == "Teeth count" {
+                                    // Only show count if we know teeth are present
+                                    let presentVal = visitRow[Expression<Int?>("pe_teeth_present")] ?? 0
+                                    if presentVal == 1 {
+                                        displayValue = "\(v)"
+                                    }
+                                } else if label == "Abdominal mass" {
+                                    // yes/no semantics for abdominal mass
+                                    displayValue = (v == 1 ? "yes" : "no")
+                                } else {
+                                    displayValue = "\(v)"
+                                }
                             }
+
                         default:
                             break
                         }
 
                         if let result = displayValue {
                             var line = "\(label): \(result)"
-                            if let c = commentRaw as? String, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                line += " (\(c))"
+
+                            // Unwrap commentRaw safely (handles both String and String?)
+                            var commentString: String?
+                            if let s = commentRaw as? String {
+                                commentString = s
+                            } else if let sOpt = commentRaw as? Optional<String>, let s = sOpt {
+                                commentString = s
                             }
+
+                            if let c = commentString,
+                               !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                // Field-specific rules for when to append comments
+                                if label == "Teeth present" {
+                                    // Only attach comment if teeth are present
+                                    let presentVal = visitRow[Expression<Int?>("pe_teeth_present")] ?? 0
+                                    if presentVal == 1 {
+                                        line += " (\(c))"
+                                    }
+                                } else if label == "Hips" {
+                                    // Only attach comment if hips are abnormal
+                                    let hipsNormalVal = visitRow[Expression<Int?>("pe_hips_normal")] ?? 1
+                                    if hipsNormalVal == 0 {
+                                        line += " (\(c))"
+                                    }
+                                } else if label == "Fontanelle" {
+                                    // Only attach comment if fontanelle is abnormal
+                                    let fontanelleVal = visitRow[Expression<Int?>("pe_fontanelle_normal")] ?? 1
+                                    if fontanelleVal == 0 {
+                                        line += " (\(c))"
+                                    }
+                                } else {
+                                    // Default behavior: always append tidy comment
+                                    line += " (\(c))"
+                                }
+                            }
+
                             groupParts.append(line)
                         }
                     }
 
                     if !groupParts.isEmpty {
                         foundPE = true
-                        drawWrappedText("\(groupName): " + groupParts.joined(separator: "; "), font: subFont, in: pageRect, at: &y, using: context)
+                        drawWrappedText(
+                            "\(groupName): " + groupParts.joined(separator: "; "),
+                            font: subFont,
+                            in: pageRect,
+                            at: &y,
+                            using: context
+                        )
                     }
                 }
 
@@ -1152,11 +1449,28 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText("Problem Listing", font: UIFont.boldSystemFont(ofSize: 15))
 
-                let problems = visitRow[Expression<String?>("problem_listing")] ?? ""
-                if !problems.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    drawWrappedText(problems, font: subFont, in: pageRect, at: &y, using: context)
-                } else {
+                let rawProblems = visitRow[Expression<String?>("problem_listing")] ?? ""
+                let trimmedProblems = rawProblems.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if trimmedProblems.isEmpty {
+                    // No problem listing documented
                     drawText("—", font: subFont)
+                } else {
+                    // Split into logical lines and render each as a bullet
+                    let lines = trimmedProblems
+                        .components(separatedBy: .newlines)
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+
+                    if lines.isEmpty {
+                        drawText("—", font: subFont)
+                    } else {
+                        for line in lines {
+                            ensureSpace(for: 16)
+                            drawWrappedText(line, font: subFont, in: pageRect, at: &y, using: context)
+                            y += 2
+                        }
+                    }
                 }
                 
                 // MARK: - Conclusions
@@ -1164,10 +1478,19 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText("Conclusions", font: UIFont.boldSystemFont(ofSize: 15))
                 let conclusions = visitRow[Expression<String?>("conclusions")] ?? ""
-                if !conclusions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    drawWrappedText(conclusions, font: subFont, in: pageRect, at: &y, using: context)
+                let trimmedConclusions = conclusions.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if !trimmedConclusions.isEmpty {
+                    drawWrappedText(trimmedConclusions, font: subFont, in: pageRect, at: &y, using: context)
                 } else {
-                    drawText("No conclusions documented.", font: subFont)
+                    // Default conclusion when nothing specific is documented
+                    if let ageStr = formatAgeString(dobString: dobText,
+                                                   visitDateString: visitDate,
+                                                   ageDays: ageDaysDB) {
+                        drawWrappedText("Healthy \(ageStr)", font: subFont, in: pageRect, at: &y, using: context)
+                    } else {
+                        drawWrappedText("Healthy", font: subFont, in: pageRect, at: &y, using: context)
+                    }
                 }
 
                 // MARK: - Anticipatory Guidance
@@ -1178,7 +1501,7 @@ struct WellVisitPDFGenerator {
                 if !guidance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     drawWrappedText(guidance, font: subFont, in: pageRect, at: &y, using: context)
                 } else {
-                    drawText("No anticipatory guidance provided.", font: subFont)
+                    drawText("Age appropriate anticipatory guidance", font: subFont)
                 }
 
                
@@ -1200,6 +1523,34 @@ struct WellVisitPDFGenerator {
                 let nextVisit = visitRow[Expression<String?>("next_visit_date")] ?? ""
                 if !nextVisit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     drawText("Next Visit Date: \(nextVisit)", font: subFont)
+                }
+
+                // MARK: - AI Assistant Input
+                y += 12
+                ensureSpace(for: 18)
+                drawText("AI Assistant Input", font: UIFont.boldSystemFont(ofSize: 15))
+
+                let aiTable = Table("well_ai_inputs")
+                let aiVisitID = Expression<Int64>("well_visit_id")
+                let aiResponse = Expression<String?>("response")
+                let aiCreatedAt = Expression<String?>("created_at")
+
+                // Fetch only the latest AI record for this visit, ordered by created_at descending
+                let latestAIQuery = aiTable
+                    .filter(aiVisitID == visit.id)
+                    .order(aiCreatedAt.desc)
+                    .limit(1)
+
+                if let aiRow = try? db.pluck(latestAIQuery),
+                   let responseRaw = aiRow[aiResponse] {
+                    let response = responseRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !response.isEmpty {
+                        drawWrappedText(response, font: subFont, in: pageRect, at: &y, using: context)
+                    } else {
+                        drawText("No AI input recorded", font: subFont)
+                    }
+                } else {
+                    drawText("No AI input recorded", font: subFont)
                 }
                 
                 // MARK: - Growth Charts

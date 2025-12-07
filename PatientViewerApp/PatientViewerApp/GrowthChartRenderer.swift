@@ -63,7 +63,8 @@ struct GrowthChartRenderer {
         patientID: Int64,
         measurement: String,
         sex: String,
-        filename: String
+        filename: String,
+        maxAgeMonths: Double? = nil
     ) async -> UIImage? {
         Self.logger.info("Render start: measurement=\(measurement, privacy: .public), patientID=\(patientID, privacy: .public), sex=\(sex, privacy: .public), csv=\(filename, privacy: .public)")
         // These loaders are synchronous — no 'await' needed here.
@@ -75,9 +76,22 @@ struct GrowthChartRenderer {
         )
 
         // Filter out any non-finite (NaN/±Inf) values from both sources before plotting.
-        let cleanPatient = patientData.filter { $0.ageMonths.isFinite && $0.value.isFinite }
+        let cleanPatientAll = patientData.filter { $0.ageMonths.isFinite && $0.value.isFinite }
+
+        // Apply optional age cutoff (used by PDF renderer to stop at visit age with a small tolerance).
+        let ageTolerance = 0.1
+        let cleanPatient: [GrowthDataPoint]
+        if let cutoff = maxAgeMonths {
+            cleanPatient = cleanPatientAll.filter { $0.ageMonths <= cutoff + ageTolerance }
+            if cleanPatient.isEmpty && !cleanPatientAll.isEmpty {
+                Self.logger.notice("All patient points for \(measurement, privacy: .public) are after cutoff ageMonths=\(cutoff, privacy: .public); none will be plotted for this chart.")
+            }
+        } else {
+            cleanPatient = cleanPatientAll
+        }
+
         if cleanPatient.isEmpty {
-            Self.logger.notice("No patient points to plot for \(measurement, privacy: .public)")
+            Self.logger.notice("No patient points to plot for \(measurement, privacy: .public) (after cutoff/filtering)")
         }
 
         // Determine Y-axis domain dynamically (patient + reference), padded and clamped to defaults.
