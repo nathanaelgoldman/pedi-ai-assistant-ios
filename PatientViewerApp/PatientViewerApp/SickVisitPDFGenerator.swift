@@ -34,6 +34,125 @@ struct SickVisitPDFGenerator {
             // but this declaration is needed for drawWrappedText's scope.
         }
 
+        // Helper to format age string, mirroring WellVisitPDFGenerator logic (without ageDays param)
+        func formatAgeString(dobString: String, visitDateString: String) -> String? {
+            let dobFormatter = DateFormatter()
+            dobFormatter.dateFormat = "yyyy-MM-dd"
+            dobFormatter.locale = Locale(identifier: "en_US_POSIX")
+            guard let dobDate = dobFormatter.date(from: dobString) else {
+                SickVisitPDFGenerator.log.warning("formatAgeString: unable to parse DOB='\(dobString)'")
+                return nil
+            }
+            var visitDate: Date? = nil
+            // Try ISO8601 with fractional seconds
+            let iso1 = ISO8601DateFormatter()
+            iso1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            visitDate = iso1.date(from: visitDateString)
+            if visitDate == nil {
+                // Try ISO8601 without fractional seconds
+                let iso2 = ISO8601DateFormatter()
+                iso2.formatOptions = [.withInternetDateTime]
+                visitDate = iso2.date(from: visitDateString)
+            }
+            if visitDate == nil {
+                // Try "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                let df1 = DateFormatter()
+                df1.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                df1.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = df1.date(from: visitDateString)
+            }
+            if visitDate == nil {
+                // Try "yyyy-MM-dd"
+                let df2 = DateFormatter()
+                df2.dateFormat = "yyyy-MM-dd"
+                df2.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = df2.date(from: visitDateString)
+            }
+            guard let visit = visitDate else {
+                SickVisitPDFGenerator.log.warning("formatAgeString: unable to parse visitDate='\(visitDateString)'")
+                return nil
+            }
+            let calendar = Calendar(identifier: .gregorian)
+            let components = calendar.dateComponents([.year, .month, .day], from: dobDate, to: visit)
+            let years = max(0, components.year ?? 0)
+            let months = max(0, components.month ?? 0)
+            let days = max(0, components.day ?? 0)
+            if years == 0 && months == 0 {
+                return days == 1 ? "1 day" : "\(days) days"
+            } else if years == 0 && months >= 1 {
+                let monthPart = months == 1 ? "1 month" : "\(months) months"
+                if days > 0 {
+                    let dayPart = days == 1 ? "1 day" : "\(days) days"
+                    return "\(monthPart) \(dayPart)"
+                } else {
+                    return monthPart
+                }
+            } else if years >= 1 {
+                let yearPart = years == 1 ? "1 year" : "\(years) years"
+                if months > 0 {
+                    let monthPart = months == 1 ? "1 month" : "\(months) months"
+                    return "\(yearPart) \(monthPart)"
+                } else {
+                    return yearPart
+                }
+            }
+            return nil
+        }
+
+        // Helper to compute age in months from DOB and visit date
+        func computeAgeMonths(dobString: String, visitDateString: String) -> Double? {
+            let dobFormatter = DateFormatter()
+            dobFormatter.dateFormat = "yyyy-MM-dd"
+            dobFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+            guard let dobDate = dobFormatter.date(from: dobString) else {
+                SickVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse DOB='\(dobString)'")
+                return nil
+            }
+
+            var visitDate: Date? = nil
+
+            // Try ISO8601 with fractional seconds
+            let iso1 = ISO8601DateFormatter()
+            iso1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            visitDate = iso1.date(from: visitDateString)
+
+            if visitDate == nil {
+                // Try ISO8601 without fractional seconds
+                let iso2 = ISO8601DateFormatter()
+                iso2.formatOptions = [.withInternetDateTime]
+                visitDate = iso2.date(from: visitDateString)
+            }
+
+            if visitDate == nil {
+                // Try "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                let df1 = DateFormatter()
+                df1.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                df1.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = df1.date(from: visitDateString)
+            }
+
+            if visitDate == nil {
+                // Try plain date-only format
+                let df2 = DateFormatter()
+                df2.dateFormat = "yyyy-MM-dd"
+                df2.locale = Locale(identifier: "en_US_POSIX")
+                visitDate = df2.date(from: visitDateString)
+            }
+
+            guard let finalVisitDate = visitDate else {
+                SickVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse visitDate='\(visitDateString)'")
+                return nil
+            }
+
+            let interval = finalVisitDate.timeIntervalSince(dobDate)
+            let days = interval / 86_400.0
+            if days < 0 {
+                SickVisitPDFGenerator.log.warning("computeAgeMonths: negative age days=\(days) for DOB='\(dobString)' visit='\(visitDateString)'")
+            }
+            return max(0.0, days / 30.0)
+        }
+
         // Helper to draw wrapped text for long lines (e.g., PE section), supporting multi-page and clean margins
         func drawWrappedText(_ text: String, font: UIFont, in rect: CGRect, at y: inout CGFloat, using rendererContext: UIGraphicsPDFRendererContext) {
             let paragraphStyle = NSMutableParagraphStyle()
@@ -175,6 +294,8 @@ struct SickVisitPDFGenerator {
                 let dobText = patientRow[dob]
                 let sexText = patientRow[sex]
                 let mrnText = patientRow[mrn]
+
+                let ageMonthsForVisit = computeAgeMonths(dobString: dobText, visitDateString: visit.date)
                 Self.log.debug("Patient alias=\(aliasText, privacy: .public) name=\(name, privacy: .public) dob=\(dobText, privacy: .public) sex=\(sexText, privacy: .public)")
 
                 // 3. Render
@@ -183,6 +304,9 @@ struct SickVisitPDFGenerator {
                 drawText("Alias: \(aliasText)", font: subFont)
                 drawText("Name: \(name)", font: subFont)
                 drawText("DOB: \(dobText)", font: subFont)
+                if let ageText = formatAgeString(dobString: dobText, visitDateString: visit.date) {
+                    drawText("Age at Visit: \(ageText)", font: subFont)
+                }
                 drawText("Sex: \(sexText)", font: subFont)
                 drawText("MRN: \(mrnText)", font: subFont)
 
@@ -227,13 +351,68 @@ struct SickVisitPDFGenerator {
 
                     // MARK: - Past Medical History
                     let pmh = Table("past_medical_history")
+                    let pmhPID = Expression<Int64>("patient_id")
                     let asthma = Expression<Int?>("asthma")
                     let otitis = Expression<Int?>("otitis")
                     let uti = Expression<Int?>("uti")
                     let allergies = Expression<Int?>("allergies")
                     let other = Expression<String?>("other")
+                    let allergyDetails = Expression<String?>("allergy_details")
 
-                    if let pmhRow = try? db.pluck(pmh.filter(Expression<Int64>("patient_id") == pid)) {
+                    // Default lines (shown even when nothing is recorded)
+                    var perinatalLine = "Perinatal: —"
+                    var pmhLine = "History: —"
+
+                    // Age-gated perinatal summary (only if < 3 months)
+                    if let ageM = ageMonthsForVisit, ageM < 3.0 {
+                        let perinatal = Table("perinatal_history")
+                        let perinatalPID = Expression<Int64>("patient_id")
+                        let pregnancyRisk = Expression<String?>("pregnancy_risk")
+                        let birthMode = Expression<String?>("birth_mode")
+                        let term = Expression<Int?>("birth_term_weeks")
+                        let resuscitation = Expression<String?>("resuscitation")
+                        let infectionRisk = Expression<String?>("infection_risk")
+                        let birthWeight = Expression<Int?>("birth_weight_g")
+                        let birthLength = Expression<Double?>("birth_length_cm")
+                        let headCirc = Expression<Double?>("birth_head_circumference_cm")
+                        let dischargeWeight = Expression<Int?>("discharge_weight_g")
+                        let feedingMaternity = Expression<String?>("feeding_in_maternity")
+                        let vaccinations = Expression<String?>("maternity_vaccinations")
+                        let events = Expression<String?>("maternity_stay_events")
+                        let hearing = Expression<String?>("hearing_screening")
+                        let heart = Expression<String?>("heart_screening")
+                        let metabolic = Expression<String?>("metabolic_screening")
+                        let afterBirth = Expression<String?>("illnesses_after_birth")
+                        let motherVacc = Expression<String?>("mother_vaccinations")
+
+                        if let peri = try? db.pluck(perinatal.filter(perinatalPID == pid)) {
+                            var parts: [String] = []
+                            if let v = try? peri.get(pregnancyRisk), !v.isEmpty { parts.append("Pregnancy: \(v)") }
+                            if let v = try? peri.get(birthMode), !v.isEmpty { parts.append("Birth mode: \(v)") }
+                            if let v = try? peri.get(term) { parts.append("GA: \(v) weeks") }
+                            if let v = try? peri.get(resuscitation), !v.isEmpty { parts.append("Resuscitation: \(v)") }
+                            if let v = try? peri.get(infectionRisk), !v.isEmpty { parts.append("Infection risk: \(v)") }
+                            if let v = try? peri.get(birthWeight) { parts.append("BW: \(v) g") }
+                            if let v = try? peri.get(birthLength) { parts.append("BL: \(String(format: "%.1f", v)) cm") }
+                            if let v = try? peri.get(headCirc) { parts.append("HC: \(String(format: "%.1f", v)) cm") }
+                            if let v = try? peri.get(dischargeWeight) { parts.append("Discharge wt: \(v) g") }
+                            if let v = try? peri.get(feedingMaternity), !v.isEmpty { parts.append("Feeding: \(v)") }
+                            if let v = try? peri.get(vaccinations), !v.isEmpty { parts.append("Vaccinations: \(v)") }
+                            if let v = try? peri.get(events), !v.isEmpty { parts.append("Events: \(v)") }
+                            if let v = try? peri.get(hearing), !v.isEmpty { parts.append("Hearing: \(v)") }
+                            if let v = try? peri.get(heart), !v.isEmpty { parts.append("Heart: \(v)") }
+                            if let v = try? peri.get(metabolic), !v.isEmpty { parts.append("Metabolic: \(v)") }
+                            if let v = try? peri.get(afterBirth), !v.isEmpty { parts.append("After birth: \(v)") }
+                            if let v = try? peri.get(motherVacc), !v.isEmpty { parts.append("Mother vacc: \(v)") }
+
+                            if !parts.isEmpty {
+                                perinatalLine = "Perinatal: " + parts.joined(separator: "; ")
+                            }
+                        }
+                    }
+
+                    // Non-perinatal past medical history
+                    if let pmhRow = try? db.pluck(pmh.filter(pmhPID == pid)) {
                         var items: [String] = []
                         if (try? pmhRow.get(asthma)) == 1 { items.append("Asthma") }
                         if (try? pmhRow.get(otitis)) == 1 { items.append("Otitis") }
@@ -242,13 +421,84 @@ struct SickVisitPDFGenerator {
                         if let otherVal = try? pmhRow.get(other), !otherVal.isEmpty {
                             items.append(otherVal)
                         }
+                        if let details = try? pmhRow.get(allergyDetails), !details.isEmpty {
+                            items.append("Allergy details: \(details)")
+                        }
+
                         if !items.isEmpty {
-                            y += 12
-                            drawText("Past Medical History", font: UIFont.boldSystemFont(ofSize: 16))
-                            drawText(items.joined(separator: "; "), font: subFont)
+                            pmhLine = "History: " + items.joined(separator: "; ")
                         }
                     }
-                    
+
+                    // Always render Past Medical History section with explicit placeholders
+                    y += 12
+                    drawText("Past Medical History", font: UIFont.boldSystemFont(ofSize: 16))
+                    drawWrappedText(perinatalLine, font: subFont, in: pageRect, at: &y, using: rendererContext)
+                    drawWrappedText(pmhLine, font: subFont, in: pageRect, at: &y, using: rendererContext)
+
+                    // MARK: - Vitals
+                    y += 12
+                    drawText("Vitals", font: UIFont.boldSystemFont(ofSize: 16))
+
+                    let vitals = Table("vitals")
+                    let vEpisodeID = Expression<Int64>("episode_id")
+                    let vRecordedAt = Expression<String>("recorded_at")
+
+                    let vWeight = Expression<Double?>("weight_kg")
+                    let vHeight = Expression<Double?>("height_cm")
+                    let vHeadCirc = Expression<Double?>("head_circumference_cm")
+                    let vTemp = Expression<Double?>("temperature_c")
+                    let vHR = Expression<Int?>("heart_rate")
+                    let vRR = Expression<Int?>("respiratory_rate")
+                    let vSpO2 = Expression<Int?>("spo2")
+                    let vSys = Expression<Int?>("bp_systolic")
+                    let vDia = Expression<Int?>("bp_diastolic")
+
+                    if let vitalsRow = try? db.pluck(
+                        vitals
+                            .filter(vEpisodeID == visit.id)
+                            .order(vRecordedAt.desc)
+                            .limit(1)
+                    ) {
+                        var vitalsLines: [String] = []
+
+                        if let w = vitalsRow[vWeight], w > 0 {
+                            vitalsLines.append(String(format: "Weight: %.1f kg", w))
+                        }
+                        if let h = vitalsRow[vHeight], h > 0 {
+                            vitalsLines.append(String(format: "Length/Height: %.1f cm", h))
+                        }
+                        if let hc = vitalsRow[vHeadCirc], hc > 0 {
+                            vitalsLines.append(String(format: "Head Circumference: %.1f cm", hc))
+                        }
+                        if let t = vitalsRow[vTemp], t > 0 {
+                            vitalsLines.append(String(format: "Temperature: %.1f °C", t))
+                        }
+                        if let hr = vitalsRow[vHR], hr > 0 {
+                            vitalsLines.append("Heart Rate: \(hr) bpm")
+                        }
+                        if let rr = vitalsRow[vRR], rr > 0 {
+                            vitalsLines.append("Respiratory Rate: \(rr) /min")
+                        }
+                        if let spo = vitalsRow[vSpO2], spo > 0 {
+                            vitalsLines.append("SpO₂: \(spo) %")
+                        }
+                        if let sys = vitalsRow[vSys], let dia = vitalsRow[vDia], sys > 0, dia > 0 {
+                            vitalsLines.append("Blood Pressure: \(sys)/\(dia) mmHg")
+                        }
+
+                        if vitalsLines.isEmpty {
+                            drawText("—", font: subFont)
+                        } else {
+                            for line in vitalsLines {
+                                drawText(line, font: subFont)
+                            }
+                        }
+                    } else {
+                        // No vitals recorded for this episode
+                        drawText("—", font: subFont)
+                    }
+
                 // MARK: - Physical Examination
                 y += 12
                 drawText("Physical Examination", font: UIFont.boldSystemFont(ofSize: 16))
@@ -305,6 +555,32 @@ struct SickVisitPDFGenerator {
                 let comments = Expression<String?>("comments")
                 let aiNotes = Expression<String?>("ai_notes")
 
+                let aiInputs = Table("ai_inputs")
+                let aiEpisodeID = Expression<Int64>("episode_id")
+                let aiResponse = Expression<String?>("response")
+                let aiCreatedAt = Expression<String?>("created_at")
+
+                // Resolve AI content: prefer latest ai_inputs.response, fallback to legacy episodes.ai_notes
+                var aiSectionContent: String? = nil
+
+                // 1) Try latest ai_inputs row for this episode
+                let latestAIQuery = aiInputs
+                    .filter(aiEpisodeID == visit.id)
+                    .order(aiCreatedAt.desc)
+                    .limit(1)
+
+                if let aiRow = try? db.pluck(latestAIQuery),
+                   let raw = aiRow[aiResponse]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !raw.isEmpty {
+                    aiSectionContent = raw
+                } else if let legacy = try? episodeRow.get(aiNotes) {
+                    // 2) Fallback to legacy ai_notes column on episodes
+                    let trimmed = legacy.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        aiSectionContent = trimmed
+                    }
+                }
+
                 func renderSection(title: String, content: String?) {
                     let headerFont = UIFont.boldSystemFont(ofSize: 16)
                     let bodyFont = subFont
@@ -349,7 +625,7 @@ struct SickVisitPDFGenerator {
                 renderSection(title: "Medications", content: try? episodeRow.get(medications))
                 renderSection(title: "Anticipatory Guidance", content: try? episodeRow.get(anticipatory))
                 renderSection(title: "Comments", content: try? episodeRow.get(comments))
-                renderSection(title: "AI Notes", content: try? episodeRow.get(aiNotes))
+                renderSection(title: "AI Assistant Input", content: aiSectionContent)
             } catch {
                 Self.log.error("DB error while generating sick visit PDF: \(error.localizedDescription, privacy: .public)")
                 drawText("❌ DB Error: \(error.localizedDescription)", font: subFont)
