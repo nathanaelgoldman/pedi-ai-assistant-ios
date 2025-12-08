@@ -708,6 +708,7 @@ final class ReportDataLoader {
         var planGuidance: String?
         var clinicianComments: String?
         var nextVisitDate: String?
+        var perinatalSummary: String?
 
         do {
             let dbPath = try currentBundleDBPath()
@@ -818,6 +819,9 @@ final class ReportDataLoader {
                     }
                 }
 
+                // --- VITALS summary for this sick episode ---
+                vitalsFlags = loadVitalsSummaryForEpisode(episodeID)
+
                 // --- PATIENT: vaccination_status ---
                 if patientID > 0 {
                     let sqlPt = "SELECT vaccination_status FROM patients WHERE id = ? LIMIT 1;"
@@ -860,6 +864,21 @@ final class ReportDataLoader {
                         }
                     }
                 }
+                
+                // --- Perinatal summary for sick episode, gated to ≤ 3 months ---
+                if let dob = parseDateFlexible(meta.dobISO),
+                   let visit = parseDateFlexible(meta.visitDateISO),
+                   visit >= dob {
+
+                    let seconds = visit.timeIntervalSince(dob)
+                    let days = seconds / 86400.0
+                    let months = max(0.0, days / 30.4375)    // same convention as growth logic
+
+                    if months <= 3.0, let pid = patientIDForSickEpisode(episodeID) {
+                        // Per spec: perinatal history is historical, no date cutoff here.
+                        perinatalSummary = buildPerinatalSummary(patientID: pid, cutoffISO: nil)
+                    }
+                }
             }
         } catch {
             // leave optionals nil; renderer will print "—"
@@ -872,6 +891,7 @@ final class ReportDataLoader {
             duration: duration,
             basics: basics,
             pmh: pmhText,
+            perinatalSummary: perinatalSummary,
             vaccination: vaccinationText,
             vitalsSummary: vitalsFlags,
             physicalExamGroups: peGroups,
@@ -3102,5 +3122,268 @@ extension ReportDataLoader {
             supplementation: core.supplementation,
             sleep: core.sleep
         )
+    }
+}
+
+extension ReportDataLoader {
+
+    /// Load a concise vitals summary for a sick episode.
+    /// Strategy:
+    ///  - Look for a `vitals` table in the current bundle DB.
+    ///  - Join by a suitable FK (episode_id / visit_id / encounter_id / sick_episode_id).
+    ///  - Take the most recent row for this episode.
+    ///  - Build a single human-readable line with all available vitals.
+    private func loadVitalsSummaryForEpisode(_ episodeID: Int) -> [String] {
+        var out: [String] = []
+
+        func nonEmpty(_ value: String?) -> String? {
+            guard let v = value?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return nil }
+            return v
+        }
+
+        do {
+            let dbPath = try currentBundleDBPath()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
+
+                // Check that a vitals table exists
+                var hasVitals = false
+                var checkStmt: OpaquePointer?
+                if sqlite3_prepare_v2(
+                    db,
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='vitals' LIMIT 1;",
+                    -1,
+                    &checkStmt,
+                    nil
+                ) == SQLITE_OK, let st = checkStmt {
+                    defer { sqlite3_finalize(st) }
+                    hasVitals = (sqlite3_step(st) == SQLITE_ROW)
+                }
+                if !hasVitals { return out }
+
+                // Discover vitals columns
+                var vcols = Set<String>()
+                var colsStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, "PRAGMA table_info(vitals);", -1, &colsStmt, nil) == SQLITE_OK, let s = colsStmt {
+                    defer { sqlite3_finalize(s) }
+                    while sqlite3_step(s) == SQLITE_ROW {
+                        if let cName = sqlite3_column_text(s, 1) {
+                            vcols.insert(String(cString: cName))
+                        }
+                    }
+                }
+
+                // Try common FK candidates
+                let fkCandidates = ["episode_id","visit_id","encounter_id","sick_episode_id"]
+                guard let fk = fkCandidates.first(where: { vcols.contains($0) }) else {
+                    return out
+                }
+
+                // Pick available date/timestamp columns in priority order
+                let datePriorityCandidates = [
+                    "recorded_at",
+                    "measured_at",
+                    "created_at",
+                    "updated_at",
+                    "date"
+                ]
+                let dateCols = datePriorityCandidates.filter { vcols.contains($0) }
+
+                let orderClause: String
+                if dateCols.isEmpty {
+                    // Fallback: no known date columns, just use id
+                    orderClause = "ORDER BY id DESC"
+                } else {
+                    var caseLines: [String] = []
+                    for col in dateCols {
+                        caseLines.append("WHEN \(col) IS NOT NULL THEN \(col)")
+                    }
+                    let caseBody = caseLines.joined(separator: "\n            ")
+                    orderClause = """
+                    ORDER BY
+                        CASE
+                            \(caseBody)
+                            ELSE id
+                        END DESC
+                    """
+                }
+
+                let sql = """
+                SELECT *
+                FROM vitals
+                WHERE \(fk) = ?
+                \(orderClause)
+                LIMIT 1;
+                """
+
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(episodeID))
+
+                    if sqlite3_step(st) == SQLITE_ROW {
+                        // Build a dictionary of the row
+                        var row: [String:String] = [:]
+                        let n = sqlite3_column_count(st)
+                        for i in 0..<n {
+                            guard let cname = sqlite3_column_name(st, i) else { continue }
+                            let key = String(cString: cname)
+                            if sqlite3_column_type(st, i) != SQLITE_NULL,
+                               let cval = sqlite3_column_text(st, i) {
+                                let val = String(cString: cval).trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !val.isEmpty { row[key] = val }
+                            }
+                        }
+
+                        func val(_ key: String) -> String? {
+                            return nonEmpty(row[key])
+                        }
+
+                        var parts: [String] = []
+
+                        // Weight
+                        if let w = val("weight_kg") ?? val("wt_kg") ?? val("weight") {
+                            if w.contains("kg") {
+                                parts.append("Weight: \(w)")
+                            } else {
+                                parts.append("Weight: \(w) kg")
+                            }
+                        }
+
+                        // Length / Height
+                        if let l = val("length_cm") ?? val("height_cm") ?? val("stature_cm") ?? val("length") {
+                            if l.contains("cm") {
+                                parts.append("Height/Length: \(l)")
+                            } else {
+                                parts.append("Height/Length: \(l) cm")
+                            }
+                        }
+
+                        // Temperature (°C)
+                        if let t = val("temp_c") ?? val("temperature_c") ?? val("temperature") ?? val("temp") {
+                            parts.append("Temp: \(t)\u{00A0}°C")
+                        }
+
+                        // Heart rate
+                        if let hr = val("heart_rate") ?? val("hr") ?? val("pulse") {
+                            parts.append("HR: \(hr)\u{00A0}bpm")
+                        }
+
+                        // Respiratory rate
+                        if let rr = val("resp_rate") ?? val("rr") ?? val("respiratory_rate") {
+                            parts.append("RR: \(rr)/min")
+                        }
+
+                        // SpO2
+                        if let spo2 = val("spo2") ?? val("SpO2") ?? val("spO2") ?? val("oxygen_saturation") {
+                            if spo2.contains("%") {
+                                parts.append("SpO₂: \(spo2)")
+                            } else {
+                                parts.append("SpO₂: \(spo2)%")
+                            }
+                        }
+
+                        // Blood pressure  ✅ now includes bp_systolic / bp_diastolic
+                        var bpPieces: [String] = []
+                        if let sys = val("bp_systolic") ?? val("bp_sys") ?? val("systolic_bp") ?? val("sbp") {
+                            bpPieces.append(sys)
+                        }
+                        if let dia = val("bp_diastolic") ?? val("bp_dia") ?? val("diastolic_bp") ?? val("dbp") {
+                            bpPieces.append(dia)
+                        }
+                        if !bpPieces.isEmpty {
+                            parts.append("BP: \(bpPieces.joined(separator: "/")) mmHg")
+                        }
+
+                        // When measured
+                        if let when = val("measured_at") ?? val("recorded_at") ?? val("date") {
+                            parts.append("Measured: \(when)")
+                        }
+
+                        if !parts.isEmpty {
+                            out.append(parts.joined(separator: " · "))
+                        }
+                    }
+                }
+            }
+        } catch {
+            // On error, just return empty and let the renderer show "—"
+        }
+
+        return out
+    }
+    
+}
+
+extension ReportDataLoader {
+
+    /// Resolve patient_id for a sick episode from the bundle DB.
+    /// Robust to minor schema variants: tries common tables and patient FK names.
+    private func patientIDForSickEpisode(_ episodeID: Int) -> Int64? {
+        do {
+            let dbPath = try currentBundleDBPath()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+               let db = db {
+                defer { sqlite3_close(db) }
+
+                // Discover tables
+                var tables: [String] = []
+                var tStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db,
+                                      "SELECT name FROM sqlite_master WHERE type='table';",
+                                      -1,
+                                      &tStmt,
+                                      nil) == SQLITE_OK,
+                   let s = tStmt {
+                    defer { sqlite3_finalize(s) }
+                    while sqlite3_step(s) == SQLITE_ROW {
+                        if let c = sqlite3_column_text(s, 0) {
+                            tables.append(String(cString: c))
+                        }
+                    }
+                }
+
+                // Prefer canonical episodes table but allow a couple of variants
+                let candidates = ["episodes", "sick_episodes"]
+                guard let table = candidates.first(where: { tables.contains($0) }) else {
+                    return nil
+                }
+
+                // Columns for chosen table
+                var cols = Set<String>()
+                var stmtCols: OpaquePointer?
+                if sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &stmtCols, nil) == SQLITE_OK,
+                   let s = stmtCols {
+                    defer { sqlite3_finalize(s) }
+                    while sqlite3_step(s) == SQLITE_ROW {
+                        if let cName = sqlite3_column_text(s, 1) {
+                            cols.insert(String(cString: cName))
+                        }
+                    }
+                }
+
+                // Patient FK candidates
+                guard let patientFK = ["patient_id","patientId","patientID"].first(where: { cols.contains($0) }) else {
+                    return nil
+                }
+
+                let sql = "SELECT \(patientFK) FROM \(table) WHERE id = ? LIMIT 1;"
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
+                   let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(episodeID))
+                    if sqlite3_step(st) == SQLITE_ROW,
+                       sqlite3_column_type(st, 0) != SQLITE_NULL {
+                        return sqlite3_column_int64(st, 0)
+                    }
+                }
+            }
+        } catch {
+            // fall through
+        }
+        return nil
     }
 }

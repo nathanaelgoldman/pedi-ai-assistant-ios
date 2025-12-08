@@ -294,9 +294,9 @@ struct WellVisitPDFGenerator {
         }
         if sexTextForCharts == "M" || sexTextForCharts == "F" {
             let chartTypes: [(String, String, String)] = [
-                ("weight", "Weight-for-Age (0–24m)", "wfa_0_24m_\(sexTextForCharts)"),
-                ("height", "Length-for-Age (0–24m)", "lhfa_0_24m_\(sexTextForCharts)"),
-                ("head_circ", "Head Circumference-for-Age (0–24m)", "hcfa_0_24m_\(sexTextForCharts)")
+                ("weight", "Weight-for-Age (0–60m)", "wfa_0_24m_\(sexTextForCharts)"),
+                ("height", "Length-for-Age (0–60m)", "lhfa_0_24m_\(sexTextForCharts)"),
+                ("head_circ", "Head Circumference-for-Age (0–60m)", "hcfa_0_24m_\(sexTextForCharts)")
             ]
             for (measurement, title, filename) in chartTypes {
                 if let cutoff = ageMonthsForCharts {
@@ -1556,39 +1556,46 @@ struct WellVisitPDFGenerator {
                 // MARK: - Growth Charts
                 y += 12
                 ensureSpace(for: 18)
-                for (title, chartImage) in chartImagesToRender {
-                    context.beginPage()
 
-                    // Draw chart title
+                for (title, chartImage) in chartImagesToRender {
+                    // Each chart gets its own fresh page
+                    context.beginPage()
+                    y = margin
+
+                    // Draw chart title at top of page
                     drawText(title, font: UIFont.boldSystemFont(ofSize: 16))
 
                     // Validate image size to avoid NaN aspect ratios
                     guard chartImage.size.width > 0, chartImage.size.height > 0 else {
-                        WellVisitPDFGenerator.log.warning("Skipping chart '\(title, privacy: .public)' due to invalid size w=\(chartImage.size.width, privacy: .public) h=\(chartImage.size.height, privacy: .public)")
+                        WellVisitPDFGenerator.log.warning(
+                            "Skipping chart '\(title, privacy: .public)' due to invalid size w=\(chartImage.size.width, privacy: .public) h=\(chartImage.size.height, privacy: .public)"
+                        )
                         continue
                     }
 
-                    // Set available drawing space to nearly full page
+                    // Available drawing space *below* the title
                     let maxWidth = pageWidth - 2 * margin
-                    let maxHeight = pageHeight - 2 * margin
+                    let availableHeight = pageHeight - y - margin - 8   // 8pt spacing below title
 
-                    // Maintain aspect ratio
                     let aspectRatio = chartImage.size.width / chartImage.size.height
                     var targetWidth = maxWidth
-                    var targetHeight = maxWidth / aspectRatio
+                    var targetHeight = targetWidth / aspectRatio
 
-                    // If height exceeds max, scale down to fit height
-                    if targetHeight > maxHeight {
-                        targetHeight = maxHeight
-                        targetWidth = maxHeight * aspectRatio
+                    // If height exceeds available space, scale down to fit
+                    if targetHeight > availableHeight {
+                        targetHeight = availableHeight
+                        targetWidth = targetHeight * aspectRatio
                     }
 
-                    // Center image on page
+                    // Center image horizontally, place it just under the title
                     let imageX = (pageWidth - targetWidth) / 2
-                    let imageY = (pageHeight - targetHeight) / 2  // Center vertically
+                    let imageY = y + 8   // small gap under title
 
                     let imageRect = CGRect(x: imageX, y: imageY, width: targetWidth, height: targetHeight)
                     chartImage.draw(in: imageRect)
+
+                    // Update y in case you ever add anything below the chart later
+                    y = imageY + targetHeight + 8
                 }
 
             } catch {

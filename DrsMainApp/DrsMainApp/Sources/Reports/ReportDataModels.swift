@@ -79,6 +79,7 @@ struct SickReportData {
     let duration: String?
     let basics: [String: String]              // Feeding / Urination / Breathing / Pain / Context
     let pmh: String?
+    let perinatalSummary: String?
     let vaccination: String?
     let vitalsSummary: [String]               // flagged items
     let physicalExamGroups: [(group: String, lines: [String])]

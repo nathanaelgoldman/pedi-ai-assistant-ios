@@ -1234,6 +1234,7 @@ extension ReportBuilder {
             content.append(NSAttributedString(string: text + "\n",
                                               attributes: [.font: font, .foregroundColor: color]))
         }
+        
 
         // Header block (Sick)
         para("Sick Visit Report", font: .systemFont(ofSize: 20, weight: .semibold))
@@ -1285,17 +1286,59 @@ extension ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         }
         // 12) Past Medical History
-        section("Past Medical History", data.pmh)
+        if data.perinatalSummary != nil {
+            // When we have (or had) a perinatal summary for this age band:
+            // render PMH as two subsections and use "—" for whichever is empty.
+            para("Past Medical History", font: headerFont)
+
+            let peri = data.perinatalSummary?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let pmh  = data.pmh?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            // Perinatal history
+            para("Perinatal History", font: NSFont.systemFont(ofSize: 13, weight: .semibold))
+            if !peri.isEmpty {
+                para(peri, font: bodyFont)
+            } else {
+                para("—", font: bodyFont)
+            }
+
+            // Other PMH
+            para("Other Past Medical History", font: NSFont.systemFont(ofSize: 13, weight: .semibold))
+            if !pmh.isEmpty {
+                para(pmh, font: bodyFont)
+            } else {
+                para("—", font: bodyFont)
+            }
+
+            content.append(NSAttributedString(string: "\n"))
+        } else {
+            // Fallback: pre-existing simple behavior when no perinatal summary
+            section("Past Medical History", data.pmh)
+        }
 
         // 13) Vaccination
         section("Vaccination", data.vaccination)
 
-        // 14) Vitals Summary (flagged items)
-        para("Vitals Summary", font: headerFont)
+        // 14) Vitals (full block from vitalsSummary)
+        para("Vitals", font: headerFont)
         if data.vitalsSummary.isEmpty {
             para("—", font: bodyFont)
         } else {
-            for line in data.vitalsSummary {
+            for rawLine in data.vitalsSummary {
+                var line = rawLine
+
+                // If the line contains a "Measured: ..." segment, pretty-print the date/time part.
+                let token = "Measured: "
+                if let range = line.range(of: token) {
+                    let prefix = String(line[..<range.lowerBound])          // everything before "Measured: "
+                    let rawDatePart = line[range.upperBound...]
+                        .trimmingCharacters(in: .whitespacesAndNewlines)    // the ISO timestamp
+                    let pretty = humanizeIfDate(rawDatePart)                // reuse existing helper
+                    line = prefix + token + pretty
+                }
+
                 para("• \(line)", font: bodyFont)
             }
         }
@@ -2585,7 +2628,7 @@ extension ReportBuilder {
             "Basics",
             "Past Medical History",
             "Vaccination",
-            "Vitals Summary",
+            "Vitals",
             "Investigations",
             "Working Diagnosis",
             "ICD-10",

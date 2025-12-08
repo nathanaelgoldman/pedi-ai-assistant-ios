@@ -52,7 +52,7 @@ struct GrowthChartView: View {
 
         // Clamp inside reasonable defaults
         lower = max(lower, def.lowerBound)
-        upper = min(upper, def.upperBound)
+        
 
         // Ensure at least 1 unit height
         if upper - lower < 1 { upper = lower + 1 }
@@ -116,31 +116,45 @@ struct GrowthChartView: View {
                 }
                 .chartXScale(domain: xDom)
                 .chartYScale(domain: yDom)
+                .chartScrollableAxes(.horizontal)
+                .chartXVisibleDomain(length: 24)
                 .chartXAxisLabel("Age (months)")
                 .chartYAxisLabel(yAxisLabel(measurement))
                 .onAppear {
-                    Self.log.debug("Chart appear: measurement=\(self.measurement, privacy: .public) x=\(self.xDom.lowerBound, privacy: .public)...\(self.xDom.upperBound, privacy: .public) y=\(self.yDom.lowerBound, privacy: .public)...\(self.yDom.upperBound, privacy: .public) points=\(self.cleanData().count, privacy: .public) curves=\(self.cleanCurves().count, privacy: .public)")
+                    Self.log.debug("Chart appear measurement=\(self.measurement, privacy: .public)")
+                    Self.log.debug(
+                        "xFull=\(self.xDom.lowerBound, privacy: .public)...\(self.xDom.upperBound, privacy: .public)"
+                    )
+                    Self.log.debug(
+                        "xVisible=\(self.xVisibleDom.lowerBound, privacy: .public)...\(self.xVisibleDom.upperBound, privacy: .public)"
+                    )
+                    Self.log.debug(
+                        "y=\(self.yDom.lowerBound, privacy: .public)...\(self.yDom.upperBound, privacy: .public)"
+                    )
+                    Self.log.debug(
+                        "points=\(self.cleanData().count, privacy: .public) curves=\(self.cleanCurves().count, privacy: .public)"
+                    )
                 }
                 .chartXAxis {
                     AxisMarks(preset: .aligned, values: .stride(by: 1)) { value in
                         AxisGridLine()
                         AxisTick()
                         AxisValueLabel {
-                            if let intVal = value.as(Int.self) {
-                                Text("\(intVal)")
+                            if let intVal = value.as(Int.self), intVal % 2 == 0 {
+                                            Text("\(intVal)")
                             }
                         }
                     }
                 }
                 .chartYAxis {
-                    let yStride: Double = measurement == "height" ? 5.0 : 1.0
-                    AxisMarks(preset: .aligned, values: .stride(by: yStride)) { value in
+                    AxisMarks(preset: .aligned,
+                              values: .stride(by: yStrideForMeasurement(measurement))) { value in
                         AxisGridLine()
                         AxisTick()
                         AxisValueLabel()
                     }
                 }
-                .frame(height: 300)
+                .frame(height: 470)
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
@@ -168,6 +182,17 @@ struct GrowthChartView: View {
             referenceCurves: cleanCurves()
         )
     }
+    
+    private func yStrideForMeasurement(_ measurement: String) -> Double {
+        switch measurement {
+        case "height":
+            return 5.0       // 5 cm steps
+        case "weight", "head_circ":
+            return 2.0       // 2 kg / 2 cm steps
+        default:
+            return 1.0       // fallback
+        }
+    }
 
     private func xDomain() -> ClosedRange<Double> {
         let agesFromData = cleanData().map(\.ageMonths)
@@ -183,6 +208,13 @@ struct GrowthChartView: View {
         let domain = paddedMin...paddedMax
         Self.log.debug("xDomain computed: \(domain.lowerBound, privacy: .public)...\(domain.upperBound, privacy: .public) for \(measurement, privacy: .public)")
         return domain
+    }
+    
+    private var xVisibleDom: ClosedRange<Double> {
+        let lower = xDom.lowerBound
+        // Start with at most 24 months visible; user can scroll further.
+        let upper = min(xDom.upperBound, 24)
+        return lower...upper
     }
 
     private func titleForMeasurement(_ m: String) -> String {

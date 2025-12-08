@@ -14,8 +14,8 @@ import OSLog
 struct GrowthChartRenderer {
     // Shared Y-axis defaults and dynamic clamping/padding used by renderer.
     private static let defaultRanges: [String: ClosedRange<Double>] = [
-        "weight": 0...20,     // kg (0–24m)
-        "height": 40...100,   // cm (0–24m)
+        "weight": 0...26,     // kg (0–24m)
+        "height": 40...120,   // cm (0–24m)
         "head_circ": 30...55  // cm (0–24m)
     ]
 
@@ -115,9 +115,18 @@ struct GrowthChartRenderer {
             .flatMap { $0.points.map(\.ageMonths) }
             .filter { $0.isFinite }
             .max() ?? 0
+
         let bestMax = max(patientMaxAge, curveMaxAge)
-        // Clamp to 0...24 months with a small padding; if no data, default to 24.
-        let paddedMaxAge = (bestMax > 0) ? min(bestMax + 1.0, 24) : 24
+
+        // Clamp to 0...60 months with a small padding; if no data, default to 60.
+        let maxDomainMonths: Double = 60
+        let paddedMaxAge: Double
+        if bestMax > 0 {
+            // A little padding, but never beyond 60 months.
+            paddedMaxAge = min(bestMax + 1.0, maxDomainMonths)
+        } else {
+            paddedMaxAge = maxDomainMonths
+        }
 
         // If both patient and reference are empty, render a placeholder image instead of attempting to chart.
         if cleanPatient.isEmpty && totalRefPoints == 0 {
@@ -135,11 +144,11 @@ struct GrowthChartRenderer {
                     }
                     .padding()
                 }
-                .frame(width: 1400, height: 1000)
+                .frame(width: 1400, height: 1200)
 
                 let renderer = ImageRenderer(content: placeholder)
                 renderer.scale = 1.0
-                renderer.proposedSize = ProposedViewSize(width: 1400, height: 1000)
+                renderer.proposedSize = ProposedViewSize(width: 1400, height: 1200)
                 return renderer.uiImage
             }
         }
@@ -181,18 +190,23 @@ struct GrowthChartRenderer {
             .chartXScale(domain: 0...paddedMaxAge)
             .chartYScale(domain: yRange)
             .chartYAxis {
-                AxisMarks(position: .leading, values: .stride(by: 1)) {
-                    AxisGridLine()
-                    AxisTick()
-                    AxisValueLabel()
+                switch measurement {
+                case "weight":
+                    // label/grid every 2 kg
+                    AxisMarks(position: .leading, values: .stride(by: 2))
+                case "height":
+                    // label/grid every 5 cm
+                    AxisMarks(position: .leading, values: .stride(by: 5))
+                case "head_circ":
+                    // label/grid every 2 cm
+                    AxisMarks(position: .leading, values: .stride(by: 2))
+                default:
+                    AxisMarks(position: .leading, values: .automatic)
                 }
             }
             .chartXAxis {
-                AxisMarks(position: .bottom, values: .stride(by: 1)) {
-                    AxisGridLine()
-                    AxisTick()
-                    AxisValueLabel()
-                }
+                // label/grid every 2 months
+                AxisMarks(position: .bottom, values: .stride(by: 2))
             }
             .chartXAxisLabel("Age (months)")
             .chartYAxisLabel(measurement.capitalized)
@@ -201,18 +215,13 @@ struct GrowthChartRenderer {
             let chartView = ZStack {
                 chartContent
             }
-            .frame(width: 1400, height: 1000)
+            .frame(width: 1400, height: 1200)
             .background(Color.white)
 
             let renderer = ImageRenderer(content: chartView)
             renderer.scale = 1.0
-            renderer.proposedSize = ProposedViewSize(width: 1400, height: 1000)
+            renderer.proposedSize = ProposedViewSize(width: 1400, height: 1200)
             return renderer.uiImage
-        }
-        if let img = image {
-            Self.logger.info("Render success: size=\(String(describing: img.size), privacy: .public)")
-        } else {
-            Self.logger.error("Render failed: ImageRenderer returned nil")
         }
 
         return image
