@@ -3386,14 +3386,19 @@ final class AppState: ObservableObject {
     /// and `force == false`, returns `nil` (UI can show a "Save Anyway" path).
     @discardableResult
     func startNewEpisode(force: Bool = false) -> Int? {
+        // DEBUG: what are we about to use?
+        log.info("startNewEpisode: pid=\(String(describing: self.selectedPatientID)), uid=\(String(describing: self.activeUserID)), db=\(self.currentDBURL?.path ?? "nil")")
+
         guard let pid = selectedPatientID,
               let dbURL = currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else {
+            log.error("startNewEpisode: guard failed (no pid or dbURL)")
             return nil
         }
 
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
+            log.error("startNewEpisode: sqlite3_open_v2 failed")
             return nil
         }
         defer { sqlite3_close(db) }
@@ -3409,7 +3414,7 @@ final class AppState: ObservableObject {
               AND date(COALESCE(created_at, CURRENT_TIMESTAMP)) = date(CURRENT_TIMESTAMP)
             LIMIT 1;
             """
-            // If the check statement prepares successfully, enforce the same‑day constraint.
+            // If the check statement prepares successfully, enforce the same-day constraint.
             // If preparation fails, skip the guard and proceed to insert.
             if sqlite3_prepare_v2(db, checkSQL, -1, &checkStmt, nil) == SQLITE_OK {
                 sqlite3_bind_int64(checkStmt, 1, sqlite3_int64(pid))
@@ -3430,6 +3435,8 @@ final class AppState: ObservableObject {
         defer { sqlite3_finalize(ins) }
         let insertSQL = "INSERT INTO episodes (patient_id, user_id) VALUES (?, ?);"
         guard sqlite3_prepare_v2(db, insertSQL, -1, &ins, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("startNewEpisode: INSERT prepare failed: \(msg)")
             return nil
         }
         sqlite3_bind_int64(ins, 1, sqlite3_int64(pid))
@@ -3439,10 +3446,14 @@ final class AppState: ObservableObject {
             sqlite3_bind_null(ins, 2)
         }
         guard sqlite3_step(ins) == SQLITE_DONE else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("startNewEpisode: INSERT failed: \(msg)")
             return nil
         }
 
         let newID = Int(sqlite3_last_insert_rowid(db))
+        log.info("startNewEpisode: inserted row id \(newID), user_id=\(String(describing: self.activeUserID))")
+
         self.activeEpisodeID = newID
         // Keep the right pane lists fresh
         self.reloadVisitsForSelectedPatient()

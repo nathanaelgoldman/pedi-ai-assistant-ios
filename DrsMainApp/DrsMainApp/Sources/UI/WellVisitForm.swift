@@ -2669,13 +2669,14 @@ struct WellVisitForm: View {
                 devtest_score,
                 devtest_result,
                 delta_weight_g,
+                user_id,
                 created_at,
                 updated_at
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, 
+                ?, ?, ?, ?, ?, ?, ?,
                 CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
             );
             """
@@ -2752,6 +2753,13 @@ struct WellVisitForm: View {
                 sqlite3_bind_int(stmt, 36, delta)
             } else {
                 sqlite3_bind_null(stmt, 36)
+            }
+
+            // Bind user_id at index 37
+            if let uid = appState.activeUserID {
+                sqlite3_bind_int64(stmt, 37, sqlite3_int64(uid))
+            } else {
+                sqlite3_bind_null(stmt, 37)
             }
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {

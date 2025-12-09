@@ -40,19 +40,19 @@ final class ReportGrowthRenderer {
         let lhfaCurves = (try? loadWHO(kind: .lhfa, sex: sex)) ?? fallbackFlatCurves()
         let hcfaCurves = (try? loadWHO(kind: .hcfa, sex: sex)) ?? fallbackFlatCurves()
 
-        let wfaImg = renderChart(title: "Weight‑for‑Age (0–24 m)",
+        let wfaImg = renderChart(title: "Weight‑for‑Age (0–60 m)",
                                  yLabel: "kg",
                                  curves: wfaCurves,
                                  points: series.wfa,
                                  size: clamped)
 
-        let lhfaImg = renderChart(title: "Length/Height‑for‑Age (0–24 m)",
+        let lhfaImg = renderChart(title: "Length/Height‑for‑Age (0–60 m)",
                                   yLabel: "cm",
                                   curves: lhfaCurves,
                                   points: series.lhfa,
                                   size: clamped)
 
-        let hcfaImg = renderChart(title: "Head Circumference‑for‑Age (0–24 m)",
+        let hcfaImg = renderChart(title: "Head Circumference‑for‑Age (0–60 m)",
                                   yLabel: "cm",
                                   curves: hcfaCurves,
                                   points: series.hcfa,
@@ -162,7 +162,8 @@ final class ReportGrowthRenderer {
     }
 
     private static func fallbackFlatCurves() -> ReportGrowth.Curves {
-        let ages = stride(from: 0.0, through: 24.0, by: 1.0).map { $0 }
+        // Flat dummy curves from 0–60 months (used only if WHO CSV is missing)
+        let ages = stride(from: 0.0, through: 60.0, by: 1.0).map { $0 }
         let zeros = Array(repeating: 0.0, count: ages.count)
         return ReportGrowth.Curves(agesMonths: ages, p3: zeros, p15: zeros, p50: zeros, p85: zeros, p97: zeros)
     }
@@ -267,7 +268,7 @@ final class ReportGrowthRenderer {
 
         // X range is months 0–24
         let xMin: CGFloat = 0
-        let xMax: CGFloat = 24
+        let xMax: CGFloat = 60
 
         // Y range from curves + patient points
         var yMin = CGFloat(curves.values(for: .p3).min() ?? 0)
@@ -299,12 +300,12 @@ final class ReportGrowthRenderer {
         NSAttributedString(string: title, attributes: titleAttrs)
             .draw(at: CGPoint(x: plot.minX, y: plot.maxY + 10))
 
-        // Grid lines (vertical: minor every month; major every 3 months) — plus Y dynamic grid below
+        // Grid lines (vertical: minor every month; major every 6 months) — plus Y dynamic grid below
         // Minor vertical grid: every 1 month
         ctx.saveGState()
         ctx.setStrokeColor(style.gridColor.withAlphaComponent(0.7).cgColor)
         ctx.setLineWidth(0.3)
-        for month in 0...24 {
+        for month in 0...60 {
             let x = X(Double(month))
             ctx.move(to: CGPoint(x: x, y: plot.minY))
             ctx.addLine(to: CGPoint(x: x, y: plot.maxY))
@@ -312,11 +313,11 @@ final class ReportGrowthRenderer {
         ctx.strokePath()
         ctx.restoreGState()
 
-        // Major vertical grid: every 3 months (slightly darker/thicker)
+        // Major vertical grid: every 6 months (slightly darker/thicker)
         ctx.saveGState()
         ctx.setStrokeColor(style.axisColor.withAlphaComponent(0.6).cgColor)
         ctx.setLineWidth(0.8)
-        for month in stride(from: 0, through: 24, by: 3) {
+        for month in stride(from: 0, through: 60, by: 6) {
             let x = X(Double(month))
             ctx.move(to: CGPoint(x: x, y: plot.minY))
             ctx.addLine(to: CGPoint(x: x, y: plot.maxY))
@@ -378,7 +379,7 @@ final class ReportGrowthRenderer {
         ctx.setLineWidth(1.2)
         ctx.stroke(plot)
 
-        // X labels (monthly, no unit here; unit is on axis title) + axis label
+        // X labels (every 2 months; unit is on axis title) + axis label
         let labelAttrs: [NSAttributedString.Key: Any] = [
             .font: style.labelFontSmall,
             .foregroundColor: style.labelColor
@@ -386,7 +387,7 @@ final class ReportGrowthRenderer {
         // Measure a representative label height once
         let sampleLabelSize = NSAttributedString(string: "00", attributes: labelAttrs).size()
         let xLabelYOffset: CGFloat = sampleLabelSize.height + 6  // keep labels a few points below the axis line
-        for month in 0...24 {
+        for month in stride(from: 0, through: 60, by: 2) {
             let s = NSAttributedString(string: "\(month)", attributes: labelAttrs)
             let sz = s.size()
             let xx = X(Double(month)) - sz.width/2

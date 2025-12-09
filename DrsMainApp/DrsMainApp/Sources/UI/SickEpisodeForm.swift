@@ -728,7 +728,7 @@ struct SickEpisodeForm: View {
           neurological, musculoskeletal, lymph_nodes,
           problem_listing, complementary_investigations, diagnosis, icd10, medications,
           anticipatory_guidance, comments
-        ) VALUES ( ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
+        ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
         """
 
         var stmt: OpaquePointer?
@@ -738,48 +738,56 @@ struct SickEpisodeForm: View {
         }
         defer { sqlite3_finalize(stmt) }
 
-        // 1: patient_id
-        sqlite3_bind_int64(stmt, 1, patientID)
-        // 2: created_at
-        bindText(stmt, 2, isoNow())
-
         func str(_ k: String) -> String? { payload[k] as? String }
 
-        // 3.. end: follow the column order above
-        bindText(stmt, 3,  str("main_complaint"))
-        bindText(stmt, 4,  str("hpi"))
-        bindText(stmt, 5,  str("duration"))
-        bindText(stmt, 6,  str("appearance"))
-        bindText(stmt, 7,  str("feeding"))
-        bindText(stmt, 8,  str("breathing"))
-        bindText(stmt, 9,  str("urination"))
-        bindText(stmt, 10, str("pain"))
-        bindText(stmt, 11, str("stools"))
-        bindText(stmt, 12, str("context"))
-        bindText(stmt, 13, str("general_appearance"))
-        bindText(stmt, 14, str("hydration"))
-        bindText(stmt, 15, str("heart"))
-        bindText(stmt, 16, str("color"))
-        bindText(stmt, 17, str("skin"))
-        bindText(stmt, 18, str("ent"))
-        bindText(stmt, 19, str("right_ear"))
-        bindText(stmt, 20, str("left_ear"))
-        bindText(stmt, 21, str("right_eye"))
-        bindText(stmt, 22, str("left_eye"))
-        bindText(stmt, 23, str("lungs"))
-        bindText(stmt, 24, str("abdomen"))
-        bindText(stmt, 25, str("peristalsis"))
-        bindText(stmt, 26, str("genitalia"))
-        bindText(stmt, 27, str("neurological"))
-        bindText(stmt, 28, str("musculoskeletal"))
-        bindText(stmt, 29, str("lymph_nodes"))
-        bindText(stmt, 30, str("problem_listing"))
-        bindText(stmt, 31, str("complementary_investigations"))
-        bindText(stmt, 32, str("diagnosis"))
-        bindText(stmt, 33, str("icd10"))
-        bindText(stmt, 34, str("medications"))
-        bindText(stmt, 35, str("anticipatory_guidance"))
-        bindText(stmt, 36, str("comments"))
+        // 1: patient_id
+        sqlite3_bind_int64(stmt, 1, patientID)
+
+        // 2: user_id (from activeUserID, or NULL if none)
+        if let uid = appState.activeUserID {
+            sqlite3_bind_int64(stmt, 2, sqlite3_int64(uid))
+        } else {
+            sqlite3_bind_null(stmt, 2)
+        }
+
+        // 3: created_at
+        bindText(stmt, 3, isoNow())
+
+        // 4.. end: follow the column order above
+        bindText(stmt, 4,  str("main_complaint"))
+        bindText(stmt, 5,  str("hpi"))
+        bindText(stmt, 6,  str("duration"))
+        bindText(stmt, 7,  str("appearance"))
+        bindText(stmt, 8,  str("feeding"))
+        bindText(stmt, 9,  str("breathing"))
+        bindText(stmt, 10, str("urination"))
+        bindText(stmt, 11, str("pain"))
+        bindText(stmt, 12, str("stools"))
+        bindText(stmt, 13, str("context"))
+        bindText(stmt, 14, str("general_appearance"))
+        bindText(stmt, 15, str("hydration"))
+        bindText(stmt, 16, str("heart"))
+        bindText(stmt, 17, str("color"))
+        bindText(stmt, 18, str("skin"))
+        bindText(stmt, 19, str("ent"))
+        bindText(stmt, 20, str("right_ear"))
+        bindText(stmt, 21, str("left_ear"))
+        bindText(stmt, 22, str("right_eye"))
+        bindText(stmt, 23, str("left_eye"))
+        bindText(stmt, 24, str("lungs"))
+        bindText(stmt, 25, str("abdomen"))
+        bindText(stmt, 26, str("peristalsis"))
+        bindText(stmt, 27, str("genitalia"))
+        bindText(stmt, 28, str("neurological"))
+        bindText(stmt, 29, str("musculoskeletal"))
+        bindText(stmt, 30, str("lymph_nodes"))
+        bindText(stmt, 31, str("problem_listing"))
+        bindText(stmt, 32, str("complementary_investigations"))
+        bindText(stmt, 33, str("diagnosis"))
+        bindText(stmt, 34, str("icd10"))
+        bindText(stmt, 35, str("medications"))
+        bindText(stmt, 36, str("anticipatory_guidance"))
+        bindText(stmt, 37, str("comments"))
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
