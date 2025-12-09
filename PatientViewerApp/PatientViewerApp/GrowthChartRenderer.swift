@@ -161,7 +161,10 @@ struct GrowthChartRenderer {
 
         // Build the Chart and render on the main actor so all @MainActor-isolated
         // view modifiers (e.g., .chartLegend) are called on the correct actor.
+        // Build the Chart and render on the main actor so all @MainActor-isolated
+        // view modifiers (e.g., .chartLegend) are called on the correct actor.
         let image: UIImage? = await MainActor.run {
+            // 1) Base chart content
             let chartContent = Chart {
                 // Reference Curves (filtered inside the loop)
                 ForEach(refCurves, id: \.label) { curve in
@@ -187,36 +190,87 @@ struct GrowthChartRenderer {
                     .symbolSize(40)
                 }
             }
-            .chartXScale(domain: 0...paddedMaxAge)
-            .chartYScale(domain: yRange)
-            .chartYAxis {
-                switch measurement {
-                case "weight":
-                    // label/grid every 2 kg
-                    AxisMarks(position: .leading, values: .stride(by: 2))
-                case "height":
-                    // label/grid every 5 cm
-                    AxisMarks(position: .leading, values: .stride(by: 5))
-                case "head_circ":
-                    // label/grid every 2 cm
-                    AxisMarks(position: .leading, values: .stride(by: 2))
-                default:
-                    AxisMarks(position: .leading, values: .automatic)
-                }
-            }
-            .chartXAxis {
-                // label/grid every 2 months
-                AxisMarks(position: .bottom, values: .stride(by: 2))
-            }
-            .chartXAxisLabel("Age (months)")
-            .chartYAxisLabel(measurement.capitalized)
-            .chartLegend(.visible)
 
-            let chartView = ZStack {
-                chartContent
-            }
-            .frame(width: 1400, height: 1200)
-            .background(Color.white)
+            // 2) X/Y scales
+            let chartScaled = chartContent
+                .chartXScale(domain: 0...paddedMaxAge)
+                .chartYScale(domain: yRange)
+
+            // 3) Axes styling (black ticks/labels, lighter grid)
+            let chartWithAxes = chartScaled
+                .chartYAxis {
+                    switch measurement {
+                    case "weight":
+                        AxisMarks(position: .leading, values: .stride(by: 2)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    case "height":
+                        AxisMarks(position: .leading, values: .stride(by: 5)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    case "head_circ":
+                        AxisMarks(position: .leading, values: .stride(by: 2)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    default:
+                        AxisMarks(position: .leading, values: .automatic) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(position: .bottom, values: .stride(by: 2)) { value in
+                        AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                        AxisTick().foregroundStyle(.black)
+
+                        if let month = value.as(Double.self) {
+                            AxisValueLabel {
+                                Text(String(Int(month.rounded())))
+                                    .foregroundColor(.black)
+                            }
+                        }
+                    }
+                }
+
+            // 4) Final view used for rendering
+            let chartView = chartWithAxes
+                .frame(width: 1400, height: 1200)
+                .background(Color.white)
 
             let renderer = ImageRenderer(content: chartView)
             renderer.scale = 1.0
