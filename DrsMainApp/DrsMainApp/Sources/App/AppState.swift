@@ -3454,10 +3454,185 @@ final class AppState: ObservableObject {
         let newID = Int(sqlite3_last_insert_rowid(db))
         log.info("startNewEpisode: inserted row id \(newID), user_id=\(String(describing: self.activeUserID))")
 
+        // Make sure the active clinician exists in this bundle's users table
+        self.ensureActiveClinicianMirroredIntoBundleUsers()
+
         self.activeEpisodeID = newID
         // Keep the right pane lists fresh
         self.reloadVisitsForSelectedPatient()
         return newID
+        
+        
+    }
+    
+    // MARK: - Clinician mirroring into bundle DB (users table)
+
+    /// Ensure the currently active clinician (from the app-local clinicians.sqlite)
+    /// is present in the active bundle's db.sqlite `users` table, keyed by the same id.
+    /// This keeps PatientViewerApp able to resolve episodes.user_id / well_visits.user_id
+    /// to a "first_name + last_name" without leaking all clinician details.
+    private func ensureActiveClinicianMirroredIntoBundleUsers() {
+        guard let activeUserID = self.activeUserID else {
+            log.info("ensureActiveClinicianMirroredIntoBundleUsers: no activeUserID; skipping")
+            return
+        }
+
+        // 1) Read the active clinician's name from the app-local clinicians.sqlite
+        //    (same path logic as ClinicianStore.dbURL).
+        let fm = FileManager.default
+        let cliniciansDBURL: URL = {
+            let base = try! fm.url(for: .applicationSupportDirectory,
+                                   in: .userDomainMask,
+                                   appropriateFor: nil,
+                                   create: true)
+                .appendingPathComponent("DrsMainApp", isDirectory: true)
+                .appendingPathComponent("Clinicians", isDirectory: true)
+            if !fm.fileExists(atPath: base.path) {
+                try? fm.createDirectory(at: base, withIntermediateDirectories: true)
+            }
+            return base.appendingPathComponent("clinicians.sqlite", isDirectory: false)
+        }()
+
+        var cliniciansDB: OpaquePointer?
+        guard sqlite3_open_v2(cliniciansDBURL.path, &cliniciansDB, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let cliniciansDBUnwrapped = cliniciansDB else {
+            log.error("ensureActiveClinicianMirroredIntoBundleUsers: failed to open clinicians DB at \(cliniciansDBURL.path, privacy: .public)")
+            return
+        }
+        defer { sqlite3_close(cliniciansDBUnwrapped) }
+
+        var nameStmt: OpaquePointer?
+        defer { sqlite3_finalize(nameStmt) }
+
+        let nameSQL = """
+        SELECT TRIM(first_name) AS first_name,
+               TRIM(last_name)  AS last_name
+        FROM users
+        WHERE id = ?
+        LIMIT 1;
+        """
+
+        guard sqlite3_prepare_v2(cliniciansDBUnwrapped, nameSQL, -1, &nameStmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(cliniciansDBUnwrapped))
+            log.error("ensureActiveClinicianMirroredIntoBundleUsers: name SELECT prepare failed: \(msg, privacy: .public)")
+            return
+        }
+
+        sqlite3_bind_int64(nameStmt, 1, sqlite3_int64(activeUserID))
+
+        guard sqlite3_step(nameStmt) == SQLITE_ROW else {
+            log.warning("ensureActiveClinicianMirroredIntoBundleUsers: no clinician row found for id \(activeUserID, privacy: .public) in clinicians.sqlite")
+            return
+        }
+
+        let firstName = sqlite3_column_text(nameStmt, 0).flatMap { String(cString: $0) } ?? ""
+        let lastName  = sqlite3_column_text(nameStmt, 1).flatMap { String(cString: $0) } ?? ""
+        let trimmedFirst = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLast  = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedFirst.isEmpty || !trimmedLast.isEmpty else {
+            log.warning("ensureActiveClinicianMirroredIntoBundleUsers: clinician \(activeUserID, privacy: .public) has empty name; skipping mirror")
+            return
+        }
+
+        // 2) Open current bundle DB and upsert this clinician into db.sqlite.users
+        guard let bundleDBURL = currentDBURL,
+              fm.fileExists(atPath: bundleDBURL.path) else {
+            log.error("ensureActiveClinicianMirroredIntoBundleUsers: no currentDBURL; skipping mirror")
+            return
+        }
+
+        var bundleDB: OpaquePointer?
+        guard sqlite3_open_v2(bundleDBURL.path, &bundleDB, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+              let bundleDBUnwrapped = bundleDB else {
+            log.error("ensureActiveClinicianMirroredIntoBundleUsers: failed to open bundle DB at \(bundleDBURL.path, privacy: .public)")
+            return
+        }
+        defer { sqlite3_close(bundleDBUnwrapped) }
+
+        // Ensure a minimal `users` table exists in the bundle DB.
+        let createSQL = """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            first_name TEXT NOT NULL,
+            last_name  TEXT NOT NULL,
+            created_at TEXT
+        );
+        """
+        if sqlite3_exec(bundleDBUnwrapped, createSQL, nil, nil, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
+            log.error("ensureActiveClinicianMirroredIntoBundleUsers: CREATE TABLE users failed: \(msg, privacy: .public)")
+            return
+        }
+
+        // Check if a row already exists for this id.
+        var checkStmt: OpaquePointer?
+        defer { sqlite3_finalize(checkStmt) }
+
+        let checkSQL = "SELECT 1 FROM users WHERE id = ? LIMIT 1;"
+        guard sqlite3_prepare_v2(bundleDBUnwrapped, checkSQL, -1, &checkStmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
+            log.error("ensureActiveClinicianMirroredIntoBundleUsers: check SELECT prepare failed: \(msg, privacy: .public)")
+            return
+        }
+        sqlite3_bind_int64(checkStmt, 1, sqlite3_int64(activeUserID))
+
+        let exists = (sqlite3_step(checkStmt) == SQLITE_ROW)
+
+        if exists {
+            // UPDATE
+            var updStmt: OpaquePointer?
+            defer { sqlite3_finalize(updStmt) }
+
+            let updSQL = """
+            UPDATE users
+            SET first_name = ?, last_name = ?
+            WHERE id = ?;
+            """
+            guard sqlite3_prepare_v2(bundleDBUnwrapped, updSQL, -1, &updStmt, nil) == SQLITE_OK else {
+                let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
+                log.error("ensureActiveClinicianMirroredIntoBundleUsers: UPDATE prepare failed: \(msg, privacy: .public)")
+                return
+            }
+
+            _ = trimmedFirst.withCString { c in sqlite3_bind_text(updStmt, 1, c, -1, SQLITE_TRANSIENT) }
+            _ = trimmedLast.withCString  { c in sqlite3_bind_text(updStmt, 2, c, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int64(updStmt, 3, sqlite3_int64(activeUserID))
+
+            if sqlite3_step(updStmt) != SQLITE_DONE {
+                let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
+                log.error("ensureActiveClinicianMirroredIntoBundleUsers: UPDATE step failed: \(msg, privacy: .public)")
+                return
+            }
+
+            log.info("ensureActiveClinicianMirroredIntoBundleUsers: updated user \(activeUserID, privacy: .public) in bundle users table")
+        } else {
+            // INSERT
+            var insStmt: OpaquePointer?
+            defer { sqlite3_finalize(insStmt) }
+
+            let insSQL = """
+            INSERT INTO users (id, first_name, last_name, created_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP);
+            """
+            guard sqlite3_prepare_v2(bundleDBUnwrapped, insSQL, -1, &insStmt, nil) == SQLITE_OK else {
+                let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
+                log.error("ensureActiveClinicianMirroredIntoBundleUsers: INSERT prepare failed: \(msg, privacy: .public)")
+                return
+            }
+
+            sqlite3_bind_int64(insStmt, 1, sqlite3_int64(activeUserID))
+            _ = trimmedFirst.withCString { c in sqlite3_bind_text(insStmt, 2, c, -1, SQLITE_TRANSIENT) }
+            _ = trimmedLast.withCString  { c in sqlite3_bind_text(insStmt, 3, c, -1, SQLITE_TRANSIENT) }
+
+            if sqlite3_step(insStmt) != SQLITE_DONE {
+                let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
+                log.error("ensureActiveClinicianMirroredIntoBundleUsers: INSERT step failed: \(msg, privacy: .public)")
+                return
+            }
+
+            log.info("ensureActiveClinicianMirroredIntoBundleUsers: inserted user \(activeUserID, privacy: .public) into bundle users table")
+        }
     }
 
         // MARK: - Growth data (writes)
