@@ -85,15 +85,60 @@ struct BundleExporter {
             try? db.execute("PRAGMA busy_timeout = 3000")
             // Ensure the pragma is enabled for the session (harmless if already on)
             try? db.execute("PRAGMA foreign_keys = ON")
+
             var hasViolations = false
-            for _ in try db.prepare("PRAGMA foreign_key_check") {
+
+            for row in try db.prepare("PRAGMA foreign_key_check") {
                 hasViolations = true
-                break
+
+                // PRAGMA foreign_key_check returns: table, rowid, parent, fkid
+                let table  = row[0] as? String ?? "<unknown_table>"
+                let rowid  = row[1] as? Int64  ?? -1
+                let parent = row[2] as? String ?? "<unknown_parent>"
+                let fkid   = row[3] as? Int64  ?? -1
+
+                log.error("FK violation → table=\(table, privacy: .public) rowid=\(rowid, privacy: .public) parent=\(parent, privacy: .public) fkid=\(fkid, privacy: .public)")
             }
+
+            if hasViolations {
+                log.error("foreign_key_check found violations in \(dbPath, privacy: .public)")
+            } else {
+                log.debug("foreign_key_check OK for \(dbPath, privacy: .public)")
+            }
+
             return !hasViolations
         } catch {
             log.warning("PRAGMA foreign_key_check failed to run: \(error.localizedDescription, privacy: .public)")
             return false
+        }
+    }
+    
+    /// On the export copy, clear any user_id that doesn't match an existing user.
+    /// This keeps foreign keys consistent without touching the live DB.
+    private static func nullOutInvalidUserIDs(dbPath: String) {
+        do {
+            let db = try Connection(dbPath)
+            try? db.execute("PRAGMA busy_timeout = 3000")
+            try? db.execute("PRAGMA foreign_keys = ON")
+
+            let episodesSQL = """
+            UPDATE episodes
+            SET user_id = NULL
+            WHERE user_id IS NOT NULL
+              AND user_id NOT IN (SELECT id FROM users);
+            """
+
+            let wellVisitsSQL = """
+            UPDATE well_visits
+            SET user_id = NULL
+            WHERE user_id IS NOT NULL
+              AND user_id NOT IN (SELECT id FROM users);
+            """
+
+            try db.run(episodesSQL)
+            try db.run(wellVisitsSQL)
+        } catch {
+            log.warning("nullOutInvalidUserIDs failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -198,6 +243,8 @@ struct BundleExporter {
                 throw NSError(domain: "BundleExport", code: 2, userInfo: [NSLocalizedDescriptionKey: "SQLite integrity_check failed for export copy."])
             }
         }
+        
+        nullOutInvalidUserIDs(dbPath: dbFileInBundle.path)
 
         // Also validate foreign key consistency — this catches orphan rows missed by integrity_check
         if !foreignKeyCheckOK(dbPath: dbFileInBundle.path) {

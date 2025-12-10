@@ -20,6 +20,7 @@ import AppKit
 import PDFKit
 import UniformTypeIdentifiers
 import CoreText
+import ZIPFoundation
 
 
 
@@ -2091,24 +2092,96 @@ extension ReportBuilder {
     }
 
     /// Zip the **contents** of a directory so the files appear at the root of the zip (required for .docx).
+    /// Uses Foundation's Archive API instead of /usr/bin/zip to avoid sandbox issues when writing
+    /// to user‑selected locations (e.g. Downloads) from a sandboxed app.
     private func zipDocxPackage(at packageRoot: URL, to zipFile: URL) throws {
         let fm = FileManager.default
-        if fm.fileExists(atPath: zipFile.path) { try? fm.removeItem(at: zipFile) }
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        task.currentDirectoryURL = packageRoot
-        // Zip everything at root (not the folder itself)
-        task.arguments = ["-r", "-y", zipFile.path, "."]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError  = pipe
-        try task.run()
-        task.waitUntilExit()
-        if task.terminationStatus != 0 {
-            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            NSLog("[ReportExport] docx zip failed (%d): %@", task.terminationStatus, out)
-            throw NSError(domain: "ReportExport", code: 5001,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to zip DOCX at \(packageRoot.path)"])
+        if fm.fileExists(atPath: zipFile.path) {
+            try fm.removeItem(at: zipFile)
+        }
+
+        // Use in‑process ZIP via Foundation.Archive (10.13+).
+        if #available(macOS 10.13, *) {
+            guard let archive = Archive(url: zipFile, accessMode: .create) else {
+                throw NSError(
+                    domain: "ReportExport",
+                    code: 5002,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to create DOCX archive at \(zipFile.path)"]
+                )
+            }
+
+            // Enumerate all files under packageRoot and add them with paths relative to packageRoot.
+            guard let enumerator = fm.enumerator(at: packageRoot,
+                                                 includingPropertiesForKeys: [.isDirectoryKey],
+                                                 options: [],
+                                                 errorHandler: { url, error in
+                                                     NSLog("[ReportExport] docx enumerator error for %@: %@", url.path, String(describing: error))
+                                                     return true
+                                                 }) else {
+                throw NSError(
+                    domain: "ReportExport",
+                    code: 5003,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to enumerate DOCX package at \(packageRoot.path)"]
+                )
+            }
+
+            for case let fileURL as URL in enumerator {
+                let rv = try fileURL.resourceValues(forKeys: [.isDirectoryKey])
+                if rv.isDirectory == true {
+                    // Directories do not need explicit entries in the zip; they are implied by file paths.
+                    continue
+                }
+
+                // Compute path inside the zip as a relative path from packageRoot.
+                let fullPath = fileURL.path
+                let basePath = packageRoot.path
+                var relPath: String
+                if fullPath.hasPrefix(basePath) {
+                    let start = fullPath.index(fullPath.startIndex, offsetBy: basePath.count)
+                    relPath = String(fullPath[start...])
+                    if relPath.hasPrefix("/") {
+                        relPath.removeFirst()
+                    }
+                } else {
+                    // Fallback: just use the last path component.
+                    relPath = fileURL.lastPathComponent
+                }
+
+                // Add the entry using the convenience relativeTo: API.
+                do {
+                    try archive.addEntry(with: relPath,
+                                         relativeTo: packageRoot,
+                                         compressionMethod: .deflate)
+                } catch {
+                    NSLog("[ReportExport] failed to add %@ to DOCX archive: %@", relPath, String(describing: error))
+                    throw NSError(
+                        domain: "ReportExport",
+                        code: 5004,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to add \(relPath) to DOCX at \(zipFile.path)"]
+                    )
+                }
+            }
+        } else {
+            // Very old macOS fallback: this path may still hit sandbox limits when targeting user folders.
+            // Kept only for completeness; modern targets should always go through the Archive path above.
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+            task.currentDirectoryURL = packageRoot
+            task.arguments = ["-r", "-y", zipFile.path, "."]
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError  = pipe
+            try task.run()
+            task.waitUntilExit()
+            if task.terminationStatus != 0 {
+                let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                NSLog("[ReportExport] docx zip failed (%d): %@", task.terminationStatus, out)
+                throw NSError(
+                    domain: "ReportExport",
+                    code: 5001,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to zip DOCX at \(packageRoot.path)"]
+                )
+            }
         }
     }
 
@@ -2584,11 +2657,11 @@ extension ReportBuilder {
 
         let fm = FileManager.default
         let baseDir: URL = {
-            if let bundle = appState.currentBundleURL {
-                return bundle.appendingPathComponent("Docs", isDirectory: true)
-            } else {
-                return fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents/DrsMainApp/Reports", isDirectory: true)
-            }
+            // Always export DOCX outside the bundle so it does NOT appear in the in-bundle Document Viewer.
+            // Use a fixed per-user export folder.
+            let docsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask).first
+                ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
+            return docsRoot.appendingPathComponent("DrsMainApp/Exports", isDirectory: true)
         }()
         try fm.createDirectory(at: baseDir, withIntermediateDirectories: true)
         let outURL = baseDir.appendingPathComponent("\(stem).docx")

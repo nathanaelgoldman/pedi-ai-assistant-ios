@@ -263,6 +263,7 @@ struct SickVisitPDFGenerator {
                 let episodes = Table("episodes")
                 let episodeID = Expression<Int64>("id")
                 let patientID = Expression<Int64>("patient_id")
+                let episodeUserID = Expression<Int64?>("user_id")
 
                 // 1. Get patient_id for this visit (episode)
                 guard let episodeRow = try db.pluck(episodes.filter(episodeID == visit.id)) else {
@@ -282,6 +283,11 @@ struct SickVisitPDFGenerator {
                 let sex = Expression<String>("sex")
                 let mrn = Expression<String>("mrn")
                 let alias = Expression<String?>("alias_label")
+                
+                let users = Table("users")
+                let userPK = Expression<Int64>("id")
+                let firstNameUser = Expression<String>("first_name")
+                let lastNameUser = Expression<String>("last_name")
 
                 guard let patientRow = try db.pluck(patients.filter(id == pid)) else {
                     Self.log.error("Patient id=\(pid, privacy: .public) not found in 'patients' table.")
@@ -309,6 +315,14 @@ struct SickVisitPDFGenerator {
                 }
                 drawText("Sex: \(sexText)", font: subFont)
                 drawText("MRN: \(mrnText)", font: subFont)
+                // Clinician Name (if available)
+                if let clinicianID = episodeRow[episodeUserID],
+                   let userRow = try? db.pluck(users.filter(userPK == clinicianID)) {
+                    let clinicianName = "\(userRow[firstNameUser]) \(userRow[lastNameUser])".trimmingCharacters(in: .whitespaces)
+                    if !clinicianName.isEmpty {
+                        drawText("Clinician: \(clinicianName)", font: subFont)
+                    }
+                }
 
                 // Chief Complaint & History section
                 y += 12

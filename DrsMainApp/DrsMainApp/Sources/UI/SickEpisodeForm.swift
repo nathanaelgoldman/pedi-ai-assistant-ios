@@ -91,6 +91,7 @@ struct SickEpisodeForm: View {
     @State private var bpDiaField: String = ""
     @State private var recordedAtField: String = ""
     @State private var replacePreviousVitals: Bool = false
+    @EnvironmentObject var clinicianStore: ClinicianStore
 
     // In-memory vitals history for the current episode
     fileprivate struct VitalsRow: Identifiable {
@@ -315,7 +316,6 @@ struct SickEpisodeForm: View {
                             SectionHeader("Physical Examination")
                             pickerRow("General appearance", $generalAppearance, generalChoices)
                             pickerRow("Hydration", $hydration, hydrationChoices)
-                            pickerRow("Heart", $heart, heartChoices)
                             pickerRow("Color / Hemodynamics", $color, colorChoices)
                             multiSelectChips(title: "Skin", options: skinOptionsMulti, selection: $skinSet)
                             multiSelectChips(title: "ENT", options: entChoices, selection: $ent)
@@ -323,6 +323,7 @@ struct SickEpisodeForm: View {
                             pickerRow("Left ear", $leftEar, earChoices)
                             pickerRow("Right eye", $rightEye, eyeChoices)
                             pickerRow("Left eye", $leftEye, eyeChoices)
+                            pickerRow("Heart", $heart, heartChoices)
                             multiSelectChips(title: "Lungs", options: lungsOptionsMulti, selection: $lungsSet)
                             multiSelectChips(title: "Abdomen", options: abdomenOptionsMulti, selection: $abdomenSet)
                             pickerRow("Peristalsis", $peristalsis, peristalsisChoices)
@@ -709,6 +710,85 @@ struct SickEpisodeForm: View {
         } else {
             sqlite3_bind_null(stmt, idx)
         }
+    }
+    
+    /// Ensure the active clinician exists in the bundle's `users` table.
+    /// This keeps episodes.user_id resolvable inside db.sqlite for the viewer.
+    private func ensureBundleUserRow(dbURL: URL) {
+        // 1) We need an active user id
+        guard let uid = appState.activeUserID else {
+            log.info("ensureBundleUserRow: no activeUserID, skipping users sync")
+            return
+        }
+
+        // 2) Find the matching clinician in the local ClinicianStore
+        guard let clinician = clinicianStore.users.first(where: { $0.id == uid }) else {
+            log.info("ensureBundleUserRow: no clinician match for id \(uid), skipping users sync")
+            return
+        }
+
+        // 3) Open bundle DB
+        var db: OpaquePointer?
+        do {
+            db = try dbOpen(dbURL)
+        } catch {
+            log.error("ensureBundleUserRow: dbOpen failed")
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        // 4) Ensure minimal users table (id, first_name, last_name)
+        let createSQL = """
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY,
+          first_name TEXT NOT NULL,
+          last_name  TEXT NOT NULL
+        );
+        """
+        if sqlite3_exec(db, createSQL, nil, nil, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("ensureBundleUserRow: CREATE TABLE failed: \(msg, privacy: .public)")
+            return
+        }
+
+        // 5) Try UPDATE first
+        var stmt: OpaquePointer?
+
+        let updateSQL = "UPDATE users SET first_name = ?, last_name = ? WHERE id = ?;"
+        if sqlite3_prepare_v2(db, updateSQL, -1, &stmt, nil) == SQLITE_OK {
+            // We can reuse bindText helper
+            bindText(stmt, 1, clinician.firstName)
+            bindText(stmt, 2, clinician.lastName)
+            sqlite3_bind_int64(stmt, 3, sqlite3_int64(uid))
+            _ = sqlite3_step(stmt)
+        }
+        sqlite3_finalize(stmt)
+
+        let changed = sqlite3_changes(db)
+        if changed > 0 {
+            log.info("ensureBundleUserRow: updated users row for id=\(uid)")
+            return
+        }
+
+        // 6) If nothing was updated, INSERT a new row
+        let insertSQL = "INSERT INTO users (id, first_name, last_name) VALUES (?, ?, ?);"
+        if sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("ensureBundleUserRow: INSERT prepare failed: \(msg, privacy: .public)")
+            return
+        }
+        bindText(stmt, 2, clinician.firstName)
+        bindText(stmt, 3, clinician.lastName)
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(uid))
+
+        if sqlite3_step(stmt) == SQLITE_DONE {
+            log.info("ensureBundleUserRow: inserted users row for id=\(uid)")
+        } else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("ensureBundleUserRow: INSERT step failed: \(msg, privacy: .public)")
+        }
+        sqlite3_finalize(stmt)
     }
 
     private func insertEpisode(dbURL: URL, patientID: Int64, payload: [String: Any]) throws -> Int64 {
@@ -1774,7 +1854,10 @@ struct SickEpisodeForm: View {
             return
         }
 
+        let userIDLabel = appState.activeUserID.map(String.init) ?? "nil"
+        log.info("SickEpisode save using activeUserID=\(userIDLabel)")
         log.info("Persisting SickEpisode to DB: \(dbURL.path, privacy: .public) for pid \(pid)")
+        ensureBundleUserRow(dbURL: dbURL)
         do {
             try ensureEpisodesTable(dbURL: dbURL)
         } catch {

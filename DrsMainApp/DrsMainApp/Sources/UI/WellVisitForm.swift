@@ -278,6 +278,7 @@ func reportLayoutProfile(forVisitType id: String) -> WellVisitLayoutProfile {
 struct WellVisitForm: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var clinicianStore: ClinicianStore
 
     /// If nil → create new visit; non-nil → edit existing well_visit row.
     let editingVisitID: Int?
@@ -2519,6 +2520,8 @@ struct WellVisitForm: View {
             showError("No patient is selected.")
             return
         }
+        
+        ensureBundleUserRowIfNeeded(dbURL: dbURL)
 
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
@@ -3111,6 +3114,63 @@ struct WellVisitForm: View {
 
             _ = sqlite3_step(stmt)
         }
+    }
+    
+    // Ensure the active clinician exists in the bundle's local `users` table.
+    // This mirrors the logic used for sick episodes.
+    private func ensureBundleUserRowIfNeeded(dbURL: URL) {
+        guard
+            let activeID = appState.activeUserID,
+            let clinician = clinicianStore.users.first(where: { $0.id == activeID })
+        else {
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+              let db = db else {
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        // Minimal users table used by the viewer app and PDF generators
+        let createSQL = """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            first_name TEXT NOT NULL,
+            last_name  TEXT NOT NULL
+        );
+        """
+        guard sqlite3_exec(db, createSQL, nil, nil, nil) == SQLITE_OK else {
+            return
+        }
+
+        // If the row already exists, nothing else to do
+        let checkSQL = "SELECT 1 FROM users WHERE id = ? LIMIT 1;"
+        var checkStmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, checkSQL, -1, &checkStmt, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_finalize(checkStmt) }
+
+        sqlite3_bind_int64(checkStmt, 1, sqlite3_int64(activeID))
+        if sqlite3_step(checkStmt) == SQLITE_ROW {
+            return
+        }
+
+        // Insert the active clinician into the bundle users table
+        let insertSQL = "INSERT INTO users (id, first_name, last_name) VALUES (?, ?, ?);"
+        var insertStmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, insertSQL, -1, &insertStmt, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_finalize(insertStmt) }
+
+        sqlite3_bind_int64(insertStmt, 1, sqlite3_int64(activeID))
+        _ = clinician.firstName.withCString { sqlite3_bind_text(insertStmt, 2, $0, -1, SQLITE_TRANSIENT) }
+        _ = clinician.lastName.withCString  { sqlite3_bind_text(insertStmt, 3, $0, -1, SQLITE_TRANSIENT) }
+
+        _ = sqlite3_step(insertStmt)
     }
 
     private func showError(_ message: String) {
