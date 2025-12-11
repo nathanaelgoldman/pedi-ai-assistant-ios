@@ -53,7 +53,7 @@ private func validateSQLiteHeader(dbURL: URL) throws {
 /// Verify db.sqlite hash (hard fail) and docs hashes (soft-fail with warnings).
 /// Returns the decoded manifest for callers that want to use its fields.
 @discardableResult
-private func verifyExtractedBundle(root: URL, log: (String) -> Void) throws -> ManifestV2 {
+private func verifyExtractedBundle(root: URL, dbURL: URL, log: (String) -> Void) throws -> ManifestV2 {
     let manifest = try loadManifest(at: root)
     let schema = manifest.schema_version ?? 1
     if schema < 2 {
@@ -61,12 +61,7 @@ private func verifyExtractedBundle(root: URL, log: (String) -> Void) throws -> M
         return manifest
     }
 
-    // Verify db.sqlite
-    let dbURL = root.appendingPathComponent("db.sqlite")
-    guard FileManager.default.fileExists(atPath: dbURL.path) else {
-        throw NSError(domain: "BundleImport", code: 2001,
-                      userInfo: [NSLocalizedDescriptionKey: "Bundle is missing db.sqlite"])
-    }
+    // Verify db.sqlite at the resolved location (may be a decrypted copy).
     if let expected = manifest.db_sha256 {
         let actual = try sha256Hex(ofFile: dbURL)
         if expected.lowercased() != actual.lowercased() {
@@ -162,53 +157,126 @@ struct BundleImporter: View {
         try fm.createDirectory(at: tempExtract, withIntermediateDirectories: true)
         try fm.unzipItem(at: tempZip, to: tempExtract)
 
-        // Validate required files inside extracted bundle
-        let expectedDB = tempExtract.appendingPathComponent("db.sqlite")
-        let expectedManifest = tempExtract.appendingPathComponent("manifest.json")
-        guard fm.fileExists(atPath: expectedDB.path), fm.fileExists(atPath: expectedManifest.path) else {
+        // Load manifest first (required, especially for encrypted bundles)
+        let manifestURL = tempExtract.appendingPathComponent("manifest.json")
+        guard fm.fileExists(atPath: manifestURL.path) else {
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
-            throw NSError(domain: "BundleImporter", code: 3, userInfo: [NSLocalizedDescriptionKey: "❌ Extracted bundle is missing required files."])
+            throw NSError(domain: "BundleImporter", code: 3, userInfo: [NSLocalizedDescriptionKey: "❌ Extracted bundle is missing manifest.json."])
+        }
+
+        // Determine whether this bundle is encrypted (DrsMainApp v2+ exports set these keys)
+        let manifestData = try Data(contentsOf: manifestURL)
+        let manifestJSON = (try? JSONSerialization.jsonObject(with: manifestData, options: [])) as? [String: Any]
+        let isEncrypted = (manifestJSON?["encrypted"] as? Bool) ?? false
+        let scheme = manifestJSON?["encryption_scheme"] as? String
+
+        // Resolve dbURL (decrypt if needed)
+        let dbURL: URL
+        if isEncrypted {
+            guard scheme == "AES-GCM-v1" else {
+                // Cleanup temp items before throwing
+                cleanupTempArtifacts(tempZip, tempExtract)
+                throw NSError(
+                    domain: "BundleImporter",
+                    code: 12,
+                    userInfo: [NSLocalizedDescriptionKey: "❌ Unsupported encryption scheme: \(scheme ?? "<none>")."]
+                )
+            }
+
+            let encURL = tempExtract.appendingPathComponent("db.sqlite.enc")
+            guard fm.fileExists(atPath: encURL.path) else {
+                // Cleanup temp items before throwing
+                cleanupTempArtifacts(tempZip, tempExtract)
+                throw NSError(
+                    domain: "BundleImporter",
+                    code: 13,
+                    userInfo: [NSLocalizedDescriptionKey: "❌ Encrypted bundle is missing db.sqlite.enc."]
+                )
+            }
+
+            let plainURL = tempExtract.appendingPathComponent("db.sqlite")
+            // Remove any stale plaintext copy if present
+            try? fm.removeItem(at: plainURL)
+
+            do {
+                try BundleCrypto.decryptFile(at: encURL, to: plainURL)
+            } catch {
+                // Cleanup temp items before throwing
+                cleanupTempArtifacts(tempZip, tempExtract)
+                throw NSError(
+                    domain: "BundleImporter",
+                    code: 14,
+                    userInfo: [NSLocalizedDescriptionKey: "❌ Failed to decrypt bundle database: \(error.localizedDescription)"]
+                )
+            }
+
+            dbURL = plainURL
+        } else {
+            // Legacy / unencrypted bundle: expect a plain db.sqlite
+            let expectedDB = tempExtract.appendingPathComponent("db.sqlite")
+            guard fm.fileExists(atPath: expectedDB.path) else {
+                // Cleanup temp items before throwing
+                cleanupTempArtifacts(tempZip, tempExtract)
+                throw NSError(
+                    domain: "BundleImporter",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "❌ Extracted bundle is missing db.sqlite."]
+                )
+            }
+            dbURL = expectedDB
         }
 
         // Fail fast if db.sqlite isn't an actual SQLite file (magic header check)
         do {
-            try validateSQLiteHeader(dbURL: expectedDB)
-            log.debug("SQLite header validated for \(expectedDB.path, privacy: .public)")
+            try validateSQLiteHeader(dbURL: dbURL)
+            log.debug("SQLite header validated for \(dbURL.path, privacy: .public)")
         } catch {
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
-            throw NSError(domain: "BundleImporter", code: 11, userInfo: [NSLocalizedDescriptionKey: "❌ Not a valid SQLite file: \(error.localizedDescription)"])
+            throw NSError(
+                domain: "BundleImporter",
+                code: 11,
+                userInfo: [NSLocalizedDescriptionKey: "❌ Not a valid SQLite file: \(error.localizedDescription)"]
+            )
         }
 
         // Verify manifest/db/docs hashes (throws on db mismatch)
         do {
-            _ = try verifyExtractedBundle(root: tempExtract) { msg in
+            _ = try verifyExtractedBundle(root: tempExtract, dbURL: dbURL) { msg in
                 log.debug("\(msg, privacy: .public)")
             }
         } catch {
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
-            throw NSError(domain: "BundleImporter", code: 10, userInfo: [NSLocalizedDescriptionKey: "❌ Verification failed: \(error.localizedDescription)"])
+            throw NSError(
+                domain: "BundleImporter",
+                code: 10,
+                userInfo: [NSLocalizedDescriptionKey: "❌ Verification failed: \(error.localizedDescription)"]
+            )
         }
 
         // Run SQLite integrity check on the incoming DB before touching it
         do {
-            try runIntegrityCheckOrThrow(dbPath: expectedDB.path)
+            try runIntegrityCheckOrThrow(dbPath: dbURL.path)
         } catch {
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
-            throw NSError(domain: "BundleImporter", code: 9, userInfo: [NSLocalizedDescriptionKey: "❌ Integrity check failed for db.sqlite: \(error.localizedDescription)"])
+            throw NSError(
+                domain: "BundleImporter",
+                code: 9,
+                userInfo: [NSLocalizedDescriptionKey: "❌ Integrity check failed for db.sqlite: \(error.localizedDescription)"]
+            )
         }
 
         do {
-            try ensureParentNotesColumn(dbPath: expectedDB.path)
+            try ensureParentNotesColumn(dbPath: dbURL.path)
         } catch {
             log.warning("ensureParentNotesColumn(temp) failed: \(error.localizedDescription)")
         }
 
         // Read alias and dob from the temp db
-        let (alias, dob) = try readAliasAndDOB(fromDBAt: expectedDB.path)
+        let (alias, dob) = try readAliasAndDOB(fromDBAt: dbURL.path)
         let safeAlias = sanitizeFileName(alias.isEmpty ? "Unknown" : alias)
 
         // Also copy to persistent folder for permanent updates

@@ -252,8 +252,34 @@ struct BundleExporter {
             throw NSError(domain: "BundleExport", code: 3, userInfo: [NSLocalizedDescriptionKey: "SQLite foreign_key_check failed for export copy."])
         }
 
-        // Compute db.sqlite hash for manifest after normalization
-        let dbSha256 = try sha256Hex(ofFile: dbFileInBundle)
+        // NEW: Encrypt the DB for transport if our crypto layer is enabled for this app.
+        // This mirrors the DrsMainApp export format so that both apps can round‑trip bundles.
+        do {
+            try BundleCrypto.encryptDatabaseIfNeeded(at: bundleFolder)
+        } catch {
+            BundleExporter.log.error("Encryption step failed; aborting export: \(error.localizedDescription, privacy: .public)")
+            throw NSError(domain: "BundleExport",
+                          code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to encrypt database for export."])
+        }
+
+        // Decide which file we hash for integrity: prefer plaintext if it still exists,
+        // otherwise fall back to the encrypted db.sqlite.enc.
+        let fm = FileManager.default
+        let dbFileToHash: URL
+        let encryptedDBURL = bundleFolder.appendingPathComponent("db.sqlite.enc")
+        if fm.fileExists(atPath: dbFileInBundle.path) {
+            dbFileToHash = dbFileInBundle
+        } else if fm.fileExists(atPath: encryptedDBURL.path) {
+            dbFileToHash = encryptedDBURL
+        } else {
+            throw NSError(domain: "BundleExport",
+                          code: 5,
+                          userInfo: [NSLocalizedDescriptionKey: "Neither db.sqlite nor db.sqlite.enc found in export bundle."])
+        }
+
+        // Compute DB hash for manifest after normalization/encryption
+        let dbSha256 = try sha256Hex(ofFile: dbFileToHash)
 
         var includesDocs = false
         var docsManifest: [[String: String]] = []
@@ -272,7 +298,7 @@ struct BundleExporter {
             "format": "peMR",
             "version": 1,                      // legacy key for older importers
             "schema_version": 2,               // bumped schema when hashes were added
-            "encrypted": false,
+            "encrypted": FileManager.default.fileExists(atPath: encryptedDBURL.path),
             "exported_at": timestamp,
             "source": "patient_viewer_app",
             "includes_docs": includesDocs,

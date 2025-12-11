@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 import SQLite3
 import SwiftUI
+import CryptoKit
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
@@ -151,6 +152,8 @@ final class ClinicianStore: ObservableObject {
         addIfMissing("ai_well_prompt")
         addIfMissing("ai_sick_rules_json")
         addIfMissing("ai_well_rules_json")
+        addIfMissing("pwd_salt")
+        addIfMissing("pwd_hash")
     }
 
     // MARK: - Lifecycle
@@ -490,5 +493,121 @@ final class ClinicianStore: ObservableObject {
             activeUser = nil
             UserDefaults.standard.removeObject(forKey: activeUserKey)
         }
+    }
+    
+    // MARK: - Password helpers (for app lock)
+    /// Generate a random 32-byte salt.
+    private func generateSalt() -> Data {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status == errSecSuccess {
+            return Data(bytes)
+        } else {
+            // Fallback: still return random-ish data using UUID, only used for app lock
+            return UUID().uuidString.data(using: .utf8) ?? Data()
+        }
+    }
+
+    /// Compute a simple salted SHA-256 hash of the password.
+    /// For an app lock (not full-disk encryption), this is acceptable and simple.
+    private func hashPassword(_ password: String, salt: Data) -> Data {
+        var data = Data()
+        data.append(salt)
+        data.append(password.data(using: .utf8) ?? Data())
+        let digest = SHA256.hash(data: data)
+        return Data(digest)
+    }
+
+    /// Store or replace the password for a clinician by id.
+    /// This writes a Base64-encoded salt and hash into pwd_salt / pwd_hash columns.
+    func setPassword(_ password: String, forUserID id: Int) {
+        guard let db = openDB() else { return }
+        defer { sqlite3_close(db) }
+
+        let salt = generateSalt()
+        let hash = hashPassword(password, salt: salt)
+        let saltB64 = salt.base64EncodedString()
+        let hashB64 = hash.base64EncodedString()
+
+        let sql = "UPDATE users SET pwd_salt = ?, pwd_hash = ? WHERE id = ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_text(stmt, 1, saltB64, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, hashB64, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int64(stmt, 3, sqlite3_int64(id))
+
+        _ = sqlite3_step(stmt)
+    }
+
+    /// Clear the stored password for a clinician (used when disabling app lock or resetting).
+    func clearPassword(forUserID id: Int) {
+        guard let db = openDB() else { return }
+        defer { sqlite3_close(db) }
+
+        let sql = "UPDATE users SET pwd_salt = NULL, pwd_hash = NULL WHERE id = ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(id))
+        _ = sqlite3_step(stmt)
+    }
+
+    /// Return true if a password has been set for this clinician.
+    func hasPassword(forUserID id: Int) -> Bool {
+        guard let db = openDB() else { return false }
+        defer { sqlite3_close(db) }
+
+        let sql = "SELECT pwd_hash FROM users WHERE id = ? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(id))
+        let rc = sqlite3_step(stmt)
+        if rc == SQLITE_ROW {
+            if sqlite3_column_text(stmt, 0) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Verify a candidate password for a given clinician id.
+    /// Returns true if the salted hash matches what is stored in the DB.
+    func verifyPassword(_ candidate: String, forUserID id: Int) -> Bool {
+        guard let db = openDB() else { return false }
+        defer { sqlite3_close(db) }
+
+        let sql = "SELECT pwd_salt, pwd_hash FROM users WHERE id = ? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(id))
+        let rc = sqlite3_step(stmt)
+        guard rc == SQLITE_ROW else { return false }
+
+        guard
+            let saltCStr = sqlite3_column_text(stmt, 0),
+            let hashCStr = sqlite3_column_text(stmt, 1)
+        else {
+            return false
+        }
+
+        let saltB64 = String(cString: saltCStr)
+        let hashB64 = String(cString: hashCStr)
+        guard
+            let saltData = Data(base64Encoded: saltB64),
+            let storedHash = Data(base64Encoded: hashB64)
+        else {
+            return false
+        }
+
+        let candidateHash = hashPassword(candidate, salt: saltData)
+        // Constant-time-ish comparison using Data ==
+        return candidateHash == storedHash
     }
 }

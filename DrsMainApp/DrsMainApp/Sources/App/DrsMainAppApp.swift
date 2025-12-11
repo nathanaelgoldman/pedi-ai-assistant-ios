@@ -162,6 +162,8 @@ private struct SignInSheet: View {
     @State private var selectedID: Int? = nil
     @State private var firstName: String = ""
     @State private var lastName: String = ""
+    @State private var password: String = ""
+    @State private var loginError: String? = nil
 
     var body: some View {
         NavigationView {
@@ -181,11 +183,8 @@ private struct SignInSheet: View {
                                         return n.isEmpty ? "User #\(u.id)" : n
                                     }())
                                     .foregroundStyle(.primary)
-
                                 }
-
                                 Spacer()
-
                                 if selectedID == u.id {
                                     Image(systemName: "checkmark.circle.fill")
                                         .foregroundColor(.accentColor)
@@ -198,6 +197,8 @@ private struct SignInSheet: View {
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 selectedID = u.id
+                                loginError = nil
+                                password = ""
                             }
                             // macOS context menu delete
                             .contextMenu {
@@ -259,6 +260,17 @@ private struct SignInSheet: View {
                     .buttonStyle(.borderedProminent)
                 }
 
+                // Password for selected clinician (if required)
+                VStack(alignment: .leading, spacing: 4) {
+                    SecureField("Password (if required)", text: $password)
+                        .textFieldStyle(.roundedBorder)
+                    if let loginError {
+                        Text(loginError)
+                            .font(.footnote)
+                            .foregroundColor(.red)
+                    }
+                }
+
                 Spacer()
 
                 HStack {
@@ -276,8 +288,18 @@ private struct SignInSheet: View {
                             return clinicianStore.users.first?.id
                         }()
                         if let uid = chosenID {
+                            // If a password is set for this clinician, require it
+                            if clinicianStore.hasPassword(forUserID: uid) {
+                                guard clinicianStore.verifyPassword(password, forUserID: uid) else {
+                                    loginError = "Incorrect password."
+                                    return
+                                }
+                            }
                             appState.activeUserID = uid
                             showSignIn = false
+                            // Clear password state on successful sign-in
+                            password = ""
+                            loginError = nil
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -318,6 +340,13 @@ private struct ClinicianProfileForm: View {
     @State private var aiWellPrompt: String = ""
     @State private var aiSickRulesJSON: String = ""
     @State private var aiWellRulesJSON: String = ""
+
+    // App lock (password) state
+    @State private var newPassword: String = ""
+    @State private var confirmPassword: String = ""
+    @State private var passwordError: String? = nil
+    @State private var hasPassword: Bool = false
+    @State private var removePassword: Bool = false
 
     var body: some View {
         NavigationView {
@@ -400,11 +429,66 @@ private struct ClinicianProfileForm: View {
                             .padding(.vertical, 4)
                         }
                     }
+
+                    // --- App lock (password) section ---
+                    Section("App lock (password)") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let user, hasPassword {
+                                Text("A password is currently set for this clinician.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("No password set yet.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            SecureField("New password", text: $newPassword)
+                                .textContentType(.newPassword)
+                                .disabled(removePassword)
+
+                            SecureField("Confirm password", text: $confirmPassword)
+                                .textContentType(.newPassword)
+                                .disabled(removePassword)
+
+                            if let user, hasPassword {
+                                Toggle("Remove existing password", isOn: $removePassword)
+                            }
+
+                            if let passwordError {
+                                Text(passwordError)
+                                    .font(.footnote)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+
                     Section {
                         HStack {
                             Spacer()
                             Button("Close") { onClose() }
                             Button(user == nil ? "Create" : "Save") {
+                                // Reset any previous password error
+                                passwordError = nil
+
+                                // Determine if we have a new password to set
+                                var effectiveNewPassword: String? = nil
+                                if !removePassword {
+                                    let trimmedNew = newPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let trimmedConfirm = confirmPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !trimmedNew.isEmpty || !trimmedConfirm.isEmpty {
+                                        guard !trimmedNew.isEmpty, !trimmedConfirm.isEmpty else {
+                                            passwordError = "Please enter and confirm the password."
+                                            return
+                                        }
+                                        guard trimmedNew == trimmedConfirm else {
+                                            passwordError = "Passwords do not match."
+                                            return
+                                        }
+                                        effectiveNewPassword = trimmedNew
+                                    }
+                                }
+
                                 if let u = user {
                                     // Update existing clinician
                                     clinicianStore.updateUser(
@@ -433,6 +517,14 @@ private struct ClinicianProfileForm: View {
                                         sickRulesJSON: aiSickRulesJSON.isEmpty ? nil : aiSickRulesJSON,
                                         wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
                                     )
+                                    // Handle password changes for existing clinician
+                                    if let newPwd = effectiveNewPassword {
+                                        clinicianStore.setPassword(newPwd, forUserID: u.id)
+                                        hasPassword = true
+                                    } else if removePassword {
+                                        clinicianStore.clearPassword(forUserID: u.id)
+                                        hasPassword = false
+                                    }
                                 } else {
                                     // Create new clinician
                                     if let new = clinicianStore.createUser(
@@ -461,6 +553,13 @@ private struct ClinicianProfileForm: View {
                                             wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
                                         )
                                         clinicianStore.setActiveUser(new)
+                                        // Handle password for newly created clinician
+                                        if let newPwd = effectiveNewPassword {
+                                            clinicianStore.setPassword(newPwd, forUserID: new.id)
+                                            hasPassword = true
+                                        } else {
+                                            hasPassword = false
+                                        }
                                     }
                                 }
                                 onClose()
@@ -492,6 +591,11 @@ private struct ClinicianProfileForm: View {
                 aiWellPrompt    = u.aiWellPrompt ?? ""
                 aiSickRulesJSON = u.aiSickRulesJSON ?? ""
                 aiWellRulesJSON = u.aiWellRulesJSON ?? ""
+                hasPassword = clinicianStore.hasPassword(forUserID: u.id)
+                newPassword = ""
+                confirmPassword = ""
+                passwordError = nil
+                removePassword = false
             }
         }
     }

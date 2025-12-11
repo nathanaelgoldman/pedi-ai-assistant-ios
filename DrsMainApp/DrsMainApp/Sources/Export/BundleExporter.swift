@@ -129,6 +129,7 @@ struct BundleExporter {
     }
 
     /// Write a v2 manifest with bundle identity (MRN, alias, DOB, sex), db checksum, and docs listing.
+    /// Step 1: also encrypts db.sqlite → db.sqlite.enc and marks the bundle as encrypted.
     private static func writeManifestV2(at stageRoot: URL, sourceRoot: URL) throws {
         let fm = FileManager.default
 
@@ -136,15 +137,33 @@ struct BundleExporter {
         var files: [[String: Any]] = []
         var docsManifest: [[String: Any]] = []
 
-        // db.sqlite checksum if present
+        // db.sqlite checksum if present (plaintext), then encrypt to db.sqlite.enc
         var dbSHA256: String? = nil
+        var encrypted = false
+        var encryptionScheme: String? = nil
+
         let dbURL = stageRoot.appendingPathComponent("db.sqlite")
+        // Read patient identity from the plaintext db.sqlite before encryption.
+        // This gives us stable identity fields even though the staged bundle
+        // will only contain db.sqlite.enc.
+        let ident = try loadPatientIdentity(from: dbURL)
         if fm.fileExists(atPath: dbURL.path) {
+            // 1) Hash plaintext for semantic integrity
             let data = try Data(contentsOf: dbURL)
             dbSHA256 = sha256Hex(data)
+
+            // 2) Encrypt db.sqlite → db.sqlite.enc
+            let encURL = stageRoot.appendingPathComponent("db.sqlite.enc")
+            try BundleCrypto.encryptFile(at: dbURL, to: encURL)
+
+            // 3) Remove plaintext db.sqlite from the staged bundle
+            try fm.removeItem(at: dbURL)
+
+            encrypted = true
+            encryptionScheme = "AES-GCM-v1"
         }
 
-        // Walk stage root (db.sqlite and docs/**)
+        // Walk stage root (db.sqlite.enc and docs/**)
         let enumerator = fm.enumerator(
             at: stageRoot,
             includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey],
@@ -174,9 +193,6 @@ struct BundleExporter {
             }
         }
 
-        // Read patient identity from db.sqlite if possible
-        let ident = try loadPatientIdentity(from: dbURL)
-
         let manifest: [String: Any?] = [
             "version": 2,
             "created": ISO8601DateFormatter().string(from: Date()),
@@ -187,6 +203,9 @@ struct BundleExporter {
             "dob": ident.dob,
             "patient_sex": ident.sex,
             "mrn": ident.mrn,
+            // Encryption metadata
+            "encrypted": encrypted,
+            "encryption_scheme": encryptionScheme,
             // Checksums and listings
             "db_sha256": dbSHA256,
             "docs_manifest": docsManifest,
@@ -246,14 +265,24 @@ struct BundleExporter {
             return exists
         }
 
-        let hasAlias = hasColumn("alias")
+        // Support both "alias" and "alias_label"
+        let hasAlias        = hasColumn("alias")
+        let hasAliasLabel   = hasColumn("alias_label")
+        let aliasColumnName: String? = {
+            if hasAlias { return "alias" }
+            if hasAliasLabel { return "alias_label" }
+            return nil
+        }()
+
         let hasDOB   = hasColumn("dob")
         let hasSex   = hasColumn("sex")
         let hasMRN   = hasColumn("mrn")
 
         // Build a safe SELECT only for available columns
         var cols: [String] = ["id"]
-        if hasAlias { cols.append("alias") }
+        if let aliasColName = aliasColumnName {
+            cols.append(aliasColName)
+        }
         if hasDOB   { cols.append("dob") }
         if hasSex   { cols.append("sex") }
         if hasMRN   { cols.append("mrn") }
@@ -273,12 +302,19 @@ struct BundleExporter {
 
         if sqlite3_step(stmt) == SQLITE_ROW {
             var colIdx = 0
-            // id
-            pid = Int(sqlite3_column_int64(stmt, Int32(colIdx))); colIdx += 1
-            if hasAlias {
-                if let c = sqlite3_column_text(stmt, Int32(colIdx)) { alias = String(cString: c) }
+
+            // id (always present)
+            pid = Int(sqlite3_column_int64(stmt, Int32(colIdx)))
+            colIdx += 1
+
+            // alias or alias_label if any
+            if aliasColumnName != nil {
+                if let c = sqlite3_column_text(stmt, Int32(colIdx)) {
+                    alias = String(cString: c)
+                }
                 colIdx += 1
             }
+
             if hasDOB {
                 if let c = sqlite3_column_text(stmt, Int32(colIdx)) { dob = String(cString: c) }
                 colIdx += 1

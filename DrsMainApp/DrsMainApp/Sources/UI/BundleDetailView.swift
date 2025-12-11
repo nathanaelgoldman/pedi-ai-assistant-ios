@@ -98,6 +98,16 @@ struct BundleDetailView: View {
         loadError = nil
         guard let bundleURL else { return }
 
+        // Ensure we have a plain db.sqlite available (decrypt if needed)
+        do {
+            try BundleCrypto.decryptDatabaseIfNeeded(at: bundleURL)
+        } catch {
+            let message = error.localizedDescription
+            loadError = "Failed to prepare bundle database: \(message)"
+            log.error("Failed to decrypt/prepare bundle DB: \(message, privacy: .public)")
+            return
+        }
+
         let dbURL = bundleURL.appendingPathComponent("db.sqlite")
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             log.info("No db.sqlite in bundle at \(dbURL.path, privacy: .public)")
@@ -244,7 +254,13 @@ struct BundleDetailView: View {
     // MARK: - Helpers
 
     private func dbExists(at bundleURL: URL) -> Bool {
-        FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent("db.sqlite").path)
+        let fm = FileManager.default
+        let plain = bundleURL.appendingPathComponent("db.sqlite")
+        if fm.fileExists(atPath: plain.path) { return true }
+
+        // Also consider encrypted-only bundles as having a DB so we can decrypt on demand.
+        let enc = bundleURL.appendingPathComponent("db.sqlite.enc")
+        return fm.fileExists(atPath: enc.path)
     }
 
     private func revealInFinder(_ url: URL) {
@@ -255,9 +271,16 @@ struct BundleDetailView: View {
 
     private func openDB(_ bundleURL: URL) {
         #if os(macOS)
+        do {
+            // Ensure a plain db.sqlite exists (decrypt if needed).
+            try BundleCrypto.decryptDatabaseIfNeeded(at: bundleURL)
+        } catch {
+            log.error("Failed to decrypt DB before opening: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+
         let db = bundleURL.appendingPathComponent("db.sqlite")
         NSWorkspace.shared.open(db)
         #endif
     }
 }
-
