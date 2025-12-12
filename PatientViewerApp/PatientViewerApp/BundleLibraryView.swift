@@ -676,23 +676,56 @@ struct BundleLibraryView: View {
     @State private var pendingImport: PendingImport? = nil
 
     var body: some View {
-        VStack(alignment: .leading) {
-            Text("📚 Saved Patient Bundles")
-                .font(.title2)
-                .padding(.bottom, 8)
+        VStack(alignment: .leading, spacing: 16) {
+            // Header
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("📚 Saved Patient Bundles")
+                        .font(.title2)
+                        .fontWeight(.semibold)
 
+                    Text("Open a saved bundle to view visits, growth and documents.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+
+            // Toolbar row
             HStack {
                 Button(action: { isImportingZip = true }) {
                     Label("Import .peMR.zip", systemImage: "tray.and.arrow.down")
+                        .font(.body.weight(.semibold))
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
                 .disabled(isBusy)
+
                 Spacer()
             }
-            .padding(.bottom, 8)
 
+            // Content
             if savedBundles.isEmpty {
-                Text("No saved bundles found.")
-                    .foregroundColor(.gray)
+                VStack(spacing: 12) {
+                    Image(systemName: "archivebox")
+                        .font(.system(size: 32, weight: .regular))
+                        .foregroundColor(.secondary)
+
+                    Text("No saved bundles yet")
+                        .font(.headline)
+
+                    Text("Imported patient bundles will appear here so you can reopen them later.")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 12)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(.secondarySystemBackground))
+                )
             } else {
                 List {
                     ForEach(savedBundles) { bundle in
@@ -711,24 +744,14 @@ struct BundleLibraryView: View {
                                 showAlert = true
                             }
                         }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(bundle.alias)
-                                    .font(.headline)
-                                if let name = bundle.name, !name.isEmpty {
-                                    Text(name)
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                                if let dob = bundle.dob, !dob.isEmpty {
-                                    Text("DOB: \(dob)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Text(metaLine(for: bundle))
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
+                            BundleRowCard(
+                                alias: bundle.alias,
+                                name: bundle.name,
+                                dob: bundle.dob,
+                                metaLine: metaLine(for: bundle)
+                            )
                         }
+                        .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 pendingDeletion = bundle
@@ -739,11 +762,20 @@ struct BundleLibraryView: View {
                         }
                     }
                 }
+                .listStyle(.plain)
             }
         }
         .padding()
-        .onAppear { ensureBaseDirectories(); loadPersistentBundles() }
-        .fileImporter(isPresented: $isImportingZip, allowedContentTypes: [UTType.zip], allowsMultipleSelection: false) { result in
+        .background(Color(.systemGroupedBackground))
+        .onAppear {
+            ensureBaseDirectories()
+            loadPersistentBundles()
+        }
+        .fileImporter(
+            isPresented: $isImportingZip,
+            allowedContentTypes: [UTType.zip],
+            allowsMultipleSelection: false
+        ) { result in
             switch result {
             case .success(let urls):
                 if let first = urls.first {
@@ -756,9 +788,16 @@ struct BundleLibraryView: View {
             }
         }
         .alert(isPresented: $showAlert) {
-            Alert(title: Text("Error"), message: Text(alertMessage), dismissButton: .default(Text("OK")))
+            Alert(
+                title: Text("Error"),
+                message: Text(alertMessage),
+                dismissButton: .default(Text("OK"))
+            )
         }
-        .confirmationDialog("Delete this saved bundle?", isPresented: $showDeleteConfirm) {
+        .confirmationDialog(
+            "Delete this saved bundle?",
+            isPresented: $showDeleteConfirm
+        ) {
             Button("Delete", role: .destructive) {
                 if let bundle = pendingDeletion {
                     deleteBundle(bundle)
@@ -775,11 +814,21 @@ struct BundleLibraryView: View {
                 Text("Permanently remove this saved bundle.")
             }
         }
-        .confirmationDialog("A bundle for this patient already exists.", isPresented: $showDuplicateImportDialog, titleVisibility: .visible) {
+        .confirmationDialog(
+            "A bundle for this patient already exists.",
+            isPresented: $showDuplicateImportDialog,
+            titleVisibility: .visible
+        ) {
             Button("Overwrite (archive previous)", role: .destructive) {
                 guard let pending = pendingImport else { return }
                 do {
-                    try archiveExistingAndReplace(existingURL: pending.existingURL, newRoot: pending.tempRoot, dest: pending.destinationURL, zipURL: pending.zipURL, identity: pending.identity)
+                    try archiveExistingAndReplace(
+                        existingURL: pending.existingURL,
+                        newRoot: pending.tempRoot,
+                        dest: pending.destinationURL,
+                        zipURL: pending.zipURL,
+                        identity: pending.identity
+                    )
                     pendingImport = nil
                 } catch {
                     log.error("Overwrite failed: \(error.localizedDescription, privacy: .public)")
@@ -801,6 +850,64 @@ struct BundleLibraryView: View {
             }
         }
     }
+
+// MARK: - BundleRowCard Helper View
+
+private struct BundleRowCard: View {
+    let alias: String
+    let name: String?
+    let dob: String?
+    let metaLine: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(.systemGray6))
+                    .frame(width: 40, height: 40)
+
+                Image(systemName: "person.text.rectangle")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.accentColor)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(alias)
+                    .font(.headline)
+
+                if let name, !name.isEmpty {
+                    Text(name)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
+                if let dob, !dob.isEmpty {
+                    Text("DOB: \(dob)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                if !metaLine.isEmpty {
+                    Text(metaLine)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.secondary)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        )
+    }
+}
 
     private func loadPersistentBundles() {
         ensureBaseDirectories()

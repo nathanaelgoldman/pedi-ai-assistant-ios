@@ -249,28 +249,77 @@ struct VisitListView: SwiftUI.View {
     }
 
     var body: some SwiftUI.View {
-        VStack {
-            Picker("Visit Type", selection: $selectedCategory) {
-                Text("🧒 Well Visits").tag("well")
-                Text("🤒 Sick Visits").tag("sick")
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .onChange(of: selectedCategory) { oldValue, newValue in
-                logVisits.info("VisitList filter changed from \(oldValue, privacy: .public) to \(newValue, privacy: .public)")
-            }
-            .padding()
+        ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
 
-            List(filteredVisits) { visit in
-                NavigationLink(destination: VisitDetailView(visit: visit, dbURL: dbURL)) {
-                    VStack(alignment: .leading) {
-                        Text("📅 \(formatDate(visit.date))")
-                        Text("🩺 \(visit.type)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Visit Summaries")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+
+                    Text("Browse well and sick visits for this patient.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 4)
+
+                // Segmented picker in a subtle card
+                VStack {
+                    Picker("Visit Type", selection: $selectedCategory) {
+                        Text("🧒 Well Visits").tag("well")
+                        Text("🤒 Sick Visits").tag("sick")
                     }
-                    .contentShape(Rectangle())
+                    .pickerStyle(.segmented)
+                }
+                .padding(8)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .onChange(of: selectedCategory) { oldValue, newValue in
+                    logVisits.info("VisitList filter changed from \(oldValue, privacy: .public) to \(newValue, privacy: .public)")
+                }
+
+                // Visits list as cards
+                if filteredVisits.isEmpty {
+                    Spacer()
+
+                    VStack(spacing: 8) {
+                        Image(systemName: selectedCategory == "well" ? "figure.child" : "bandage")
+                            .font(.system(size: 40, weight: .regular))
+                            .foregroundColor(.secondary)
+
+                        Text(selectedCategory == "well" ? "No well visits yet." : "No sick visits yet.")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+
+                        Text("New visits will appear here once recorded in the doctor's app.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+
+                    Spacer()
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(filteredVisits) { visit in
+                                NavigationLink {
+                                    VisitDetailView(visit: visit, dbURL: dbURL)
+                                } label: {
+                                    VisitCard(visit: visit)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
         .navigationTitle("Visit Summaries")
         .onAppear {
@@ -334,6 +383,77 @@ struct VisitListView: SwiftUI.View {
         } catch {
             logVisits.error("Failed to read visits: \(String(describing: error))")
         }
+    }
+}
+
+struct VisitCard: SwiftUI.View {
+    let visit: VisitSummary
+
+    private var iconName: String {
+        switch visit.category {
+        case "well":
+            return "heart.text.square"
+        case "sick":
+            return "bandage"
+        default:
+            return "doc.text.magnifyingglass"
+        }
+    }
+
+    private var categoryLabel: String {
+        switch visit.category {
+        case "well":
+            return "Well visit"
+        case "sick":
+            return "Sick visit"
+        default:
+            return visit.category.capitalized
+        }
+    }
+
+    var body: some SwiftUI.View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.systemBlue).opacity(0.08))
+
+                Image(systemName: iconName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(Color(.systemBlue))
+            }
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(formatDate(visit.date))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+
+                Text(visit.type.isEmpty ? "No title recorded" : visit.type)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Text(categoryLabel)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Color(.tertiaryLabel))
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.systemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(.quaternaryLabel), lineWidth: 0.8)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 }
 

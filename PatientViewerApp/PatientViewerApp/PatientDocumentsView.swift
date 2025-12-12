@@ -70,56 +70,136 @@ struct PatientDocumentsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("📁 Patient Documents")
-                .font(.title2)
-                .bold()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Header
+                HStack(alignment: .center, spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(.systemBlue).opacity(0.1))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(Color(.systemBlue))
+                    }
 
-            Button("📤 Upload Document") {
-                showImporter = true
-            }
-            .fileImporter(
-                isPresented: $showImporter,
-                allowedContentTypes: AllowedDocTypes.supported,
-                allowsMultipleSelection: false
-            ) { result in
-                handleImport(result)
-            }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Patient Documents")
+                            .font(.title2.weight(.semibold))
+                        Text("View, upload, and share documents linked to this patient.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
 
-            Divider()
+                    Spacer()
+                }
 
-            if records.isEmpty {
-                Text("No documents uploaded yet.")
-                    .foregroundStyle(.gray)
-            } else {
-                ForEach(records) { record in
-                    VStack(alignment: .leading) {
-                        Text("📄 \(record.originalName)")
+                // Upload button
+                Button {
+                    showImporter = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Upload Document")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .fileImporter(
+                    isPresented: $showImporter,
+                    allowedContentTypes: AllowedDocTypes.supported,
+                    allowsMultipleSelection: false
+                ) { result in
+                    handleImport(result)
+                }
+
+                // Divider between actions and list
+                Divider()
+                    .padding(.top, 4)
+
+                // Document list / empty state
+                if records.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "tray")
+                            .font(.system(size: 36, weight: .regular))
+                            .foregroundColor(.secondary)
+
+                        Text("No documents yet")
                             .font(.headline)
-                        Text("Uploaded: \(record.uploadedAt)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack {
-                            Button("🧾 Preview") {
-                                openFile(record: record)
+
+                        Text("Upload lab reports, vaccination records, discharge summaries, or any other files you’d like to keep with this patient.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(records) { record in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Image(systemName: "doc.text")
+                                        .foregroundColor(Color(.systemBlue))
+
+                                    Text(record.originalName)
+                                        .font(.headline)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+
+                                    Spacer()
+                                }
+
+                                Text("Uploaded: \(record.uploadedAt)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                HStack(spacing: 12) {
+                                    Button {
+                                        openFile(record: record)
+                                    } label: {
+                                        Label("Preview", systemImage: "eye")
+                                            .font(.subheadline)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .disabled(isPreviewing)
+
+                                    Button(role: .destructive) {
+                                        confirmDelete = record
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                            .font(.subheadline)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .tint(.red)
+
+                                    Spacer()
+                                }
                             }
-                            .buttonStyle(.bordered)
-                            .disabled(isPreviewing)
-                            Button(role: .destructive) {
-                                confirmDelete = record
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.red)
-                            Spacer()
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color(.secondarySystemBackground))
+                            )
                         }
                     }
-                    Divider()
                 }
+
+                Spacer(minLength: 8)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
         }
-        .padding()
         .onAppear {
             guard !didLoadOnce else { return }
             documentsLog.info("Documents view appeared. Base=\(dbURL.path, privacy: .public)")

@@ -6,7 +6,11 @@
 //
 
 // DrsMainApp/Sources/App/DrsMainAppApp.swift
+
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 @main
 struct DrsMainAppApp: App {
@@ -275,8 +279,19 @@ private struct SignInSheet: View {
 
                 HStack {
                     Button("Cancel") {
-                        // Allow proceeding without selecting (viewer mode)
-                        showSignIn = false
+                        if appState.activeUserID == nil {
+                            // No active clinician: do not allow using the app without sign‑in
+                            #if os(macOS)
+                            // On macOS, terminate the app if user refuses to pick a clinician
+                            NSApp.terminate(nil)
+                            #else
+                            // On iOS (if ever used), keep the sheet open (no escape without clinician)
+                            // Do nothing here so the sign‑in sheet stays visible.
+                            #endif
+                        } else {
+                            // A clinician is already active: just dismiss the sheet
+                            showSignIn = false
+                        }
                     }
                     .buttonStyle(.bordered)
 

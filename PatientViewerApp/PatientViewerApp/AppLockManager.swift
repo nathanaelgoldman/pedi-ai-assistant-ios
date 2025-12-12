@@ -11,6 +11,7 @@
 import Foundation
 import Security
 import CryptoKit
+import LocalAuthentication
 import Combine
 
 @MainActor
@@ -99,6 +100,50 @@ final class AppLockManager: ObservableObject {
     /// Utility to ask: should we show the lock screen right now?
     var shouldShowLockScreen: Bool {
         isLockEnabled && isLocked
+    }
+
+    // MARK: - Biometrics (Face ID / Touch ID)
+
+    /// Returns true if Face ID / Touch ID is available and enrolled on this device.
+    var canUseBiometrics: Bool {
+        let context = LAContext()
+        var error: NSError?
+        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+    }
+
+    /// Attempt to unlock using Face ID / Touch ID.
+    /// - Parameters:
+    ///   - reason: The localized reason shown in the system auth dialog.
+    ///   - completion: Called on the main actor with true on success.
+    func unlockWithBiometrics(reason: String = "Unlock Patient Viewer",
+                              completion: @escaping (Bool) -> Void) {
+        // If no lock is configured, treat as unlocked.
+        guard isLockEnabled else {
+            isLocked = false
+            completion(true)
+            return
+        }
+
+        let context = LAContext()
+        context.localizedCancelTitle = "Cancel"
+
+        var authError: NSError?
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &authError) {
+            context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+                                   localizedReason: reason) { success, _ in
+                Task { @MainActor in
+                    if success {
+                        self.unlock()
+                        completion(true)
+                    } else {
+                        completion(false)
+                    }
+                }
+            }
+        } else {
+            // Biometrics not available / not enrolled
+            completion(false)
+        }
     }
 
     // MARK: - Hashing

@@ -21,11 +21,14 @@ struct ContentView: SwiftUI.View {
     // Unified sheet router (single source of truth for modal sheets)
     enum SheetRoute: Identifiable, Equatable {
         case bundleLibrary
+        case settings
 
         var id: String {
             switch self {
             case .bundleLibrary:
                 return "bundleLibrary"
+            case .settings:
+                return "settings"
             }
         }
     }
@@ -45,129 +48,11 @@ struct ContentView: SwiftUI.View {
 
     var body: some SwiftUI.View {
         NavigationView {
-            VStack {
+            Group {
                 if extractedFolderURL == nil {
-                    Button("📁 Load New Bundle from Device") {
-                        showingFileImporter = true
-                    }
-                    .padding()
-
-                    Button("📚 Load from Saved Bundles") {
-                        sheetRoute = .bundleLibrary
-                    }
-                    .padding()
-                } else {
-                    if let aliasLabel = bundleAliasLabel {
-                        Text("👤 Active patient: \(aliasLabel)")
-                            .font(.headline)
-                            .foregroundColor(.blue)
-                            .padding(.bottom, 4)
-                    }
-
-                
-
-                    
-
-                    if let url = extractedFolderURL {
-                        NavigationLink("➡️ Next: View Visits", destination: VisitListView(dbURL: url))
-                            .padding(.top)
-
-                        let dbPath = url.appendingPathComponent("db.sqlite").path
-                        let (patientSex, allPatientData) = GrowthDataFetcher.fetchAllGrowthData(dbPath: dbPath)
-                        let patientId = GrowthDataFetcher.getPatientId(from: dbPath) ?? -1
-
-                        NavigationLink("📈 View Growth Chart (test)", destination:
-                            GrowthChartScreen(
-                                patientSex: patientSex,
-                                allPatientData: allPatientData
-                            )
-                        )
-                        .padding(.top)
-
-                        if patientId >= 0 {
-                            NavigationLink(destination:
-                                ParentNotesView(
-                                    dbURL: url,
-                                    patientId: patientId
-                                )
-                                .id(patientId)
-                                .onAppear {
-                                    log.debug("🧠 Passing patient ID to ParentNotesView: \(patientId, privacy: .public)")
-                                }
-                            ) {
-                                Text("📝 Parent Notes")
-                            }
-                            .padding(.top)
-                        }
-
-                        NavigationLink("📎 Patient Documents", destination: PatientDocumentsView(dbURL: url))
-                            .padding(.top)
-
-                        NavigationLink("📤 Export Bundle", destination: {
-                            ExportBundleView(dbURL: url, onShare: { shareURL in
-                                do {
-                                    let data = try Data(contentsOf: shareURL)
-                                    // Use the exported filename (without path) as default if available
-                                    exportDefaultName = shareURL.deletingPathExtension().lastPathComponent
-                                    exportDoc = ZipFileDocument(data: data)
-                                    showFileExporter = true
-                                } catch {
-                                    log.error("Failed to prepare document for export: \(error.localizedDescription, privacy: .public)")
-                                }
-                            })
-                        })
-                            .padding(.top)
-
-
-                        Button("🗑 Clear Active Bundle") {
-                            // Always persist current ActiveBundle first
-                            saveActiveBundleToPersistent()
-                            if let url = extractedFolderURL {
-                                // Confirm persistent DB is written before clearing
-                                let dbPath = url.appendingPathComponent("db.sqlite").path
-                                log.debug("Pre-clear check: Confirming persistent DB exists and is intact.")
-                                if FileManager.default.fileExists(atPath: dbPath) {
-                                    log.info("Persistent DB file exists at \(dbPath, privacy: .public)")
-                                } else {
-                                    log.error("Persistent DB file is MISSING at \(dbPath, privacy: .public)")
-                                }
-                                log.debug("Ensuring only temporary bundle is cleared. Persistent bundles remain untouched.")
-
-                                // Only remove volatile temporary folders, not persistent ActiveBundle/{alias_label}
-                                let path = url.path
-                                if path.contains("tmp") || path.contains("Temporary") {
-                                    try? FileManager.default.removeItem(at: url)
-                                    log.info("Cleared volatile bundle at \(path, privacy: .public)")
-                                } else {
-                                    log.debug("Skipped clearing persistent ActiveBundle at \(path, privacy: .public)")
-                                }
-                            }
-                            // Flush DB to disk before clearing
-                            if let url = extractedFolderURL {
-                                let dbPath = url.appendingPathComponent("db.sqlite").path
-                                log.debug("Forcing DB flush before clear at: \(dbPath, privacy: .public)")
-                                let db = FMDatabase(path: dbPath)
-                                if db.open() {
-                                    db.executeUpdate("VACUUM;", withArgumentsIn: [])
-                                    db.close()
-                                    log.info("DB flushed using VACUUM.")
-                                } else {
-                                    log.error("Failed to open DB for flushing.")
-                                }
-                            }
-                            extractedFolderURL = nil
-                            bundleAliasLabel = nil
-                            bundleDOB = nil
-                            sheetRoute = nil
-
-                            // Force reloading the same bundle path later
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                                extractedFolderURL = nil
-                            }
-                        }
-                        .foregroundColor(.red)
-                        .padding(.top, 20)
-                    }
+                    emptyStateView
+                } else if let url = extractedFolderURL {
+                    activeBundleView(for: url)
                 }
             }
             .sheet(item: $sheetRoute, onDismiss: { sheetRoute = nil }) { route in
@@ -178,6 +63,9 @@ struct ContentView: SwiftUI.View {
                         bundleAlias: Binding(get: { bundleAliasLabel ?? "Unknown" }, set: { bundleAliasLabel = $0 }),
                         bundleDOB: Binding(get: { bundleDOB ?? "Unknown" }, set: { bundleDOB = $0 })
                     )
+
+                case .settings:
+                    AppSettingsView()
                 }
             }
             .fileExporter(
@@ -249,7 +137,7 @@ struct ContentView: SwiftUI.View {
             }, message: {
                 Text(importError ?? "")
             })
-            .navigationTitle("Patient Viewer")
+            .navigationTitle("Medical Records")
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .background, .inactive:
@@ -258,6 +146,339 @@ struct ContentView: SwiftUI.View {
                     break
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyStateView: some SwiftUI.View {
+        VStack(spacing: 32) {
+            // Header / intro
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Patient Viewer")
+                    .font(.largeTitle.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("Load a patient bundle to review visits, growth charts and documents.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal)
+            .padding(.top, 24)
+
+            // Action cards
+            VStack(spacing: 16) {
+                // Load new bundle from device
+                Button {
+                    showingFileImporter = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "tray.and.arrow.down.fill")
+                            .font(.title2)
+                            .frame(width: 32, height: 32)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Load New Bundle from Device")
+                                .font(.headline)
+                            Text("Import a .peMR.zip file from Files or iCloud.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: 520)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                // Load from saved bundles
+                Button {
+                    sheetRoute = .bundleLibrary
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "books.vertical.fill")
+                            .font(.title2)
+                            .frame(width: 32, height: 32)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Load from Saved Bundles")
+                                .font(.headline)
+                            Text("Open a previously stored patient bundle on this device.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: 520)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                // Settings
+                Button {
+                    sheetRoute = .settings
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                            .frame(width: 32, height: 32)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Settings")
+                                .font(.headline)
+                            Text("Manage app lock and viewer preferences.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: 520)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(.systemBackground))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.secondary.opacity(0.12), lineWidth: 0.8)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(.systemGroupedBackground),
+                    Color(.secondarySystemGroupedBackground)
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
+    }
+
+    @ViewBuilder
+    private func activeBundleView(for url: URL) -> some SwiftUI.View {
+        // Precompute DB-related values once
+        let dbPath = url.appendingPathComponent("db.sqlite").path
+        let (patientSex, allPatientData) = GrowthDataFetcher.fetchAllGrowthData(dbPath: dbPath)
+        let patientId = GrowthDataFetcher.getPatientId(from: dbPath) ?? -1
+        let alias = bundleAliasLabel ?? "Unknown patient"
+        let dob = bundleDOB ?? "Unknown date of birth"
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Patient header card
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.black)
+                                .frame(width: 56, height: 56)
+
+                            Image(systemName: "person.crop.circle")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundColor(.white)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(alias)
+                                .font(.title2.bold())
+                            Text(dob)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+                    }
+
+                    if !patientSex.isEmpty {
+                        Text("Sex: \(patientSex)")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 6)
+                )
+
+                // Action cards
+                VStack(spacing: 16) {
+                    // Visits
+                    NavigationLink(
+                        destination: VisitListView(dbURL: url)
+                    ) {
+                        ActionCard(
+                            systemImage: "list.bullet.rectangle",
+                            title: "View Visits",
+                            subtitle: "Browse all visits, summaries and clinical notes."
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // Growth chart
+                    NavigationLink(
+                        destination: GrowthChartScreen(
+                            patientSex: patientSex,
+                            allPatientData: allPatientData
+                        )
+                    ) {
+                        ActionCard(
+                            systemImage: "chart.bar.xaxis",
+                            title: "View Growth Charts",
+                            subtitle: "See weight, height and head circumference over time."
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // Parent notes (only if we have a valid ID)
+                    if patientId >= 0 {
+                        NavigationLink(
+                            destination:
+                                ParentNotesView(
+                                    dbURL: url,
+                                    patientId: patientId
+                                )
+                                .id(patientId)
+                                .onAppear {
+                                    log.debug("🧠 Passing patient ID to ParentNotesView: \(patientId, privacy: .public)")
+                                }
+                        ) {
+                            ActionCard(
+                                systemImage: "text.bubble.fill",
+                                title: "Parent Notes",
+                                subtitle: "View and add notes written by parents."
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Documents
+                    NavigationLink(
+                        destination: PatientDocumentsView(dbURL: url)
+                    ) {
+                        ActionCard(
+                            systemImage: "paperclip",
+                            title: "Patient Documents",
+                            subtitle: "Open scans, vaccination records and other files."
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // Export
+                    NavigationLink(
+                        destination: {
+                            ExportBundleView(dbURL: url, onShare: { shareURL in
+                                do {
+                                    let data = try Data(contentsOf: shareURL)
+                                    // Use the exported filename (without path) as default if available
+                                    exportDefaultName = shareURL.deletingPathExtension().lastPathComponent
+                                    exportDoc = ZipFileDocument(data: data)
+                                    showFileExporter = true
+                                } catch {
+                                    log.error("Failed to prepare document for export: \(error.localizedDescription, privacy: .public)")
+                                }
+                            })
+                        }()
+                    ) {
+                        ActionCard(
+                            systemImage: "square.and.arrow.up",
+                            title: "Export Bundle",
+                            subtitle: "Create an encrypted .peMR.zip bundle to share or archive."
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // Clear bundle (destructive) – simple but clear
+                VStack(alignment: .leading, spacing: 8) {
+                    Button(role: .destructive) {
+                        clearActiveBundle()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "trash")
+                            Text("Clear Active Bundle")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                    }
+
+                    Text("This keeps your persistent saved bundles; only the currently open working copy is cleared.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 8)
+            }
+            .padding()
+        }
+    }
+
+    // MARK: - Clear helper (logic unchanged, just extracted for reuse)
+
+    private func clearActiveBundle() {
+        // Always persist current ActiveBundle first
+        saveActiveBundleToPersistent()
+        if let url = extractedFolderURL {
+            // Confirm persistent DB is written before clearing
+            let dbPath = url.appendingPathComponent("db.sqlite").path
+            log.debug("Pre-clear check: Confirming persistent DB exists and is intact.")
+            if FileManager.default.fileExists(atPath: dbPath) {
+                log.info("Persistent DB file exists at \(dbPath, privacy: .public)")
+            } else {
+                log.error("Persistent DB file is MISSING at \(dbPath, privacy: .public)")
+            }
+            log.debug("Ensuring only temporary bundle is cleared. Persistent bundles remain untouched.")
+
+            // Only remove volatile temporary folders, not persistent ActiveBundle/{alias_label}
+            let path = url.path
+            if path.contains("tmp") || path.contains("Temporary") {
+                try? FileManager.default.removeItem(at: url)
+                log.info("Cleared volatile bundle at \(path, privacy: .public)")
+            } else {
+                log.debug("Skipped clearing persistent ActiveBundle at \(path, privacy: .public)")
+            }
+        }
+        // Flush DB to disk before clearing
+        if let url = extractedFolderURL {
+            let dbPath = url.appendingPathComponent("db.sqlite").path
+            log.debug("Forcing DB flush before clear at: \(dbPath, privacy: .public)")
+            let db = FMDatabase(path: dbPath)
+            if db.open() {
+                db.executeUpdate("VACUUM;", withArgumentsIn: [])
+                db.close()
+                log.info("DB flushed using VACUUM.")
+            } else {
+                log.error("Failed to open DB for flushing.")
+            }
+        }
+        extractedFolderURL = nil
+        bundleAliasLabel = nil
+        bundleDOB = nil
+        sheetRoute = nil
+
+        // Force reloading the same bundle path later
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+            extractedFolderURL = nil
         }
     }
 
@@ -324,6 +545,50 @@ struct ContentView: SwiftUI.View {
         } catch {
             log.error("Save to persistent failed: \(String(describing: error), privacy: .public)")
         }
+    }
+}
+
+// Reusable black badge-style card used in the active patient dashboard
+private struct ActionCard: SwiftUI.View {
+    let systemImage: String
+    let title: String
+    let subtitle: String
+
+    var body: some SwiftUI.View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(.systemGray6))
+                    .frame(width: 48, height: 48)
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.accentColor)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+        )
     }
 }
 
