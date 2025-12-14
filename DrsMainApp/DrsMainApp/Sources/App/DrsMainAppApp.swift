@@ -65,22 +65,23 @@ struct DrsMainAppApp: App {
                             return nil
                         }
 
-                        // Require at least an API key; if missing, fall back to the local stub.
+                        // Normalise provider choice; default to "openai" if not set.
+                        let providerID = (clinician.aiProvider ?? "openai")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                            .lowercased()
+
+                        // If clinician explicitly picked "local", always use the local stub
+                        // (i.e. return nil here so EpisodeAIEngine falls back accordingly).
+                        if providerID == "local" {
+                            return nil
+                        }
+
+                        // For any cloud provider, we still require an API key.
                         guard let apiKeyRaw = clinician.aiAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !apiKeyRaw.isEmpty
                         else {
                             return nil
                         }
-
-                        // Optional custom endpoint; defaults to the public OpenAI API.
-                        let baseURL: URL = {
-                            if let endpointRaw = clinician.aiEndpoint?.trimmingCharacters(in: .whitespacesAndNewlines),
-                               !endpointRaw.isEmpty,
-                               let url = URL(string: endpointRaw) {
-                                return url
-                            }
-                            return URL(string: "https://api.openai.com/v1")!
-                        }()
 
                         // Determine model: use clinician-specific value if present, otherwise fall back to a reasonable default.
                         let model: String = {
@@ -88,15 +89,42 @@ struct DrsMainAppApp: App {
                                !raw.isEmpty {
                                 return raw
                             }
-                            // Default: you can change this to any supported OpenAI model string.
+                            // Default: you can change this to any supported model string.
                             return "gpt-5.1-mini"
                         }()
 
-                        return OpenAIProvider(
-                            apiKey: apiKeyRaw,
-                            model: model,
-                            apiBaseURL: baseURL
-                        )
+                        switch providerID {
+                        case "openai", "":
+                            // Optional custom endpoint; defaults to the public OpenAI API.
+                            let baseURL: URL = {
+                                if let endpointRaw = clinician.aiEndpoint?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   !endpointRaw.isEmpty,
+                                   let url = URL(string: endpointRaw) {
+                                    return url
+                                }
+                                return URL(string: "https://api.openai.com/v1")!
+                            }()
+
+                            return OpenAIProvider(
+                                apiKey: apiKeyRaw,
+                                model: model,
+                                apiBaseURL: baseURL
+                            )
+
+                        case "anthropic":
+                            // Placeholder: in a future phase, this will return an AnthropicProvider.
+                            // For now, fall back to local stub behaviour.
+                            return nil
+
+                        case "gemini":
+                            // Placeholder: in a future phase, this will return a GeminiProvider.
+                            // For now, fall back to local stub behaviour.
+                            return nil
+
+                        default:
+                            // Unknown provider string → be defensive and fall back to local stub.
+                            return nil
+                        }
                     }
                 }
                 .sheet(isPresented: $showSignIn) {
@@ -349,6 +377,7 @@ private struct ClinicianProfileForm: View {
     @State private var aiEndpoint = ""
     @State private var aiAPIKey   = ""
     @State private var aiModel    = ""
+    @State private var aiProvider = "openai"
 
     // Per-clinician AI prompts and JSON rules
     @State private var aiSickPrompt: String = ""
@@ -388,6 +417,12 @@ private struct ClinicianProfileForm: View {
                     Section("AI Assistant (optional)") {
                         TextField("Endpoint URL", text: $aiEndpoint)
                         TextField("Model (e.g. gpt-5.1-mini)", text: $aiModel)
+                        Picker("Provider", selection: $aiProvider) {
+                            Text("OpenAI").tag("openai")
+                            Text("Anthropic").tag("anthropic")
+                            Text("Gemini").tag("gemini")
+                            Text("Local (no cloud)").tag("local")
+                        }
                         SecureField("API Key",     text: $aiAPIKey)
                             .textContentType(.password)
                     }
@@ -523,7 +558,8 @@ private struct ClinicianProfileForm: View {
                                         id: u.id,
                                         endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
                                         apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
-                                        model:    aiModel.isEmpty    ? nil : aiModel
+                                        model:    aiModel.isEmpty    ? nil : aiModel,
+                                        provider: aiProvider
                                     )
                                     clinicianStore.updateAIPromptsAndRules(
                                         id: u.id,
@@ -558,7 +594,8 @@ private struct ClinicianProfileForm: View {
                                             id: new.id,
                                             endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
                                             apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
-                                            model:    aiModel.isEmpty    ? nil : aiModel
+                                            model:    aiModel.isEmpty    ? nil : aiModel,
+                                            provider: aiProvider
                                         )
                                         clinicianStore.updateAIPromptsAndRules(
                                             id: new.id,
@@ -602,6 +639,7 @@ private struct ClinicianProfileForm: View {
                 aiEndpoint = u.aiEndpoint ?? ""
                 aiAPIKey   = u.aiAPIKey ?? ""
                 aiModel    = u.aiModel ?? ""
+                aiProvider = u.aiProvider ?? "openai"
                 aiSickPrompt    = u.aiSickPrompt ?? ""
                 aiWellPrompt    = u.aiWellPrompt ?? ""
                 aiSickRulesJSON = u.aiSickRulesJSON ?? ""

@@ -2,6 +2,7 @@
 //  DrsMainApp
 
 import SwiftUI
+import Foundation
 import OSLog
 #if os(macOS)
 import AppKit
@@ -19,9 +20,11 @@ struct SidebarView: View {
 
             List {
                 // MARK: - Recent Bundles
-                Section("Recent Bundles") {
+                Section(NSLocalizedString("sidebar.section.recentBundles",
+                                          comment: "Sidebar section title for recent peMR bundles")) {
                     if appState.recentBundles.isEmpty {
-                        Text("No bundles yet")
+                        Text(NSLocalizedString("sidebar.recent.empty",
+                                               comment: "Shown when there are no recent bundles"))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(appState.recentBundles, id: \.path) { url in
@@ -43,24 +46,37 @@ struct SidebarView: View {
                             .contentShape(Rectangle())
                             .listRowSeparator(.visible)
                             .contextMenu {
-                                Button("Reveal in Finder") { revealInFinder(url) }
-                                Button("Copy Path") { copyToPasteboard(url.path) }
+                                Button(
+                                    NSLocalizedString("sidebar.context.revealInFinder",
+                                                      comment: "Context menu action to reveal the bundle in Finder")
+                                ) {
+                                    revealInFinder(url)
+                                }
+                                Button(
+                                    NSLocalizedString("sidebar.context.copyPath",
+                                                      comment: "Context menu action to copy the bundle path to the clipboard")
+                                ) {
+                                    copyToPasteboard(url.path)
+                                }
                             }
                         }
                     }
                 } // end Section: Recent Bundles
 
                 // MARK: - Patients
-                Section("Patients") {
+                Section(NSLocalizedString("sidebar.section.patients",
+                                          comment: "Sidebar section title for patients")) {
                     if appState.currentBundleURL == nil {
                         HStack {
-                            Text("Select a bundle to load patients")
+                            Text(NSLocalizedString("sidebar.patients.noBundle",
+                                                   comment: "Shown when no bundle is selected yet"))
                             Spacer()
                         }
                         .foregroundStyle(.secondary)
                     } else if appState.patients.isEmpty {
                         HStack {
-                            Text("No patients in this bundle")
+                            Text(NSLocalizedString("sidebar.patients.empty",
+                                                   comment: "Shown when the selected bundle has no patients"))
                             Spacer()
                             Button {
                                 appState.reloadPatients()
@@ -68,7 +84,8 @@ struct SidebarView: View {
                                 Image(systemName: "arrow.clockwise")
                             }
                             .buttonStyle(.borderless)
-                            .help("Reload patients from current db.sqlite")
+                            .help(NSLocalizedString("sidebar.patients.reloadHelp",
+                                                    comment: "Help text for reloading patients from the current database"))
                         }
                         .foregroundStyle(.secondary)
                     } else {
@@ -118,14 +135,22 @@ struct SidebarView: View {
     // MARK: - Header
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Pedi•AI — Doctor")
+            Text(NSLocalizedString("sidebar.header.title",
+                                   comment: "Main sidebar header title (doctor app)"))
                 .font(.title3).bold()
             if let active = appState.currentBundleURL {
-                Text("Active: \(active.lastPathComponent)")
+                Text(
+                    String(
+                        format: NSLocalizedString("sidebar.header.active",
+                                                  comment: "Label showing the active bundle file name in the sidebar header"),
+                        active.lastPathComponent
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text("No active bundle")
+                Text(NSLocalizedString("sidebar.header.inactive",
+                                       comment: "Shown in sidebar header when no bundle is active"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -142,13 +167,21 @@ struct SidebarView: View {
             Button {
                 pickAndAddBundles()
             } label: {
-                Label("Import Bundles…", systemImage: "square.and.arrow.down")
+                Label(
+                    NSLocalizedString("sidebar.toolbar.importBundles",
+                                      comment: "Toolbar button to import peMR bundles"),
+                    systemImage: "square.and.arrow.down"
+                )
             }
 
             Button {
                 showingNewPatient = true
             } label: {
-                Label("New Patient…", systemImage: "person.badge.plus")
+                Label(
+                    NSLocalizedString("sidebar.toolbar.newPatient",
+                                      comment: "Toolbar button to create a new patient in the active bundle"),
+                    systemImage: "person.badge.plus"
+                )
             }
         }
     }
@@ -187,17 +220,35 @@ struct SidebarView: View {
             // Timing metadata block
             VStack(alignment: .leading, spacing: 2) {
                 if !summary.createdOn.isEmpty && summary.createdOn != "—" {
-                    Text("Created: \(summary.createdOn)")
+                    Text(
+                        String(
+                            format: NSLocalizedString("sidebar.bundle.createdOn",
+                                                      comment: "Metadata line: Created: <timestamp>"),
+                            summary.createdOn
+                        )
+                    )
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 if !summary.importedOn.isEmpty && summary.importedOn != "—" {
-                    Text("Imported: \(summary.importedOn)")
+                    Text(
+                        String(
+                            format: NSLocalizedString("sidebar.bundle.importedOn",
+                                                      comment: "Metadata line: Imported: <timestamp>"),
+                            summary.importedOn
+                        )
+                    )
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 if !summary.lastSavedOn.isEmpty && summary.lastSavedOn != "—" {
-                    Text("Last save: \(summary.lastSavedOn)")
+                    Text(
+                        String(
+                            format: NSLocalizedString("sidebar.bundle.lastSave",
+                                                      comment: "Metadata line: Last save: <timestamp>"),
+                            summary.lastSavedOn
+                        )
+                    )
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

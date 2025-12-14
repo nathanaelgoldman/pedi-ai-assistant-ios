@@ -1,0 +1,75 @@
+/* 
+  Localizable.strings
+  DrsMainApp
+
+  Created by yunastic on 12/14/25.
+  
+*/
+/* SIDEBAR */
+/* Sidebar – Header */
+"sidebar.header.title"    = "Pedi•AI — Doctor";
+"sidebar.header.active"   = "Active: %@";
+"sidebar.header.inactive" = "No active bundle";
+
+/* Sidebar – Sections */
+"sidebar.section.recentBundles" = "Recent Bundles";
+"sidebar.section.patients"      = "Patients";
+
+/* Sidebar – Recent bundles */
+"sidebar.recent.empty" = "No bundles yet";
+
+/* Sidebar – Recent bundles (menu helpers, if used elsewhere) */
+"sidebar.menu.revealInFinder" = "Reveal in Finder";
+"sidebar.menu.copyPath"       = "Copy Path";
+
+/* Sidebar – Patients section */
+"sidebar.patients.noBundle"   = "Select a bundle to load patients";
+"sidebar.patients.empty"      = "No patients in this bundle";
+"sidebar.patients.reloadHelp" = "Reload patients from current db.sqlite";
+
+/* Sidebar – Toolbar */
+"sidebar.toolbar.importBundles" = "Import Bundles…";
+"sidebar.toolbar.newPatient"    = "New Patient…";
+
+/* Sidebar – Context menu */
+"sidebar.context.revealInFinder" = "Reveal in Finder";
+"sidebar.context.copyPath"       = "Copy Path";
+
+/* Sidebar – Bundle metadata */
+"sidebar.bundle.createdOn"  = "Created: %@";
+"sidebar.bundle.importedOn" = "Imported: %@";
+"sidebar.bundle.lastSave"   = "Last save: %@";
+
+/* BUNDLEDETAILVIEW */
+/* Bundle Detail – header title */
+"bundleDetail.title" = "Bundle Detail";
+
+/* Bundle Detail – buttons */
+"bundleDetail.button.revealInFinder" = "Reveal in Finder";
+"bundleDetail.button.openDB" = "Open DB";
+
+/* Bundle Detail – field labels */
+"bundleDetail.field.alias" = "Alias";
+"bundleDetail.field.fullName" = "Full Name";
+"bundleDetail.field.dob" = "DOB";
+"bundleDetail.field.sex" = "Sex";
+"bundleDetail.field.patientID" = "Patient ID";
+
+/* Bundle Detail – no patient in DB */
+"bundleDetail.noPatient" = "No patient record found in this bundle.";
+
+/* Bundle Detail – empty state when no bundle selected */
+"bundleDetail.empty.title" = "No Bundle Selected";
+"bundleDetail.empty.description" = "Use “Add Bundles…” or create a new patient.";
+
+/* PATIENTSLISTVIEW */
+/* Patients List – header */
+"patientsList.title" = "Patients";
+
+/* Patients List – reload button help */
+"patientsList.reload.help" = "Reload patients from the bundle database";
+
+/* Patients List – row details */
+"patientsList.row.details-format" = "%@ • %@ • %@";
+
+/* PATIENTSDETAILVIEW */

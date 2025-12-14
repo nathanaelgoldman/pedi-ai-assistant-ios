@@ -32,6 +32,9 @@
 		BB6E2F832EC858650044F225 /* VitalsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6E2F822EC858600044F225 /* VitalsStore.swift */; };
 		BB6E2F852EC8665C0044F225 /* VitalsRanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6E2F842EC866470044F225 /* VitalsRanges.swift */; };
 		BB6E2F8D2EC8722A0044F225 /* VitalsBP.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6E2F8C2EC872250044F225 /* VitalsBP.swift */; };
+		BB71CCE72EEE8B66000B7947 /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB71CCE62EEE8B5C000B7947 /* AnthropicProvider.swift */; };
+		BB71CCE92EEE8B95000B7947 /* GeminiProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB71CCE82EEE8B92000B7947 /* GeminiProvider.swift */; };
+		BB71CCEC2EEE9570000B7947 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BB71CCEA2EEE9570000B7947 /* Localizable.strings */; };
 		BB9186852EC6E29D00A8AA8A /* PmhStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9186842EC6E29800A8AA8A /* PmhStore.swift */; };
 		BB9186872EC6E9F100A8AA8A /* PmhForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9186862EC6E9E900A8AA8A /* PmhForm.swift */; };
 		BB9186892EC6F48F00A8AA8A /* VaccinationStatusForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9186882EC6F48A00A8AA8A /* VaccinationStatusForm.swift */; };
@@ -82,6 +85,9 @@
 		BB6E2F822EC858600044F225 /* VitalsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsStore.swift; sourceTree = "<group>"; };
 		BB6E2F842EC866470044F225 /* VitalsRanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsRanges.swift; sourceTree = "<group>"; };
 		BB6E2F8C2EC872250044F225 /* VitalsBP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsBP.swift; sourceTree = "<group>"; };
+		BB71CCE62EEE8B5C000B7947 /* AnthropicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicProvider.swift; sourceTree = "<group>"; };
+		BB71CCE82EEE8B92000B7947 /* GeminiProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiProvider.swift; sourceTree = "<group>"; };
+		BB71CCEB2EEE9570000B7947 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		BB9186842EC6E29800A8AA8A /* PmhStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PmhStore.swift; sourceTree = "<group>"; };
 		BB9186862EC6E9E900A8AA8A /* PmhForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PmhForm.swift; sourceTree = "<group>"; };
 		BB9186882EC6F48A00A8AA8A /* VaccinationStatusForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaccinationStatusForm.swift; sourceTree = "<group>"; };
@@ -144,6 +150,8 @@
 		BB01DB6F2ECB53B500F412D8 /* AI */ = {
 			isa = PBXGroup;
 			children = (
+				BB71CCE82EEE8B92000B7947 /* GeminiProvider.swift */,
+				BB71CCE62EEE8B5C000B7947 /* AnthropicProvider.swift */,
 				BB01DB702ECB542C00F412D8 /* OpenAIProvider.swift */,
 			);
 			path = AI;
@@ -163,6 +171,7 @@
 		BB5497332EACAB41009F314A = {
 			isa = PBXGroup;
 			children = (
+				BB71CCEA2EEE9570000B7947 /* Localizable.strings */,
 				BB3E158F2EB704A5008E1472 /* Resources */,
 				BB564AF12EAE0BB900870007 /* Sources */,
 				BB54973E2EACAB41009F314A /* DrsMainApp */,
@@ -370,6 +379,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB71CCEC2EEE9570000B7947 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -401,6 +411,7 @@
 				BB96A56B2EBB3311003F5C44 /* GrowthModels.swift in Sources */,
 				BB3E15B02EB89917008E1472 /* ReportDataModels.swift in Sources */,
 				BBD60E352ED936BA008D7F46 /* WellVisitReportRules.swift in Sources */,
+				BB71CCE72EEE8B66000B7947 /* AnthropicProvider.swift in Sources */,
 				BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */,
 				BB9186892EC6F48F00A8AA8A /* VaccinationStatusForm.swift in Sources */,
 				BB9EB0DB2EC0CD0100308D39 /* MacBundleExporter.swift in Sources */,
@@ -414,6 +425,7 @@
 				BB6E2F852EC8665C0044F225 /* VitalsRanges.swift in Sources */,
 				BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */,
 				BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */,
+				BB71CCE92EEE8B95000B7947 /* GeminiProvider.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
 				BB96A5732EBB3A2D003F5C44 /* ReportGrowthRenderer.swift in Sources */,
 				BBE1E2AB2EC5CAF7004C6280 /* PerinatalHistoryForm.swift in Sources */,
@@ -429,6 +441,17 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		BB71CCEA2EEE9570000B7947 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				BB71CCEB2EEE9570000B7947 /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		BB5497462EACAB42009F314A /* Debug */ = {

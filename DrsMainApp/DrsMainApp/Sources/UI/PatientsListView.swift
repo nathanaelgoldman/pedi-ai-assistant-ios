@@ -1,4 +1,3 @@
-//
 //  PatientsListView.swift
 //  DrsMainApp
 //
@@ -12,15 +11,27 @@ struct PatientsListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Patients")
-                    .font(.headline)
+                Text(
+                    NSLocalizedString(
+                        "patientsList.title",
+                        comment: "Patients list header title"
+                    )
+                )
+                .font(.headline)
+
                 Spacer()
+
                 Button {
                     appState.reloadPatients()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("Reload patients from the bundle database")
+                .help(
+                    NSLocalizedString(
+                        "patientsList.reload.help",
+                        comment: "Help tooltip for button that reloads patients from the bundle database"
+                    )
+                )
             }
 
             List(selection: $appState.selectedPatientID) {
@@ -28,9 +39,20 @@ struct PatientsListView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.alias.isEmpty ? p.fullName : p.alias)
                             .font(.body.weight(.medium))
-                        Text("\(p.fullName) • \(p.dobISO) • \(p.sex)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+
+                        Text(
+                            String(
+                                format: NSLocalizedString(
+                                    "patientsList.row.details-format",
+                                    comment: "Patient row details: full name • DOB • sex"
+                                ),
+                                p.fullName,
+                                p.dobISO,
+                                p.sex
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                     .tag(p.id as Int?)
                 }

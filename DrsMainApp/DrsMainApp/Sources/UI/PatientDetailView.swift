@@ -22,18 +22,54 @@ fileprivate func prettyCategory(_ raw: String) -> String {
         .replacingOccurrences(of: " ", with: "_")
 
     let map: [String: String] = [
-        "one_month": "1-month visit",
-        "two_month": "2-month visit",
-        "four_month": "4-month visit",
-        "six_month": "6-month visit",
-        "nine_month": "9-month visit",
-        "twelve_month": "12-month visit",
-        "fifteen_month": "15-month visit",
-        "eighteen_month": "18-month visit",
-        "twentyfour_month": "24-month visit",
-        "thirty_month": "30-month visit",
-        "thirtysix_month": "36-month visit",
-        "episode": "Sick visit"
+        "one_month": NSLocalizedString(
+            "patient.visit-category.one-month",
+            comment: "Visit type label: 1‑month well visit"
+        ),
+        "two_month": NSLocalizedString(
+            "patient.visit-category.two-month",
+            comment: "Visit type label: 2‑month well visit"
+        ),
+        "four_month": NSLocalizedString(
+            "patient.visit-category.four-month",
+            comment: "Visit type label: 4‑month well visit"
+        ),
+        "six_month": NSLocalizedString(
+            "patient.visit-category.six-month",
+            comment: "Visit type label: 6‑month well visit"
+        ),
+        "nine_month": NSLocalizedString(
+            "patient.visit-category.nine-month",
+            comment: "Visit type label: 9‑month well visit"
+        ),
+        "twelve_month": NSLocalizedString(
+            "patient.visit-category.twelve-month",
+            comment: "Visit type label: 12‑month well visit"
+        ),
+        "fifteen_month": NSLocalizedString(
+            "patient.visit-category.fifteen-month",
+            comment: "Visit type label: 15‑month well visit"
+        ),
+        "eighteen_month": NSLocalizedString(
+            "patient.visit-category.eighteen-month",
+            comment: "Visit type label: 18‑month well visit"
+        ),
+        "twentyfour_month": NSLocalizedString(
+            "patient.visit-category.twentyfour-month",
+            comment: "Visit type label: 24‑month well visit"
+        ),
+        "thirty_month": NSLocalizedString(
+            "patient.visit-category.thirty-month",
+            comment: "Visit type label: 30‑month well visit"
+        ),
+        "thirtysix_month": NSLocalizedString(
+            "patient.visit-category.thirtysix-month",
+            comment: "Visit type label: 36‑month well visit"
+        ),
+        "episode": NSLocalizedString(
+            "patient.visit-category.sick",
+            comment: "Visit type label: acute sick visit"
+        )
     ]
 
     if let nice = map[k] { return nice }
@@ -43,12 +79,29 @@ fileprivate func prettyCategory(_ raw: String) -> String {
 
 // Segments for visit filtering
 fileprivate enum VisitTab: String, CaseIterable, Identifiable {
-    case all = "All"
-    case sick = "Sick"
-    case well = "Well"
+    case all
+    case sick
+    case well
 
     var id: String { rawValue }
-    var label: String { rawValue }
+
+    private var labelKey: String {
+        switch self {
+        case .all:
+            return "patient.visits.filter.all"
+        case .sick:
+            return "patient.visits.filter.sick"
+        case .well:
+            return "patient.visits.filter.well"
+        }
+    }
+
+    var label: String {
+        NSLocalizedString(
+            labelKey,
+            comment: "Segment title for visit filter in patient detail"
+        )
+    }
 }
 
 // Detect whether a visit category is a "well" milestone vs a sick episode
@@ -191,59 +244,119 @@ struct PatientDetailView: View {
             Button {
                 showDocuments.toggle()
             } label: {
-                Label("Documents…", systemImage: "doc.on.clipboard")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.documents",
+                        comment: "Patient header action: open documents list"
+                    ),
+                    systemImage: "doc.on.clipboard"
+                )
             }
             Button {
                 showVitals.toggle()
             } label: {
-                Label("Vitals…", systemImage: "waveform.path.ecg")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.vitals",
+                        comment: "Patient header action: open vitals table"
+                    ),
+                    systemImage: "waveform.path.ecg"
+                )
             }
             Button {
                 perinatalPatientIDForSheet = patient.id
                 showPerinatalHistory = true
             } label: {
-                Label("Perinatal History…", systemImage: "doc.text")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.perinatal-history",
+                        comment: "Patient header action: edit perinatal history"
+                    ),
+                    systemImage: "doc.text"
+                )
             }
             Button {
                 pmhPatientIDForSheet = patient.id
                 showPMH = true
             } label: {
-                Label("Past Medical History…", systemImage: "book")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.pmh",
+                        comment: "Patient header action: edit past medical history"
+                    ),
+                    systemImage: "book"
+                )
             }
             Button {
                 vaxPatientIDForSheet = patient.id
                 showVaccinationStatus = true
             } label: {
-                Label("Vaccination Status…", systemImage: "syringe")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.vaccination-status",
+                        comment: "Patient header action: edit vaccination status"
+                    ),
+                    systemImage: "syringe"
+                )
             }
             Button {
                 showGrowth.toggle()
             } label: {
-                Label("Growth…", systemImage: "chart.xyaxis.line")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.growth",
+                        comment: "Patient header action: open growth table"
+                    ),
+                    systemImage: "chart.xyaxis.line"
+                )
             }
             Button {
                 showGrowthCharts.toggle()
             } label: {
-                Label("Growth Charts…", systemImage: "chart.bar.xaxis")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.growth-charts",
+                        comment: "Patient header action: open growth charts"
+                    ),
+                    systemImage: "chart.bar.xaxis"
+                )
             }
             Button {
                 Task { await MacBundleExporter.run(appState: appState) }
             } label: {
-                Label("Export peMR Bundle…", systemImage: "square.and.arrow.up")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.export-bundle",
+                        comment: "Patient header action: export peMR bundle"
+                    ),
+                    systemImage: "square.and.arrow.up"
+                )
             }
             Button {
                 editingWellVisitID = nil
                 showWellVisitForm = true
                 visitForDetail = nil
             } label: {
-                Label("New Well Visit…", systemImage: "checkmark.seal")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.new-well-visit",
+                        comment: "Patient header action: create new well visit"
+                    ),
+                    systemImage: "checkmark.seal"
+                )
             }
             Button {
                 editingEpisodeID = nil
                 showEpisodeForm = true
                 visitForDetail = nil
             } label: {
-                Label("New Sick Episode…", systemImage: "stethoscope")
+                Label(
+                    NSLocalizedString(
+                        "patient.header.new-sick-episode",
+                        comment: "Patient header action: create new sick episode"
+                    ),
+                    systemImage: "stethoscope"
+                )
             }
             reportMenu()
         }
@@ -258,24 +371,59 @@ struct PatientDetailView: View {
 
         Menu {
             if let v = sick {
-                Button("Latest Sick (\(visitDateFormatted(v.dateISO)))") {
+                Button(
+                    String(
+                        format: NSLocalizedString(
+                            "patient.report.latest-sick-title",
+                            comment: "Menu item: Latest sick visit, placeholder is visit date"
+                        ),
+                        visitDateFormatted(v.dateISO)
+                    )
+                ) {
                     visitForDetail = v
                     reportVisitKind = .sick(episodeID: v.id)
                 }
             } else {
-                Text("No sick visits").foregroundStyle(.secondary)
+                Text(
+                    NSLocalizedString(
+                        "patient.report.no-sick-visits",
+                        comment: "Menu placeholder when no sick visits exist"
+                    )
+                )
+                .foregroundStyle(.secondary)
             }
 
             if let v = well {
-                Button("Latest Well (\(prettyCategory(v.category)), \(visitDateFormatted(v.dateISO)))") {
+                Button(
+                    String(
+                        format: NSLocalizedString(
+                            "patient.report.latest-well-title",
+                            comment: "Menu item: Latest well visit, placeholders are category then date"
+                        ),
+                        prettyCategory(v.category),
+                        visitDateFormatted(v.dateISO)
+                    )
+                ) {
                     visitForDetail = v
                     reportVisitKind = .well(visitID: v.id)
                 }
             } else {
-                Text("No well visits").foregroundStyle(.secondary)
+                Text(
+                    NSLocalizedString(
+                        "patient.report.no-well-visits",
+                        comment: "Menu placeholder when no well visits exist"
+                    )
+                )
+                .foregroundStyle(.secondary)
             }
         } label: {
-            Label("Report…", systemImage: "doc.plaintext")
+            Label(
+                NSLocalizedString(
+                    "patient.report.menu-title",
+                    comment: "Toolbar menu title for visit reports"
+                ),
+                systemImage: "doc.plaintext"
+            )
         }
     }
 
@@ -288,40 +436,65 @@ struct PatientDetailView: View {
             profile.parentNotes?.isEmpty == false) {
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Patient Summary")
-                    .font(.headline)
+                Text(
+                    NSLocalizedString(
+                        "patient.summary.title",
+                        comment: "Section title for patient profile summary card"
+                    )
+                )
+                .font(.headline)
 
                 VStack(alignment: .leading, spacing: 8) {
                     if let s = profile.perinatalHistory, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         LabeledContent {
                             Text(s)
                         } label: {
-                            Text("Perinatal")
-                                .foregroundStyle(.secondary)
+                            Text(
+                                NSLocalizedString(
+                                    "patient.summary.perinatal.label",
+                                    comment: "Label for perinatal history in patient summary card"
+                                )
+                            )
+                            .foregroundStyle(.secondary)
                         }
                     }
                     if let pmh = profile.pmh, !pmh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         LabeledContent {
                             Text(pmh)
                         } label: {
-                            Text("Past Medical History")
-                                .foregroundStyle(.secondary)
+                            Text(
+                                NSLocalizedString(
+                                    "patient.summary.pmh.label",
+                                    comment: "Label for past medical history in patient summary card"
+                                )
+                            )
+                            .foregroundStyle(.secondary)
                         }
                     }
                     if let notes = profile.parentNotes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         LabeledContent {
                             Text(notes)
                         } label: {
-                            Text("Parent Notes")
-                                .foregroundStyle(.secondary)
+                            Text(
+                                NSLocalizedString(
+                                    "patient.summary.parent-notes.label",
+                                    comment: "Label for parent notes in patient summary card"
+                                )
+                            )
+                            .foregroundStyle(.secondary)
                         }
                     }
                     if let v = profile.vaccinationStatus, !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         LabeledContent {
                             Text(v)
                         } label: {
-                            Text("Vaccination")
-                                .foregroundStyle(.secondary)
+                            Text(
+                                NSLocalizedString(
+                                    "patient.summary.vaccination.label",
+                                    comment: "Label for vaccination status in patient summary card"
+                                )
+                            )
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -340,8 +513,15 @@ struct PatientDetailView: View {
                     Image(systemName: "person.circle.fill")
                         .font(.system(size: 40))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(patient.fullName.isEmpty ? "Anon Patient" : patient.fullName)
-                            .font(.title2.bold())
+                        Text(
+                            patient.fullName.isEmpty
+                            ? NSLocalizedString(
+                                "patient.header.anon",
+                                comment: "Patient header title when full name is not available"
+                              )
+                            : patient.fullName
+                        )
+                        .font(.title2.bold())
                         Text(patient.alias)
                             .foregroundStyle(.secondary)
                     }
@@ -353,20 +533,44 @@ struct PatientDetailView: View {
                 // Facts grid
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
                     GridRow {
-                        Text("Patient ID").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.grid.patient-id.label",
+                                comment: "Label for patient ID in patient details grid"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                         Text("\(patient.id)")
                     }
                     GridRow {
-                        Text("DOB").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.grid.dob.label",
+                                comment: "Label for date of birth in patient details grid"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                         Text(dobFormatted)
                     }
                     GridRow {
-                        Text("Sex").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.grid.sex.label",
+                                comment: "Label for sex in patient details grid"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                         Text(patient.sex)
                     }
                     if let bundle = appState.currentBundleURL {
                         GridRow {
-                            Text("Bundle").foregroundStyle(.secondary)
+                            Text(
+                                NSLocalizedString(
+                                    "patient.grid.bundle.label",
+                                    comment: "Label for bundle filename in patient details grid"
+                                )
+                            )
+                            .foregroundStyle(.secondary)
                             Text(bundle.lastPathComponent)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -382,10 +586,21 @@ struct PatientDetailView: View {
 
                 // Visits section
                 HStack {
-                    Text("Visits")
-                        .font(.headline)
+                    Text(
+                        NSLocalizedString(
+                            "patient.visits.title",
+                            comment: "Section title for visits list in patient detail"
+                        )
+                    )
+                    .font(.headline)
                     Spacer()
-                    Picker("Filter", selection: $visitTab) {
+                    Picker(
+                        NSLocalizedString(
+                            "patient.visits.filter.label",
+                            comment: "Accessibility label for visit filter segmented control"
+                        ),
+                        selection: $visitTab
+                    ) {
                         ForEach(VisitTab.allCases) { tab in
                             Text(tab.label).tag(tab)
                         }
@@ -396,8 +611,16 @@ struct PatientDetailView: View {
 
                 let list = filteredVisits
                 if list.isEmpty {
-                    Text("No visits found for this patient in “\(visitTab.label)”")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        String(
+                            format: NSLocalizedString(
+                                "patient.visits.empty-filtered",
+                                comment: "Shown when no visits match current filter; placeholder is filter label"
+                            ),
+                            visitTab.label
+                        )
+                    )
+                    .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(list, id: \.stableID) { v in
@@ -533,7 +756,12 @@ struct PatientDetailView: View {
 
             Spacer()
 
-            Button("Details…") {
+            Button(
+                NSLocalizedString(
+                    "patient.visit-row.details-button",
+                    comment: "Button to open visit details sheet"
+                )
+            ) {
                 let kind: VisitKind
                 if isSickCategory(v.category) {
                     kind = .sick(episodeID: v.id)
@@ -547,7 +775,12 @@ struct PatientDetailView: View {
 
             if isSickCategory(v.category) {
                 // Sick episode editing (24h window)
-                Button("Edit…") {
+                Button(
+                    NSLocalizedString(
+                        "patient.visit-row.edit-button",
+                        comment: "Button to edit a visit from patient details"
+                    )
+                ) {
                     editingEpisodeID = v.id
                     showEpisodeForm = true
                 }
@@ -555,7 +788,12 @@ struct PatientDetailView: View {
                 .disabled(!isWithin24Hours(v.dateISO))
             } else if isWellCategory(v.category) {
                 // Well-visit editing – no time restriction for now
-                Button("Edit…") {
+                Button(
+                    NSLocalizedString(
+                        "patient.visit-row.edit-button",
+                        comment: "Button to edit a visit from patient details"
+                    )
+                ) {
                     editingWellVisitID = v.id
                     showWellVisitForm = true
                 }
@@ -593,29 +831,52 @@ private struct SummarySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Summary")
-                .font(.headline)
+            Text(
+                NSLocalizedString(
+                    "patient.visit-summary.title",
+                    comment: "Section title for visit summary card"
+                )
+            )
+            .font(.headline)
 
             VStack(alignment: .leading, spacing: 8) {
                 if let p = summary.problems, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     LabeledContent {
                         BubbleText(text: p)
                     } label: {
-                        Text("Problems").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.visit-summary.problems.label",
+                                comment: "Label for problems list in visit summary"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                     }
                 }
                 if let d = summary.diagnosis, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     LabeledContent {
                         BubbleText(text: d)
                     } label: {
-                        Text("Diagnosis").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.visit-summary.diagnosis.label",
+                                comment: "Label for diagnosis text in visit summary"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                     }
                 }
                 if let c = summary.conclusions, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     LabeledContent {
                         BubbleText(text: c)
                     } label: {
-                        Text("Conclusions").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.visit-summary.conclusions.label",
+                                comment: "Label for conclusions/plan text in visit summary"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -632,8 +893,13 @@ private struct MilestonesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Milestones")
-                .font(.headline)
+            Text(
+                NSLocalizedString(
+                    "patient.milestones.title",
+                    comment: "Section title for milestones summary card"
+                )
+            )
+            .font(.headline)
 
             VStack(alignment: .leading, spacing: 8) {
                 BubbleText(text: summary)
@@ -693,23 +959,46 @@ struct VisitDetailView: View {
                 HStack {
                     Image(systemName: "calendar.badge.clock")
                         .font(.system(size: 24))
-                    Text("Visit Details")
-                        .font(.title2.bold())
+                    Text(
+                        NSLocalizedString(
+                            "patient.visit-detail.title",
+                            comment: "Title for visit detail sheet"
+                        )
+                    )
+                    .font(.title2.bold())
                     Spacer()
                 }
 
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
                     GridRow {
-                        Text("ID").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.visit-detail.grid.id.label",
+                                comment: "Label for visit ID in visit detail grid"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                         Text("\(visit.id)")
                     }
                     GridRow {
-                        Text("Date").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.visit-detail.grid.date.label",
+                                comment: "Label for visit date in visit detail grid"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                         Text(formattedDate(visit.dateISO))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     GridRow {
-                        Text("Category").foregroundStyle(.secondary)
+                        Text(
+                            NSLocalizedString(
+                                "patient.visit-detail.grid.category.label",
+                                comment: "Label for visit category in visit detail grid"
+                            )
+                        )
+                        .foregroundStyle(.secondary)
                         Text(prettyCategory(visit.category))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -746,7 +1035,12 @@ struct VisitDetailView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Menu {
-                    Button("Export PDF") {
+                    Button(
+                        NSLocalizedString(
+                            "patient.visit-detail.export.pdf",
+                            comment: "Menu item to export visit report as PDF"
+                        )
+                    ) {
                         Task { @MainActor in
                             do {
                                 let builder = ReportBuilder(appState: appState, clinicianStore: clinicianStore)
@@ -756,14 +1050,22 @@ struct VisitDetailView: View {
                                 _ = try builder.exportPDF(for: kind)
                             } catch {
                                 let alert = NSAlert()
-                                alert.messageText = "Export failed"
+                                alert.messageText = NSLocalizedString(
+                                    "patient.visit-detail.export.failed.title",
+                                    comment: "Title for export failed alert"
+                                )
                                 alert.informativeText = error.localizedDescription
                                 alert.alertStyle = .warning
                                 alert.runModal()
                             }
                         }
                     }
-                    Button("Export Word (.docx)") {
+                    Button(
+                        NSLocalizedString(
+                            "patient.visit-detail.export.docx",
+                            comment: "Menu item to export visit report as Word (DOCX)"
+                        )
+                    ) {
                         Task { @MainActor in
                             do {
                                 let builder = ReportBuilder(appState: appState, clinicianStore: clinicianStore)
@@ -776,7 +1078,10 @@ struct VisitDetailView: View {
 
                                 // Ask user where to save; default to Downloads with the suggested name
                                 let panel = NSSavePanel()
-                                panel.title = "Save Word Report"
+                                panel.title = NSLocalizedString(
+                                    "patient.visit-detail.export.docx.save-panel.title",
+                                    comment: "Title for save panel when exporting Word report"
+                                )
                                 let docxType = UTType(filenameExtension: "docx") ?? .data
                                 panel.allowedContentTypes = [docxType]
                                 panel.canCreateDirectories = true
@@ -800,7 +1105,13 @@ struct VisitDetailView: View {
                         }
                     }
                 } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
+                    Label(
+                        NSLocalizedString(
+                            "patient.visit-detail.export.menu-title",
+                            comment: "Toolbar menu title for export actions in visit detail"
+                        ),
+                        systemImage: "square.and.arrow.up"
+                    )
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -808,20 +1119,55 @@ struct VisitDetailView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .alert("Report exported", isPresented: $showExportSuccess) {
-            Button("Reveal in Finder") {
+        .alert(
+            NSLocalizedString(
+                "patient.visit-detail.export.success.title",
+                comment: "Title for successful export alert"
+            ),
+            isPresented: $showExportSuccess
+        ) {
+            Button(
+                NSLocalizedString(
+                    "patient.visit-detail.export.success.reveal-button",
+                    comment: "Button to reveal exported report in Finder"
+                )
+            ) {
                 if let u = exportSuccessURL {
                     NSWorkspace.shared.activateFileViewerSelecting([u])
                 }
             }
-            Button("OK", role: .cancel) { }
+            Button(
+                NSLocalizedString(
+                    "patient.visit-detail.export.success.ok-button",
+                    comment: "OK button for successful export alert"
+                ),
+                role: .cancel
+            ) { }
         } message: {
-            Text(exportSuccessURL?.lastPathComponent ?? "Saved")
+            Text(exportSuccessURL?.lastPathComponent ?? NSLocalizedString(
+                "patient.visit-detail.export.success.default-filename",
+                comment: "Fallback filename text when export succeeded but URL is missing"
+            ))
         }
-        .alert("Export failed", isPresented: $showExportError) {
-            Button("OK", role: .cancel) { }
+        .alert(
+            NSLocalizedString(
+                "patient.visit-detail.export.failed.title",
+                comment: "Title for export failed alert"
+            ),
+            isPresented: $showExportError
+        ) {
+            Button(
+                NSLocalizedString(
+                    "patient.visit-detail.export.failed.ok-button",
+                    comment: "OK button for export failed alert"
+                ),
+                role: .cancel
+            ) { }
         } message: {
-            Text(exportErrorMessage ?? "Unknown error")
+            Text(exportErrorMessage ?? NSLocalizedString(
+                "patient.visit-detail.export.failed.unknown-message",
+                comment: "Fallback message when export error has no description"
+            ))
         }
     }
 }

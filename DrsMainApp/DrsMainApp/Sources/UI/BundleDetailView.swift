@@ -31,7 +31,8 @@ struct BundleDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Bundle Detail")
+            Text(NSLocalizedString("bundleDetail.title",
+                                   comment: "Main title for the bundle detail panel"))
                 .font(.title2).bold()
 
             if let url = appState.currentBundleURL {
@@ -47,13 +48,20 @@ struct BundleDetailView: View {
                     Button {
                         revealInFinder(url)
                     } label: {
-                        Label("Reveal in Finder", systemImage: "finder")
+                        Label(
+                            NSLocalizedString("bundleDetail.button.revealInFinder",
+                                              comment: "Button to reveal the bundle folder in Finder"),
+                            systemImage: "finder"
+                        )
                     }
 
                     Button {
                         openDB(url)
                     } label: {
-                        Label("Open DB", systemImage: "rectangle.and.text.magnifyingglass")
+                        Label(
+                            NSLocalizedString("bundleDetail.button.openDB",
+                                              comment: "Button to open the underlying db.sqlite in an external viewer"),
+                            systemImage: "rectangle.and.text.magnifyingglass")
                     }
                     .disabled(!dbExists(at: url))
                 }
@@ -62,22 +70,56 @@ struct BundleDetailView: View {
 
                 if let s = summary {
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                        GridRow { Text("Alias").font(.subheadline.weight(.semibold)); Text(s.alias) }
-                        GridRow { Text("Full Name").font(.subheadline.weight(.semibold)); Text(s.fullName) }
-                        GridRow { Text("DOB").font(.subheadline.weight(.semibold)); Text(s.dobISO) }
-                        GridRow { Text("Sex").font(.subheadline.weight(.semibold)); Text(s.sex) }
-                        GridRow { Text("Patient ID").font(.subheadline.weight(.semibold)); Text("\(s.id)") }
+                        GridRow {
+                            Text(NSLocalizedString("bundleDetail.field.alias",
+                                                   comment: "Field label for patient alias in bundle detail"))
+                                .font(.subheadline.weight(.semibold))
+                            Text(s.alias)
+                        }
+                        GridRow {
+                            Text(NSLocalizedString("bundleDetail.field.fullName",
+                                                   comment: "Field label for patient full name in bundle detail"))
+                                .font(.subheadline.weight(.semibold))
+                            Text(s.fullName)
+                        }
+                        GridRow {
+                            Text(NSLocalizedString("bundleDetail.field.dob",
+                                                   comment: "Field label for patient date of birth in bundle detail"))
+                                .font(.subheadline.weight(.semibold))
+                            Text(s.dobISO)
+                        }
+                        GridRow {
+                            Text(NSLocalizedString("bundleDetail.field.sex",
+                                                   comment: "Field label for patient sex in bundle detail"))
+                                .font(.subheadline.weight(.semibold))
+                            Text(s.sex)
+                        }
+                        GridRow {
+                            Text(NSLocalizedString("bundleDetail.field.patientID",
+                                                   comment: "Field label for patient ID in bundle detail"))
+                                .font(.subheadline.weight(.semibold))
+                            Text("\(s.id)")
+                        }
                     }
                 } else if let e = loadError {
                     Text(e).foregroundStyle(.red)
                 } else {
-                    Text("No patient record found in this bundle.")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        NSLocalizedString("bundleDetail.noPatient",
+                                          comment: "Shown when no patient record can be found in the selected bundle")
+                    )
+                    .foregroundStyle(.secondary)
                 }
             } else {
-                ContentUnavailableView("No Bundle Selected",
-                                       systemImage: "folder",
-                                       description: Text("Use “Add Bundles…” or create a new patient."))
+                ContentUnavailableView(
+                    NSLocalizedString("bundleDetail.empty.title",
+                                      comment: "Title shown when no bundle is selected in the detail view"),
+                    systemImage: "folder",
+                    description: Text(
+                        NSLocalizedString("bundleDetail.empty.description",
+                                          comment: "Description prompting user to import or create a new bundle when none is selected")
+                    )
+                )
             }
 
             Spacer()
