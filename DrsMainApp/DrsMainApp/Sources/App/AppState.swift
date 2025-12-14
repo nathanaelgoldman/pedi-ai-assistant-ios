@@ -18,6 +18,10 @@ import PediaShared
 import AppKit   // for NSAlert confirmation dialogs during import
 #endif
 
+/// Convenience alias so other files can reference the sidebar summary
+/// type without qualifying it with `AppState.`.
+typealias BundleSidebarSummary = AppState.BundleSidebarSummary
+
 struct PatientRow: Identifiable, Equatable {
     let id: Int
     let alias: String
@@ -3723,6 +3727,14 @@ final class AppState: ObservableObject {
                         continue
                     }
 
+                    // Phase 1 integrity guard: if a v2 manifest with db_sha256 exists,
+                    // verify the DB on disk matches before proceeding. This helps catch
+                    // tampering/corruption while staying backward‑compatible for older bundles.
+                    if !self.validateBundleIntegrity(at: bundleRoot) {
+                        self.log.error("ZIP import: integrity check failed for bundle at \(bundleRoot.path, privacy: .public); skipping.")
+                        continue
+                    }
+
                     // Extract patient identity from the staged bundle
                     guard let identity = self.extractPatientIdentity(from: bundleRoot) else {
                         self.log.warning("ZIP import: no identity (manifest/db) found under \(bundleRoot.path, privacy: .public) — registering as anonymous; duplicate detection skipped.")
@@ -3866,6 +3878,134 @@ final class AppState: ObservableObject {
                 parts.append(day)
             }
             return parts.isEmpty ? "UnknownPatient" : parts.joined(separator: " • ")
+        }
+
+        /// Lightweight summary used for displaying bundles in the sidebar.
+        struct BundleSidebarSummary: Identifiable, Hashable {
+            /// Underlying bundle root URL (also used as stable identity).
+            let id: URL
+            let url: URL
+            let alias: String
+            let fullName: String
+            let dob: String
+            let createdOn: String
+            let importedOn: String
+            let lastSavedOn: String
+        }
+
+        /// Build a best-effort sidebar summary for a given bundle root by combining
+        /// manifest.json identity info with file-system timestamps. This is read-only
+        /// and safe for both DrsMainApp- and PatientViewerApp-origin bundles.
+        func buildBundleSidebarSummary(for bundleRoot: URL) -> BundleSidebarSummary {
+            let fm = FileManager.default
+
+            // Identity: prefer manifest/db identity via the existing helper.
+            let identity = extractPatientIdentity(from: bundleRoot)
+            let alias: String = {
+                if let a = identity?.alias, !a.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return a
+                }
+                if let id = identity {
+                    return identityString(id)
+                }
+                return "UnknownPatient"
+            }()
+
+            // DOB in a friendlier format (YYYY-MM-DD) if present.
+            let dob: String = {
+                guard let raw = identity?.dobISO, !raw.isEmpty else { return "—" }
+                if let day = raw.split(separator: "T").first {
+                    return String(day)
+                }
+                return raw
+            }()
+
+            // For now we don't have full name in the manifest; show alias as the display name.
+            let fullName = alias
+
+            // Created-on: try manifest["exported_at"], else folder creationDate.
+            var createdOn = "—"
+            let manifestURL = bundleRoot.appendingPathComponent("manifest.json")
+            if let data = try? Data(contentsOf: manifestURL),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let ts = obj["exported_at"] as? String,
+               !ts.isEmpty {
+                createdOn = formatBundleExportStamp(ts)
+            } else if let attrs = try? fm.attributesOfItem(atPath: bundleRoot.path),
+                      let cdate = attrs[.creationDate] as? Date {
+                createdOn = formatBundleDate(cdate)
+            }
+
+            // Imported-on: use folder creationDate as an approximation.
+            let importedOn: String = {
+                if let attrs = try? fm.attributesOfItem(atPath: bundleRoot.path),
+                   let cdate = attrs[.creationDate] as? Date {
+                    return formatBundleDate(cdate)
+                }
+                return "—"
+            }()
+
+            // Last-saved: prefer db.sqlite or db.sqlite.enc mtime; else folder mtime.
+            let lastSavedOn: String = {
+                let dbPlain = bundleRoot.appendingPathComponent("db.sqlite")
+                let dbEnc   = bundleRoot.appendingPathComponent("db.sqlite.enc")
+                if let attrs = try? fm.attributesOfItem(atPath: dbPlain.path),
+                   let m = attrs[.modificationDate] as? Date {
+                    return formatBundleDate(m)
+                }
+                if let attrs = try? fm.attributesOfItem(atPath: dbEnc.path),
+                   let m = attrs[.modificationDate] as? Date {
+                    return formatBundleDate(m)
+                }
+                if let attrs = try? fm.attributesOfItem(atPath: bundleRoot.path),
+                   let m = attrs[.modificationDate] as? Date {
+                    return formatBundleDate(m)
+                }
+                return "—"
+            }()
+
+            let normalizedURL = bundleRoot.standardizedFileURL
+            return BundleSidebarSummary(
+                id: normalizedURL,
+                url: normalizedURL,
+                alias: alias,
+                fullName: fullName,
+                dob: dob,
+                createdOn: createdOn,
+                importedOn: importedOn,
+                lastSavedOn: lastSavedOn
+            )
+        }
+
+        /// Convert an export timestamp like "yyyyMMdd-HHmmss" into a human-readable
+        /// short date/time string using the current locale.
+        private func formatBundleExportStamp(_ stamp: String) -> String {
+            let input = DateFormatter()
+            input.locale = Locale(identifier: "en_US_POSIX")
+            input.timeZone = TimeZone(secondsFromGMT: 0)
+            input.dateFormat = "yyyyMMdd-HHmmss"
+
+            let display = DateFormatter()
+            display.locale = Locale.current
+            display.timeZone = TimeZone.current
+            display.dateStyle = .short
+            display.timeStyle = .short
+
+            if let d = input.date(from: stamp) {
+                return display.string(from: d)
+            }
+            // Fallback to raw stamp if parsing fails.
+            return stamp
+        }
+
+        /// Convert a Date into a short, locale-aware date + time string.
+        private func formatBundleDate(_ date: Date) -> String {
+            let df = DateFormatter()
+            df.locale = Locale.current
+            df.timeZone = TimeZone.current
+            df.dateStyle = .short
+            df.timeStyle = .short
+            return df.string(from: date)
         }
 
     private func extractPatientIdentity(from bundleRoot: URL) -> PatientIdentity? {
@@ -4484,6 +4624,105 @@ final class AppState: ObservableObject {
             return entries
         }
 
+        /// Validate bundle integrity against manifest.json (if present).
+        ///
+        /// - Returns `true` if:
+        ///   • There is no manifest, or
+        ///   • The manifest has no `db_sha256` field, or
+        ///   • The DB hash matches the manifest (docs mismatches are logged but non‑fatal).
+        /// - Returns `false` only when a manifest explicitly declares `db_sha256` and the
+        ///   corresponding DB file on disk does not match or cannot be hashed.
+        private func validateBundleIntegrity(at bundleRoot: URL) -> Bool {
+            let fm = FileManager.default
+            let manifestURL = bundleRoot.appendingPathComponent("manifest.json")
+
+            // No manifest at all → nothing to validate, stay backward‑compatible.
+            guard fm.fileExists(atPath: manifestURL.path) else {
+                return true
+            }
+
+            do {
+                let data = try Data(contentsOf: manifestURL)
+                guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    // Malformed manifest → treat as non‑fatal for now, but log.
+                    log.warning("validateBundleIntegrity: manifest.json is not a dictionary at \(manifestURL.lastPathComponent, privacy: .public)")
+                    return true
+                }
+
+                // If there is no db_sha256, we cannot validate DB integrity – accept but log.
+                guard let expectedDBHash = (obj["db_sha256"] as? String)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                      !expectedDBHash.isEmpty else {
+                    log.info("validateBundleIntegrity: manifest has no db_sha256; skipping DB hash check.")
+                    return true
+                }
+
+                let encryptedFlag = (obj["encrypted"] as? Bool) ?? false
+                let plainDB = bundleRoot.appendingPathComponent("db.sqlite")
+                let encDB   = bundleRoot.appendingPathComponent("db.sqlite.enc")
+
+                // Decide which DB file to hash: prefer encrypted when manifest says so and file exists.
+                let dbToHash: URL?
+                if encryptedFlag, fm.fileExists(atPath: encDB.path) {
+                    dbToHash = encDB
+                } else if fm.fileExists(atPath: plainDB.path) {
+                    dbToHash = plainDB
+                } else if fm.fileExists(atPath: encDB.path) {
+                    // Fallback: encrypted present even if manifest encrypted=false
+                    dbToHash = encDB
+                } else {
+                    log.error("validateBundleIntegrity: no db.sqlite or db.sqlite.enc found under \(bundleRoot.path, privacy: .public)")
+                    return false
+                }
+
+                guard let dbURL = dbToHash else {
+                    return false
+                }
+
+                let actualHash = sha256OfFile(at: dbURL)
+                guard !actualHash.isEmpty else {
+                    log.error("validateBundleIntegrity: failed to compute DB hash for \(dbURL.path, privacy: .public)")
+                    return false
+                }
+
+                if actualHash.lowercased() != expectedDBHash.lowercased() {
+                    log.error("validateBundleIntegrity: DB hash mismatch for bundle at \(bundleRoot.path, privacy: .public). expected=\(expectedDBHash, privacy: .public) actual=\(actualHash, privacy: .public)")
+                    return false
+                }
+
+                // Optionally validate docs_manifest, but treat mismatches as warnings only.
+                if let docsArray = obj["docs_manifest"] as? [[String: Any]], !docsArray.isEmpty {
+                    for entry in docsArray {
+                        guard let relPath = (entry["path"] as? String)?
+                                .trimmingCharacters(in: .whitespacesAndNewlines),
+                              !relPath.isEmpty else { continue }
+                        let expectedDocHash = (entry["sha256"] as? String)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                        let docURL = bundleRoot.appendingPathComponent(relPath)
+                        guard fm.fileExists(atPath: docURL.path) else {
+                            log.warning("validateBundleIntegrity: docs entry missing on disk → \(relPath, privacy: .public)")
+                            continue
+                        }
+
+                        let actualDocHash = sha256OfFile(at: docURL)
+                        if !expectedDocHash.isEmpty,
+                           !actualDocHash.isEmpty,
+                           actualDocHash.lowercased() != expectedDocHash.lowercased() {
+                            log.warning("validateBundleIntegrity: docs hash mismatch for \(relPath, privacy: .public). expected=\(expectedDocHash, privacy: .public) actual=\(actualDocHash, privacy: .public)")
+                        }
+                    }
+                }
+
+                // All checks passed or only non‑fatal warnings → accept bundle.
+                return true
+            } catch {
+                log.warning("validateBundleIntegrity: failed to read/parse manifest at \(manifestURL.path, privacy: .public): \(String(describing: error), privacy: .public)")
+                // Treat manifest read errors as non‑fatal to stay compatible.
+                return true
+            }
+        }
+
         ///
         /// Write/refresh a v2 peMR manifest.json at the given bundle root.
         /// Safe to call before exporting a bundle; idempotent and tolerant of missing bits.
@@ -4611,14 +4850,17 @@ final class AppState: ObservableObject {
     // MARK: - Bundle importing (folders or .zip)
     
     
-    extension AppState {
-        @MainActor
-        func importBundles(from urls: [URL]) {
-            // Legacy wrapper: funnel all imports through the MRN-aware, prompt-enabled path.
-            let zips = urls.filter { $0.pathExtension.lowercased() == "zip" }
-            guard !zips.isEmpty else { return }
-            self.importZipBundles(from: zips)
+extension AppState {
+    @MainActor
+    func importBundles(from urls: [URL]) {
+        // Legacy wrapper: funnel all imports (ZIP or .peMR) through the MRN-aware, prompt-enabled path.
+        let bundleFiles = urls.filter {
+            let ext = $0.pathExtension.lowercased()
+            return ext == "zip" || ext == "pemr"
         }
+        guard !bundleFiles.isEmpty else { return }
+        self.importZipBundles(from: bundleFiles)
+    }
         
         private func canonicalBundleRoot(at url: URL) -> URL? {
             let fm = FileManager.default

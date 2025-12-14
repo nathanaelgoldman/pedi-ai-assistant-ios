@@ -10,7 +10,7 @@
 //  DrsMainApp
 //
 //  Pure-Foundation exporter used by MacBundleExporter.run(appState:)
-//  Zips a peMR bundle folder into a temporary .peMR.zip
+//  Zips a peMR bundle folder into a temporary .pemr
 //
 
 import Foundation
@@ -37,7 +37,7 @@ enum BundleZipError: Error, LocalizedError {
 
 struct BundleExporter {
 
-    /// Create a `.peMR.zip` from the given bundle folder.
+    /// Create a `.pemr` file from the given bundle folder (ZIP container with custom extension).
     /// Returns the temporary file URL of the created archive.
     static func exportBundle(from src: URL) async throws -> URL {
         // Run on a background thread to avoid blocking the main actor.
@@ -65,6 +65,18 @@ struct BundleExporter {
         //    (skip db.sqlite-wal, db.sqlite-shm, .DS_Store, __MACOSX)
         let dbSrc  = src.appendingPathComponent("db.sqlite", isDirectory: false)
         let docsSrc = src.appendingPathComponent("docs", isDirectory: true)
+
+        // Derive a clean base name for the exported file:
+        // prefer the patient alias from db.sqlite if available,
+        // otherwise fall back to the source folder name.
+        var baseName = src.lastPathComponent
+        if fm.fileExists(atPath: dbSrc.path),
+           let ident = try? loadPatientIdentity(from: dbSrc),
+           let alias = ident.alias,
+           !alias.isEmpty {
+            baseName = sanitizedSlug(alias)
+        }
+
         if fm.fileExists(atPath: dbSrc.path) {
             try fm.copyItem(at: dbSrc, to: stageRoot.appendingPathComponent("db.sqlite"))
         }
@@ -75,9 +87,9 @@ struct BundleExporter {
         // 4) Build manifest.json with SHA-256 per file
         try writeManifestV2(at: stageRoot, sourceRoot: src)
 
-        // 5) Zip the staged root (flat)
+        // 5) Zip the staged root (flat), using `<alias>-<timestamp>-drsmain.pemr`.
         let stamp = timestamp()
-        let name  = "\(src.lastPathComponent)-\(stamp).peMR.zip"
+        let name  = "\(baseName)-\(stamp)-drsmain.pemr"
         let out   = fm.temporaryDirectory.appendingPathComponent(name, isDirectory: false)
 
         if fm.fileExists(atPath: out.path) { try? fm.removeItem(at: out) }
@@ -336,6 +348,20 @@ struct BundleExporter {
     private static func sha256Hex(_ data: Data) -> String {
         let digest = SHA256.hash(data: data)
         return digest.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func sanitizedSlug(_ raw: String) -> String {
+        // Normalize and strip diacritics
+        let decomposed = raw.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        // Allow only ASCII alphanumerics plus dash/underscore; replace others with "_"
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        let mappedScalars = decomposed.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
+        var slug = String(mappedScalars)
+        // Collapse multiple underscores
+        slug = slug.replacingOccurrences(of: #"_{2,}"#, with: "_", options: .regularExpression)
+        // Trim leading/trailing separators
+        slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "._-"))
+        return slug.isEmpty ? "export" : slug
     }
 
     private static func timestamp() -> String {

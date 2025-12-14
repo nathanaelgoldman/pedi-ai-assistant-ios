@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Existing URL types (currently unused but kept) -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict/>
+    </array>
+
+    <!-- Declare the exported UTType for .pemr bundles -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.yunastic.pedia.pemr</string>
+
+            <key>UTTypeDescription</key>
+            <string>Pedia portable medical record bundle</string>
+
+            <!-- It’s a generic data blob that is also a ZIP archive -->
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+                <string>com.pkware.zip-archive</string>
+            </array>
+
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <!-- Our file extension (case-insensitive, but we use .pemr in code) -->
+                <key>public.filename-extension</key>
+                <array>
+                    <string>pemr</string>
+                </array>
+
+                <!-- Custom mime-type -->
+                <key>public.mime-type</key>
+                <string>application/vnd.yunastic-pemr+zip</string>
+            </dict>
+        </dict>
+    </array>
+
+    <!-- Tell the system this app can open/edit .pemr bundles -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Pedia Medical Record Bundle</string>
+
+            <!-- Match the UTTypeIdentifier above -->
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.yunastic.pedia.pemr</string>
+            </array>
+
+            <!-- DrsMainApp is an editor for these bundles -->
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+        </dict>
+    </array>
+</dict>
+</plist>

@@ -314,21 +314,22 @@ struct BundleExporter {
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: .prettyPrinted)
         try manifestData.write(to: bundleFolder.appendingPathComponent("manifest.json"))
 
-        // Prepare zip output
-        let zipOutputURL = exportsDir.appendingPathComponent("\(bundleFolderName).peMR.zip")
+        // Prepare peMR bundle output (ZIP container with .pemr extension)
+        let bundleOutputURL = exportsDir.appendingPathComponent("\(bundleFolderName).pemr")
 
-        // Overwrite old zip if present
-        removeIfExists(zipOutputURL)
+        // Overwrite old bundle if present
+        removeIfExists(bundleOutputURL)
 
-        // Create zip (no preview/open here)
-        try FileManager.default.zipItem(at: bundleFolder, to: zipOutputURL, shouldKeepParent: false)
+        // Create zip (no preview/open here) – the underlying format is ZIP,
+        // even though the outward extension is .pemr.
+        try FileManager.default.zipItem(at: bundleFolder, to: bundleOutputURL, shouldKeepParent: false)
 
         // Clean up working directory to avoid clutter
         removeIfExists(bundleFolder)
 
         // Log without using file:// scheme to keep logs tidy
-        BundleExporter.log.info("Export zip ready at: \(zipOutputURL.path, privacy: .public)")
+        BundleExporter.log.info("Export bundle ready at: \(bundleOutputURL.path, privacy: .public)")
 
-        return zipOutputURL
+        return bundleOutputURL
     }
 }

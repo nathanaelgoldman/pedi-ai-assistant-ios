@@ -374,12 +374,15 @@ struct BundleImporter: View {
     // MARK: - View
     var body: some View {
         VStack {
-            Button("📦 Import .peMR.zip Bundle") {
+            Button("📦 Import .peMR Bundle") {
                 isImporterPresented = true
             }
             .fileImporter(
                 isPresented: $isImporterPresented,
-                allowedContentTypes: [UTType.zip],
+                allowedContentTypes: [
+                    UTType(filenameExtension: "pemr") ?? .data,
+                    .zip
+                ],
                 allowsMultipleSelection: false
             ) { result in
                 switch result {

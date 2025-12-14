@@ -71,19 +71,22 @@ struct ContentView: SwiftUI.View {
             .fileExporter(
                 isPresented: $showFileExporter,
                 document: exportDoc,
-                contentType: .zip,
+                contentType: UTType(filenameExtension: "pemr") ?? .data,
                 defaultFilename: exportDefaultName
             ) { result in
                 switch result {
                 case .success(let url):
-                    log.info("Exported zip to: \(url.path, privacy: .public)")
+                    log.info("Exported bundle to: \(url.path, privacy: .public)")
                 case .failure(let error):
                     log.error("Export failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
             .fileImporter(
                 isPresented: $showingFileImporter,
-                allowedContentTypes: [.zip],
+                allowedContentTypes: [
+                    UTType(filenameExtension: "pemr") ?? .data,
+                    .zip
+                ],
                 allowsMultipleSelection: false
             ) { result in
                 do {
@@ -405,7 +408,7 @@ struct ContentView: SwiftUI.View {
                         ActionCard(
                             systemImage: "square.and.arrow.up",
                             title: "Export Bundle",
-                            subtitle: "Create an encrypted .peMR.zip bundle to share or archive."
+                            subtitle: "Create an encrypted .peMR bundle to share or archive."
                         )
                     }
                     .buttonStyle(.plain)
@@ -592,9 +595,15 @@ private struct ActionCard: SwiftUI.View {
     }
 }
 
-// Simple FileDocument wrapper for exporting the generated .zip
+// Simple FileDocument wrapper for exporting the generated .peMR bundle
 struct ZipFileDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.zip] }
+    static var readableContentTypes: [UTType] {
+        if let pemr = UTType(filenameExtension: "pemr") {
+            return [pemr]
+        } else {
+            return [.data]
+        }
+    }
 
     var data: Data
 

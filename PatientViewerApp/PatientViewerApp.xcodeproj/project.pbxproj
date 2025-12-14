@@ -40,9 +40,22 @@
 		BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BBF5F8232EED4FAF00B9C52D /* Exceptions for "PatientViewerApp" folder in "PatientViewerApp" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BBCC54DB2E976199005002B9 /* PatientViewerApp */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		BBCC54DE2E976199005002B9 /* PatientViewerApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BBF5F8232EED4FAF00B9C52D /* Exceptions for "PatientViewerApp" folder in "PatientViewerApp" target */,
+			);
 			path = PatientViewerApp;
 			sourceTree = "<group>";
 		};
@@ -444,7 +457,8 @@
 				DEVELOPMENT_TEAM = 6Q54BDS5LK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "$(PRODUCT_NAME)";
+				INFOPLIST_FILE = PatientViewerApp/Info.plist;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = PatientViewerApp;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -473,7 +487,8 @@
 				DEVELOPMENT_TEAM = 6Q54BDS5LK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "$(PRODUCT_NAME)";
+				INFOPLIST_FILE = PatientViewerApp/Info.plist;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = PatientViewerApp;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

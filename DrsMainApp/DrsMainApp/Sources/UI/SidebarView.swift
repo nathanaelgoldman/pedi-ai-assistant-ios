@@ -25,22 +25,19 @@ struct SidebarView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(appState.recentBundles, id: \.path) { url in
+                            let summary = appState.buildBundleSidebarSummary(for: url)
+                            let isActive = appState.currentBundleURL?.standardizedFileURL == url.standardizedFileURL
+
                             Button {
                                 if appState.currentBundleURL != url {
                                     appState.selectBundle(url)
                                 }
                             } label: {
-                                HStack {
-                                    Image(systemName: "folder")
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(url.lastPathComponent)
-                                            .font(.body)
-                                        Text(url.path)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
+                                bundleRowContent(
+                                    summary: summary,
+                                    isActive: isActive,
+                                    fileName: url.deletingPathExtension().lastPathComponent
+                                )
                             }
                             .buttonStyle(.plain)
                             .contentShape(Rectangle())
@@ -154,6 +151,63 @@ struct SidebarView: View {
                 Label("New Patient…", systemImage: "person.badge.plus")
             }
         }
+    }
+
+    // MARK: - Row Builders
+    @ViewBuilder
+    private func bundleRowContent(summary: BundleSidebarSummary, isActive: Bool, fileName: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: isActive ? "folder.fill" : "folder")
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    // Primary title: alias if available, otherwise fallback to filename (without extension)
+                    Text(summary.alias.isEmpty ? fileName : summary.alias)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+
+                    // Optional full name line if distinct from title
+                    if !summary.fullName.isEmpty && summary.fullName != summary.alias {
+                        Text(summary.fullName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    // Small metadata line: DOB if present
+                    if !summary.dob.isEmpty && summary.dob != "—" {
+                        Text(summary.dob)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            // Timing metadata block
+            VStack(alignment: .leading, spacing: 2) {
+                if !summary.createdOn.isEmpty && summary.createdOn != "—" {
+                    Text("Created: \(summary.createdOn)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if !summary.importedOn.isEmpty && summary.importedOn != "—" {
+                    Text("Imported: \(summary.importedOn)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if !summary.lastSavedOn.isEmpty && summary.lastSavedOn != "—" {
+                    Text("Last save: \(summary.lastSavedOn)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
+        )
     }
 
     // MARK: - Actions
