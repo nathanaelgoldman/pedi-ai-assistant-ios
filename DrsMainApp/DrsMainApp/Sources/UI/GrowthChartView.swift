@@ -22,10 +22,38 @@ struct GrowthChartView: View {
     private let log = Logger(subsystem: "DrsMainApp", category: "GrowthChartView")
 
     enum Tab: String, CaseIterable, Identifiable {
-        case weight = "Weight"
-        case height = "Height"
-        case hc     = "Head Circ."
+        case weight
+        case height
+        case hc
+
         var id: String { rawValue }
+
+        /// Title used in the segmented control and y-axis label
+        var localizedTitle: String {
+            switch self {
+            case .weight:
+                return NSLocalizedString(
+                    "growth.charts.tab.weight",
+                    comment: "Segment title for weight chart tab"
+                )
+            case .height:
+                return NSLocalizedString(
+                    "growth.charts.tab.height",
+                    comment: "Segment title for height/length chart tab"
+                )
+            case .hc:
+                return NSLocalizedString(
+                    "growth.charts.tab.hc",
+                    comment: "Segment title for head circumference chart tab"
+                )
+            }
+        }
+
+        /// Label for the y-axis
+        var localizedYAxisLabel: String {
+            // For now we reuse the same text as the tab title
+            localizedTitle
+        }
     }
 
     // Local plotting model for Charts
@@ -47,25 +75,44 @@ struct GrowthChartView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                Picker("Chart", selection: $selectedTab) {
-                    ForEach(Tab.allCases) { t in Text(t.rawValue).tag(t) }
+                Picker(
+                    NSLocalizedString(
+                        "growth.charts.picker.label",
+                        comment: "Accessibility label for growth chart type picker"
+                    ),
+                    selection: $selectedTab
+                ) {
+                    ForEach(Tab.allCases) { t in
+                        Text(t.localizedTitle).tag(t)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
 
                 let series = makeSeries(points: points, tab: selectedTab)
                 if series.isEmpty {
-                    Text("No \(selectedTab.rawValue.lowercased()) data to plot.")
-                        .foregroundStyle(.secondary)
-                        .padding()
+                    Text(
+                        NSLocalizedString(
+                            "growth.charts.empty",
+                            comment: "Shown when there is no data to plot for the current growth chart"
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                    .padding()
                 } else {
                     if let bd = birthDate {
                         Chart {
                             // Patient data (points only; no connecting lines)
                             ForEach(series) { p in
                                 PointMark(
-                                    x: .value("Age (mo)", monthsBetween(bd, p.date)),
-                                    y: .value(selectedTab.rawValue, p.value)
+                                    x: .value(
+                                        NSLocalizedString(
+                                            "growth.charts.axis.x.age-short",
+                                            comment: "X-axis dimension label for age in months (short form)"
+                                        ),
+                                        monthsBetween(bd, p.date)
+                                    ),
+                                    y: .value(selectedTab.localizedYAxisLabel, p.value)
                                 )
                                 .zIndex(2)
                             }
@@ -73,8 +120,20 @@ struct GrowthChartView: View {
                             ForEach(whoCurves, id: \.label) { curve in
                                 ForEach(curve.points) { q in
                                     LineMark(
-                                        x: .value("Age (mo)", monthsBetween(bd, q.date)),
-                                        y: .value("Value", q.value)
+                                        x: .value(
+                                            NSLocalizedString(
+                                                "growth.charts.axis.x.age-short",
+                                                comment: "X-axis dimension label for age in months (short form)"
+                                            ),
+                                            monthsBetween(bd, q.date)
+                                        ),
+                                        y: .value(
+                                            NSLocalizedString(
+                                                "growth.charts.axis.y.value",
+                                                comment: "Generic y-axis dimension label for WHO reference curves"
+                                            ),
+                                            q.value
+                                        )
                                     )
                                     .foregroundStyle(by: .value("WHO", curve.label))
                                     .interpolationMethod(.monotone)
@@ -97,8 +156,13 @@ struct GrowthChartView: View {
                         }
                         .chartYAxis { AxisMarks() }
                         .chartLegend(position: .top, alignment: .leading, spacing: 8)
-                        .chartXAxisLabel("Age (months)")
-                        .chartYAxisLabel(selectedTab.rawValue)
+                        .chartXAxisLabel(
+                            NSLocalizedString(
+                                "growth.charts.axis.x.age-long",
+                                comment: "X-axis label: Age in months"
+                            )
+                        )
+                        .chartYAxisLabel(selectedTab.localizedYAxisLabel)
                         .padding(.horizontal)
                         .frame(minHeight: 360)
                     } else {
@@ -106,16 +170,34 @@ struct GrowthChartView: View {
                         Chart {
                             ForEach(series) { p in
                                 PointMark(
-                                    x: .value("Date", p.date),
-                                    y: .value(selectedTab.rawValue, p.value)
+                                    x: .value(
+                                        NSLocalizedString(
+                                            "growth.charts.axis.x.date-dimension",
+                                            comment: "X-axis dimension label for date-based growth chart"
+                                        ),
+                                        p.date
+                                    ),
+                                    y: .value(selectedTab.localizedYAxisLabel, p.value)
                                 )
                                 .zIndex(2)
                             }
                             ForEach(whoCurves, id: \.label) { curve in
                                 ForEach(curve.points) { q in
                                     LineMark(
-                                        x: .value("Date", q.date),
-                                        y: .value("Value", q.value)
+                                        x: .value(
+                                            NSLocalizedString(
+                                                "growth.charts.axis.x.date-dimension",
+                                                comment: "X-axis dimension label for date-based growth chart"
+                                            ),
+                                            q.date
+                                        ),
+                                        y: .value(
+                                            NSLocalizedString(
+                                                "growth.charts.axis.y.value",
+                                                comment: "Generic y-axis dimension label for WHO reference curves"
+                                            ),
+                                            q.value
+                                        )
                                     )
                                     .foregroundStyle(by: .value("WHO", curve.label))
                                     .interpolationMethod(.monotone)
@@ -134,20 +216,44 @@ struct GrowthChartView: View {
                         }
                         .chartYAxis { AxisMarks() }
                         .chartLegend(position: .top, alignment: .leading, spacing: 8)
-                        .chartXAxisLabel("Date")
-                        .chartYAxisLabel(selectedTab.rawValue)
+                        .chartXAxisLabel(
+                            NSLocalizedString(
+                                "growth.charts.axis.x.date-label",
+                                comment: "X-axis label: Date"
+                            )
+                        )
+                        .chartYAxisLabel(selectedTab.localizedYAxisLabel)
                         .padding(.horizontal)
                         .frame(minHeight: 360)
                     }
                 }
             }
-            .navigationTitle("Growth Charts")
+            .navigationTitle(
+                NSLocalizedString(
+                    "growth.charts.nav.title",
+                    comment: "Navigation title for growth charts window"
+                )
+            )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(
+                        NSLocalizedString(
+                            "generic.button.close",
+                            comment: "Close button title"
+                        )
+                    ) {
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Refresh") { reloadData() }
+                    Button(
+                        NSLocalizedString(
+                            "generic.button.refresh",
+                            comment: "Refresh button title"
+                        )
+                    ) {
+                        reloadData()
+                    }
                 }
             }
             .onAppear {
@@ -243,8 +349,6 @@ struct GrowthChartView: View {
 
             rows.append(DBPoint(recordedAt: recDate, weightKg: w, heightCm: h, headCircumferenceCm: hc))
         }
-        
-        // ... after the while-loop that fills `rows`
 
         // --- Add perinatal points: birth (weight/length/HC) and discharge (weight) ---
         do {
@@ -342,6 +446,7 @@ struct GrowthChartView: View {
             }
         }
     }
+
     // MARK: - WHO reference loading (real implementation)
     private func reloadWHO() {
         whoCurves = []
@@ -541,4 +646,4 @@ struct GrowthChartView: View {
         // approx fractional month as 30.437 days (Gregorian average)
         return cal.date(byAdding: .day, value: Int(frac * 30.437), to: step) ?? step
     }
-    }
+}

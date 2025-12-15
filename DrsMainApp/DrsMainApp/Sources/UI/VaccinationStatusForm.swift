@@ -10,8 +10,10 @@ struct VaccinationStatusForm: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
 
+    // NOTE: This is the stored *code* value, still in English for DB compatibility.
     @State private var status: String = "Unknown"
 
+    // These are also the stored *codes* – do not localize here.
     private static let choices: [String] = [
         "Up to date",
         "Delayed",
@@ -23,15 +25,19 @@ struct VaccinationStatusForm: View {
         VStack(spacing: 16) {
             // Header
             HStack {
-                Text("Vaccination Status")
+                Text(NSLocalizedString("vax.form.title",
+                                       comment: "Vaccination status form title"))
                     .font(.title2).bold()
                 Spacer()
             }
 
             // Picker
-            Picker("Status", selection: $status) {
+            Picker(NSLocalizedString("vax.field.status.label",
+                                     comment: "Vaccination status picker label"),
+                   selection: $status) {
                 ForEach(Self.choices, id: \.self) { choice in
-                    Text(choice).tag(choice)
+                    // Localized label, but tag stays as the original code
+                    Text(localizedStatusLabel(for: choice)).tag(choice)
                 }
             }
             .pickerStyle(.segmented)
@@ -40,11 +46,13 @@ struct VaccinationStatusForm: View {
 
             // Actions
             HStack {
-                Button("Cancel") {
+                Button(NSLocalizedString("generic.button.cancel",
+                                         comment: "Cancel button")) {
                     dismiss()
                 }
                 Spacer()
-                Button("Save") {
+                Button(NSLocalizedString("generic.button.save",
+                                         comment: "Save button")) {
                     let ok = app.saveVaccinationStatusForSelectedPatient(status)
                     if ok {
                         dismiss()
@@ -61,8 +69,31 @@ struct VaccinationStatusForm: View {
                Self.choices.contains(current) {
                 status = current
             } else {
-                status = "Unknown"
+                status = "Unknown" // stored code, not localized text
             }
+        }
+    }
+
+    // MARK: - Helpers
+
+    /// Map stored status codes to localized labels for display.
+    private func localizedStatusLabel(for code: String) -> String {
+        switch code {
+        case "Up to date":
+            return NSLocalizedString("vax.status.up_to_date",
+                                     comment: "Vaccination status: up to date")
+        case "Delayed":
+            return NSLocalizedString("vax.status.delayed",
+                                     comment: "Vaccination status: delayed")
+        case "Not vaccinated":
+            return NSLocalizedString("vax.status.not_vaccinated",
+                                     comment: "Vaccination status: not vaccinated")
+        case "Unknown":
+            return NSLocalizedString("vax.status.unknown",
+                                     comment: "Vaccination status: unknown")
+        default:
+            // Fallback: show raw value if we somehow get an unknown code
+            return code
         }
     }
 }

@@ -34,10 +34,10 @@ struct ContentView: View {
                     Image(systemName: "folder")
                         .font(.system(size: 36, weight: .regular))
                         .foregroundStyle(.secondary)
-                    Text("No Bundle Selected")
+                    Text("content_view.empty.no_bundle_title")
                         .font(.title2).bold()
                         .foregroundStyle(.secondary)
-                    Text("Use “Add Bundles…” to import a .peMR zip or choose a bundle folder.")
+                    Text("content_view.empty.no_bundle_message")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

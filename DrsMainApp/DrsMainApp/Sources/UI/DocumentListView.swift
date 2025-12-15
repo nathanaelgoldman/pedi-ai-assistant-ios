@@ -32,7 +32,8 @@ struct DocumentListView: View {
                 // LEFT: list
                 VStack(spacing: 0) {
                     HStack {
-                        Text("Documents")
+                        Text(NSLocalizedString("docs.list.header.title",
+                                               comment: "Header title for documents list in bundle documents window"))
                             .font(.headline)
                         Spacer()
                     }
@@ -40,7 +41,8 @@ struct DocumentListView: View {
 
                     List(selection: $selectedURL) {
                         if files.isEmpty {
-                            Text("No documents in this bundle’s “docs” folder.")
+                            Text(NSLocalizedString("docs.list.empty",
+                                                   comment: "Shown when there are no documents in the bundle docs folder"))
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(files, id: \.self) { url in
@@ -68,7 +70,8 @@ struct DocumentListView: View {
                         PreviewPane(url: url)
                     } else {
                         VStack {
-                            Text("Select a document to preview")
+                            Text(NSLocalizedString("docs.preview.placeholder",
+                                                   comment: "Shown when no document is selected in the documents window"))
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -80,7 +83,10 @@ struct DocumentListView: View {
             .task { loadFiles() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(NSLocalizedString("generic.button.close",
+                                             comment: "Generic Close button title")) {
+                        dismiss()
+                    }
                 }
                 ToolbarItemGroup(placement: .automatic) {
                     if let url = selectedURL {
@@ -89,7 +95,9 @@ struct DocumentListView: View {
                         Button(role: .destructive) {
                             deleteSelected(url)
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Label(NSLocalizedString("docs.toolbar.delete",
+                                                    comment: "Toolbar button to delete the selected document"),
+                                  systemImage: "trash")
                         }
                         .disabled(!canDelete(url))
                         Divider()
@@ -97,17 +105,29 @@ struct DocumentListView: View {
                     Button {
                         importFile()
                     } label: {
-                        Label("Upload…", systemImage: "square.and.arrow.up")
+                        Label(NSLocalizedString("docs.toolbar.upload",
+                                                comment: "Toolbar button to upload a document into the bundle docs folder"),
+                              systemImage: "square.and.arrow.up")
                     }
                     .keyboardShortcut("i", modifiers: [.command])
                 }
             }
-            .navigationTitle("Bundle Documents")
-            .alert("Error", isPresented: .constant(errorMessage != nil), actions: {
-                Button("OK") { errorMessage = nil }
-            }, message: {
-                Text(errorMessage ?? "")
-            })
+            .navigationTitle(NSLocalizedString("docs.nav.title",
+                                               comment: "Navigation title for the bundle documents window"))
+            .alert(
+                NSLocalizedString("generic.error.title",
+                                  comment: "Generic error alert title"),
+                isPresented: .constant(errorMessage != nil),
+                actions: {
+                    Button(NSLocalizedString("generic.button.ok",
+                                             comment: "Generic OK button title")) {
+                        errorMessage = nil
+                    }
+                },
+                message: {
+                    Text(errorMessage ?? "")
+                }
+            )
         }
         .frame(minWidth: 840, idealWidth: 960, maxWidth: .infinity,
                minHeight: 520, idealHeight: 640, maxHeight: .infinity)
@@ -134,7 +154,11 @@ struct DocumentListView: View {
             }
             .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
         } catch {
-            errorMessage = "Failed to list docs: \(error.localizedDescription)"
+            errorMessage = String(
+                format: NSLocalizedString("docs.error.list-failed",
+                                          comment: "Shown when listing documents in the bundle docs folder fails; %@ is the underlying error message"),
+                error.localizedDescription
+            )
             files = []
         }
 
@@ -177,7 +201,11 @@ struct DocumentListView: View {
             loadFiles()
             selectedURL = dest
         } catch {
-            errorMessage = "Failed to copy file: \(error.localizedDescription)"
+            errorMessage = String(
+                format: NSLocalizedString("docs.error.copy-failed",
+                                          comment: "Shown when copying an imported document into the bundle docs folder fails; %@ is the underlying error message"),
+                error.localizedDescription
+            )
         }
     }
 
@@ -191,7 +219,8 @@ struct DocumentListView: View {
         let fm = FileManager.default
         // Only allow deletion if file resides under docs/
         guard url.standardizedFileURL.path.hasPrefix(docs.standardizedFileURL.path) else {
-            errorMessage = "Only files inside the bundle’s docs folder can be deleted."
+            errorMessage = NSLocalizedString("docs.error.delete-outside-docs",
+                                             comment: "Shown when attempting to delete a file that is not inside the bundle docs folder")
             return
         }
         do {
@@ -199,7 +228,11 @@ struct DocumentListView: View {
             loadFiles()
             selectedURL = nil
         } catch {
-            errorMessage = "Failed to delete: \(error.localizedDescription)"
+            errorMessage = String(
+                format: NSLocalizedString("docs.error.delete-failed",
+                                          comment: "Shown when deleting a document from the bundle docs folder fails; %@ is the underlying error message"),
+                error.localizedDescription
+            )
         }
     }
 
@@ -231,7 +264,8 @@ fileprivate struct PreviewPane: View {
             VStack(spacing: 12) {
                 Image(systemName: "doc")
                     .font(.system(size: 48))
-                Text("DOCX preview isn’t supported here.")
+                Text(NSLocalizedString("docs.preview.docx-unsupported",
+                                       comment: "Shown when a DOCX document cannot be previewed in the app"))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 12) {
                     OpenInFinderButton(url: url)
@@ -243,7 +277,8 @@ fileprivate struct PreviewPane: View {
             VStack(spacing: 12) {
                 Image(systemName: "questionmark.folder")
                     .font(.system(size: 48))
-                Text("Unsupported file type.")
+                Text(NSLocalizedString("docs.preview.unsupported-type",
+                                       comment: "Shown when the document file type is not supported for preview"))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 12) {
                     OpenInFinderButton(url: url)
@@ -322,7 +357,11 @@ fileprivate struct TextPreview: View {
             do {
                 text = try String(contentsOf: url, encoding: .utf8)
             } catch {
-                text = "Failed to load text: \(error.localizedDescription)"
+                text = String(
+                    format: NSLocalizedString("docs.error.text-load-failed",
+                                              comment: "Shown when loading a plain text document fails; %@ is the underlying error message"),
+                    error.localizedDescription
+                )
             }
         }
     }
@@ -337,7 +376,9 @@ fileprivate struct OpenInFinderButton: View {
         Button {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } label: {
-            Label("Show in Finder", systemImage: "folder")
+            Label(NSLocalizedString("docs.button.show-in-finder",
+                                    comment: "Button to reveal the selected document in Finder"),
+                  systemImage: "folder")
         }
         #else
         EmptyView()
@@ -355,7 +396,9 @@ fileprivate struct ShareButton: View {
                 picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
             }
         } label: {
-            Label("Share…", systemImage: "square.and.arrow.up")
+            Label(NSLocalizedString("docs.button.share",
+                                    comment: "Button to share the selected document"),
+                  systemImage: "square.and.arrow.up")
         }
         #else
         EmptyView()

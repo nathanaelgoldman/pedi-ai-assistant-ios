@@ -5,11 +5,6 @@
 //  Created by yunastic on 11/13/25.
 //
 //
-//  PerinatalStore.swift
-//  DrsMainApp
-//
-//  Created by you, today ☺
-//
 
 import Foundation
 import SQLite3
@@ -165,7 +160,7 @@ public final class PerinatalStore {
             resolvedURL = u
         } else {
             throw NSError(domain: "PerinatalStore", code: 404,
-                          userInfo: [NSLocalizedDescriptionKey: "No dbURL provided or resolvable (PerinatalStore.dbURLResolver not set)"])
+                          userInfo: [NSLocalizedDescriptionKey: String(localized: "perinatalstore.error.no_db_url_resolvable", comment: "PerinatalStore: no dbURL provided and dbURLResolver not set")])
         }
         return try PerinatalStore(dbURL: resolvedURL).fetchPerinatal(for: patientID)
     }
@@ -185,7 +180,7 @@ public final class PerinatalStore {
             resolvedURL = u
         } else {
             throw NSError(domain: "PerinatalStore", code: 404,
-                          userInfo: [NSLocalizedDescriptionKey: "No dbURL provided or resolvable (PerinatalStore.dbURLResolver not set)"])
+                          userInfo: [NSLocalizedDescriptionKey: String(localized: "perinatalstore.error.no_db_url_resolvable", comment: "PerinatalStore: no dbURL provided and dbURLResolver not set")])
         }
         var h = history
         if h.patientID != patientID { h.patientID = patientID }
@@ -505,7 +500,7 @@ public extension PerinatalStore {
     static func fetch(for patientID: Int) throws -> PerinatalHistory? {
         guard let url = PerinatalStore.dbURLResolver?() else {
             throw NSError(domain: "PerinatalStore", code: 404,
-                          userInfo: [NSLocalizedDescriptionKey: "No dbURL provided and PerinatalStore.dbURLResolver is not set"])
+                          userInfo: [NSLocalizedDescriptionKey: String(localized: "perinatalstore.error.no_db_url_resolver_not_set", comment: "PerinatalStore: dbURLResolver not set")])
         }
         return try PerinatalStore.fetch(dbURL: url, for: patientID)
     }
@@ -513,7 +508,7 @@ public extension PerinatalStore {
     static func upsert(for patientID: Int, history: PerinatalHistory) throws {
         guard let url = PerinatalStore.dbURLResolver?() else {
             throw NSError(domain: "PerinatalStore", code: 404,
-                          userInfo: [NSLocalizedDescriptionKey: "No dbURL provided and PerinatalStore.dbURLResolver is not set"])
+                          userInfo: [NSLocalizedDescriptionKey: String(localized: "perinatalstore.error.no_db_url_resolver_not_set", comment: "PerinatalStore: dbURLResolver not set")])
         }
         try PerinatalStore.upsert(dbURL: url, for: patientID, history: history)
     }

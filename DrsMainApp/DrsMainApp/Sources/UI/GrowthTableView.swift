@@ -33,16 +33,55 @@ struct GrowthTableView: View {
         VStack(spacing: 0) {
             // Header row
             HStack {
-                Text("Date").font(.subheadline).foregroundStyle(.secondary)
-                    .frame(width: 120, alignment: .leading)
-                Text("Weight (kg)").font(.subheadline).foregroundStyle(.secondary)
-                    .frame(width: 100, alignment: .trailing)
-                Text("Height (cm)").font(.subheadline).foregroundStyle(.secondary)
-                    .frame(width: 100, alignment: .trailing)
-                Text("Head C (cm)").font(.subheadline).foregroundStyle(.secondary)
-                    .frame(width: 110, alignment: .trailing)
-                Text("Source").font(.subheadline).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(
+                    NSLocalizedString(
+                        "growth.header.date",
+                        comment: "Growth table header: date column"
+                    )
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
+
+                Text(
+                    NSLocalizedString(
+                        "growth.header.weight-kg",
+                        comment: "Growth table header: weight (kg) column"
+                    )
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 100, alignment: .trailing)
+
+                Text(
+                    NSLocalizedString(
+                        "growth.header.height-cm",
+                        comment: "Growth table header: height (cm) column"
+                    )
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 100, alignment: .trailing)
+
+                Text(
+                    NSLocalizedString(
+                        "growth.header.headc-cm",
+                        comment: "Growth table header: head circumference (cm) column"
+                    )
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 110, alignment: .trailing)
+
+                Text(
+                    NSLocalizedString(
+                        "growth.header.source",
+                        comment: "Growth table header: source column"
+                    )
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -69,9 +108,14 @@ struct GrowthTableView: View {
 
             // Empty state (kept INSIDE the VStack so modifiers below apply to the whole view)
             if rows.isEmpty {
-                Text("No growth records found for this patient.")
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 12)
+                Text(
+                    NSLocalizedString(
+                        "growth.empty",
+                        comment: "Shown when no growth records are found for the selected patient"
+                    )
+                )
+                .foregroundStyle(.secondary)
+                .padding(.top, 12)
             }
         }
         .frame(minWidth: 720, minHeight: 420)
@@ -82,15 +126,33 @@ struct GrowthTableView: View {
         .onChange(of: appState.currentBundleURL) { _, _ in
             scheduleReload()
         }
-        .navigationTitle("Growth")
+        .navigationTitle(
+            NSLocalizedString(
+                "growth.nav.title",
+                comment: "Navigation title for the growth table window"
+            )
+        )
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Close") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
+                Button(
+                    NSLocalizedString(
+                        "generic.button.close",
+                        comment: "Toolbar button to close a sheet or window"
+                    )
+                ) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
             }
             ToolbarItem(placement: .automatic) {
                 Button { scheduleReload() } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Label(
+                        NSLocalizedString(
+                            "growth.toolbar.refresh",
+                            comment: "Toolbar button to refresh growth records"
+                        ),
+                        systemImage: "arrow.clockwise"
+                    )
                 }
                 .keyboardShortcut("r", modifiers: [.command])
             }
@@ -98,9 +160,20 @@ struct GrowthTableView: View {
                 Button {
                     showAddSheet = true
                 } label: {
-                    Label("Add", systemImage: "plus")
+                    Label(
+                        NSLocalizedString(
+                            "growth.toolbar.add",
+                            comment: "Toolbar button to add a manual growth point"
+                        ),
+                        systemImage: "plus"
+                    )
                 }
-                .help("Add a manual growth point")
+                .help(
+                    NSLocalizedString(
+                        "growth.toolbar.add.help",
+                        comment: "Help text for the button that adds a manual growth point"
+                    )
+                )
             }
         }
         .sheet(isPresented: $showAddSheet) {
@@ -192,7 +265,13 @@ private struct GrowthRowView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: isManual) {
             if isManual {
                 Button(role: .destructive, action: onDelete) {
-                    Label("Delete", systemImage: "trash")
+                    Label(
+                        NSLocalizedString(
+                            "growth.row.delete",
+                            comment: "Swipe action button to delete a manual growth point"
+                        ),
+                        systemImage: "trash"
+                    )
                 }
             }
         }
@@ -201,7 +280,13 @@ private struct GrowthRowView: View {
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
-                    Label("Delete", systemImage: "trash")
+                    Label(
+                        NSLocalizedString(
+                            "growth.row.delete",
+                            comment: "Context menu button to delete a manual growth point"
+                        ),
+                        systemImage: "trash"
+                    )
                 }
             }
         }
@@ -223,31 +308,91 @@ private struct ManualGrowthForm: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Date") {
-                    DatePicker("Recorded date", selection: $date, displayedComponents: .date)
+                Section(
+                    NSLocalizedString(
+                        "growth.form.section.date",
+                        comment: "Section title for selecting the growth record date"
+                    )
+                ) {
+                    DatePicker(
+                        NSLocalizedString(
+                            "growth.form.label.recorded-date",
+                            comment: "Label for the date picker in the growth form"
+                        ),
+                        selection: $date,
+                        displayedComponents: .date
+                    )
                 }
-                Section("Measurements (optional)") {
-                    TextField("Weight (kg)", text: $weightText)
-                        .decimalKeyboardIfAvailable()
-                    TextField("Height (cm)", text: $heightText)
-                        .decimalKeyboardIfAvailable()
-                    TextField("Head circumference (cm)", text: $headText)
-                        .decimalKeyboardIfAvailable()
-                    Text("Leave any field blank to skip it.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                Section(
+                    NSLocalizedString(
+                        "growth.form.section.measurements",
+                        comment: "Section title for entering growth measurements"
+                    )
+                ) {
+                    TextField(
+                        NSLocalizedString(
+                            "growth.form.field.weight-kg",
+                            comment: "Text field placeholder for weight in kilograms"
+                        ),
+                        text: $weightText
+                    )
+                    .decimalKeyboardIfAvailable()
+
+                    TextField(
+                        NSLocalizedString(
+                            "growth.form.field.height-cm",
+                            comment: "Text field placeholder for height in centimeters"
+                        ),
+                        text: $heightText
+                    )
+                    .decimalKeyboardIfAvailable()
+
+                    TextField(
+                        NSLocalizedString(
+                            "growth.form.field.headc-cm",
+                            comment: "Text field placeholder for head circumference in centimeters"
+                        ),
+                        text: $headText
+                    )
+                    .decimalKeyboardIfAvailable()
+
+                    Text(
+                        NSLocalizedString(
+                            "growth.form.hint.optional-fields",
+                            comment: "Hint explaining that growth fields can be left blank to skip"
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Add Growth Point")
+            .navigationTitle(
+                NSLocalizedString(
+                    "growth.form.title",
+                    comment: "Navigation title for the sheet that adds a growth point"
+                )
+            )
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(
+                        NSLocalizedString(
+                            "generic.button.cancel",
+                            comment: "Toolbar button to cancel and dismiss a sheet"
+                        )
+                    ) {
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(
+                        NSLocalizedString(
+                            "generic.button.save",
+                            comment: "Toolbar button to save current changes"
+                        )
+                    ) {
                         let weight = parseDouble(weightText)
                         let height = parseDouble(heightText)
                         let head   = parseDouble(headText)

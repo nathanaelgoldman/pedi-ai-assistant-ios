@@ -25,20 +25,20 @@ struct PmhForm: View {
                     // Two-column layout, comfy padding
                     Grid(horizontalSpacing: 24, verticalSpacing: 16) {
                         GridRow {
-                            Toggle("Asthma", isOn: $asthma)
-                            Toggle("Recurrent Otitis", isOn: $otitis)
+                            Toggle(String(localized: "pmh.toggle.asthma"), isOn: $asthma)
+                            Toggle(String(localized: "pmh.toggle.recurrent_otitis"), isOn: $otitis)
                         }
                         GridRow {
-                            Toggle("Recurrent UTI", isOn: $uti)
-                            Toggle("Allergies", isOn: $allergies)
+                            Toggle(String(localized: "pmh.toggle.recurrent_uti"), isOn: $uti)
+                            Toggle(String(localized: "pmh.toggle.allergies"), isOn: $allergies)
                         }
                     }
                     .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Allergy details")
+                        Text(String(localized: "pmh.label.allergy_details"))
                             .font(.headline)
-                        TextField("e.g., amoxicillin → rash", text: $allergyDetails, axis: .vertical)
+                        TextField(String(localized: "pmh.placeholder.allergy_example"), text: $allergyDetails, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
                             .lineLimit(3...6)
                             .disabled(!allergies)
@@ -47,7 +47,7 @@ struct PmhForm: View {
                     .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Other past medical history")
+                        Text(String(localized: "pmh.label.other_pmh"))
                             .font(.headline)
                         TextEditor(text: $other)
                             .frame(minHeight: 120)
@@ -62,13 +62,13 @@ struct PmhForm: View {
                 }
                 .padding(.top, 12)
             }
-            .navigationTitle("Past Medical History")
+            .navigationTitle(String(localized: "pmh.nav.title"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button(String(localized: "generic.button.done")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button(String(localized: "generic.button.save")) { save() }
                 }
             }
         }

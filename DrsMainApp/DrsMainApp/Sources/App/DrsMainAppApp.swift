@@ -158,26 +158,35 @@ struct DrsMainAppApp: App {
                             if let active {
                                 Text({
                                     let n = (active.firstName + " " + active.lastName).trimmingCharacters(in: .whitespaces)
-                                    return "Signed in as " + (n.isEmpty ? "User #\(active.id)" : n)
+                                    let who: String
+                                    if n.isEmpty {
+                                        who = String(format: NSLocalizedString("app.clinician.user_number", comment: ""), active.id)
+                                    } else {
+                                        who = n
+                                    }
+                                    return String(format: NSLocalizedString("app.toolbar.signed_in_as", comment: ""), who)
                                 }())
                                 Divider()
-                                Button("Edit profile…") { showClinicianProfile = true }
-                                Button("Switch clinician…") { showSignIn = true }
-                                Button("Sign out") {
+                                Button("app.toolbar.edit_profile") { showClinicianProfile = true }
+                                Button("app.toolbar.switch_clinician") { showSignIn = true }
+                                Button("app.toolbar.sign_out") {
                                     appState.activeUserID = nil
                                     showSignIn = true
                                 }
                             } else {
-                                Button("Sign in…") { showSignIn = true }
+                                Button("app.toolbar.sign_in_ellipsis") { showSignIn = true }
                             }
                         } label: {
                             if let active {
                                 Label({
                                     let n = (active.firstName + " " + active.lastName).trimmingCharacters(in: .whitespaces)
-                                    return (n.isEmpty ? "Dr" : "Dr " + n)
+                                    if n.isEmpty {
+                                        return NSLocalizedString("app.toolbar.doctor", comment: "")
+                                    }
+                                    return String(format: NSLocalizedString("app.toolbar.doctor_name", comment: ""), n)
                                 }(), systemImage: "person.crop.circle")
                             } else {
-                                Label("Sign in", systemImage: "person.crop.circle.badge.questionmark")
+                                Label("app.toolbar.sign_in", systemImage: "person.crop.circle.badge.questionmark")
                             }
                         }
                     }
@@ -202,7 +211,7 @@ private struct SignInSheet: View {
             VStack(spacing: 16) {
                 // Existing clinicians
                 if clinicianStore.users.isEmpty {
-                    Text("No clinicians found. Create one below.")
+                    Text("app.signin.no_clinicians_found")
                         .font(.callout)
                         .foregroundColor(.secondary)
                 } else {
@@ -211,8 +220,12 @@ private struct SignInSheet: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text({
-                                        let n = (u.firstName + " " + u.lastName).trimmingCharacters(in: .whitespacesAndNewlines)
-                                        return n.isEmpty ? "User #\(u.id)" : n
+                                        let n = (u.firstName + " " + u.lastName)
+                                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                                        if n.isEmpty {
+                                            return String(format: NSLocalizedString("app.clinician.user_number", comment: ""), u.id)
+                                        }
+                                        return n
                                     }())
                                     .foregroundStyle(.primary)
                                 }
@@ -221,7 +234,7 @@ private struct SignInSheet: View {
                                     Image(systemName: "checkmark.circle.fill")
                                         .foregroundColor(.accentColor)
                                 } else if appState.activeUserID == u.id {
-                                    Text("Active")
+                                    Text("app.signin.active")
                                         .font(.caption)
                                         .foregroundColor(.green)
                                 }
@@ -239,7 +252,7 @@ private struct SignInSheet: View {
                                     clinicianStore.deleteUser(u)
                                     if selectedID == idToDelete { selectedID = nil }
                                 } label: {
-                                    Label("Delete", systemImage: "trash")
+                                    Label("app.common.delete", systemImage: "trash")
                                 }
                             }
                             #if os(iOS)
@@ -250,7 +263,7 @@ private struct SignInSheet: View {
                                     clinicianStore.deleteUser(u)
                                     if selectedID == idToDelete { selectedID = nil }
                                 } label: {
-                                    Label("Delete", systemImage: "trash")
+                                    Label("app.common.delete", systemImage: "trash")
                                 }
                             }
                             #endif
@@ -271,15 +284,15 @@ private struct SignInSheet: View {
 
                 // Create new clinician
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Create clinician")
+                    Text("app.signin.create_clinician")
                         .font(.headline)
                     HStack {
-                        TextField("First name", text: $firstName)
+                        TextField("app.signin.first_name", text: $firstName)
                             .textFieldStyle(.roundedBorder)
-                        TextField("Last name", text: $lastName)
+                        TextField("app.signin.last_name", text: $lastName)
                             .textFieldStyle(.roundedBorder)
                     }
-                    Button("Add") {
+                    Button("app.signin.add") {
                         let fn = firstName.trimmingCharacters(in: .whitespaces)
                         let ln = lastName.trimmingCharacters(in: .whitespaces)
                         guard !fn.isEmpty, !ln.isEmpty else { return }
@@ -294,7 +307,7 @@ private struct SignInSheet: View {
 
                 // Password for selected clinician (if required)
                 VStack(alignment: .leading, spacing: 4) {
-                    SecureField("Password (if required)", text: $password)
+                    SecureField("app.signin.password_optional", text: $password)
                         .textFieldStyle(.roundedBorder)
                     if let loginError {
                         Text(loginError)
@@ -306,7 +319,7 @@ private struct SignInSheet: View {
                 Spacer()
 
                 HStack {
-                    Button("Cancel") {
+                    Button("app.common.cancel") {
                         if appState.activeUserID == nil {
                             // No active clinician: do not allow using the app without sign‑in
                             #if os(macOS)
@@ -325,7 +338,7 @@ private struct SignInSheet: View {
 
                     Spacer()
 
-                    Button("Use selected") {
+                    Button("app.signin.use_selected") {
                         let chosenID: Int? = {
                             if let sel = selectedID { return sel }
                             return clinicianStore.users.first?.id
@@ -334,7 +347,7 @@ private struct SignInSheet: View {
                             // If a password is set for this clinician, require it
                             if clinicianStore.hasPassword(forUserID: uid) {
                                 guard clinicianStore.verifyPassword(password, forUserID: uid) else {
-                                    loginError = "Incorrect password."
+                                    loginError = NSLocalizedString("app.signin.incorrect_password", comment: "")
                                     return
                                 }
                             }
@@ -351,7 +364,7 @@ private struct SignInSheet: View {
             }
             .frame(minWidth: 560, minHeight: 380) // ensure comfortable size on macOS
             .padding()
-            .navigationTitle("Sign in")
+            .navigationTitle("app.signin.title")
         }
         .frame(minWidth: 640, minHeight: 420) // enforce sheet size on macOS
         .onAppear {
@@ -396,40 +409,40 @@ private struct ClinicianProfileForm: View {
         NavigationView {
             ScrollView {
                 Form {
-                    Section("Identity") {
-                        TextField("First name", text: $firstName)
-                        TextField("Last name",  text: $lastName)
-                        TextField("Title (e.g., MD, FAAP)", text: $title)
+                    Section("app.clinician_profile.section.identity") {
+                        TextField("app.clinician_profile.first_name", text: $firstName)
+                        TextField("app.clinician_profile.last_name",  text: $lastName)
+                        TextField("app.clinician_profile.title", text: $title)
                     }
-                    Section("Contact") {
-                        TextField("Email", text: $email)
-                        TextField("Website", text: $website)
+                    Section("app.clinician_profile.section.contact") {
+                        TextField("app.clinician_profile.email", text: $email)
+                        TextField("app.clinician_profile.website", text: $website)
                     }
-                    Section("Professional") {
-                        TextField("Societies (comma-separated)", text: $societies)
+                    Section("app.clinician_profile.section.professional") {
+                        TextField("app.clinician_profile.societies", text: $societies)
                     }
-                    Section("Social") {
-                        TextField("Twitter/X", text: $twitter)
-                        TextField("WeChat",    text: $wechat)
-                        TextField("Instagram", text: $instagram)
-                        TextField("LinkedIn",  text: $linkedin)
+                    Section("app.clinician_profile.section.social") {
+                        TextField("app.clinician_profile.twitter", text: $twitter)
+                        TextField("app.clinician_profile.wechat",    text: $wechat)
+                        TextField("app.clinician_profile.instagram", text: $instagram)
+                        TextField("app.clinician_profile.linkedin",  text: $linkedin)
                     }
-                    Section("AI Assistant (optional)") {
-                        TextField("Endpoint URL", text: $aiEndpoint)
-                        TextField("Model (e.g. gpt-5.1-mini)", text: $aiModel)
-                        Picker("Provider", selection: $aiProvider) {
-                            Text("OpenAI").tag("openai")
-                            Text("Anthropic").tag("anthropic")
-                            Text("Gemini").tag("gemini")
-                            Text("Local (no cloud)").tag("local")
+                    Section("app.clinician_profile.section.ai_assistant") {
+                        TextField("app.clinician_profile.ai.endpoint_url", text: $aiEndpoint)
+                        TextField("app.clinician_profile.ai.model", text: $aiModel)
+                        Picker("app.clinician_profile.ai.provider", selection: $aiProvider) {
+                            Text("app.clinician_profile.ai.provider.openai").tag("openai")
+                            Text("app.clinician_profile.ai.provider.anthropic").tag("anthropic")
+                            Text("app.clinician_profile.ai.provider.gemini").tag("gemini")
+                            Text("app.clinician_profile.ai.provider.local").tag("local")
                         }
-                        SecureField("API Key",     text: $aiAPIKey)
+                        SecureField("app.clinician_profile.ai.api_key",     text: $aiAPIKey)
                             .textContentType(.password)
                     }
-                    Section("AI Prompts & Rules") {
-                        DisclosureGroup("Sick visit prompts & rules") {
+                    Section("app.clinician_profile.section.ai_prompts_rules") {
+                        DisclosureGroup("app.clinician_profile.ai_prompts_rules.sick_group") {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Sick visit AI prompt")
+                                Text("app.clinician_profile.ai_prompts_rules.sick_prompt_label")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 TextEditor(text: $aiSickPrompt)
@@ -439,7 +452,7 @@ private struct ClinicianProfileForm: View {
                                             .stroke(Color.secondary.opacity(0.2))
                                     )
 
-                                Text("Sick visit JSON rules (paste JSON here)")
+                                Text("app.clinician_profile.ai_prompts_rules.sick_rules_label")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 4)
@@ -453,9 +466,9 @@ private struct ClinicianProfileForm: View {
                             .padding(.vertical, 4)
                         }
 
-                        DisclosureGroup("Well visit prompts & rules") {
+                        DisclosureGroup("app.clinician_profile.ai_prompts_rules.well_group") {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Well visit AI prompt")
+                                Text("app.clinician_profile.ai_prompts_rules.well_prompt_label")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 TextEditor(text: $aiWellPrompt)
@@ -465,7 +478,7 @@ private struct ClinicianProfileForm: View {
                                             .stroke(Color.secondary.opacity(0.2))
                                     )
 
-                                Text("Well visit JSON rules (optional, future use)")
+                                Text("app.clinician_profile.ai_prompts_rules.well_rules_label")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 4)
@@ -481,34 +494,34 @@ private struct ClinicianProfileForm: View {
                     }
 
                     // --- App lock (password) section ---
-                    Section("App lock (password)") {
+                    Section("app.clinician_profile.section.app_lock") {
                         VStack(alignment: .leading, spacing: 8) {
                             if let user, hasPassword {
-                                Text("A password is currently set for this clinician.")
+                                Text("app.clinician_profile.app_lock.password_set")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             } else {
-                                Text("No password set yet.")
+                                Text("app.clinician_profile.app_lock.no_password")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
 
-                            SecureField("New password", text: $newPassword)
+                            SecureField("app.clinician_profile.app_lock.new_password", text: $newPassword)
                                 .textContentType(.newPassword)
                                 .disabled(removePassword)
 
-                            SecureField("Confirm password", text: $confirmPassword)
+                            SecureField("app.clinician_profile.app_lock.confirm_password", text: $confirmPassword)
                                 .textContentType(.newPassword)
                                 .disabled(removePassword)
 
                             if let user, hasPassword {
-                                Toggle("Remove existing password", isOn: $removePassword)
+                                Toggle("app.clinician_profile.app_lock.remove_existing", isOn: $removePassword)
                             }
 
                             if let passwordError {
                                 Text(passwordError)
                                     .font(.footnote)
-                                    .foregroundColor(.red)
+                                    .foregroundStyle(.red)
                             }
                         }
                     }
@@ -516,8 +529,8 @@ private struct ClinicianProfileForm: View {
                     Section {
                         HStack {
                             Spacer()
-                            Button("Close") { onClose() }
-                            Button(user == nil ? "Create" : "Save") {
+                            Button("app.common.close") { onClose() }
+                            Button(user == nil ? "app.common.create" : "app.common.save") {
                                 // Reset any previous password error
                                 passwordError = nil
 
@@ -528,11 +541,11 @@ private struct ClinicianProfileForm: View {
                                     let trimmedConfirm = confirmPassword.trimmingCharacters(in: .whitespacesAndNewlines)
                                     if !trimmedNew.isEmpty || !trimmedConfirm.isEmpty {
                                         guard !trimmedNew.isEmpty, !trimmedConfirm.isEmpty else {
-                                            passwordError = "Please enter and confirm the password."
+                                            passwordError = NSLocalizedString("app.clinician_profile.app_lock.error.enter_and_confirm", comment: "")
                                             return
                                         }
                                         guard trimmedNew == trimmedConfirm else {
-                                            passwordError = "Passwords do not match."
+                                            passwordError = NSLocalizedString("app.clinician_profile.app_lock.error.mismatch", comment: "")
                                             return
                                         }
                                         effectiveNewPassword = trimmedNew
@@ -622,7 +635,7 @@ private struct ClinicianProfileForm: View {
                     }
                 }
             }
-            .navigationTitle(user == nil ? "Create Clinician" : "Clinician Profile")
+            .navigationTitle(user == nil ? "app.clinician_profile.nav_title.create" : "app.clinician_profile.nav_title.edit")
         }
         .onAppear {
             if let u = user {

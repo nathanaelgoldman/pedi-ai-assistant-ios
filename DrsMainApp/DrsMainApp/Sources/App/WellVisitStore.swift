@@ -377,7 +377,7 @@ public struct WellVisitStore {
 
         let rc = sqlite3_step(stmt)
         if rc != SQLITE_DONE {
-            throw sqliteError(db, context: "well_visits update step rc=\(rc)")
+            throw sqliteError(db, key: "wellVisitStore.error.updateStep", rc)
         }
         return sqlite3_changes(db) > 0
     }
@@ -389,7 +389,7 @@ public struct WellVisitStore {
         let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
         let rc = sqlite3_open_v2(url.path, &db, flags, nil)
         if rc != SQLITE_OK {
-            throw sqliteError(db, context: "open \(url.path)")
+            throw sqliteError(db, key: "wellVisitStore.error.open", url.path)
         }
         return db
     }
@@ -397,21 +397,21 @@ public struct WellVisitStore {
     private func prepare(_ db: OpaquePointer?, _ sql: String, _ stmt: inout OpaquePointer?) throws {
         let rc = sqlite3_prepare_v2(db, sql, -1, &stmt, nil)
         if rc != SQLITE_OK {
-            throw sqliteError(db, context: "prepare: \(sql)")
+            throw sqliteError(db, key: "wellVisitStore.error.prepare", sql)
         }
     }
 
     private func stepDone(_ stmt: OpaquePointer?) throws {
         let rc = sqlite3_step(stmt)
         if rc != SQLITE_DONE {
-            throw sqliteError(nil, context: "step rc=\(rc)")
+            throw sqliteError(nil, key: "wellVisitStore.error.step", rc)
         }
     }
 
     private func bindInt64(_ stmt: OpaquePointer?, index: Int32, value: Int64) throws {
         let rc = sqlite3_bind_int64(stmt, index, value)
         if rc != SQLITE_OK {
-            throw sqliteError(nil, context: "bind int64 @\(index)")
+            throw sqliteError(nil, key: "wellVisitStore.error.bindInt64", Int(index))
         }
     }
 
@@ -427,7 +427,7 @@ public struct WellVisitStore {
         if let value = value, !value.isEmpty {
             sqlite3_bind_text(stmt, index, value, -1, SQLITE_TRANSIENT)
         } else {
-        sqlite3_bind_null(stmt, index)
+            sqlite3_bind_null(stmt, index)
         }
     }
 
@@ -442,23 +442,30 @@ public struct WellVisitStore {
         return Int(sqlite3_column_int64(stmt, index))
     }
 
-    private func sqliteError(_ db: OpaquePointer?, context: String) -> NSError {
+    private func sqliteError(_ db: OpaquePointer?, key: String, _ args: CVarArg...) -> NSError {
         // Be defensive: `db` may be nil in some call sites (e.g. stepDone)
         let code: Int32 = (db != nil) ? sqlite3_errcode(db) : 0
 
+        let base = String(format: NSLocalizedString(key, comment: ""), arguments: args)
+
         if let db = db, let cmsg = sqlite3_errmsg(db) {
-            let msg = String(cString: cmsg)
+            let sqliteMsg = String(cString: cmsg)
+            let full = String(
+                format: NSLocalizedString("wellVisitStore.error.withSQLite", comment: ""),
+                base,
+                sqliteMsg
+            )
             return NSError(
                 domain: "WellVisitStore",
                 code: Int(code),
-                userInfo: [NSLocalizedDescriptionKey: "\(context): \(msg)"]
+                userInfo: [NSLocalizedDescriptionKey: full]
             )
         }
 
         return NSError(
             domain: "WellVisitStore",
             code: Int(code),
-            userInfo: [NSLocalizedDescriptionKey: context]
+            userInfo: [NSLocalizedDescriptionKey: base]
         )
     }
 }

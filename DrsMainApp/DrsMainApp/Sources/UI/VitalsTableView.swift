@@ -21,30 +21,129 @@ struct VitalsTableView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Patient Vitals")
-                    .font(.title2).bold()
+                Text(
+                    NSLocalizedString(
+                        "vitals.nav.title",
+                        comment: "Title for the vitals table sheet"
+                    )
+                )
+                .font(.title2).bold()
+
                 Spacer()
-                Button("Close") { dismiss() }
+
+                Button(
+                    NSLocalizedString(
+                        "generic.button.close",
+                        comment: "Close button label for sheets"
+                    )
+                ) {
+                    dismiss()
+                }
             }
             .padding(.bottom, 8)
 
             if vitals.isEmpty {
-                Text("No vitals recorded for this patient.")
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text(
+                    NSLocalizedString(
+                        "vitals.empty",
+                        comment: "Shown when there are no vitals recorded for the patient"
+                    )
+                )
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 6) {
                     // Column headers
                     HStack {
-                        Text("Date/Time").font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Temp °C").font(.subheadline).foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
-                        Text("HR").font(.subheadline).foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
-                        Text("RR").font(.subheadline).foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
-                        Text("SpO₂").font(.subheadline).foregroundStyle(.secondary).frame(width: 60, alignment: .trailing)
-                        Text("BP").font(.subheadline).foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
-                        Text("Weight (kg)").font(.subheadline).foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
-                        Text("Height (cm)").font(.subheadline).foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
-                        Text("HC (cm)").font(.subheadline).foregroundStyle(.secondary).frame(width: 80, alignment: .trailing)
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.date-time",
+                                comment: "Vitals table header: Date and time of measurement"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.temp-c",
+                                comment: "Vitals table header: Temperature in Celsius"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 70, alignment: .trailing)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.hr",
+                                comment: "Vitals table header: Heart rate"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.rr",
+                                comment: "Vitals table header: Respiratory rate"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.spo2",
+                                comment: "Vitals table header: Oxygen saturation"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 60, alignment: .trailing)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.bp",
+                                comment: "Vitals table header: Blood pressure"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 70, alignment: .trailing)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.weight-kg",
+                                comment: "Vitals table header: Weight in kilograms"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 90, alignment: .trailing)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.height-cm",
+                                comment: "Vitals table header: Height in centimeters"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 90, alignment: .trailing)
+
+                        Text(
+                            NSLocalizedString(
+                                "vitals.header.hc-cm",
+                                comment: "Vitals table header: Head circumference in centimeters"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 80, alignment: .trailing)
                     }
                     .padding(.horizontal, 4)
 
@@ -68,8 +167,12 @@ struct VitalsTableView: View {
                                 Text(item.spo2.map { "\($0)%" } ?? "")
                                     .frame(width: 60, alignment: .trailing)
 
-                                Text((item.bpSystolic != nil && item.bpDiastolic != nil) ? "\(item.bpSystolic!)/\(item.bpDiastolic!)" : "")
-                                    .frame(width: 70, alignment: .trailing)
+                                Text(
+                                    (item.bpSystolic != nil && item.bpDiastolic != nil)
+                                        ? "\(item.bpSystolic!)/\(item.bpDiastolic!)"
+                                        : ""
+                                )
+                                .frame(width: 70, alignment: .trailing)
 
                                 Text(item.weightKg.map { String(format: "%.2f", $0) } ?? "")
                                     .frame(width: 90, alignment: .trailing)

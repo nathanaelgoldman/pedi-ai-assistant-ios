@@ -19,10 +19,59 @@ struct GrowthPoint: Identifiable, Equatable {
     let source: String             // "manual" | "vitals" | "birth" | "discharge" | ...
 }
 
-enum GrowthStoreError: Error {
+enum GrowthStoreError: Error, LocalizedError {
     case noDB
     case openFailed
-    case prepareFailed(String)
+
+    // Validation
+    case invalidRecordedAt
+    case missingMeasurements
+
+    // DB operations (keep raw SQLite error for logs/debug only)
+    case queryFailed(String)
+    case insertFailed(String)
+    case deleteFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noDB:
+            // Not currently used as a user-facing error, but keep a safe fallback.
+            return NSLocalizedString(
+                "growth_store.error.query_failed",
+                comment: "Generic DB failure shown to the user"
+            )
+        case .openFailed:
+            return NSLocalizedString(
+                "growth_store.error.open_failed",
+                comment: "Could not open the database"
+            )
+        case .invalidRecordedAt:
+            return NSLocalizedString(
+                "growth_store.error.invalid_recorded_at",
+                comment: "Validation: recordedAtISO cannot be empty"
+            )
+        case .missingMeasurements:
+            return NSLocalizedString(
+                "growth_store.error.missing_measurements",
+                comment: "Validation: at least one measurement must be provided"
+            )
+        case .queryFailed:
+            return NSLocalizedString(
+                "growth_store.error.query_failed",
+                comment: "Database query failed"
+            )
+        case .insertFailed:
+            return NSLocalizedString(
+                "growth_store.error.insert_failed",
+                comment: "Could not save growth data"
+            )
+        case .deleteFailed:
+            return NSLocalizedString(
+                "growth_store.error.delete_failed",
+                comment: "Could not delete growth data"
+            )
+        }
+    }
 }
 
 final class GrowthStore {
@@ -59,7 +108,7 @@ final class GrowthStore {
         var stmt: OpaquePointer?
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw GrowthStoreError.prepareFailed(msg)
+            throw GrowthStoreError.queryFailed(msg)
         }
         defer { sqlite3_finalize(stmt) }
 
@@ -117,10 +166,10 @@ final class GrowthStore {
 
         // Basic validation
         guard !recordedAtISO.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw GrowthStoreError.prepareFailed("recordedAtISO cannot be empty")
+            throw GrowthStoreError.invalidRecordedAt
         }
         guard weightKg != nil || heightCm != nil || headCircumferenceCm != nil else {
-            throw GrowthStoreError.prepareFailed("At least one of weightKg/heightCm/headCircumferenceCm must be provided")
+            throw GrowthStoreError.missingMeasurements
         }
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
@@ -138,7 +187,7 @@ final class GrowthStore {
         var stmt: OpaquePointer?
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw GrowthStoreError.prepareFailed(msg)
+            throw GrowthStoreError.queryFailed(msg)
         }
         defer { sqlite3_finalize(stmt) }
 
@@ -173,7 +222,7 @@ final class GrowthStore {
         let rc = sqlite3_step(stmt)
         if rc != SQLITE_DONE {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw GrowthStoreError.prepareFailed("insert failed: \(msg)")
+            throw GrowthStoreError.insertFailed(msg)
         }
 
         let newID = Int(sqlite3_last_insert_rowid(db))
@@ -196,7 +245,7 @@ final class GrowthStore {
         var stmt: OpaquePointer?
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw GrowthStoreError.prepareFailed(msg)
+            throw GrowthStoreError.queryFailed(msg)
         }
         defer { sqlite3_finalize(stmt) }
 
@@ -205,7 +254,7 @@ final class GrowthStore {
         let rc = sqlite3_step(stmt)
         if rc != SQLITE_DONE {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw GrowthStoreError.prepareFailed("delete failed: \(msg)")
+            throw GrowthStoreError.deleteFailed(msg)
         }
 
         log.info("Deleted manual_growth row \(id, privacy: .public)")

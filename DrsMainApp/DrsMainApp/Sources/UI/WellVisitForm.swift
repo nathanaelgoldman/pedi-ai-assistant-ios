@@ -11,6 +11,15 @@ import SQLite3
 // Matches C macro used elsewhere so we can safely bind text.
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+// MARK: - Localization
+
+/// Small helper for `Localizable.strings` keys.
+/// Use `.k(...)` for SwiftUI text and `.s(...)` when a `String` is required.
+private enum L10nWVF {
+    static func k(_ key: String) -> LocalizedStringKey { LocalizedStringKey(key) }
+    static func s(_ key: String) -> String { NSLocalizedString(key, comment: "") }
+}
+
 // MARK: - Milestone model & catalog
 
 private struct MilestoneDescriptor: Identifiable, Hashable {
@@ -28,9 +37,9 @@ private enum MilestoneStatus: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .achieved:  return "Achieved"
-        case .notYet:    return "Not yet"
-        case .uncertain: return "Uncertain"
+        case .achieved:  return L10nWVF.s("well_visit_form.milestone_status.achieved")
+        case .notYet:    return L10nWVF.s("well_visit_form.milestone_status.not_yet")
+        case .uncertain: return L10nWVF.s("well_visit_form.milestone_status.uncertain")
         }
     }
 }
@@ -571,25 +580,25 @@ struct WellVisitForm: View {
 
         @ViewBuilder
         private var solidsSection: some View {
-            Text("Solid foods")
+            Text(L10nWVF.k("well_visit_form.solids.title"))
                 .font(.subheadline.bold())
 
-            Toggle("Solid foods started", isOn: $solidFoodStarted)
+            Toggle(L10nWVF.k("well_visit_form.solids.started"), isOn: $solidFoodStarted)
 
             if solidFoodStarted {
                 DatePicker(
-                    "Start date",
+                    L10nWVF.k("well_visit_form.solids.start_date"),
                     selection: $solidFoodStartDate,
                     displayedComponents: .date
                 )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Solid food intake")
+                    Text(L10nWVF.k("well_visit_form.solids.intake"))
                         .font(.subheadline)
-                    Picker("Solid food quantity / quality", selection: $solidFoodQuality) {
-                        Text("Appears good").tag("appears_good")
-                        Text("Uncertain").tag("uncertain")
-                        Text("Probably limited").tag("probably_limited")
+                    Picker(L10nWVF.k("well_visit_form.solids.quality"), selection: $solidFoodQuality) {
+                        Text(L10nWVF.k("well_visit_form.shared.appears_good")).tag("appears_good")
+                        Text(L10nWVF.k("well_visit_form.shared.uncertain")).tag("uncertain")
+                        Text(L10nWVF.k("well_visit_form.shared.probably_limited")).tag("probably_limited")
                     }
                     .pickerStyle(.segmented)
                 }
@@ -598,47 +607,47 @@ struct WellVisitForm: View {
 
     @ViewBuilder
     private var olderFeedingSection: some View {
-        Text("Variety & dairy intake")
+        Text(L10nWVF.k("well_visit_form.feeding_older.title"))
             .font(.subheadline.bold())
 
         VStack(alignment: .leading, spacing: 8) {
-            Text("Food variety quality")
+            Text(L10nWVF.k("well_visit_form.feeding_older.food_variety_quality.label"))
                 .font(.subheadline)
-            Picker("Food variety quality", selection: $foodVarietyQuality) {
-                Text("Appears good").tag("appears_good")
-                Text("Uncertain").tag("uncertain")
-                Text("Probably limited").tag("probably_limited")
+            Picker(L10nWVF.k("well_visit_form.feeding_older.food_variety_quality.picker"), selection: $foodVarietyQuality) {
+                Text(L10nWVF.k("well_visit_form.shared.appears_good")).tag("appears_good")
+                Text(L10nWVF.k("well_visit_form.shared.uncertain")).tag("uncertain")
+                Text(L10nWVF.k("well_visit_form.shared.probably_limited")).tag("probably_limited")
             }
             .pickerStyle(.segmented)
         }
 
         VStack(alignment: .leading, spacing: 8) {
-            Text("Dairy intake (per day)")
+            Text(L10nWVF.k("well_visit_form.feeding_older.dairy_intake.label"))
                 .font(.subheadline)
-            Picker("Dairy intake (per day)", selection: $dairyAmountCode) {
-                Text("1 cup or bottle").tag("1")
-                Text("2 cups or bottles").tag("2")
-                Text("3 cups or bottles").tag("3")
-                Text("4 cups or bottles").tag("4")
+            Picker(L10nWVF.k("well_visit_form.feeding_older.dairy_intake.picker"), selection: $dairyAmountCode) {
+                Text(L10nWVF.k("well_visit_form.feeding_older.dairy_intake.1")).tag("1")
+                Text(L10nWVF.k("well_visit_form.feeding_older.dairy_intake.2")).tag("2")
+                Text(L10nWVF.k("well_visit_form.feeding_older.dairy_intake.3")).tag("3")
+                Text(L10nWVF.k("well_visit_form.feeding_older.dairy_intake.4")).tag("4")
             }
             .pickerStyle(.segmented)
         }
 
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("Still breastfeeding", isOn: $milkTypeBreast)
+            Toggle(L10nWVF.k("well_visit_form.feeding_older.still_breastfeeding"), isOn: $milkTypeBreast)
                 .toggleStyle(.switch)
         }
     }
     
     @ViewBuilder
     private var aiAssistantSection: some View {
-        GroupBox("AI Assistant") {
+        GroupBox(L10nWVF.k("well_visit_form.ai.title")) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
                     Button {
                         triggerAIForWellVisit()
                     } label: {
-                        Label("Run AI summary", systemImage: "wand.and.stars")
+                        Label(L10nWVF.k("well_visit_form.ai.run"), systemImage: "wand.and.stars")
                     }
                     .buttonStyle(.borderedProminent)
 
@@ -651,7 +660,7 @@ struct WellVisitForm: View {
                 let entries = currentAIEntriesForVisit
 
                 if entries.isEmpty {
-                    Text("No AI summary yet. Click “Run AI summary” to generate suggestions for this visit.")
+                    Text(L10nWVF.k("well_visit_form.ai.empty_state"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -705,15 +714,15 @@ struct WellVisitForm: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Visit info
-                    GroupBox("Visit info") {
+                    GroupBox(L10nWVF.k("well_visit_form.section.visit_info.title")) {
                         VStack(alignment: .leading, spacing: 12) {
                             DatePicker(
-                                "Date",
+                                L10nWVF.k("well_visit_form.section.visit_info.date"),
                                 selection: $visitDate,
                                 displayedComponents: .date
                             )
 
-                            Picker("Type", selection: $visitTypeID) {
+                            Picker(L10nWVF.k("well_visit_form.section.visit_info.type"), selection: $visitTypeID) {
                                 ForEach(visitTypes) { t in
                                     Text(t.title).tag(t.id)
                                 }
@@ -724,33 +733,40 @@ struct WellVisitForm: View {
                     }
                     
                     if isWeightDeltaVisit {
-                        GroupBox("Weight change since last measurement") {
+                        GroupBox(L10nWVF.k("well_visit_form.weight_trend.title")) {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(latestWeightSummary.isEmpty
-                                     ? "Latest weight: not available"
-                                     : "Latest weight: \(latestWeightSummary)")
-                                    .font(.subheadline)
+                                Text(
+                                    latestWeightSummary.isEmpty
+                                    ? L10nWVF.s("well_visit_form.weight_trend.latest_weight.unavailable")
+                                    : String(
+                                        format: L10nWVF.s("well_visit_form.weight_trend.latest_weight.value"),
+                                        latestWeightSummary
+                                    )
+                                )
+                                .font(.subheadline)
 
                                 if !previousWeightSummary.isEmpty {
-                                    Text("Previous weight: \(previousWeightSummary)")
+                                    Text(String(format: L10nWVF.s("well_visit_form.weight_trend.previous_weight.value"), previousWeightSummary))
                                         .font(.subheadline)
                                 } else {
-                                    Text("Previous weight: not available")
+                                    Text(L10nWVF.k("well_visit_form.weight_trend.previous_weight.unavailable"))
                                         .font(.subheadline)
                                 }
 
                                 HStack {
-                                    Text(deltaWeightPerDaySummary.isEmpty
-                                         ? "Δ weight: not available"
-                                         : deltaWeightPerDaySummary)
-                                        .font(.subheadline)
+                                    Text(
+                                        deltaWeightPerDaySummary.isEmpty
+                                        ? L10nWVF.s("well_visit_form.weight_trend.delta.unavailable")
+                                        : deltaWeightPerDaySummary
+                                    )
+                                    .font(.subheadline)
 
                                     Spacer()
 
                                     if let delta = deltaWeightPerDayValue,
                                        delta >= 20,
                                        deltaWeightIsNormal {
-                                        Label("OK", systemImage: "checkmark.circle.fill")
+                                        Label(L10nWVF.k("well_visit_form.weight_trend.ok"), systemImage: "checkmark.circle.fill")
                                             .font(.subheadline)
                                             .foregroundColor(.green)
                                     }
@@ -760,54 +776,54 @@ struct WellVisitForm: View {
                     }
 
                     // Parent's concerns  → parent_concerns
-                    GroupBox("Parent's Concerns") {
+                    GroupBox(L10nWVF.k("well_visit_form.section.parents_concerns.title")) {
                         TextEditor(text: $parentsConcerns)
                             .frame(minHeight: 120)
                     }
 
                     // Feeding + Supplementation + Vitamin D
                     if layout.showsFeeding {
-                        GroupBox("Feeding & Supplementation") {
+                        GroupBox(L10nWVF.k("well_visit_form.section.feeding.title")) {
                             VStack(alignment: .leading, spacing: 12) {
 
                                 if isStructuredFeedingUnder12 {
                                     // NEWBORN → 9-month visits:
                                     // milk checkboxes, volumes, regurgitation, one issues text, ±solids, Vit D
-                                    Text("Milk type(s)")
+                                    Text(L10nWVF.k("well_visit_form.feeding.milk_type.title"))
                                         .font(.subheadline.bold())
 
                                     HStack {
-                                        Toggle("Breastmilk", isOn: $milkTypeBreast)
-                                        Toggle("Formula", isOn: $milkTypeFormula)
+                                        Toggle(L10nWVF.k("well_visit_form.feeding.milk_type.breastmilk"), isOn: $milkTypeBreast)
+                                        Toggle(L10nWVF.k("well_visit_form.feeding.milk_type.formula"), isOn: $milkTypeFormula)
                                     }
 
                                     HStack(spacing: 16) {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Volume per feed (ml)")
+                                            Text(L10nWVF.k("well_visit_form.feeding.volume_per_feed.label"))
                                                 .font(.subheadline)
-                                            TextField("e.g. 60", text: $feedVolumeMl)
+                                            TextField(L10nWVF.k("well_visit_form.feeding.volume_per_feed.placeholder"), text: $feedVolumeMl)
                                                 .frame(width: 80)
                                                 .textFieldStyle(.roundedBorder)
                                         }
 
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Feeds per 24h")
+                                            Text(L10nWVF.k("well_visit_form.feeding.feeds_per_24h.label"))
                                                 .font(.subheadline)
-                                            TextField("e.g. 8", text: $feedFreqPer24h)
+                                            TextField(L10nWVF.k("well_visit_form.feeding.feeds_per_24h.placeholder"), text: $feedFreqPer24h)
                                                 .frame(width: 80)
                                                 .textFieldStyle(.roundedBorder)
                                         }
                                     }
 
                                     if estimatedTotalIntakeMlPer24h != "–" {
-                                        Text("Estimated intake: \(estimatedTotalIntakeMlPer24h)")
+                                        Text(String(format: L10nWVF.s("well_visit_form.feeding.estimated_intake.value"), estimatedTotalIntakeMlPer24h))
                                             .font(.footnote)
                                             .foregroundStyle(.secondary)
                                     }
 
-                                    Toggle("Significant regurgitation", isOn: $regurgitationPresent)
+                                    Toggle(L10nWVF.k("well_visit_form.feeding.regurgitation.toggle"), isOn: $regurgitationPresent)
 
-                                    Text("Feeding difficulties / issues")
+                                    Text(L10nWVF.k("well_visit_form.feeding.issues.title"))
                                         .font(.subheadline.bold())
                                     TextEditor(text: $feedingIssue)
                                         .frame(minHeight: 80)
@@ -821,7 +837,7 @@ struct WellVisitForm: View {
                                     }
 
                                     if showsVitaminDField {
-                                        Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
+                                        Toggle(L10nWVF.k("well_visit_form.feeding.vitamin_d.toggle"), isOn: $vitaminDGiven)
                                     }
 
                                 } else {
@@ -829,197 +845,197 @@ struct WellVisitForm: View {
                                     // food variety / dairy intake, breastfeeding, ONE issues text, Vit D
                                     olderFeedingSection
 
-                                    Text("Feeding difficulties / issues")
+                                    Text(L10nWVF.k("well_visit_form.feeding.issues.title"))
                                         .font(.subheadline.bold())
                                     TextEditor(text: $feedingIssue)
                                         .frame(minHeight: 80)
 
                                     if showsVitaminDField {
-                                        Toggle("Vitamin D supplementation given", isOn: $vitaminDGiven)
+                                        Toggle(L10nWVF.k("well_visit_form.feeding.vitamin_d.toggle"), isOn: $vitaminDGiven)
                                     }
                                 }
                             }
                         }
                     }
 
-                    GroupBox("Stools") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Stool pattern")
-                                .font(.subheadline)
+                GroupBox(L10nWVF.k("well_visit_form.stools.title")) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(L10nWVF.k("well_visit_form.stools.pattern.label"))
+                            .font(.subheadline)
 
-                            Picker("Stool pattern", selection: $poopStatus) {
-                                Text("Normal / typical breastfed stool").tag("normal")
-                                Text("Abnormal reported").tag("abnormal")
-                                Text("Hard / constipated").tag("hard")
-                            }
-                            .pickerStyle(.segmented)
-
-                            TextField("Stool comment (optional)", text: $poopComment)
-                                .textFieldStyle(.roundedBorder)
+                        Picker(L10nWVF.k("well_visit_form.stools.pattern.picker"), selection: $poopStatus) {
+                            Text(L10nWVF.k("well_visit_form.stools.pattern.option.normal_breastfed")).tag("normal")
+                            Text(L10nWVF.k("well_visit_form.stools.pattern.option.abnormal_reported")).tag("abnormal")
+                            Text(L10nWVF.k("well_visit_form.stools.pattern.option.hard_constipated")).tag("hard")
                         }
-                    }
+                        .pickerStyle(.segmented)
 
-                    // Sleep
-                    if layout.showsSleep {
-                        GroupBox("Sleep") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                if isEarlySleepVisit {
-                                    // Structured sleep layout for early visits
+                        TextField(L10nWVF.k("well_visit_form.stools.comment.placeholder"), text: $poopComment)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                }
+
+                // Sleep
+                if layout.showsSleep {
+                    GroupBox(L10nWVF.k("well_visit_form.sleep.title")) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if isEarlySleepVisit {
+                                // Structured sleep layout for early visits
+                                HStack(spacing: 16) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(L10nWVF.k("well_visit_form.sleep.wakes_for_feeds.label"))
+                                            .font(.subheadline)
+                                        TextField(L10nWVF.k("well_visit_form.sleep.wakes_for_feeds.placeholder"), text: $wakesForFeedsPerNight)
+                                            .frame(width: 80)
+                                            .textFieldStyle(.roundedBorder)
+                                    }
+
+                                    if isEarlyMilkOnlyVisit {
+                                        Toggle(L10nWVF.k("well_visit_form.sleep.longer_stretch.toggle"), isOn: $longerSleepAtNight)
+                                            .toggleStyle(.switch)
+                                    }
+                                }
+
+                                Toggle(L10nWVF.k("well_visit_form.sleep.issues_reported.toggle"), isOn: $sleepIssueReported)
+                                    .toggleStyle(.switch)
+
+                                if sleepIssueReported {
+                                    Text(L10nWVF.k("well_visit_form.sleep.issue_description.label"))
+                                        .font(.subheadline)
+                                    TextEditor(text: $sleep)
+                                        .frame(minHeight: 80)
+                                }
+                            } else if isOlderSleepVisit {
+                                // Structured sleep layout for older visits (12-month+)
+                                VStack(alignment: .leading, spacing: 8) {
                                     HStack(spacing: 16) {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Wakes for feeds (per night)")
+                                            Text(L10nWVF.k("well_visit_form.sleep.wakes_at_night.label"))
                                                 .font(.subheadline)
-                                            TextField("e.g. 3", text: $wakesForFeedsPerNight)
+                                            TextField(L10nWVF.k("well_visit_form.sleep.wakes_at_night.placeholder"), text: $wakesForFeedsPerNight)
                                                 .frame(width: 80)
                                                 .textFieldStyle(.roundedBorder)
                                         }
 
-                                        if isEarlyMilkOnlyVisit {
-                                            Toggle("Has a longer stretch of sleep at night", isOn: $longerSleepAtNight)
-                                                .toggleStyle(.switch)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(L10nWVF.k("well_visit_form.sleep.total_sleep_24h.label"))
+                                                .font(.subheadline)
+                                            Picker(L10nWVF.k("well_visit_form.sleep.total_sleep_24h.picker"), selection: $sleepHoursText) {
+                                                Text(L10nWVF.k("well_visit_form.sleep.total_sleep_24h.option.lt10")).tag("lt10")
+                                                Text(L10nWVF.k("well_visit_form.sleep.total_sleep_24h.option.10_15")).tag("10_15")
+                                            }
+                                            .pickerStyle(.segmented)
                                         }
                                     }
 
-                                    Toggle("Sleep issues reported", isOn: $sleepIssueReported)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(L10nWVF.k("well_visit_form.sleep.regularity.label"))
+                                            .font(.subheadline)
+                                        Picker(L10nWVF.k("well_visit_form.sleep.regularity.picker"), selection: $sleepRegular) {
+                                            Text(L10nWVF.k("well_visit_form.sleep.regularity.option.regular")).tag("regular")
+                                            Text(L10nWVF.k("well_visit_form.sleep.regularity.option.irregular")).tag("irregular")
+                                        }
+                                        .pickerStyle(.segmented)
+                                    }
+
+                                    Toggle(L10nWVF.k("well_visit_form.sleep.snoring.toggle"), isOn: $sleepSnoring)
+                                        .toggleStyle(.switch)
+
+                                    Toggle(L10nWVF.k("well_visit_form.sleep.issues_reported.toggle"), isOn: $sleepIssueReported)
                                         .toggleStyle(.switch)
 
                                     if sleepIssueReported {
-                                        Text("Sleep issue description")
+                                        Text(L10nWVF.k("well_visit_form.sleep.issue_description.label"))
                                             .font(.subheadline)
                                         TextEditor(text: $sleep)
                                             .frame(minHeight: 80)
                                     }
-                                } else if isOlderSleepVisit {
-                                    // Structured sleep layout for older visits (12-month+)
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack(spacing: 16) {
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text("Wakes at night (per night)")
-                                                    .font(.subheadline)
-                                                TextField("e.g. 1", text: $wakesForFeedsPerNight)
-                                                    .frame(width: 80)
-                                                    .textFieldStyle(.roundedBorder)
-                                            }
-
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text("Total sleep in 24h")
-                                                    .font(.subheadline)
-                                                Picker("Total sleep in 24h", selection: $sleepHoursText) {
-                                                    Text("Less than 10 h").tag("lt10")
-                                                    Text("10–15 h").tag("10_15")
-                                                }
-                                                .pickerStyle(.segmented)
-                                            }
-                                        }
-
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Sleep regularity")
-                                                .font(.subheadline)
-                                            Picker("Sleep regularity", selection: $sleepRegular) {
-                                                Text("Regular").tag("regular")
-                                                Text("Irregular").tag("irregular")
-                                            }
-                                            .pickerStyle(.segmented)
-                                        }
-
-                                        Toggle("Snoring / noisy breathing during sleep", isOn: $sleepSnoring)
-                                            .toggleStyle(.switch)
-
-                                        Toggle("Sleep issues reported", isOn: $sleepIssueReported)
-                                            .toggleStyle(.switch)
-
-                                        if sleepIssueReported {
-                                            Text("Sleep issue description")
-                                                .font(.subheadline)
-                                            TextEditor(text: $sleep)
-                                                .frame(minHeight: 80)
-                                        }
-                                    }
-                                } else {
-                                    // Legacy / generic sleep comment for other ages (fallback)
-                                    TextEditor(text: $sleep)
-                                        .frame(minHeight: 100)
                                 }
+                            } else {
+                                // Legacy / generic sleep comment for other ages (fallback)
+                                TextEditor(text: $sleep)
+                                    .frame(minHeight: 100)
                             }
                         }
                     }
+                }
 
                     // Physical examination (stored in lab_text for now)
                     if layout.showsPhysicalExam {
-                        GroupBox("Physical examination") {
+                        GroupBox(L10nWVF.k("well_visit_form.section.physical_exam")) {
                             VStack(alignment: .leading, spacing: 12) {
                                 // General / appearance
-                                Text("General / appearance")
+                                Text(L10nWVF.k("well_visit_form.pe.general.title"))
                                     .font(.subheadline.bold())
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Trophic state / weight impression")
+                                        Text(L10nWVF.k("well_visit_form.pe.general.trophic.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peTrophicNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peTrophicNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Trophic comment (optional)", text: $peTrophicComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.general.trophic.comment.placeholder"), text: $peTrophicComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Hydration")
+                                        Text(L10nWVF.k("well_visit_form.pe.general.hydration.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peHydrationNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peHydrationNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Hydration comment (optional)", text: $peHydrationComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.general.hydration.comment.placeholder"), text: $peHydrationComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Color")
+                                    Text(L10nWVF.k("well_visit_form.pe.general.color.label"))
                                         .font(.subheadline)
-                                    Picker("Color", selection: $peColor) {
-                                        Text("Normal").tag("normal")
-                                        Text("Jaundice").tag("jaundice")
-                                        Text("Pale").tag("pale")
+                                    Picker(L10nWVF.k("well_visit_form.pe.general.color.picker"), selection: $peColor) {
+                                        Text(L10nWVF.k("well_visit_form.pe.general.color.option.normal")).tag("normal")
+                                        Text(L10nWVF.k("well_visit_form.pe.general.color.option.jaundice")).tag("jaundice")
+                                        Text(L10nWVF.k("well_visit_form.pe.general.color.option.pale")).tag("pale")
                                     }
                                     .pickerStyle(.segmented)
 
-                                    TextField("Color comment (optional)", text: $peColorComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.general.color.comment.placeholder"), text: $peColorComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 if isFontanelleVisit {
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Fontanelle")
+                                            Text(L10nWVF.k("well_visit_form.pe.general.fontanelle.label"))
                                             Spacer()
-                                            Toggle("Normal", isOn: $peFontanelleNormal)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peFontanelleNormal)
                                                 .toggleStyle(.switch)
                                         }
-                                        TextField("Fontanelle comment (optional)", text: $peFontanelleComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.general.fontanelle.comment.placeholder"), text: $peFontanelleComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Pupils (RR / symmetry)")
+                                        Text(L10nWVF.k("well_visit_form.pe.general.pupils.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $pePupilsRRNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $pePupilsRRNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Pupils comment (optional)", text: $pePupilsRRComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.general.pupils.comment.placeholder"), text: $pePupilsRRComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Ocular motility / alignment")
+                                        Text(L10nWVF.k("well_visit_form.pe.general.ocular_motility.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peOcularMotilityNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peOcularMotilityNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Ocular motility comment (optional)", text: $peOcularMotilityComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.general.ocular_motility.comment.placeholder"), text: $peOcularMotilityComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
@@ -1027,27 +1043,27 @@ struct WellVisitForm: View {
                                     Divider()
                                         .padding(.vertical, 4)
 
-                                    Text("Teeth / oral cavity")
+                                    Text(L10nWVF.k("well_visit_form.pe.teeth.title"))
                                         .font(.subheadline.bold())
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Teeth present")
+                                            Text(L10nWVF.k("well_visit_form.pe.teeth.present.label"))
                                             Spacer()
-                                            Toggle("Yes", isOn: $peTeethPresent)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.yes"), isOn: $peTeethPresent)
                                                 .toggleStyle(.switch)
                                         }
 
                                         if peTeethPresent {
                                             HStack(spacing: 12) {
-                                                Text("Number of teeth (approx)")
-                                                TextField("e.g. 4", text: $peTeethCount)
+                                                Text(L10nWVF.k("well_visit_form.pe.teeth.count.label"))
+                                                TextField(L10nWVF.k("well_visit_form.pe.teeth.count.placeholder"), text: $peTeethCount)
                                                     .frame(width: 80)
                                                     .textFieldStyle(.roundedBorder)
                                             }
                                         }
 
-                                        TextField("Teeth / oral comment (optional)", text: $peTeethComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.teeth.comment.placeholder"), text: $peTeethComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
@@ -1056,62 +1072,62 @@ struct WellVisitForm: View {
                                 Divider()
                                     .padding(.vertical, 4)
 
-                                Text("Neurologic / behaviour")
+                                Text(L10nWVF.k("well_visit_form.pe.neuro.title"))
                                     .font(.subheadline.bold())
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Tone")
+                                        Text(L10nWVF.k("well_visit_form.pe.neuro.tone.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peToneNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peToneNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Tone comment (optional)", text: $peToneComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.neuro.tone.comment.placeholder"), text: $peToneComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 if isPrimitiveNeuroVisit {
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Wakefulness / reactivity")
+                                            Text(L10nWVF.k("well_visit_form.pe.neuro.wakefulness.label"))
                                             Spacer()
-                                            Toggle("Normal", isOn: $peWakefulnessNormal)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peWakefulnessNormal)
                                                 .toggleStyle(.switch)
                                         }
-                                        TextField("Wakefulness comment (optional)", text: $peWakefulnessComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.neuro.wakefulness.comment.placeholder"), text: $peWakefulnessComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Hands in fists / opening")
+                                            Text(L10nWVF.k("well_visit_form.pe.neuro.hands_fists.label"))
                                             Spacer()
-                                            Toggle("Normal", isOn: $peHandsFistNormal)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peHandsFistNormal)
                                                 .toggleStyle(.switch)
                                         }
-                                        TextField("Hands comment (optional)", text: $peHandsFistComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.neuro.hands_fists.comment.placeholder"), text: $peHandsFistComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Symmetry of movements")
+                                            Text(L10nWVF.k("well_visit_form.pe.neuro.symmetry.label"))
                                             Spacer()
-                                            Toggle("Normal", isOn: $peSymmetryNormal)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peSymmetryNormal)
                                                 .toggleStyle(.switch)
                                         }
-                                        TextField("Symmetry comment (optional)", text: $peSymmetryComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.neuro.symmetry.comment.placeholder"), text: $peSymmetryComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Follows to midline")
+                                            Text(L10nWVF.k("well_visit_form.pe.neuro.follows_midline.label"))
                                             Spacer()
-                                            Toggle("Normal", isOn: $peFollowsMidlineNormal)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peFollowsMidlineNormal)
                                                 .toggleStyle(.switch)
                                         }
-                                        TextField("Follows midline comment (optional)", text: $peFollowsMidlineComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.neuro.follows_midline.comment.placeholder"), text: $peFollowsMidlineComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
@@ -1119,12 +1135,12 @@ struct WellVisitForm: View {
                                 if isMoroVisit {
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Moro reflex")
+                                            Text(L10nWVF.k("well_visit_form.pe.neuro.moro.label"))
                                             Spacer()
-                                            Toggle("Normal", isOn: $peMoroNormal)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peMoroNormal)
                                                 .toggleStyle(.switch)
                                         }
-                                        TextField("Moro comment (optional)", text: $peMoroComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.neuro.moro.comment.placeholder"), text: $peMoroComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
@@ -1133,17 +1149,17 @@ struct WellVisitForm: View {
                                 Divider()
                                     .padding(.vertical, 4)
 
-                                Text("Respiratory")
+                                Text(L10nWVF.k("well_visit_form.pe.respiratory.title"))
                                     .font(.subheadline.bold())
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Breathing / auscultation")
+                                        Text(L10nWVF.k("well_visit_form.pe.respiratory.breathing.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peBreathingNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peBreathingNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Respiratory comment (optional)", text: $peBreathingComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.respiratory.breathing.comment.placeholder"), text: $peBreathingComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
@@ -1151,17 +1167,17 @@ struct WellVisitForm: View {
                                 Divider()
                                     .padding(.vertical, 4)
 
-                                Text("Cardiovascular")
+                                Text(L10nWVF.k("well_visit_form.pe.cardiovascular.title"))
                                     .font(.subheadline.bold())
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Heart sounds / murmurs")
+                                        Text(L10nWVF.k("well_visit_form.pe.cardiovascular.heart_sounds.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peHeartNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peHeartNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Cardiac comment (optional)", text: $peHeartComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.cardiovascular.heart_sounds.comment.placeholder"), text: $peHeartComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
@@ -1169,75 +1185,74 @@ struct WellVisitForm: View {
                                 Divider()
                                     .padding(.vertical, 4)
 
-                                Text("Abdomen / digestive")
+                                Text(L10nWVF.k("well_visit_form.pe.abdomen.title"))
                                     .font(.subheadline.bold())
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Abdomen (palpation / organomegaly)")
+                                        Text(L10nWVF.k("well_visit_form.pe.abdomen.palpation.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peAbdomenNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peAbdomenNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Abdomen comment (optional)", text: $peAbdomenComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.abdomen.palpation.comment.placeholder"), text: $peAbdomenComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Abdominal mass palpable")
+                                        Text(L10nWVF.k("well_visit_form.pe.abdomen.mass.label"))
                                         Spacer()
-                                        Toggle("Yes", isOn: $peAbdMassPresent)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.yes"), isOn: $peAbdMassPresent)
                                             .toggleStyle(.switch)
                                     }
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Liver / spleen")
+                                        Text(L10nWVF.k("well_visit_form.pe.abdomen.liver_spleen.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peLiverSpleenNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peLiverSpleenNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Liver/spleen comment (optional)", text: $peLiverSpleenComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.abdomen.liver_spleen.comment.placeholder"), text: $peLiverSpleenComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Umbilicus")
+                                        Text(L10nWVF.k("well_visit_form.pe.abdomen.umbilicus.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peUmbilicNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peUmbilicNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Umbilicus comment (optional)", text: $peUmbilicComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.abdomen.umbilicus.comment.placeholder"), text: $peUmbilicComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Genitalia (exam)")
+                                    Text(L10nWVF.k("well_visit_form.pe.abdomen.genitalia.label"))
                                         .font(.subheadline)
-                                    TextField("Genitalia description", text: $peGenitalia)
+                                    TextField(L10nWVF.k("well_visit_form.pe.abdomen.genitalia.placeholder"), text: $peGenitalia)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Testicles descended (if applicable)")
+                                        Text(L10nWVF.k("well_visit_form.pe.abdomen.testicles_descended.label"))
                                         Spacer()
-                                        Toggle("Yes", isOn: $peTesticlesDescended)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.yes"), isOn: $peTesticlesDescended)
                                             .toggleStyle(.switch)
                                     }
                                 }
-
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Femoral pulses")
+                                        Text(L10nWVF.k("well_visit_form.pe.cardiovascular.femoral_pulses.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peFemoralPulsesNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peFemoralPulsesNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Femoral pulses comment (optional)", text: $peFemoralPulsesComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.cardiovascular.femoral_pulses.comment.placeholder"), text: $peFemoralPulsesComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
@@ -1245,29 +1260,29 @@ struct WellVisitForm: View {
                                 Divider()
                                     .padding(.vertical, 4)
 
-                                Text("Hips / limbs / posture")
+                                Text(L10nWVF.k("well_visit_form.pe.msk.title"))
                                     .font(.subheadline.bold())
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Spine / posture")
+                                        Text(L10nWVF.k("well_visit_form.pe.msk.spine.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peSpineNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peSpineNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Spine comment (optional)", text: $peSpineComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.msk.spine.comment.placeholder"), text: $peSpineComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 if isHipsVisit {
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
-                                            Text("Hips / limbs")
+                                            Text(L10nWVF.k("well_visit_form.pe.msk.hips_limbs.label"))
                                             Spacer()
-                                            Toggle("Normal", isOn: $peHipsLimbsNormal)
+                                            Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peHipsLimbsNormal)
                                                 .toggleStyle(.switch)
                                         }
-                                        TextField("Hips / limbs comment (optional)", text: $peHipsLimbsComment)
+                                        TextField(L10nWVF.k("well_visit_form.pe.msk.hips_limbs.comment.placeholder"), text: $peHipsLimbsComment)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
@@ -1276,46 +1291,46 @@ struct WellVisitForm: View {
                                 Divider()
                                     .padding(.vertical, 4)
 
-                                Text("Skin")
+                                Text(L10nWVF.k("well_visit_form.pe.skin.title"))
                                     .font(.subheadline.bold())
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Skin marks")
+                                        Text(L10nWVF.k("well_visit_form.pe.skin.marks.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peSkinMarksNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peSkinMarksNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Skin marks comment (optional)", text: $peSkinMarksComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.skin.marks.comment.placeholder"), text: $peSkinMarksComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Skin integrity")
+                                        Text(L10nWVF.k("well_visit_form.pe.skin.integrity.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peSkinIntegrityNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peSkinIntegrityNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Skin integrity comment (optional)", text: $peSkinIntegrityComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.skin.integrity.comment.placeholder"), text: $peSkinIntegrityComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text("Rash / lesions")
+                                        Text(L10nWVF.k("well_visit_form.pe.skin.rash.label"))
                                         Spacer()
-                                        Toggle("Normal", isOn: $peSkinRashNormal)
+                                        Toggle(L10nWVF.k("well_visit_form.pe.shared.normal"), isOn: $peSkinRashNormal)
                                             .toggleStyle(.switch)
                                     }
-                                    TextField("Rash comment (optional)", text: $peSkinRashComment)
+                                    TextField(L10nWVF.k("well_visit_form.pe.skin.rash.comment.placeholder"), text: $peSkinRashComment)
                                         .textFieldStyle(.roundedBorder)
                                 }
 
                                 Divider()
                                     .padding(.vertical, 4)
 
-                                Text("Additional notes")
+                                Text(L10nWVF.k("well_visit_form.pe.additional_notes.title"))
                                     .font(.subheadline.bold())
                                 TextEditor(text: $physicalExam)
                                     .frame(minHeight: 120)
@@ -1325,14 +1340,14 @@ struct WellVisitForm: View {
 
                     // Milestones / development
                     if layout.showsMilestones && !currentMilestoneDescriptors.isEmpty {
-                        GroupBox("Developmental milestones") {
+                        GroupBox(L10nWVF.k("well_visit_form.section.milestones")) {
                             VStack(alignment: .leading, spacing: 16) {
                                 ForEach(currentMilestoneDescriptors) { m in
                                     VStack(alignment: .leading, spacing: 6) {
                                         Text(m.label)
                                             .font(.body)
 
-                                        Picker("Status", selection: Binding(
+                                        Picker(L10nWVF.k("well_visit_form.milestones.status.label"), selection: Binding(
                                             get: { milestoneStatuses[m.code] ?? .uncertain },
                                             set: { milestoneStatuses[m.code] = $0 }
                                         )) {
@@ -1343,7 +1358,7 @@ struct WellVisitForm: View {
                                         .pickerStyle(.segmented)
 
                                         TextField(
-                                            "Note (optional)",
+                                            L10nWVF.k("well_visit_form.milestones.note.placeholder"),
                                             text: Binding(
                                                 get: { milestoneNotes[m.code] ?? "" },
                                                 set: { milestoneNotes[m.code] = $0 }
@@ -1360,22 +1375,22 @@ struct WellVisitForm: View {
 
                     // Neurodevelopment screening (M-CHAT / Dev test)
                     if isMCHATVisit || isDevTestScoreVisit || isDevTestResultVisit {
-                        GroupBox("Neurodevelopment screening") {
+                        GroupBox(L10nWVF.k("well_visit_form.section.neurodevelopment_screening")) {
                             VStack(alignment: .leading, spacing: 12) {
                                 if isMCHATVisit {
-                                    Text("M-CHAT")
+                                    Text(L10nWVF.k("well_visit_form.mchat.title"))
                                         .font(.subheadline.bold())
 
                                     HStack(alignment: .center, spacing: 12) {
-                                        Text("M-CHAT score")
-                                        TextField("e.g. 0–20", text: $mchatScore)
+                                        Text(L10nWVF.k("well_visit_form.mchat.score.label"))
+                                        TextField(L10nWVF.k("well_visit_form.mchat.score.placeholder"), text: $mchatScore)
                                             .frame(width: 80)
                                             .textFieldStyle(.roundedBorder)
                                     }
 
-                                    TextField("M-CHAT result (e.g. low / medium / high risk)", text: $mchatResult)
+                                    TextField(L10nWVF.k("well_visit_form.mchat.result.placeholder"), text: $mchatResult)
                                         .textFieldStyle(.roundedBorder)
-                                    
+
                                     if let riskText = mchatRiskCategoryDescription {
                                         Text(riskText)
                                             .font(.footnote)
@@ -1387,20 +1402,20 @@ struct WellVisitForm: View {
                                     Divider()
                                         .padding(.vertical, 4)
 
-                                    Text("Developmental test")
+                                    Text(L10nWVF.k("well_visit_form.dev_test.title"))
                                         .font(.subheadline.bold())
 
                                     if isDevTestScoreVisit {
                                         HStack(alignment: .center, spacing: 12) {
-                                            Text("Dev test score")
-                                            TextField("score", text: $devTestScore)
+                                            Text(L10nWVF.k("well_visit_form.dev_test.score.label"))
+                                            TextField(L10nWVF.k("well_visit_form.dev_test.score.placeholder"), text: $devTestScore)
                                                 .frame(width: 80)
                                                 .textFieldStyle(.roundedBorder)
                                         }
                                     }
 
                                     if isDevTestResultVisit {
-                                        TextField("Dev test result (e.g. normal / delayed / borderline)", text: $devTestResult)
+                                        TextField(L10nWVF.k("well_visit_form.dev_test.result.placeholder"), text: $devTestResult)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
@@ -1410,9 +1425,8 @@ struct WellVisitForm: View {
                     }
 
                     // Problem listing
-                    // Problem listing
                     if layout.showsProblemListing {
-                        GroupBox("Problem listing") {
+                        GroupBox(L10nWVF.k("well_visit_form.problem_listing.title")) {
                             VStack(alignment: .leading, spacing: 8) {
                                 TextEditor(text: $problemListing)
                                     .frame(minHeight: 140)
@@ -1420,7 +1434,7 @@ struct WellVisitForm: View {
                                 Button {
                                     regenerateProblemListingFromFindings()
                                 } label: {
-                                    Label("Update from findings", systemImage: "list.bullet.clipboard")
+                                    Label(L10nWVF.k("well_visit_form.problem_listing.update_from_findings"), systemImage: "list.bullet.clipboard")
                                 }
                                 .buttonStyle(.borderedProminent)
                             }
@@ -1429,7 +1443,7 @@ struct WellVisitForm: View {
 
                     // Conclusions
                     if layout.showsConclusions {
-                        GroupBox("Conclusions") {
+                        GroupBox(L10nWVF.k("well_visit_form.conclusions.title")) {
                             TextEditor(text: $conclusions)
                                 .frame(minHeight: 140)
                         }
@@ -1437,7 +1451,7 @@ struct WellVisitForm: View {
 
                     // Plan / Anticipatory Guidance
                     if layout.showsPlan {
-                        GroupBox("Plan / Anticipatory Guidance") {
+                        GroupBox(L10nWVF.k("well_visit_form.plan.title")) {
                             TextEditor(text: $plan)
                                 .frame(minHeight: 140)
                         }
@@ -1445,7 +1459,7 @@ struct WellVisitForm: View {
 
                     // Clinician Comment – stays at the end
                     if layout.showsClinicianComment {
-                        GroupBox("Clinician Comment") {
+                        GroupBox(L10nWVF.k("well_visit_form.clinician_comment.title")) {
                             TextEditor(text: $clinicianComment)
                                 .frame(minHeight: 120)
                         }
@@ -1453,12 +1467,12 @@ struct WellVisitForm: View {
 
                     // Next Visit Date
                     if layout.showsNextVisit {
-                        GroupBox("Next Visit Date") {
+                        GroupBox(L10nWVF.k("well_visit_form.next_visit.title")) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Toggle("Schedule next visit", isOn: $hasNextVisitDate)
+                                Toggle(L10nWVF.k("well_visit_form.next_visit.toggle"), isOn: $hasNextVisitDate)
 
                                 DatePicker(
-                                    "Next visit date",
+                                    L10nWVF.k("well_visit_form.next_visit.datepicker"),
                                     selection: $nextVisitDate,
                                     displayedComponents: .date
                                 )
@@ -1478,27 +1492,27 @@ struct WellVisitForm: View {
                 }
                 .padding(20)
             }
-            .navigationTitle(editingVisitID == nil ? "New Well Visit" : "Edit Well Visit")
+            .navigationTitle(editingVisitID == nil ? Text("well_visit_form.nav.new") : Text("well_visit_form.nav.edit"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("well_visit_form.toolbar.cancel") {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("well_visit_form.toolbar.save") {
                         saveTapped()
                     }
                     .keyboardShortcut(.defaultAction)
                 }
             }
             .alert(
-                "Could not save visit",
+                "well_visit_form.alert.save_failed.title",
                 isPresented: $showErrorAlert
             ) {
-                Button("OK", role: .cancel) { }
+                Button("well_visit_form.alert.ok", role: .cancel) { }
             } message: {
-                Text(saveErrorMessage ?? "Unknown error.")
+                Text(saveErrorMessage ?? NSLocalizedString("well_visit_form.alert.unknown_error", comment: ""))
             }
             .onAppear {
                 loadIfEditing()
@@ -1568,11 +1582,11 @@ struct WellVisitForm: View {
 
         switch score {
         case 0...2:
-            return "Based on the M-CHAT score, this result falls into the Low risk (0–2) category."
+            return NSLocalizedString("well_visit_form.mchat.risk.low", comment: "")
         case 3...7:
-            return "Based on the M-CHAT score, this result falls into the Medium risk (3–7) category."
+            return NSLocalizedString("well_visit_form.mchat.risk.medium", comment: "")
         case 8...20:
-            return "Based on the M-CHAT score, this result falls into the High risk (8–20) category."
+            return NSLocalizedString("well_visit_form.mchat.risk.high", comment: "")
         default:
             return nil
         }
@@ -1595,7 +1609,7 @@ struct WellVisitForm: View {
               let patientID = appState.selectedPatientID,
               FileManager.default.fileExists(atPath: dbURL.path)
         else {
-            latestWeightSummary = "No weight data available"
+            latestWeightSummary = NSLocalizedString("well_visit_form.weight_trend.no_weight_data", comment: "")
             previousWeightSummary = ""
             deltaWeightPerDaySummary = ""
             deltaWeightPerDayValue = nil
@@ -1665,7 +1679,7 @@ struct WellVisitForm: View {
         }
 
         guard !points.isEmpty else {
-            latestWeightSummary = "No weight data available"
+            latestWeightSummary = NSLocalizedString("well_visit_form.weight_trend.no_weight_data", comment: "")
             previousWeightSummary = ""
             deltaWeightPerDaySummary = ""
             deltaWeightPerDayValue = nil
@@ -1684,7 +1698,11 @@ struct WellVisitForm: View {
         let latest = points[0]
         let latestKg = latest.weightG / 1000.0
         let latestDateDisplay = cleanDate(latest.dateStr)
-        latestWeightSummary = String(format: "%.2f kg (%@)", latestKg, latestDateDisplay)
+        latestWeightSummary = String(
+            format: NSLocalizedString("well_visit_form.weight_trend.weight_at_date_format", comment: ""),
+            latestKg,
+            latestDateDisplay
+        )
 
         guard points.count >= 2 else {
             previousWeightSummary = ""
@@ -1697,7 +1715,11 @@ struct WellVisitForm: View {
         let previous = points[1]
         let previousKg = previous.weightG / 1000.0
         let previousDateDisplay = cleanDate(previous.dateStr)
-        previousWeightSummary = String(format: "%.2f kg (%@)", previousKg, previousDateDisplay)
+        previousWeightSummary = String(
+            format: NSLocalizedString("well_visit_form.weight_trend.weight_at_date_format", comment: ""),
+            previousKg,
+            previousDateDisplay
+        )
 
         // Parse dates to compute day difference
         let rawLatest = latest.dateStr
@@ -1731,7 +1753,10 @@ struct WellVisitForm: View {
         let roundedPerDay = Int32(deltaPerDay.rounded())
 
         deltaWeightPerDayValue = roundedPerDay
-        deltaWeightPerDaySummary = "Δ weight: \(roundedPerDay) g/day"
+        deltaWeightPerDaySummary = String(
+            format: NSLocalizedString("well_visit_form.weight_trend.delta_weight_per_day", comment: ""),
+            Int(roundedPerDay)
+        )
         deltaWeightIsNormal = roundedPerDay >= 20
     }
 
@@ -2186,6 +2211,48 @@ struct WellVisitForm: View {
         refreshWeightTrend()
     }
     
+    // MARK: - Localization helpers (WellVisitForm)
+
+    private func L(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
+    private func trimmed(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - PE problem-listing line helpers
+
+    private func peField(_ labelKey: String, _ value: String) -> String {
+        String(format: L("well_visit_form.problem_listing.pe.field_format"), L(labelKey), value)
+    }
+
+    private func peFieldWithDetail(_ labelKey: String, _ value: String, detail: String?) -> String {
+        let d = trimmed(detail ?? "")
+        if d.isEmpty {
+            return peField(labelKey, value)
+        }
+        return String(format: L("well_visit_form.problem_listing.pe.field_with_detail_format"), L(labelKey), value, d)
+    }
+
+    private func peAbnormalField(
+        _ labelKey: String,
+        normal: Bool,
+        comment: String,
+        defaultKey: String
+    ) -> String? {
+        let c = trimmed(comment)
+        if normal && c.isEmpty { return nil }
+        let v = c.isEmpty ? L(defaultKey) : c
+        return peField(labelKey, v)
+    }
+
+    private func peTextField(_ labelKey: String, text: String) -> String? {
+        let t = trimmed(text)
+        if t.isEmpty { return nil }
+        return peField(labelKey, t)
+    }
+
     /// Rebuilds the problem listing from abnormal fields / comments.
     /// This does NOT touch the database – it only updates the TextEditor content.
     private func regenerateProblemListingFromFindings() {
@@ -2200,54 +2267,54 @@ struct WellVisitForm: View {
 
         // 1) Parents' concerns
         if !parentsConcerns.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Parents' concerns: \(parentsConcerns)")
+            add(String(format: NSLocalizedString("well_visit_form.problem_listing.parents_concerns", comment: ""), parentsConcerns))
         }
 
         // 2) Feeding
         if isEarlyMilkOnlyVisit {
             if regurgitationPresent {
-                add("Feeding: significant regurgitation reported.")
+                add(NSLocalizedString("well_visit_form.problem_listing.feeding.regurgitation", comment: ""))
             }
             if !feedingIssue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Feeding difficulty: \(feedingIssue)")
+                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.difficulty", comment: ""), feedingIssue))
             }
         } else {
             if !feeding.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Feeding / diet: \(feeding)")
+                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.diet", comment: ""), feeding))
             }
             if solidFoodStarted {
-                add("Solid food started.")
+                add(NSLocalizedString("well_visit_form.problem_listing.feeding.solids_started", comment: ""))
             }
             if !solidFoodQuality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Solid food quality: \(solidFoodQuality)")
+                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.solids_quality", comment: ""), solidFoodQuality))
             }
             if !solidFoodComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Solid food comment: \(solidFoodComment)")
+                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.solids_comment", comment: ""), solidFoodComment))
             }
 
             // Food variety: only if NOT "appears good"
             let foodVarietyTrim = foodVarietyQuality.trimmingCharacters(in: .whitespacesAndNewlines)
             if !foodVarietyTrim.isEmpty && foodVarietyTrim.lowercased() != "appears good" {
-                add("Food variety: \(foodVarietyTrim)")
+                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.food_variety", comment: ""), foodVarietyTrim))
             }
 
             // Dairy intake: only if more than 3 cups (code "4")
             let dairyTrim = dairyAmountCode.trimmingCharacters(in: .whitespacesAndNewlines)
             if dairyTrim == "4" {
-                add("Dairy intake: >3 cups/day.")
+                add(NSLocalizedString("well_visit_form.problem_listing.feeding.dairy_gt_3", comment: ""))
             }
         }
 
         // 2b) Stools – added for any visit when abnormal
         let poopStatusTrim = poopStatus.trimmingCharacters(in: .whitespacesAndNewlines)
         if poopStatusTrim == "abnormal" {
-            add("Stools: abnormal pattern reported.")
+            add(NSLocalizedString("well_visit_form.problem_listing.stools.abnormal", comment: ""))
         } else if poopStatusTrim == "hard" {
-            add("Stools: hard / constipation reported.")
+            add(NSLocalizedString("well_visit_form.problem_listing.stools.hard", comment: ""))
         }
         let poopCommentTrim = poopComment.trimmingCharacters(in: .whitespacesAndNewlines)
         if !poopCommentTrim.isEmpty {
-            add("Stools comment: \(poopCommentTrim)")
+            add(String(format: NSLocalizedString("well_visit_form.problem_listing.stools.comment", comment: ""), poopCommentTrim))
         }
 
         // 3) Sleep
@@ -2256,7 +2323,7 @@ struct WellVisitForm: View {
             let wakesTrim = wakesForFeedsPerNight.trimmingCharacters(in: .whitespacesAndNewlines)
             // Waking to feed is only a problem after 12 months
             if !wakesTrim.isEmpty && isPostTwelveMonthVisit {
-                add("Sleep: wakes \(wakesTrim) time(s) per night.")
+                add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.wakes_per_night", comment: ""), wakesTrim))
             }
 
             if isOlderSleepVisit {
@@ -2276,131 +2343,270 @@ struct WellVisitForm: View {
                     }
 
                     if shouldAddSleepDuration {
-                        add("Sleep duration: \(sleepHoursTrim)")
+                        add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.duration", comment: ""), sleepHoursTrim))
                     }
                 }
 
                 if !sleepRegular.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    add("Sleep regularity: \(sleepRegular)")
+                    add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.regularity", comment: ""), sleepRegular))
                 }
                 if sleepSnoring {
-                    add("Sleep: snoring / noisy breathing reported.")
+                    add(NSLocalizedString("well_visit_form.problem_listing.sleep.snoring", comment: ""))
                 }
             }
 
             if !sleep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Sleep issue: \(sleep)")
+                add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.issue", comment: ""), sleep))
             }
         }
 
         // 4) Physical exam – only add when not normal or when there is a comment
-        if !peTrophicNormal || !peTrophicComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Trophic state: " + (peTrophicComment.isEmpty ? "abnormal impression." : peTrophicComment))
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.trophic_state",
+            normal: peTrophicNormal,
+            comment: peTrophicComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal_impression"
+        ) {
+            add(line)
         }
-        if !peHydrationNormal || !peHydrationComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Hydration: " + (peHydrationComment.isEmpty ? "abnormal impression." : peHydrationComment))
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.hydration",
+            normal: peHydrationNormal,
+            comment: peHydrationComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal_impression"
+        ) {
+            add(line)
         }
-        if peColor != "normal" || !peColorComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Color: \(peColor)" + (peColorComment.isEmpty ? "" : " – \(peColorComment)"))
+
+        // Color (uses a value + optional detail)
+        if peColor != "normal" || !trimmed(peColorComment).isEmpty {
+            add(peFieldWithDetail(
+                "well_visit_form.problem_listing.pe.label.color",
+                peColor,
+                detail: trimmed(peColorComment).isEmpty ? nil : peColorComment
+            ))
         }
+
         if isFontanelleVisit,
-           (!peFontanelleNormal || !peFontanelleComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
-            add("Fontanelle: " + (peFontanelleComment.isEmpty ? "abnormal." : peFontanelleComment))
-        }
-        if !pePupilsRRNormal || !pePupilsRRComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Pupils: " + (pePupilsRRComment.isEmpty ? "abnormal." : pePupilsRRComment))
-        }
-        if !peOcularMotilityNormal || !peOcularMotilityComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Ocular motility: " + (peOcularMotilityComment.isEmpty ? "abnormal." : peOcularMotilityComment))
+           let line = peAbnormalField(
+                "well_visit_form.problem_listing.pe.label.fontanelle",
+                normal: peFontanelleNormal,
+                comment: peFontanelleComment,
+                defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+           ) {
+            add(line)
         }
 
-        if !peToneNormal || !peToneComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Tone: " + (peToneComment.isEmpty ? "abnormal." : peToneComment))
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.pupils",
+            normal: pePupilsRRNormal,
+            comment: pePupilsRRComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
+
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.ocular_motility",
+            normal: peOcularMotilityNormal,
+            comment: peOcularMotilityComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
+        }
+
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.tone",
+            normal: peToneNormal,
+            comment: peToneComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
+        }
+
         if isPrimitiveNeuroVisit {
-            if !peWakefulnessNormal || !peWakefulnessComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Wakefulness / reactivity: " + (peWakefulnessComment.isEmpty ? "abnormal." : peWakefulnessComment))
+            if let line = peAbnormalField(
+                "well_visit_form.problem_listing.pe.label.wakefulness",
+                normal: peWakefulnessNormal,
+                comment: peWakefulnessComment,
+                defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+            ) {
+                add(line)
             }
-            if !peHandsFistNormal || !peHandsFistComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Hands / opening: " + (peHandsFistComment.isEmpty ? "abnormal." : peHandsFistComment))
+            if let line = peAbnormalField(
+                "well_visit_form.problem_listing.pe.label.hands_opening",
+                normal: peHandsFistNormal,
+                comment: peHandsFistComment,
+                defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+            ) {
+                add(line)
             }
-            if !peSymmetryNormal || !peSymmetryComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Symmetry of movements: " + (peSymmetryComment.isEmpty ? "abnormal." : peSymmetryComment))
+            if let line = peAbnormalField(
+                "well_visit_form.problem_listing.pe.label.symmetry_movements",
+                normal: peSymmetryNormal,
+                comment: peSymmetryComment,
+                defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+            ) {
+                add(line)
             }
-            if !peFollowsMidlineNormal || !peFollowsMidlineComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Follows to midline: " + (peFollowsMidlineComment.isEmpty ? "abnormal." : peFollowsMidlineComment))
+            if let line = peAbnormalField(
+                "well_visit_form.problem_listing.pe.label.follows_midline",
+                normal: peFollowsMidlineNormal,
+                comment: peFollowsMidlineComment,
+                defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+            ) {
+                add(line)
             }
         }
+
         if isMoroVisit,
-           (!peMoroNormal || !peMoroComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
-            add("Moro reflex: " + (peMoroComment.isEmpty ? "abnormal." : peMoroComment))
+           let line = peAbnormalField(
+                "well_visit_form.problem_listing.pe.label.moro_reflex",
+                normal: peMoroNormal,
+                comment: peMoroComment,
+                defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+           ) {
+            add(line)
         }
 
-        if !peBreathingNormal || !peBreathingComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Respiratory: " + (peBreathingComment.isEmpty ? "abnormal." : peBreathingComment))
-        }
-        if !peHeartNormal || !peHeartComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Cardiac: " + (peHeartComment.isEmpty ? "abnormal." : peHeartComment))
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.respiratory",
+            normal: peBreathingNormal,
+            comment: peBreathingComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
 
-        if !peAbdomenNormal || !peAbdomenComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Abdomen: " + (peAbdomenComment.isEmpty ? "abnormal." : peAbdomenComment))
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.cardiac",
+            normal: peHeartNormal,
+            comment: peHeartComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
+        }
+
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.abdomen",
+            normal: peAbdomenNormal,
+            comment: peAbdomenComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
         if peAbdMassPresent {
-            add("Abdomen: mass palpable.")
-        }
-        if !peLiverSpleenNormal || !peLiverSpleenComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Liver / spleen: " + (peLiverSpleenComment.isEmpty ? "abnormal." : peLiverSpleenComment))
-        }
-        if !peUmbilicNormal || !peUmbilicComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Umbilicus: " + (peUmbilicComment.isEmpty ? "abnormal." : peUmbilicComment))
+            add(peField(
+                "well_visit_form.problem_listing.pe.label.abdomen",
+                L("well_visit_form.problem_listing.pe.abdomen.mass_palpable")
+            ))
         }
 
-        if !peGenitalia.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Genitalia: \(peGenitalia)")
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.liver_spleen",
+            normal: peLiverSpleenNormal,
+            comment: peLiverSpleenComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
+
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.umbilicus",
+            normal: peUmbilicNormal,
+            comment: peUmbilicComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
+        }
+
+        if let line = peTextField(
+            "well_visit_form.problem_listing.pe.label.genitalia",
+            text: peGenitalia
+        ) {
+            add(line)
+        }
+
         if !peTesticlesDescended {
-            add("Testicles: not fully descended.")
-        }
-        if !peFemoralPulsesNormal || !peFemoralPulsesComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Femoral pulses: " + (peFemoralPulsesComment.isEmpty ? "abnormal." : peFemoralPulsesComment))
+            add(peField(
+                "well_visit_form.problem_listing.pe.label.testicles",
+                L("well_visit_form.problem_listing.pe.testicles.not_fully_descended")
+            ))
         }
 
-        if !peSpineNormal || !peSpineComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Spine / posture: " + (peSpineComment.isEmpty ? "abnormal." : peSpineComment))
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.femoral_pulses",
+            normal: peFemoralPulsesNormal,
+            comment: peFemoralPulsesComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
+
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.spine_posture",
+            normal: peSpineNormal,
+            comment: peSpineComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
+        }
+
         if isHipsVisit,
-           (!peHipsLimbsNormal || !peHipsLimbsComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
-            add("Hips / limbs: " + (peHipsLimbsComment.isEmpty ? "abnormal." : peHipsLimbsComment))
+           let line = peAbnormalField(
+                "well_visit_form.problem_listing.pe.label.hips_limbs",
+                normal: peHipsLimbsNormal,
+                comment: peHipsLimbsComment,
+                defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+           ) {
+            add(line)
         }
 
-        if !peSkinMarksNormal || !peSkinMarksComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Skin marks: " + (peSkinMarksComment.isEmpty ? "abnormal." : peSkinMarksComment))
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.skin_marks",
+            normal: peSkinMarksNormal,
+            comment: peSkinMarksComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
-        if !peSkinIntegrityNormal || !peSkinIntegrityComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Skin integrity: " + (peSkinIntegrityComment.isEmpty ? "abnormal." : peSkinIntegrityComment))
+
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.skin_integrity",
+            normal: peSkinIntegrityNormal,
+            comment: peSkinIntegrityComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
-        if !peSkinRashNormal || !peSkinRashComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Rash / lesions: " + (peSkinRashComment.isEmpty ? "abnormal." : peSkinRashComment))
+
+        if let line = peAbnormalField(
+            "well_visit_form.problem_listing.pe.label.rash_lesions",
+            normal: peSkinRashNormal,
+            comment: peSkinRashComment,
+            defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
+        ) {
+            add(line)
         }
 
         if isTeethVisit,
            (peTeethPresent
-            || !peTeethCount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !peTeethComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
-            var text = "Teeth: "
-            if peTeethPresent {
-                text += "present"
-            } else {
-                text += "absent"
+            || !trimmed(peTeethCount).isEmpty
+            || !trimmed(peTeethComment).isEmpty) {
+
+            var value = peTeethPresent
+                ? L("well_visit_form.problem_listing.pe.teeth.present")
+                : L("well_visit_form.problem_listing.pe.teeth.absent")
+
+            if let cnt = Int(trimmed(peTeethCount)), cnt > 0 {
+                value += " " + String(format: L("well_visit_form.problem_listing.pe.teeth.count_format"), cnt)
             }
-            if !peTeethCount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                text += " (\(peTeethCount) teeth)"
-            }
-            if !peTeethComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                text += " – \(peTeethComment)"
-            }
-            add(text)
+
+            add(peFieldWithDetail(
+                "well_visit_form.problem_listing.pe.label.teeth",
+                value,
+                detail: trimmed(peTeethComment).isEmpty ? nil : peTeethComment
+            ))
         }
 
         // 5) Milestones (only if some are not achieved / uncertain)
@@ -2411,17 +2617,27 @@ struct WellVisitForm: View {
                 let status = milestoneStatuses[code] ?? .uncertain
                 if status == .achieved { continue }
 
-                var line = descriptor.label + " – " + status.displayName
+                var line = String(
+                    format: L("well_visit_form.problem_listing.milestones.line_format"),
+                    descriptor.label,
+                    status.displayName
+                )
+
                 if let note = milestoneNotes[code],
                    !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    line += " (\(note))"
+                    line = String(
+                        format: L("well_visit_form.problem_listing.milestones.line_with_note_format"),
+                        line,
+                        note
+                    )
                 }
+
                 milestoneLines.append(line)
             }
             if !milestoneLines.isEmpty {
-                add("Milestones of concern:")
+                add(L("well_visit_form.problem_listing.milestones.header"))
                 for l in milestoneLines {
-                    add("  - \(l)")
+                    add(String(format: L("well_visit_form.problem_listing.milestones.item_prefix_format"), l))
                 }
             }
         }
@@ -2430,26 +2646,37 @@ struct WellVisitForm: View {
         if isMCHATVisit {
             if !mchatScore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !mchatResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("M-CHAT: score \(mchatScore) – \(mchatResult)")
+                add(String(
+                    format: L("well_visit_form.problem_listing.mchat.line_format"),
+                    mchatScore,
+                    mchatResult
+                ))
             }
         }
         if isDevTestScoreVisit || isDevTestResultVisit {
             if !devTestScore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !devTestResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add("Developmental test: score \(devTestScore) – \(devTestResult)")
+                add(String(
+                    format: L("well_visit_form.problem_listing.dev_test.line_format"),
+                    devTestScore,
+                    devTestResult
+                ))
             }
         }
 
         // 7) Free PE notes block
-        if !physicalExam.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add("Additional PE notes: \(physicalExam)")
+        if let line = peTextField(
+            "well_visit_form.problem_listing.pe.label.additional_pe_notes",
+            text: physicalExam
+        ) {
+            add(line)
         }
         
         // 1) Weight gain – only flag if < 20 g/day
         if isWeightDeltaVisit,
            let delta = deltaWeightPerDayValue {
             if delta < 20 {
-                lines.append("Suboptimal weight gain: \(delta) g/day (target ≥ 20 g/day)")
+                lines.append(String(format: L("well_visit_form.problem_listing.weight_gain.suboptimal"), Int(delta)))
             }
             // If delta >= 20 g/day, we do NOT add anything to problem listing.
         }
@@ -2499,7 +2726,7 @@ struct WellVisitForm: View {
     private func triggerAIForWellVisit() {
         guard let ctx = buildWellVisitAIContext() else {
             appState.aiSummariesForActiveWellVisit = [
-                "local-stub": "Cannot run AI: please ensure a patient and saved well visit are selected."
+                "local-stub": NSLocalizedString("well_visit_form.ai.cannot_run", comment: "")
             ]
             return
         }
@@ -2513,11 +2740,11 @@ struct WellVisitForm: View {
 
     private func saveTapped() {
         guard let dbURL = appState.currentDBURL else {
-            showError("No active bundle / database is selected.")
+            showError(NSLocalizedString("well_visit_form.error.no_active_bundle", comment: ""))
             return
         }
         guard let patientID = appState.selectedPatientID else {
-            showError("No patient is selected.")
+            showError(NSLocalizedString("well_visit_form.error.no_patient_selected", comment: ""))
             return
         }
         
@@ -2526,7 +2753,7 @@ struct WellVisitForm: View {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
               let db = db else {
-            showError("Could not open database.")
+            showError(NSLocalizedString("well_visit_form.error.could_not_open_db", comment: ""))
             return
         }
         defer { sqlite3_close(db) }
@@ -2686,7 +2913,12 @@ struct WellVisitForm: View {
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
                 let errMsg = String(cString: sqlite3_errmsg(db))
-                showError("Failed to prepare INSERT: \(errMsg)")
+                showError(
+                    String(
+                        format: NSLocalizedString("well_visit_form.error.failed_prepare_insert", comment: ""),
+                        errMsg
+                    )
+                )
                 return
             }
             defer { sqlite3_finalize(stmt) }
@@ -2766,7 +2998,7 @@ struct WellVisitForm: View {
             }
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {
-                showError("Failed to insert well visit.")
+                showError(NSLocalizedString("well_visit_form.error.failed_insert", comment: ""))
                 return
             }
             visitID = Int(sqlite3_last_insert_rowid(db))
@@ -2817,7 +3049,12 @@ struct WellVisitForm: View {
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
                 let errMsg = String(cString: sqlite3_errmsg(db))
-                showError("Failed to prepare UPDATE: \(errMsg)")
+                showError(
+                    String(
+                        format: NSLocalizedString("well_visit_form.error.failed_prepare_update", comment: ""),
+                        errMsg
+                    )
+                )
                 return
             }
             defer { sqlite3_finalize(stmt) }
@@ -2890,7 +3127,7 @@ struct WellVisitForm: View {
             sqlite3_bind_int64(stmt, 36, sqlite3_int64(visitID))
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {
-                showError("Failed to update well visit.")
+                showError(NSLocalizedString("well_visit_form.error.failed_update", comment: ""))
                 return
             }
             // Save physical exam structured fields

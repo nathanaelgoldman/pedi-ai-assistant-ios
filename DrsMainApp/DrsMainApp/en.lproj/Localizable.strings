@@ -73,3 +73,1533 @@
 "patientsList.row.details-format" = "%@ • %@ • %@";
 
 /* PATIENTSDETAILVIEW */
+/* Patient visit categories */
+"patient.visit-category.one-month" = "1-month visit";
+"patient.visit-category.two-month" = "2-month visit";
+"patient.visit-category.four-month" = "4-month visit";
+"patient.visit-category.six-month" = "6-month visit";
+"patient.visit-category.nine-month" = "9-month visit";
+"patient.visit-category.twelve-month" = "12-month visit";
+"patient.visit-category.fifteen-month" = "15-month visit";
+"patient.visit-category.eighteen-month" = "18-month visit";
+"patient.visit-category.twentyfour-month" = "24-month visit";
+"patient.visit-category.thirty-month" = "30-month visit";
+"patient.visit-category.thirtysix-month" = "36-month visit";
+"patient.visit-category.sick" = "Sick visit";
+
+/* Visit filter segmented control */
+"patient.visits.filter.all" = "All";
+"patient.visits.filter.sick" = "Sick";
+"patient.visits.filter.well" = "Well";
+
+/* Patient header actions */
+"patient.header.documents" = "Documents…";
+"patient.header.vitals" = "Vitals…";
+"patient.header.perinatal-history" = "Perinatal History…";
+"patient.header.pmh" = "Past Medical History…";
+"patient.header.vaccination-status" = "Vaccination Status…";
+"patient.header.growth" = "Growth…";
+"patient.header.growth-charts" = "Growth Charts…";
+"patient.header.export-bundle" = "Export peMR Bundle…";
+"patient.header.new-well-visit" = "New Well Visit…";
+"patient.header.new-sick-episode" = "New Sick Episode…";
+
+/* Patient report menu */
+"patient.report.menu-title" = "Report…";
+"patient.report.latest-sick-title" = "Latest Sick (%@)";
+"patient.report.no-sick-visits" = "No sick visits";
+"patient.report.latest-well-title" = "Latest Well (%@, %@)";
+"patient.report.no-well-visits" = "No well visits";
+
+/* Patient summary card */
+"patient.summary.title" = "Patient Summary";
+"patient.summary.perinatal.label" = "Perinatal";
+"patient.summary.pmh.label" = "Past Medical History";
+"patient.summary.parent-notes.label" = "Parent Notes";
+"patient.summary.vaccination.label" = "Vaccination";
+
+/* Patient header */
+"patient.header.anon" = "Anon Patient";
+
+/* Patient facts grid */
+"patient.grid.patient-id.label" = "Patient ID";
+"patient.grid.dob.label" = "DOB";
+"patient.grid.sex.label" = "Sex";
+"patient.grid.bundle.label" = "Bundle";
+
+/* Patient visits section */
+"patient.visits.title" = "Visits";
+"patient.visits.filter.label" = "Filter";
+"patient.visits.empty-filtered" = "No visits found for this patient in “%@”";
+
+/* Patient visit row buttons */
+"patient.visit-row.details-button" = "Details…";
+"patient.visit-row.edit-button" = "Edit…";
+
+/* Visit summary card */
+"patient.visit-summary.title" = "Summary";
+"patient.visit-summary.problems.label" = "Problems";
+"patient.visit-summary.diagnosis.label" = "Diagnosis";
+"patient.visit-summary.conclusions.label" = "Conclusions";
+
+/* Milestones summary card */
+"patient.milestones.title" = "Milestones";
+
+/* Visit detail sheet */
+"patient.visit-detail.title" = "Visit Details";
+"patient.visit-detail.grid.id.label" = "ID";
+"patient.visit-detail.grid.date.label" = "Date";
+"patient.visit-detail.grid.category.label" = "Category";
+
+/* Visit detail export menu */
+"patient.visit-detail.export.menu-title" = "Export";
+"patient.visit-detail.export.pdf" = "Export PDF";
+"patient.visit-detail.export.docx" = "Export Word (.docx)";
+"patient.visit-detail.export.docx.save-panel.title" = "Save Word Report";
+
+/* Visit detail export alerts: success */
+"patient.visit-detail.export.success.title" = "Report exported";
+"patient.visit-detail.export.success.reveal-button" = "Reveal in Finder";
+"patient.visit-detail.export.success.ok-button" = "OK";
+"patient.visit-detail.export.success.default-filename" = "Saved";
+
+/* Visit detail export alerts: failure */
+"patient.visit-detail.export.failed.title" = "Export failed";
+"patient.visit-detail.export.failed.ok-button" = "OK";
+"patient.visit-detail.export.failed.unknown-message" = "Unknown error";
+
+/* DOCUMENTLISTVIEW */
+/* Documents window – header & list */
+"docs.list.header.title" = "Documents";
+"docs.list.empty" = "No documents in this bundle’s \"docs\" folder.";
+"docs.preview.placeholder" = "Select a document to preview";
+"docs.nav.title" = "Bundle Documents";
+
+/* Toolbar */
+"generic.button.close" = "Close";
+"docs.toolbar.delete" = "Delete";
+"docs.toolbar.upload" = "Upload…";
+
+/* Generic alerts */
+"generic.error.title" = "Error";
+"generic.button.ok" = "OK";
+
+/* Errors */
+"docs.error.list-failed" = "Failed to list docs: %@";
+"docs.error.copy-failed" = "Failed to copy file: %@";
+"docs.error.delete-outside-docs" = "Only files inside the bundle’s docs folder can be deleted.";
+"docs.error.delete-failed" = "Failed to delete: %@";
+"docs.error.text-load-failed" = "Failed to load text: %@";
+
+/* Preview messages */
+"docs.preview.docx-unsupported" = "DOCX preview isn’t supported here.";
+"docs.preview.unsupported-type" = "Unsupported file type.";
+
+/* Buttons (preview footer actions) */
+"docs.button.show-in-finder" = "Show in Finder";
+"docs.button.share" = "Share…";
+
+/* GROWTHTABLEVIEW */
+/* Growth – Table Headers */
+"growth.header.date" = "Date";
+"growth.header.weight-kg" = "Weight (kg)";
+"growth.header.height-cm" = "Height (cm)";
+"growth.header.headc-cm" = "Head circ. (cm)";
+"growth.header.source" = "Source";
+
+/* Growth – Empty State */
+"growth.empty" = "No growth records found for this patient.";
+
+/* Growth – Navigation Title */
+"growth.nav.title" = "Growth Table";
+
+/* Growth – Toolbar */
+"growth.toolbar.refresh" = "Refresh";
+"growth.toolbar.add" = "Add Growth Point…";
+"growth.toolbar.add.help" = "Add a manual growth record to this patient.";
+
+/* Growth – Row Actions */
+"growth.row.delete" = "Delete Growth Point";
+
+/* Growth – Manual Form */
+"growth.form.section.date" = "Date";
+"growth.form.label.recorded-date" = "Recorded date";
+"growth.form.section.measurements" = "Measurements";
+"growth.form.field.weight-kg" = "Weight (kg)";
+"growth.form.field.height-cm" = "Height (cm)";
+"growth.form.field.headc-cm" = "Head circumference (cm)";
+"growth.form.hint.optional-fields" = "You can leave any field blank if that value was not measured.";
+"growth.form.title" = "Add Growth Point";
+
+/* Generic Buttons (shared) */
+"generic.button.close" = "Close";
+"generic.button.cancel" = "Cancel";
+"generic.button.save" = "Save";
+
+/* VITALSTABLEVIEW */
+/* Vitals – Navigation */
+"vitals.nav.title" = "Patient Vitals";
+
+/* Generic buttons (shared) */
+"generic.button.close" = "Close";
+
+/* Vitals – Empty state */
+"vitals.empty" = "No vitals recorded for this patient.";
+
+/* Vitals – Table headers */
+"vitals.header.date-time" = "Date/Time";
+"vitals.header.temp-c"    = "Temp °C";
+"vitals.header.hr"        = "HR";
+"vitals.header.rr"        = "RR";
+"vitals.header.spo2"      = "SpO₂";
+"vitals.header.bp"        = "BP";
+"vitals.header.weight-kg" = "Weight (kg)";
+"vitals.header.height-cm" = "Height (cm)";
+"vitals.header.hc-cm"     = "HC (cm)";
+
+/* GROWTHCHARTVIEW */
+"growth.charts.tab.weight" = "Weight";
+"growth.charts.tab.height" = "Height";
+"growth.charts.tab.hc" = "Head Circ.";
+
+"growth.charts.picker.label" = "Growth chart type";
+
+"growth.charts.empty" = "No data to plot for this chart.";
+
+"growth.charts.axis.x.age-short" = "Age (mo)";
+"growth.charts.axis.x.age-long" = "Age (months)";
+"growth.charts.axis.x.date-dimension" = "Date";
+"growth.charts.axis.x.date-label" = "Date";
+"growth.charts.axis.y.value" = "Value";
+
+"growth.charts.nav.title" = "Growth Charts";
+
+/* PERINATALHISTORYFORM */
+// MARK: - Generic shared strings
+
+"generic.button.save" = "Save";
+"generic.button.done" = "Done";
+"generic.button.reset" = "Reset";
+"generic.button.ok" = "OK";
+
+"generic.menu.select.placeholder" = "— Select —";
+"generic.placeholder.none" = "—";
+
+"generic.toast.saved" = "Saved";
+
+
+// MARK: - Perinatal form: navigation & alerts
+
+"perinatal.form.nav.title" = "Perinatal History";
+
+"perinatal.alert.save_failed.title" = "Save failed";
+
+"perinatal.error.no_active_patient" = "No active patient selected.";
+"perinatal.error.save_failed.app" = "The app failed to save the perinatal history.";
+
+
+// MARK: - Section headers
+
+"perinatal.section.birth_pregnancy" = "Birth & Pregnancy";
+"perinatal.section.measurements_birth" = "Measurements at Birth";
+"perinatal.section.maternity_stay" = "Maternity Stay";
+"perinatal.section.screenings" = "Screenings";
+"perinatal.section.family_aftercare" = "Family & Aftercare";
+
+
+// MARK: - Field labels
+
+"perinatal.field.pregnancy_issues" = "Pregnancy issues";
+"perinatal.field.birth_mode" = "Birth mode";
+"perinatal.field.gestational_age_weeks" = "Gestational age (weeks)";
+"perinatal.field.resuscitation_at_birth" = "Resuscitation at birth";
+"perinatal.field.nicu_stay" = "NICU stay";
+"perinatal.field.infection_risk_factors" = "Infection risk factors";
+
+"perinatal.field.birth_weight_g" = "Birth weight (g)";
+"perinatal.field.birth_length_cm" = "Birth length (cm)";
+"perinatal.field.head_circumference_cm" = "Head circumference (cm)";
+"perinatal.field.discharge_weight_g" = "Discharge weight (g)";
+
+"perinatal.field.maternity_events" = "Events";
+"perinatal.field.vaccinations_maternity" = "Vaccinations in maternity";
+"perinatal.field.vitamin_k_given" = "Vitamin K given";
+"perinatal.field.feeding_maternity" = "Feeding in maternity";
+"perinatal.field.passed_meconium_24h" = "Passed meconium in 24h";
+"perinatal.field.urination_24h" = "Urination in 24h";
+
+"perinatal.field.discharge_date" = "Discharge date (YYYY-MM-DD)";
+
+"perinatal.field.heart_screening" = "Heart screening";
+"perinatal.field.metabolic_screening" = "Metabolic screening";
+"perinatal.field.hearing_screening" = "Hearing screening";
+
+"perinatal.field.mother_vaccinations" = "Mother vaccinations";
+"perinatal.field.family_vaccinations" = "Family vaccinations";
+"perinatal.field.illnesses_after_birth" = "Illnesses after birth";
+"perinatal.field.evolution_since_maternity" = "Evolution since maternity";
+
+
+// MARK: - Choice vocab: pregnancy
+
+"perinatal.choice.pregnancy.normal" = "Normal";
+"perinatal.choice.pregnancy.gestational_diabetes" = "Gestational diabetes";
+"perinatal.choice.pregnancy.preeclampsia" = "Preeclampsia";
+"perinatal.choice.pregnancy.infection" = "Infection";
+"perinatal.choice.pregnancy.threat_premature_birth" = "Threat of premature birth";
+"perinatal.choice.pregnancy.iugr" = "Intrauterine growth retardation";
+
+
+// MARK: - Choice vocab: birth mode
+
+"perinatal.choice.birth_mode.normal_vaginal" = "Normal vaginal delivery";
+"perinatal.choice.birth_mode.emergent_cs" = "Emergent C-section";
+"perinatal.choice.birth_mode.planned_cs" = "Planned C-section";
+"perinatal.choice.birth_mode.instrumental_unspecified" = "Instrumental (unspecified)";
+"perinatal.choice.birth_mode.vacuum" = "Vacuum";
+"perinatal.choice.birth_mode.forceps" = "Forceps";
+
+
+// MARK: - Choice vocab: resuscitation at birth
+
+"perinatal.choice.resusc.none" = "None";
+"perinatal.choice.resusc.free_oxygen" = "Free oxygen";
+"perinatal.choice.resusc.bag_mask" = "Bag–mask ventilation";
+"perinatal.choice.resusc.chest_compression" = "Chest compression";
+"perinatal.choice.resusc.fluids_drugs" = "Fluids and drugs";
+
+
+// MARK: - Choice vocab: infection risk
+
+"perinatal.choice.infrisk.prom" = "PROM";
+"perinatal.choice.infrisk.seroconversion_torch" = "Seroconversion TORCH";
+"perinatal.choice.infrisk.gbs_no_treatment" = "GBS+ and no treatment";
+"perinatal.choice.infrisk.gbs_treatment" = "GBS+ and treatment";
+
+
+// MARK: - Choice vocab: maternity stay events
+
+"perinatal.choice.maternity_event.none" = "None";
+"perinatal.choice.maternity_event.weight_loss_10" = "Weight loss ≥ 10%";
+"perinatal.choice.maternity_event.hyperbili_with_pt" = "Hyperbilirubinemia with phototherapy";
+"perinatal.choice.maternity_event.hyperbili_without_pt" = "Hyperbilirubinemia without phototherapy";
+"perinatal.choice.maternity_event.hypoglycemia" = "Hypoglycemia";
+"perinatal.choice.maternity_event.suspicion_infection" = "Suspicion of infection";
+
+
+// MARK: - Choice vocab: vaccinations in maternity
+
+"perinatal.choice.maternity_vax.bcg" = "BCG";
+"perinatal.choice.maternity_vax.hepb" = "Hep. B";
+"perinatal.choice.maternity_vax.rsv" = "RSV";
+"perinatal.choice.maternity_vax.anti_hbv_ig" = "Anti-HBV immunoglobulins";
+
+
+// MARK: - Choice vocab: mother vaccinations
+
+"perinatal.choice.mother_vax.none" = "No vaccination";
+"perinatal.choice.mother_vax.dtap" = "dTAP";
+"perinatal.choice.mother_vax.flu" = "Flu";
+"perinatal.choice.mother_vax.covid" = "COVID";
+"perinatal.choice.mother_vax.rsv" = "RSV";
+
+
+// MARK: - Choice vocab: family vaccinations
+
+"perinatal.choice.family_vax.none" = "No vaccination";
+"perinatal.choice.family_vax.dtap" = "dTAP";
+"perinatal.choice.family_vax.flu" = "Flu";
+"perinatal.choice.family_vax.covid" = "COVID";
+"perinatal.choice.family_vax.rsv" = "RSV";
+
+
+// MARK: - Choice vocab: screenings
+
+"perinatal.choice.heart.normal" = "Normal";
+"perinatal.choice.heart.abnormal" = "Abnormal";
+"perinatal.choice.heart.not_done" = "Not done";
+
+"perinatal.choice.metab.done_pending" = "Done, pending result";
+"perinatal.choice.metab.normal" = "Normal";
+"perinatal.choice.metab.abnormal" = "Abnormal";
+
+"perinatal.choice.hearing.normal" = "Normal";
+"perinatal.choice.hearing.abnormal" = "Abnormal";
+"perinatal.choice.hearing.abnormal_right" = "Abnormal right";
+"perinatal.choice.hearing.abnormal_left" = "Abnormal left";
+"perinatal.choice.hearing.not_done" = "Not done";
+
+
+// MARK: - Choice vocab: feeding
+
+"perinatal.choice.feeding.ebf" = "Exclusive breastfeeding (EBF)";
+"perinatal.choice.feeding.mixed" = "Mixed feeding";
+"perinatal.choice.feeding.exclusive_formula" = "Exclusive formula feeding";
+
+/* PMHFORM */
+"pmh.toggle.asthma" = "Asthma";
+"pmh.toggle.recurrent_otitis" = "Recurrent Otitis";
+"pmh.toggle.recurrent_uti" = "Recurrent UTI";
+"pmh.toggle.allergies" = "Allergies";
+
+"pmh.label.allergy_details" = "Allergy details";
+"pmh.placeholder.allergy_example" = "e.g., amoxicillin → rash";
+
+"pmh.label.other_pmh" = "Other past medical history";
+
+"pmh.nav.title" = "Past Medical History";
+
+/* VACCINATIONSTATUSFORM */
+"vax.form.title" = "Vaccination Status";
+"vax.field.status.label" = "Status";
+
+"vax.status.up_to_date" = "Up to date";
+"vax.status.delayed" = "Delayed";
+"vax.status.not_vaccinated" = "Not vaccinated";
+"vax.status.unknown" = "Unknown";
+
+"generic.button.cancel" = "Cancel";
+"generic.button.save" = "Save";
+
+/* SICKEPISODEFORM */
+/* MARK: - Sick Episode – Titles */
+"sickEpisode.title.new" = "New Sick Episode";
+"sickEpisode.title.editWithID" = "Edit Sick Episode #%d";
+
+/* MARK: - Toolbar & global buttons */
+"sickEpisode.toolbar.cancel" = "Cancel";
+"sickEpisode.toolbar.save" = "Save";
+"sickEpisode.toolbar.done" = "Done";
+"sickEpisode.button.done.inline" = "Done";
+
+/* MARK: - Sections */
+"sickEpisode.section.vitals" = "Vitals";
+"sickEpisode.section.mainComplaint" = "Main Complaint";
+"sickEpisode.section.hpi" = "History of Present Illness";
+"sickEpisode.section.pe" = "Physical Examination";
+"sickEpisode.section.problemListing" = "Problem Listing";
+"sickEpisode.section.plan" = "Plan";
+"sickEpisode.section.ai" = "AI Assistance";
+
+/* MARK: - Complaints block */
+"sickEpisode.complaints.selectCommon" = "Select common complaints";
+"sickEpisode.complaints.other.placeholder" = "Other complaints (comma-separated)";
+
+/* MARK: - Vitals – fields & helpers */
+"sickEpisode.vitals.weight.placeholder" = "Weight (kg)";
+"sickEpisode.vitals.height.placeholder" = "Height (cm)";
+"sickEpisode.vitals.headCirc.placeholder" = "Head circ (cm)";
+"sickEpisode.vitals.temperature.placeholder" = "Temperature (°C)";
+"sickEpisode.vitals.hr.placeholder" = "HR (bpm)";
+"sickEpisode.vitals.rr.placeholder" = "RR (/min)";
+"sickEpisode.vitals.spo2.placeholder" = "SpO₂ (%)";
+"sickEpisode.vitals.bpSys.placeholder" = "BP systolic";
+"sickEpisode.vitals.bpDia.placeholder" = "BP diastolic";
+"sickEpisode.vitals.recordedAt.placeholder" = "Recorded at (ISO8601)";
+"sickEpisode.vitals.recordedAt.help" = "Leave blank for current time.";
+
+"sickEpisode.vitals.toggle.replacePrevious" = "Replace previous vitals for this episode";
+"sickEpisode.vitals.button.save" = "Save vitals";
+
+"sickEpisode.vitals.history.header" = "Vitals history (oldest \u2192 newest)";
+"sickEpisode.vitals.history.empty" = "No vitals recorded for this episode yet.";
+
+/* MARK: - Structured HPI labels */
+"sickEpisode.hpi.appearance.label" = "Appearance";
+"sickEpisode.hpi.feeding.label" = "Feeding";
+"sickEpisode.hpi.breathing.label" = "Breathing";
+"sickEpisode.hpi.urination.label" = "Urination";
+"sickEpisode.hpi.pain.label" = "Pain";
+"sickEpisode.hpi.stools.label" = "Stools";
+"sickEpisode.hpi.context.label" = "Context";
+
+/* MARK: - Physical exam labels */
+"sickEpisode.pe.generalAppearance.label" = "General appearance";
+"sickEpisode.pe.hydration.label" = "Hydration";
+"sickEpisode.pe.color.label" = "Color / Hemodynamics";
+"sickEpisode.pe.skin.label" = "Skin";
+"sickEpisode.pe.ent.label" = "ENT";
+"sickEpisode.pe.rightEar.label" = "Right ear";
+"sickEpisode.pe.leftEar.label" = "Left ear";
+"sickEpisode.pe.rightEye.label" = "Right eye";
+"sickEpisode.pe.leftEye.label" = "Left eye";
+"sickEpisode.pe.heart.label" = "Heart";
+"sickEpisode.pe.lungs.label" = "Lungs";
+"sickEpisode.pe.abdomen.label" = "Abdomen";
+"sickEpisode.pe.peristalsis.label" = "Peristalsis";
+"sickEpisode.pe.genitalia.label" = "Genitalia";
+"sickEpisode.pe.neuro.label" = "Neurological";
+"sickEpisode.pe.msk.label" = "Musculoskeletal";
+"sickEpisode.pe.lymphNodes.label" = "Lymph nodes";
+
+/* MARK: - Plan / diagnosis fields */
+"sickEpisode.plan.complementaryInvestigations.label" = "Complementary investigations";
+"sickEpisode.plan.diagnosis.label" = "Working diagnosis";
+"sickEpisode.plan.icd10.label" = "ICD-10";
+"sickEpisode.plan.medications.label" = "Medications";
+"sickEpisode.plan.anticipatoryGuidance.label" = "Anticipatory guidance";
+"sickEpisode.plan.comments.label" = "Comments";
+
+/* MARK: - AI – general info & buttons */
+"sickEpisode.ai.info.guidelineAndAI" = "JSON guideline flags run locally and do not change the record; AI queries will later be configured in the clinician profile.";
+
+"sickEpisode.ai.button.checkGuidelineFlags" = "Check guideline flags";
+"sickEpisode.ai.button.ask" = "Ask AI";
+"sickEpisode.ai.button.ask.inProgress" = "Asking AI…";
+"sickEpisode.ai.button.previewJSON" = "Preview AI JSON";
+
+/* MARK: - AI – ICD-10 suggestion */
+"sickEpisode.ai.icd10.suggestedHeader" = "Suggested ICD-10";
+"sickEpisode.ai.icd10.applyButton" = "Apply to ICD-10 field";
+"sickEpisode.ai.icd10.replaceWarning" = "Current ICD-10 will be replaced.";
+
+"sickEpisode.ai.icd10.candidatesHeader" = "ICD-10 codes found in AI note";
+"sickEpisode.ai.icd10.candidatesInstruction" = "Tap a code to append it to the ICD-10 field. Duplicates are ignored.";
+
+/* MARK: - AI – guideline flags & notes */
+"sickEpisode.ai.guidelineFlags.header" = "Guideline flags (local JSON)";
+
+"sickEpisode.ai.notes.header" = "AI notes (per provider)";
+"sickEpisode.ai.provider.stubLabel" = "AI (stub)";
+
+/* MARK: - AI – history list & viewer */
+"sickEpisode.ai.history.header" = "AI history for this episode";
+"sickEpisode.ai.history.timeFallback" = "Time: n/a";
+"sickEpisode.ai.history.providerFallback" = "provider: unknown";
+"sickEpisode.ai.history.noResponseFallback" = "(no response stored)";
+"sickEpisode.ai.history.selectedHeader" = "Selected AI response";
+"sickEpisode.ai.history.button.delete" = "Delete this AI entry";
+
+/* MARK: - AI – debug */
+"sickEpisode.ai.debug.structuredJSONHeader" = "Structured episode JSON (debug)";
+
+/* WELLVISITFORM */
+"well_visit_form.milestone_status.achieved" = "Achieved";
+"well_visit_form.milestone_status.not_yet" = "Not yet";
+"well_visit_form.milestone_status.uncertain" = "Uncertain";
+
+"well_visit_form.solids.title" = "Solid foods";
+"well_visit_form.solids.started" = "Solid foods started";
+"well_visit_form.solids.start_date" = "Start date";
+"well_visit_form.solids.intake" = "Solid food intake";
+"well_visit_form.solids.quality" = "Solid food quantity / quality";
+
+"well_visit_form.shared.appears_good" = "Appears good";
+"well_visit_form.shared.uncertain" = "Uncertain";
+"well_visit_form.shared.probably_limited" = "Probably limited";
+
+"well_visit_form.feeding_older.title" = "Variety & dairy intake";
+"well_visit_form.feeding_older.food_variety_quality.label" = "Food variety quality";
+"well_visit_form.feeding_older.food_variety_quality.picker" = "Food variety quality";
+"well_visit_form.feeding_older.dairy_intake.label" = "Dairy intake (per day)";
+"well_visit_form.feeding_older.dairy_intake.picker" = "Dairy intake (per day)";
+"well_visit_form.feeding_older.dairy_intake.1" = "1 cup or bottle";
+"well_visit_form.feeding_older.dairy_intake.2" = "2 cups or bottles";
+"well_visit_form.feeding_older.dairy_intake.3" = "3 cups or bottles";
+"well_visit_form.feeding_older.dairy_intake.4" = "4 cups or bottles";
+"well_visit_form.feeding_older.still_breastfeeding" = "Still breastfeeding";
+
+"well_visit_form.ai.title" = "AI Assistant";
+"well_visit_form.ai.run" = "Run AI summary";
+"well_visit_form.ai.empty_state" = "No AI summary yet. Tap Run AI summary to generate suggestions for this visit.";
+
+// Neurodevelopment tests
+"well_visit_form.mchat.title" = "M-CHAT";
+"well_visit_form.mchat.score.label" = "M-CHAT score";
+"well_visit_form.mchat.score.placeholder" = "e.g. 0–20";
+"well_visit_form.mchat.result.placeholder" = "M-CHAT result (e.g. low / medium / high risk)";
+"well_visit_form.mchat.risk.low" = "Based on the M-CHAT score, this result falls into the Low risk (0–2) category.";
+"well_visit_form.mchat.risk.medium" = "Based on the M-CHAT score, this result falls into the Medium risk (3–7) category.";
+"well_visit_form.mchat.risk.high" = "Based on the M-CHAT score, this result falls into the High risk (8–20) category.";
+
+"well_visit_form.dev_test.title" = "Developmental test";
+"well_visit_form.dev_test.score.label" = "Dev test score";
+"well_visit_form.dev_test.score.placeholder" = "score";
+"well_visit_form.dev_test.result.placeholder" = "Dev test result (e.g. normal / delayed / borderline)";
+
+// Sections near the end
+"well_visit_form.problem_listing.title" = "Problem listing";
+"well_visit_form.problem_listing.update_from_findings" = "Update from findings";
+
+"well_visit_form.conclusions.title" = "Conclusions";
+"well_visit_form.plan.title" = "Plan / Anticipatory Guidance";
+"well_visit_form.clinician_comment.title" = "Clinician Comment";
+
+"well_visit_form.next_visit.title" = "Next Visit Date";
+"well_visit_form.next_visit.toggle" = "Schedule next visit";
+"well_visit_form.next_visit.datepicker" = "Next visit date";
+
+// Nav / toolbar / alert
+"well_visit_form.nav.new" = "New Well Visit";
+"well_visit_form.nav.edit" = "Edit Well Visit";
+
+"well_visit_form.toolbar.cancel" = "Cancel";
+"well_visit_form.toolbar.save" = "Save";
+
+"well_visit_form.alert.save_failed.title" = "Could not save visit";
+"well_visit_form.alert.ok" = "OK";
+"well_visit_form.alert.unknown_error" = "Unknown error.";
+
+"well_visit_form.problem_listing.pe.default_abnormal_impression" = "abnormal impression.";
+"well_visit_form.problem_listing.pe.default_abnormal" = "abnormal.";
+
+/* PE problem listing formats */
+"well_visit_form.problem_listing.pe.field_format" = "%@: %@";
+"well_visit_form.problem_listing.pe.field_with_detail_format" = "%@: %@ – %@";
+
+/* PE labels */
+"well_visit_form.problem_listing.pe.label.trophic_state" = "Trophic state";
+"well_visit_form.problem_listing.pe.label.hydration" = "Hydration";
+"well_visit_form.problem_listing.pe.label.color" = "Color";
+"well_visit_form.problem_listing.pe.label.fontanelle" = "Fontanelle";
+"well_visit_form.problem_listing.pe.label.pupils" = "Pupils";
+"well_visit_form.problem_listing.pe.label.ocular_motility" = "Ocular motility";
+"well_visit_form.problem_listing.pe.label.tone" = "Tone";
+"well_visit_form.problem_listing.pe.label.wakefulness" = "Wakefulness / reactivity";
+"well_visit_form.problem_listing.pe.label.hands_opening" = "Hands / opening";
+"well_visit_form.problem_listing.pe.label.symmetry_movements" = "Symmetry of movements";
+"well_visit_form.problem_listing.pe.label.follows_midline" = "Follows to midline";
+"well_visit_form.problem_listing.pe.label.moro_reflex" = "Moro reflex";
+"well_visit_form.problem_listing.pe.label.respiratory" = "Respiratory";
+"well_visit_form.problem_listing.pe.label.cardiac" = "Cardiac";
+"well_visit_form.problem_listing.pe.label.abdomen" = "Abdomen";
+"well_visit_form.problem_listing.pe.label.liver_spleen" = "Liver / spleen";
+"well_visit_form.problem_listing.pe.label.umbilicus" = "Umbilicus";
+"well_visit_form.problem_listing.pe.label.genitalia" = "Genitalia";
+"well_visit_form.problem_listing.pe.label.testicles" = "Testicles";
+"well_visit_form.problem_listing.pe.label.femoral_pulses" = "Femoral pulses";
+"well_visit_form.problem_listing.pe.label.spine_posture" = "Spine / posture";
+"well_visit_form.problem_listing.pe.label.hips_limbs" = "Hips / limbs";
+"well_visit_form.problem_listing.pe.label.skin_marks" = "Skin marks";
+"well_visit_form.problem_listing.pe.label.skin_integrity" = "Skin integrity";
+"well_visit_form.problem_listing.pe.label.rash_lesions" = "Rash / lesions";
+"well_visit_form.problem_listing.pe.label.teeth" = "Teeth";
+"well_visit_form.problem_listing.pe.label.additional_pe_notes" = "Additional PE notes";
+
+/* PE fixed values */
+"well_visit_form.problem_listing.pe.abdomen.mass_palpable" = "mass palpable";
+"well_visit_form.problem_listing.pe.testicles.not_fully_descended" = "not fully descended";
+
+/* Teeth values */
+"well_visit_form.problem_listing.pe.teeth.present" = "present";
+"well_visit_form.problem_listing.pe.teeth.absent" = "absent";
+"well_visit_form.problem_listing.pe.teeth.count_format" = "(%d teeth)";
+"well_visit_form.section.physical_exam" = "Physical examination";
+
+/* PE — shared */
+"well_visit_form.pe.shared.normal" = "Normal";
+"well_visit_form.pe.shared.yes" = "Yes";
+
+/* PE — General / appearance */
+"well_visit_form.pe.general.title" = "General / appearance";
+
+"well_visit_form.pe.general.trophic.label" = "Trophic state / weight impression";
+"well_visit_form.pe.general.trophic.comment.placeholder" = "Trophic comment (optional)";
+
+"well_visit_form.pe.general.hydration.label" = "Hydration";
+"well_visit_form.pe.general.hydration.comment.placeholder" = "Hydration comment (optional)";
+
+"well_visit_form.pe.general.color.label" = "Color";
+"well_visit_form.pe.general.color.picker" = "Color";
+"well_visit_form.pe.general.color.option.normal" = "Normal";
+"well_visit_form.pe.general.color.option.jaundice" = "Jaundice";
+"well_visit_form.pe.general.color.option.pale" = "Pale";
+"well_visit_form.pe.general.color.comment.placeholder" = "Color comment (optional)";
+
+"well_visit_form.pe.general.fontanelle.label" = "Fontanelle";
+"well_visit_form.pe.general.fontanelle.comment.placeholder" = "Fontanelle comment (optional)";
+
+"well_visit_form.pe.general.pupils.label" = "Pupils (RR / symmetry)";
+"well_visit_form.pe.general.pupils.comment.placeholder" = "Pupils comment (optional)";
+
+"well_visit_form.pe.general.ocular_motility.label" = "Ocular motility / alignment";
+"well_visit_form.pe.general.ocular_motility.comment.placeholder" = "Ocular motility comment (optional)";
+
+/* PE — Teeth */
+"well_visit_form.pe.teeth.title" = "Teeth / oral cavity";
+"well_visit_form.pe.teeth.present.label" = "Teeth present";
+"well_visit_form.pe.teeth.count.label" = "Number of teeth (approx)";
+"well_visit_form.pe.teeth.count.placeholder" = "e.g. 4";
+"well_visit_form.pe.teeth.comment.placeholder" = "Teeth / oral comment (optional)";
+
+"well_visit_form.pe.neuro.title" = "Neuro / behaviour";
+
+"well_visit_form.pe.neuro.title" = "Neurologic / behaviour";
+
+"well_visit_form.pe.neuro.tone.label" = "Tone";
+"well_visit_form.pe.neuro.tone.comment.placeholder" = "Tone comment (optional)";
+
+"well_visit_form.pe.neuro.wakefulness.label" = "Wakefulness / reactivity";
+"well_visit_form.pe.neuro.wakefulness.comment.placeholder" = "Wakefulness comment (optional)";
+
+"well_visit_form.pe.neuro.hands_fists.label" = "Hands in fists / opening";
+"well_visit_form.pe.neuro.hands_fists.comment.placeholder" = "Hands comment (optional)";
+
+"well_visit_form.pe.neuro.symmetry.label" = "Symmetry of movements";
+"well_visit_form.pe.neuro.symmetry.comment.placeholder" = "Symmetry comment (optional)";
+
+"well_visit_form.pe.neuro.follows_midline.label" = "Follows to midline";
+"well_visit_form.pe.neuro.follows_midline.comment.placeholder" = "Follows midline comment (optional)";
+"well_visit_form.pe.neuro.moro.label" = "Moro reflex";
+"well_visit_form.pe.neuro.moro.comment.placeholder" = "Moro comment (optional)";
+"well_visit_form.pe.respiratory.title" = "Respiratory";
+"well_visit_form.pe.respiratory.breathing.label" = "Breathing / auscultation";
+"well_visit_form.pe.respiratory.breathing.comment.placeholder" = "Respiratory comment (optional)";
+
+"well_visit_form.pe.cardiovascular.title" = "Cardiovascular";
+"well_visit_form.pe.cardiovascular.heart_sounds.label" = "Heart sounds / murmurs";
+"well_visit_form.pe.cardiovascular.heart_sounds.comment.placeholder" = "Cardiac comment (optional)";
+"well_visit_form.pe.abdomen.title" = "Abdomen / digestive";
+
+"well_visit_form.pe.abdomen.palpation.label" = "Abdomen (palpation / organomegaly)";
+"well_visit_form.pe.abdomen.palpation.comment.placeholder" = "Abdomen comment (optional)";
+
+"well_visit_form.pe.abdomen.mass.label" = "Abdominal mass palpable";
+
+"well_visit_form.pe.abdomen.liver_spleen.label" = "Liver / spleen";
+"well_visit_form.pe.abdomen.liver_spleen.comment.placeholder" = "Liver/spleen comment (optional)";
+
+"well_visit_form.pe.abdomen.umbilicus.label" = "Umbilicus";
+"well_visit_form.pe.abdomen.umbilicus.comment.placeholder" = "Umbilicus comment (optional)";
+
+"well_visit_form.pe.abdomen.genitalia.label" = "Genitalia (exam)";
+"well_visit_form.pe.abdomen.genitalia.placeholder" = "Genitalia description";
+
+"well_visit_form.pe.abdomen.testicles_descended.label" = "Testicles descended (if applicable)";
+"well_visit_form.pe.cardiovascular.femoral_pulses.label" = "Femoral pulses";
+"well_visit_form.pe.cardiovascular.femoral_pulses.comment.placeholder" = "Femoral pulses comment (optional)";
+
+"well_visit_form.pe.msk.title" = "Hips / limbs / posture";
+"well_visit_form.pe.msk.spine.label" = "Spine / posture";
+"well_visit_form.pe.msk.spine.comment.placeholder" = "Spine comment (optional)";
+"well_visit_form.pe.msk.hips_limbs.label" = "Hips / limbs";
+"well_visit_form.pe.msk.hips_limbs.comment.placeholder" = "Hips / limbs comment (optional)";
+
+"well_visit_form.pe.skin.title" = "Skin";
+"well_visit_form.pe.skin.marks.label" = "Skin marks";
+"well_visit_form.pe.skin.marks.comment.placeholder" = "Skin marks comment (optional)";
+"well_visit_form.pe.skin.integrity.label" = "Skin integrity";
+"well_visit_form.pe.skin.integrity.comment.placeholder" = "Skin integrity comment (optional)";
+"well_visit_form.pe.skin.rash.label" = "Rash / lesions";
+"well_visit_form.pe.skin.rash.comment.placeholder" = "Rash comment (optional)";
+
+"well_visit_form.pe.additional_notes.title" = "Additional notes";
+"well_visit_form.section.milestones" = "Developmental milestones";
+"well_visit_form.milestones.status.label" = "Status";
+"well_visit_form.milestones.note.placeholder" = "Note (optional)";
+
+"well_visit_form.section.neurodevelopment_screening" = "Neurodevelopment screening";
+"well_visit_form.problem_listing.title" = "Problem listing";
+"well_visit_form.problem_listing.update_from_findings" = "Update from findings";
+"well_visit_form.conclusions.title" = "Conclusions";
+"well_visit_form.plan.title" = "Plan / Anticipatory Guidance";
+"well_visit_form.clinician_comment.title" = "Clinician comment";
+"well_visit_form.next_visit.title" = "Next visit";
+"well_visit_form.next_visit.toggle" = "Set next visit date";
+"well_visit_form.next_visit.datepicker" = "Next visit date";
+"well_visit_form.weight_trend.weight_at_date_format" = "%.2f kg (%@)";
+"well_visit_form.problem_listing.weight_gain.suboptimal" = "Suboptimal weight gain: %d g/day (target ≥ 20 g/day)";
+
+"well_visit_form.section.visit_info.title" = "Visit info";
+"well_visit_form.section.visit_info.date" = "Date";
+"well_visit_form.section.visit_info.type" = "Type";
+
+"well_visit_form.weight_trend.title" = "Weight change since last measurement";
+"well_visit_form.weight_trend.latest_weight.unavailable" = "Latest weight: not available";
+"well_visit_form.weight_trend.latest_weight.value" = "Latest weight: %@";
+"well_visit_form.weight_trend.previous_weight.unavailable" = "Previous weight: not available";
+"well_visit_form.weight_trend.previous_weight.value" = "Previous weight: %@";
+"well_visit_form.weight_trend.delta.unavailable" = "Δ weight: not available";
+"well_visit_form.weight_trend.ok" = "OK";
+
+"well_visit_form.section.parents_concerns.title" = "Parent's Concerns";
+
+"well_visit_form.section.feeding.title" = "Feeding & Supplementation";
+"well_visit_form.feeding.milk_type.title" = "Milk type(s)";
+"well_visit_form.feeding.milk_type.breastmilk" = "Breastmilk";
+"well_visit_form.feeding.milk_type.formula" = "Formula";
+"well_visit_form.feeding.volume_per_feed.label" = "Volume per feed (ml)";
+"well_visit_form.feeding.volume_per_feed.placeholder" = "e.g. 60";
+"well_visit_form.feeding.feeds_per_24h.label" = "Feeds per 24h";
+"well_visit_form.feeding.feeds_per_24h.placeholder" = "e.g. 8";
+"well_visit_form.feeding.estimated_intake.value" = "Estimated intake: %@";
+"well_visit_form.feeding.regurgitation.toggle" = "Significant regurgitation";
+"well_visit_form.feeding.issues.title" = "Feeding difficulties / issues";
+"well_visit_form.feeding.vitamin_d.toggle" = "Vitamin D supplementation given";
+"well_visit_form.stools.title" = "Stools";
+"well_visit_form.stools.pattern.label" = "Stool pattern";
+"well_visit_form.stools.pattern.picker" = "Stool pattern";
+"well_visit_form.stools.pattern.option.normal_breastfed" = "Normal / typical breastfed stool";
+"well_visit_form.stools.pattern.option.abnormal_reported" = "Abnormal reported";
+"well_visit_form.stools.pattern.option.hard_constipated" = "Hard / constipated";
+"well_visit_form.stools.comment.placeholder" = "Stool comment (optional)";
+
+"well_visit_form.sleep.title" = "Sleep";
+"well_visit_form.sleep.wakes_for_feeds.label" = "Wakes for feeds (per night)";
+"well_visit_form.sleep.wakes_for_feeds.placeholder" = "e.g. 3";
+"well_visit_form.sleep.longer_stretch.toggle" = "Has a longer stretch of sleep at night";
+"well_visit_form.sleep.issues_reported.toggle" = "Sleep issues reported";
+"well_visit_form.sleep.issue_description.label" = "Sleep issue description";
+
+"well_visit_form.sleep.wakes_at_night.label" = "Wakes at night (per night)";
+"well_visit_form.sleep.wakes_at_night.placeholder" = "e.g. 1";
+"well_visit_form.sleep.total_sleep_24h.label" = "Total sleep in 24h";
+"well_visit_form.sleep.total_sleep_24h.picker" = "Total sleep in 24h";
+"well_visit_form.sleep.total_sleep_24h.option.lt10" = "Less than 10 h";
+"well_visit_form.sleep.total_sleep_24h.option.10_15" = "10–15 h";
+
+"well_visit_form.sleep.regularity.label" = "Sleep regularity";
+"well_visit_form.sleep.regularity.picker" = "Sleep regularity";
+"well_visit_form.sleep.regularity.option.regular" = "Regular";
+"well_visit_form.sleep.regularity.option.irregular" = "Irregular";
+
+"well_visit_form.sleep.snoring.toggle" = "Snoring / noisy breathing during sleep";
+"well_visit_form.problem_listing.milestones.header" = "Milestones of concern:";
+"well_visit_form.problem_listing.milestones.item_prefix_format" = "  - %@";
+"well_visit_form.problem_listing.milestones.line_format" = "%@ – %@";
+"well_visit_form.problem_listing.milestones.line_with_note_format" = "%@ (%@)";
+
+"well_visit_form.problem_listing.mchat.line_format" = "M-CHAT: score %@ – %@";
+"well_visit_form.problem_listing.dev_test.line_format" = "Developmental test: score %@ – %@";
+
+/* SickEpisodeForm 2nd part */
+"sick_episode.choice.abdominal" = "Abdominal";
+"sick_episode.choice.abdominal_pain" = "Abdominal pain";
+"sick_episode.choice.abnormal_tone" = "Abnormal tone";
+"sick_episode.choice.age" = "AGE";
+"sick_episode.choice.alert" = "Alert";
+"sick_episode.choice.bloody_diarrhea" = "Bloody diarrhea";
+"sick_episode.choice.bradycardia" = "Bradycardia";
+"sick_episode.choice.cervical" = "Cervical";
+"sick_episode.choice.congested_nose" = "Congested nose";
+"sick_episode.choice.cough" = "Cough";
+"sick_episode.choice.crackles" = "Crackles";
+"sick_episode.choice.crackles_l" = "Crackles (L)";
+"sick_episode.choice.crackles_r" = "Crackles (R)";
+"sick_episode.choice.crusty" = "Crusty";
+"sick_episode.choice.daycare" = "Daycare";
+"sick_episode.choice.decreased" = "Decreased";
+"sick_episode.choice.decreased_sounds" = "Decreased sounds";
+"sick_episode.choice.decreased_sounds_l" = "Decreased sounds (L)";
+"sick_episode.choice.decreased_sounds_r" = "Decreased sounds (R)";
+"sick_episode.choice.diarrhea" = "Diarrhea";
+"sick_episode.choice.discharge" = "Discharge";
+"sick_episode.choice.distended" = "Distended";
+"sick_episode.choice.dry_scaly_rash" = "Dry, scaly rash";
+"sick_episode.choice.ear" = "Ear";
+"sick_episode.choice.ear_discharge" = "Ear discharge";
+"sick_episode.choice.elevated" = "Elevated";
+"sick_episode.choice.epigastric_pain" = "Epigastric pain";
+"sick_episode.choice.eyelid_swelling" = "Eyelid swelling";
+"sick_episode.choice.fast" = "Fast";
+"sick_episode.choice.fever" = "Fever";
+"sick_episode.choice.foul_smelling" = "Foul-smelling";
+"sick_episode.choice.generalized" = "Generalized";
+"sick_episode.choice.guarding" = "Guarding";
+"sick_episode.choice.hard" = "Hard";
+"sick_episode.choice.head" = "Head";
+"sick_episode.choice.headache" = "Headache";
+"sick_episode.choice.hypogastric_pain" = "Hypogastric pain";
+"sick_episode.choice.increased" = "Increased";
+"sick_episode.choice.irritable" = "Irritable";
+"sick_episode.choice.labored" = "Labored";
+"sick_episode.choice.lethargic" = "Lethargic";
+"sick_episode.choice.limb" = "Limb";
+"sick_episode.choice.limping" = "Limping";
+"sick_episode.choice.liquid" = "Liquid";
+"sick_episode.choice.llq_pain" = "LLQ pain";
+"sick_episode.choice.mac_papular_rash" = "Maculopapular rash";
+"sick_episode.choice.macular_rash" = "Macular rash";
+"sick_episode.choice.murmur" = "Murmur";
+"sick_episode.choice.neck" = "Neck";
+"sick_episode.choice.noisy" = "Noisy";
+"sick_episode.choice.none" = "None";
+"sick_episode.choice.normal" = "Normal";
+"sick_episode.choice.not_seen_wax" = "Not seen (wax)";
+"sick_episode.choice.nodes" = "Nodes";
+"sick_episode.choice.otitis" = "Otitis";
+"sick_episode.choice.pain" = "Pain";
+"sick_episode.choice.pale" = "Pale";
+"sick_episode.choice.papular_rash" = "Papular rash";
+"sick_episode.choice.periumbilical_pain" = "Periumbilical pain";
+"sick_episode.choice.petechiae" = "Petechiae";
+"sick_episode.choice.pur_pura" = "Purpura";
+"sick_episode.choice.pus_in_canal" = "Pus in canal";
+"sick_episode.choice.rash" = "Rash";
+"sick_episode.choice.rebound" = "Rebound";
+"sick_episode.choice.red" = "Red";
+"sick_episode.choice.red_canal" = "Red canal";
+"sick_episode.choice.red_throat" = "Red throat";
+"sick_episode.choice.red_tm" = "Red TM";
+"sick_episode.choice.red_bulging_with_pus" = "Red & Bulging with pus";
+"sick_episode.choice.refuses" = "Refuses";
+"sick_episode.choice.rh_onchi" = "Rhonchi";
+"sick_episode.choice.rh_onchi_l" = "Rhonchi (L)";
+"sick_episode.choice.rh_onchi_r" = "Rhonchi (R)";
+"sick_episode.choice.rlq_pain" = "RLQ pain";
+"sick_episode.choice.runny_nose" = "Runny nose";
+"sick_episode.choice.school_age" = "School age";
+"sick_episode.choice.see_plan" = "See Plan";
+"sick_episode.choice.sick_contact" = "Sick contact";
+"sick_episode.choice.sleepy" = "Sleepy";
+"sick_episode.choice.soft" = "Soft";
+"sick_episode.choice.submandibular" = "Submandibular";
+"sick_episode.choice.swelling" = "Swelling";
+"sick_episode.choice.swollen_joint" = "Swollen joint";
+"sick_episode.choice.tachycardia" = "Tachycardia";
+"sick_episode.choice.tender" = "Tender";
+"sick_episode.choice.throat" = "Throat";
+"sick_episode.choice.tonsil_deposits" = "Tonsil deposits";
+"sick_episode.choice.travel" = "Travel";
+"sick_episode.choice.uri" = "URI";
+"sick_episode.choice.uti" = "UTI";
+"sick_episode.choice.vomiting" = "Vomiting";
+"sick_episode.choice.well" = "Well";
+"sick_episode.choice.wheeze" = "Wheeze";
+"sick_episode.choice.wheeze_l" = "Wheeze (L)";
+"sick_episode.choice.wheeze_r" = "Wheeze (R)";
+"sick_episode.choice.yellow" = "Yellow";
+"sick_episode_form.vitals.delete_picker.title" = "Delete a row…";
+"sick_episode_form.vitals.delete_picker.none" = "—";
+"sick_episode_form.vitals.delete_button" = "Delete";
+"sick_episode_form.db.open_failed" = "Open failed: %@";
+/* SickEpisodeForm — Vitals badges */
+"sick_episode.vitals.badge.hr_low"      = "HR low";
+"sick_episode.vitals.badge.hr_low_for"  = "HR low for %@";
+"sick_episode.vitals.badge.hr_high"     = "HR high";
+"sick_episode.vitals.badge.hr_high_for" = "HR high for %@";
+
+"sick_episode.vitals.badge.rr_low"      = "RR low";
+"sick_episode.vitals.badge.rr_low_for"  = "RR low for %@";
+"sick_episode.vitals.badge.rr_high"     = "RR high";
+"sick_episode.vitals.badge.rr_high_for" = "RR high for %@";
+
+"sick_episode.vitals.badge.fever"       = "Fever";
+"sick_episode.vitals.badge.hypothermia" = "Hypothermia";
+"sick_episode.vitals.badge.spo2_low"    = "SpO₂ low";
+
+/* BP badge fallback labels */
+"sick_episode.vitals.bp_label.elevated" = "Elevated";
+"sick_episode.vitals.bp_label.stage1"   = "Stage 1";
+"sick_episode.vitals.bp_label.stage2"   = "Stage 2";
+"sick_episode.vitals.bp_label.abnormal" = "Abnormal";
+
+/* BP badge formatting (sys/dia + label) */
+"sick_episode.vitals.badge.bp_value_label" = "BP %d/%d %@";
+
+/* Age band labels used inside “HR high/low for %@” etc */
+"sick_episode.vitals.age_band.neonate"    = "neonate";
+"sick_episode.vitals.age_band.infant"     = "infant";
+"sick_episode.vitals.age_band.toddler"    = "toddler";
+"sick_episode.vitals.age_band.preschool"  = "preschool";
+"sick_episode.vitals.age_band.school_age" = "school age";
+"sick_episode.vitals.age_band.adolescent" = "adolescent";
+"sick_episode.vitals.age_band.adult_like" = "adult";
+/* SickEpisodeForm — Age formatting */
+"sick_episode_form.age.years_format" = "%d y";
+"sick_episode_form.age.one_year_months_format" = "1 y %d mo";
+"sick_episode_form.age.one_year" = "1 y";
+"sick_episode_form.age.months_format" = "%d mo";
+"sick_episode_form.age.days_format" = "%d d";
+
+/* SickEpisodeForm — Problem listing lines */
+"sick_episode_form.problem_listing.age" = "Age: %@";
+"sick_episode_form.problem_listing.sex" = "Sex: %@";
+"sick_episode_form.problem_listing.vaccination_status" = "Vaccination status: %@";
+
+"sick_episode_form.problem_listing.main_complaint" = "Main complaint: %@";
+"sick_episode_form.problem_listing.duration_hours" = "Duration: %@ hours";
+"sick_episode_form.problem_listing.hpi_summary" = "HPI summary: %@";
+
+"sick_episode_form.problem_listing.appearance" = "Appearance: %@";
+"sick_episode_form.problem_listing.feeding" = "Feeding: %@";
+"sick_episode_form.problem_listing.breathing" = "Breathing: %@";
+"sick_episode_form.problem_listing.urination" = "Urination: %@";
+"sick_episode_form.problem_listing.pain" = "Pain: %@";
+"sick_episode_form.problem_listing.stools" = "Stools: %@";
+"sick_episode_form.problem_listing.context" = "Context: %@";
+
+/* SickEpisodeForm — Vitals pieces */
+"sick_episode_form.problem_listing.vitals.temp" = "T %@°C";
+"sick_episode_form.problem_listing.vitals.hr" = "HR %@";
+"sick_episode_form.problem_listing.vitals.rr" = "RR %@";
+"sick_episode_form.problem_listing.vitals.spo2" = "SpO₂ %@%%";
+"sick_episode_form.problem_listing.vitals.bp" = "BP %@/%@";
+
+/* SickEpisodeForm — Abnormal vitals line */
+"sick_episode_form.problem_listing.abnormal_vitals.values_and_flags" = "Abnormal vitals: %@ [%@]";
+"sick_episode_form.problem_listing.abnormal_vitals.flags_only" = "Abnormal vitals: %@";
+
+/* SickEpisodeForm — PE abnormalities */
+"sick_episode_form.problem_listing.general_appearance" = "General Appearance: %@";
+"sick_episode_form.problem_listing.hydration" = "Hydration: %@";
+"sick_episode_form.problem_listing.heart" = "Heart: %@";
+"sick_episode_form.problem_listing.color" = "Color: %@";
+"sick_episode_form.problem_listing.skin" = "Skin: %@";
+"sick_episode_form.problem_listing.ent" = "ENT: %@";
+"sick_episode_form.problem_listing.right_ear" = "Right Ear: %@";
+"sick_episode_form.problem_listing.left_ear" = "Left Ear: %@";
+"sick_episode_form.problem_listing.right_eye" = "Right Eye: %@";
+"sick_episode_form.problem_listing.left_eye" = "Left Eye: %@";
+"sick_episode_form.problem_listing.lungs" = "Lungs: %@";
+"sick_episode_form.problem_listing.abdomen" = "Abdomen: %@";
+"sick_episode_form.problem_listing.peristalsis" = "Peristalsis: %@";
+"sick_episode_form.problem_listing.genitalia" = "Genitalia: %@";
+"sick_episode_form.problem_listing.neurological" = "Neurological: %@";
+"sick_episode_form.problem_listing.msk" = "MSK: %@";
+"sick_episode_form.problem_listing.lymph_nodes" = "Lymph Nodes: %@";
+/* SickEpisodeForm — AI wiring */
+"sick_episode_form.ai.cannot_run_guideline_flags" = "Cannot run guideline flags: please ensure a patient and saved episode are selected.";
+"sick_episode_form.ai.cannot_run_ai" = "Cannot run AI: please ensure a patient and saved episode are selected.";
+"sick_episode_form.ai.cannot_build_prompt" = "Cannot build AI prompt: please ensure a patient and saved episode are selected, and that problem listing and complementary investigations are filled in as appropriate.";
+/* CONTENTVIEW */
+"content_view.empty.no_bundle_title" = "No Bundle Selected";
+"content_view.empty.no_bundle_message" = "Use “Add Bundles…” to import a .peMR zip or choose a bundle folder.";
+
+/* DRSMAINAPPAPP */
+/* Toolbar clinician menu */
+"app.clinician.user_number" = "User #%d";
+"app.toolbar.signed_in_as" = "Signed in as %@";
+"app.toolbar.edit_profile" = "Edit profile…";
+"app.toolbar.switch_clinician" = "Switch clinician…";
+"app.toolbar.sign_out" = "Sign out";
+"app.toolbar.sign_in_ellipsis" = "Sign in…";
+"app.toolbar.doctor" = "Dr";
+"app.toolbar.doctor_name" = "Dr %@";
+"app.toolbar.sign_in" = "Sign in";
+
+/* Sign-in sheet */
+"app.signin.title" = "Sign in";
+"app.signin.no_clinicians_found" = "No clinicians found. Create one below.";
+"app.signin.active" = "Active";
+"app.signin.create_clinician" = "Create clinician";
+"app.signin.first_name" = "First name";
+"app.signin.last_name" = "Last name";
+"app.signin.add" = "Add";
+"app.signin.password_optional" = "Password (if required)";
+"app.signin.use_selected" = "Use selected";
+"app.signin.incorrect_password" = "Incorrect password.";
+
+/* Common */
+"app.common.delete" = "Delete";
+"app.common.cancel" = "Cancel";
+
+/* Reused formatted label */
+"app.clinician.user_number" = "User #%d";
+
+/* ---------- Common ---------- */
+"app.common.cancel" = "Cancel";
+"app.common.delete" = "Delete";
+
+/* ---------- Toolbar / clinician menu ---------- */
+"app.clinician.user_number" = "User #%d";
+"app.toolbar.signed_in_as" = "Signed in as %@";
+"app.toolbar.edit_profile" = "Edit profile…";
+"app.toolbar.switch_clinician" = "Switch clinician…";
+"app.toolbar.sign_out" = "Sign out";
+"app.toolbar.sign_in_ellipsis" = "Sign in…";
+"app.toolbar.doctor" = "Dr";
+"app.toolbar.doctor_name" = "Dr %@";
+"app.toolbar.sign_in" = "Sign in";
+
+/* ---------- Sign-in sheet ---------- */
+"app.signin.title" = "Sign in";
+"app.signin.no_clinicians_found" = "No clinicians found. Create one below.";
+"app.signin.active" = "Active";
+"app.signin.create_clinician" = "Create clinician";
+"app.signin.first_name" = "First name";
+"app.signin.last_name" = "Last name";
+"app.signin.add" = "Add";
+"app.signin.password_optional" = "Password (if required)";
+"app.signin.use_selected" = "Use selected";
+"app.signin.incorrect_password" = "Incorrect password.";
+
+/* ---------- Clinician profile ---------- */
+"app.clinician_profile.section.identity" = "Identity";
+"app.clinician_profile.first_name" = "First name";
+"app.clinician_profile.last_name" = "Last name";
+"app.clinician_profile.title" = "Title (e.g., MD, FAAP)";
+
+"app.clinician_profile.section.contact" = "Contact";
+"app.clinician_profile.email" = "Email";
+"app.clinician_profile.website" = "Website";
+
+"app.clinician_profile.section.professional" = "Professional";
+"app.clinician_profile.societies" = "Societies (comma-separated)";
+
+"app.clinician_profile.section.social" = "Social";
+"app.clinician_profile.twitter" = "Twitter/X";
+"app.clinician_profile.wechat" = "WeChat";
+"app.clinician_profile.instagram" = "Instagram";
+"app.clinician_profile.linkedin" = "LinkedIn";
+
+"app.clinician_profile.section.ai_assistant" = "AI Assistant (optional)";
+"app.clinician_profile.ai.endpoint_url" = "Endpoint URL";
+"app.clinician_profile.ai.model" = "Model (e.g. gpt-5.1-mini)";
+"app.clinician_profile.ai.provider" = "Provider";
+"app.clinician_profile.ai.provider.openai" = "OpenAI";
+"app.clinician_profile.ai.provider.anthropic" = "Anthropic";
+"app.clinician_profile.ai.provider.gemini" = "Gemini";
+"app.clinician_profile.ai.provider.local" = "Local (no cloud)";
+"app.clinician_profile.ai.api_key" = "API Key";
+
+"app.clinician_profile.section.ai_prompts_rules" = "AI Prompts & Rules";
+"app.clinician_profile.ai_prompts_rules.sick_group" = "Sick visit prompts & rules";
+"app.clinician_profile.ai_prompts_rules.sick_prompt_label" = "Sick visit AI prompt";
+"app.clinician_profile.ai_prompts_rules.sick_rules_label" = "Sick visit JSON rules (paste JSON here)";
+"app.clinician_profile.ai_prompts_rules.well_group" = "Well visit prompts & rules";
+"app.clinician_profile.ai_prompts_rules.well_prompt_label" = "Well visit AI prompt";
+"app.clinician_profile.ai_prompts_rules.well_rules_label" = "Well visit JSON rules (optional, future use)";
+
+/* Clinician Profile – App lock section */
+"app.clinician_profile.section.app_lock" = "App lock (password)";
+"app.clinician_profile.app_lock.password_set" = "A password is currently set for this clinician.";
+"app.clinician_profile.app_lock.no_password" = "No password set yet.";
+"app.clinician_profile.app_lock.new_password" = "New password";
+"app.clinician_profile.app_lock.confirm_password" = "Confirm password";
+"app.clinician_profile.app_lock.remove_existing" = "Remove existing password";
+
+/* Clinician Profile – password validation errors */
+"app.clinician_profile.app_lock.error.enter_and_confirm" = "Please enter and confirm the password.";
+"app.clinician_profile.app_lock.error.mismatch" = "Passwords do not match.";
+
+/* Clinician Profile – navigation titles */
+"app.clinician_profile.nav_title.create" = "Create Clinician";
+"app.clinician_profile.nav_title.edit" = "Clinician Profile";
+
+/* GROWTHSTORE */
+"growth_store.error.open_failed" = "Could not open the database.";
+"growth_store.error.invalid_recorded_at" = "Date/time cannot be empty.";
+"growth_store.error.missing_measurements" = "Please enter at least one measurement (weight, height, or head circumference).";
+"growth_store.error.query_failed" = "Database query failed.";
+"growth_store.error.insert_failed" = "Could not save growth data.";
+"growth_store.error.delete_failed" = "Could not delete growth data.";
+
+/* PERINATALSTORE*/
+/* PerinatalStore: no dbURL provided and dbURLResolver not set */
+"perinatalstore.error.no_db_url_resolvable" = "No database was provided and none could be resolved.";
+
+/* PerinatalStore: dbURLResolver not set */
+"perinatalstore.error.no_db_url_resolver_not_set" = "No database was provided and PerinatalStore.dbURLResolver is not set.";
+
+/* PmhStore */
+/* PmhStore: unable to open database */
+"pmhstore.error.open_db" = "Unable to open database";
+
+/* PmhStore: schema error */
+"pmhstore.error.schema" = "Schema error";
+
+/* PmhStore: prepare statement failed */
+"pmhstore.error.prepare" = "Prepare failed";
+
+/* PmhStore: begin transaction failed */
+"pmhstore.error.begin" = "BEGIN failed";
+
+/* PmhStore: prepare delete failed */
+"pmhstore.error.prepare_delete" = "Prepare delete failed";
+
+/* PmhStore: delete failed */
+"pmhstore.error.delete" = "Delete failed";
+
+/* PmhStore: prepare insert failed */
+"pmhstore.error.prepare_insert" = "Prepare insert failed";
+
+/* PmhStore: insert failed */
+"pmhstore.error.insert" = "Insert failed";
+
+/* EpisodeStore */
+/* EpisodeStore - SQLite error with context + SQLite message */
+"episodestore.error.sqlite_with_message" = "%1$@: %2$@";
+
+/* EpisodeStore - SQLite error with context only */
+"episodestore.error.sqlite_context_only" = "%@";
+
+/* WellVisitStore */
+"wellVisitStore.error.open" = "Unable to open database at %@.";
+"wellVisitStore.error.prepare" = "Failed to prepare SQL: %@";
+"wellVisitStore.error.step" = "SQLite step failed (rc=%d).";
+"wellVisitStore.error.bindInt64" = "Failed to bind Int64 at index %d.";
+"wellVisitStore.error.updateStep" = "Failed to update well visit (SQLite rc=%d).";
+"wellVisitStore.error.withSQLite" = "%@ (%@)";
+
+/* AppState */
+/* Common */
+"common.yes" = "Yes";
+"common.no" = "No";
+
+/* Patient profile — PMH */
+"appstate.profile.pmh.asthma_yes" = "Asthma: Yes";
+"appstate.profile.pmh.otitis_yes" = "Otitis: Yes";
+"appstate.profile.pmh.uti_yes" = "UTI: Yes";
+"appstate.profile.pmh.allergies_yes" = "Allergies: Yes";
+"appstate.profile.pmh.allergy_details_format" = "Allergy details: %@";
+"appstate.profile.pmh.other_format" = "Other: %@";
+"appstate.profile.pmh.updated_format" = "PMH updated: %@";
+
+/* Patient profile — Perinatal summary */
+"appstate.profile.perinatal.pregnancy_risk_format" = "Pregnancy risk: %@";
+"appstate.profile.perinatal.birth_mode_format" = "Birth mode: %@";
+"appstate.profile.perinatal.term_weeks_format" = "Term: %d weeks";
+"appstate.profile.perinatal.resuscitation_format" = "Resuscitation: %@";
+"appstate.profile.perinatal.nicu_stay_days_format" = "NICU stay: %d days";
+"appstate.profile.perinatal.infection_risk_format" = "Infection risk: %@";
+"appstate.profile.perinatal.birth_weight_g_format" = "Birth weight: %d g";
+"appstate.profile.perinatal.birth_length_cm_format" = "Birth length: %.1f cm";
+"appstate.profile.perinatal.birth_hc_cm_format" = "Head circ: %.1f cm";
+"appstate.profile.perinatal.maternity_events_format" = "Maternity events: %@";
+"appstate.profile.perinatal.maternity_vaccinations_format" = "Maternity vaccs: %@";
+"appstate.profile.perinatal.vitamin_k_format" = "Vitamin K: %@";
+"appstate.profile.perinatal.feeding_in_maternity_format" = "Feeding in maternity: %@";
+"appstate.profile.perinatal.passed_meconium_24h_format" = "Passed meconium 24h: %@";
+"appstate.profile.perinatal.urination_24h_format" = "Urination 24h: %@";
+"appstate.profile.perinatal.heart_screening_format" = "Heart screening: %@";
+"appstate.profile.perinatal.metabolic_screening_format" = "Metabolic screening: %@";
+"appstate.profile.perinatal.hearing_screening_format" = "Hearing screening: %@";
+"appstate.profile.perinatal.mother_vaccinations_format" = "Mother vaccs: %@";
+"appstate.profile.perinatal.family_vaccinations_format" = "Family vaccs: %@";
+"appstate.profile.perinatal.discharge_date_format" = "Discharge date: %@";
+"appstate.profile.perinatal.discharge_weight_g_format" = "Discharge weight: %d g";
+"appstate.profile.perinatal.illnesses_after_birth_format" = "Illnesses after birth: %@";
+"appstate.profile.perinatal.updated_at_format" = "Updated at: %@";
+"appstate.profile.perinatal.evolution_since_maternity_format" = "Evolution since maternity: %@";
+
+/* Patient summary: perinatal item like 'birth_weight: 3200' */
+"appstate.summary.perinatal.kv_format" = "%@%@%@";
+
+/* Patient summary: separator between items in perinatal summary */
+"appstate.summary.perinatal.separator" = " • ";
+
+/* Generic yes/no */
+"common.yes" = "Yes";
+"common.no" = "No";
+
+/* Visit category labels */
+"visit.category.episode" = "Sick visit";
+"visit.category.well" = "Well visit";
+
+/* Patient summary – perinatal formatting */
+"appstate.summary.perinatal.kv_format" = "%@%@%@";
+"appstate.summary.perinatal.separator" = " • ";
+
+"visit.category.episode" = "Episode";
+"visit.category.well" = "Well visit";
+
+/* Default patient name placeholder shown in visit details */
+"appstate.visitdetails.patient.anonymous" = "Anon Patient";
+
+/* Milestones summary: achieved count format, e.g. 'Achieved 3/5' */
+"appstate.visitdetails.milestones.achieved_format" = "Achieved %d/%d";
+
+/* Milestones summary label for flagged items, e.g. 'Flags:' */
+"appstate.visitdetails.milestones.flags_label" = "Flags:";
+
+/* Milestones summary: full line when flags exist. Example '%@; %@ %@' */
+"appstate.visitdetails.milestones.summary_with_flags_format" = "%@; %@ %@";
+
+/* Milestones summary: separator between flagged milestone labels */
+"appstate.visitdetails.milestones.flags_list_separator" = ", ";
+
+/* Visit category label */
+"visit.category.episode" = "Sick visit";
+
+/* Visit category label */
+"visit.category.well" = "Well visit";
+
+/* Error message when saving perinatal history fails */
+"appstate.perinatal.save_failed" = "Failed to save perinatal history";
+
+/* Error message when saving past medical history (PMH) fails */
+"appstate.pmh.save_failed" = "Failed to save PMH";
+
+/* PMH summary: condition label 'asthma' */
+"appstate.ai.pmh.condition.asthma" = "asthma";
+
+/* PMH summary: condition label 'recurrent otitis' */
+"appstate.ai.pmh.condition.recurrent_otitis" = "recurrent otitis";
+
+/* PMH summary: condition label 'urinary tract infection' */
+"appstate.ai.pmh.condition.uti" = "urinary tract infection";
+
+/* PMH summary: condition label 'allergies' */
+"appstate.ai.pmh.condition.allergies" = "allergies";
+
+/* PMH summary: separator between condition labels, e.g. '; ' */
+"appstate.ai.pmh.conditions.separator" = "; ";
+
+/* PMH summary: separator between sentences/parts, e.g. ' ' */
+"appstate.ai.pmh.parts.separator" = " ";
+
+/* PMH summary: full PMH line format, e.g. 'Past medical history: %@.' */
+"appstate.ai.pmh.line.pmh_format" = "Past medical history: %@.";
+
+/* PMH summary: allergy details line format, e.g. 'Allergy details: %@.' */
+"appstate.ai.pmh.line.allergy_details_format" = "Allergy details: %@.";
+
+/* PMH summary: other PMH line format, e.g. 'Other PMH: %@.' */
+"appstate.ai.pmh.line.other_pmh_format" = "Other PMH: %@.";
+
+/* ICD-10 fallback suggestion strings (code + short description) */
+"appstate.ai.icd10.bronchiolitis" = "J21.9 – Acute bronchiolitis, unspecified";
+"appstate.ai.icd10.pneumonia" = "J18.9 – Pneumonia, unspecified organism";
+"appstate.ai.icd10.otitis" = "H66.9 – Otitis media, unspecified";
+"appstate.ai.icd10.asthma" = "J45.9 – Asthma, unspecified";
+"appstate.ai.icd10.diarrhea" = "R19.7 – Diarrhea, unspecified";
+"appstate.ai.icd10.uti" = "N39.0 – Urinary tract infection, site not specified";
+"appstate.ai.icd10.fever" = "R50.9 – Fever, unspecified";
+
+/* Guideline stub messages */
+"appstate.ai.guidelines.rules_loaded" = "Guideline rules JSON loaded.";
+"appstate.ai.guidelines.no_match" = "No matching guideline criteria found for this episode.";
+"appstate.ai.guidelines.no_rules_configured" = "No guideline rules configured yet. Add pediatric guideline rules JSON in your profile to enable guideline-based flags.";
+/* Visit category label for sick episodes */
+"visit.category.episode" = "Sick visit";
+
+/* Visit category label for well visits */
+"visit.category.well" = "Well visit";
+
+/* Default sick-visit AI header (multi-line) */
+"ai.prompt.sick.defaultHeader" = "You are assisting with a pediatric sick visit. Read the clinical context below (problem listing, investigations, vaccination status, and past medical history) and provide:\n1) A concise clinical summary.\n2) A prioritized differential diagnosis list.\n3) Suggested investigations only if they are clearly indicated.\n4) A suggested ICD-10 code (or a short list), with brief justification.";
+
+/* Default well-visit AI header (multi-line) */
+"ai.prompt.well.defaultHeader" = "You are assisting with a pediatric well-child visit (preventive care). Read the clinical context below (problem listing, perinatal history, past medical history, vaccination status, age and visit type) and provide:\n1) A concise wellness assessment summary.\n2) Key positive and negative findings relevant to growth and development.\n3) Priority preventive care and anticipatory guidance topics for this visit.\n4) Any red flags that would warrant further evaluation or investigations.";
+
+/* Prompt section headers */
+"ai.prompt.section.patientEpisodeContext" = "Patient/episode context";
+"ai.prompt.section.patientWellVisitContext" = "Patient/well-visit context";
+"ai.prompt.section.structuredEpisodeSnapshotJson" = "Structured episode snapshot (JSON)";
+"ai.prompt.section.structuredWellVisitSnapshotJson" = "Structured well-visit snapshot (JSON)";
+
+/* Prompt field labels */
+"ai.prompt.label.problemListing" = "Problem listing:";
+"ai.prompt.label.complementaryInvestigations" = "Complementary investigations:";
+"ai.prompt.label.vaccinationStatus" = "Vaccination status: %@";
+"ai.prompt.label.vaccinationStatusNotDocumented" = "Vaccination status: not documented.";
+"ai.prompt.label.pastMedicalHistory" = "Past medical history: %@";
+"ai.prompt.label.pastMedicalHistoryNotDocumented" = "Past medical history: not documented.";
+
+"ai.prompt.label.visitType" = "Visit type: %@";
+"ai.prompt.label.ageDays" = "Age (days): %@";
+"ai.prompt.label.ageDaysNotDocumented" = "Age (days): not documented.";
+"ai.prompt.label.perinatalHistory" = "Perinatal history: %@";
+"ai.prompt.label.perinatalHistoryNotDocumented" = "Perinatal history: not documented.";
+
+/* Prompt placeholders */
+"ai.prompt.placeholder.noneProvided" = "(none provided)";
+"ai.prompt.placeholder.noneDocumented" = "(none documented)";
+/* Provider failure (episode + well) */
+"appstate.ai.provider_error_fallback_format" = "AI provider error: %@. Falling back to local stub.";
+
+/* Well-visit stub pieces */
+"appstate.ai.stub.well.piece.problem_listing_provided" = "Problem listing provided";
+"appstate.ai.stub.well.piece.perinatal_included" = "Perinatal history included";
+"appstate.ai.stub.well.piece.pmh_included" = "PMH included";
+"appstate.ai.stub.well.piece.vaccination_included" = "Vaccination summary included";
+"appstate.ai.stub.well.piece.age_days_format" = "Age in days: %d";
+"appstate.ai.stub.well.piece.custom_prompt_configured" = "Clinician well-visit prompt configured";
+"appstate.ai.stub.well.piece.using_default_prompt" = "Using default well-visit AI prompt";
+"appstate.ai.stub.well.summary.no_context" = "Placeholder well-visit AI summary – no well-visit context was provided. Once configured, AI providers will analyze problem listing, perinatal history, PMH and vaccination status.";
+"appstate.ai.stub.well.summary.format" = "Stub well-visit AI summary based on current context → %@";
+
+/* Sick-episode stub pieces */
+"appstate.ai.stub.episode.piece.problem_listing_provided" = "Problem listing provided";
+"appstate.ai.stub.episode.piece.investigations_described" = "Investigations described";
+"appstate.ai.stub.episode.piece.vaccination_format" = "Vaccination: %@";
+"appstate.ai.stub.episode.piece.pmh_included" = "PMH included";
+"appstate.ai.stub.episode.piece.icd10_available_format" = "ICD-10 suggestion available (%@)";
+"appstate.ai.stub.episode.piece.custom_prompt_configured" = "Clinician sick-visit prompt configured";
+"appstate.ai.stub.episode.piece.using_default_prompt" = "Using default sick-visit AI prompt";
+"appstate.ai.stub.episode.summary.no_context" = "Placeholder AI summary – no episode context was provided. Once configured, AI providers will analyze problem listing, investigations, vaccination status and past medical history.";
+"appstate.ai.stub.episode.summary.format" = "Stub AI summary based on current episode → %@";
+/* Fallback model label when an AI input row has an empty model name. */
+"appstate.ai.inputs.model_unknown" = "Unknown";
+/* Log format for startNewEpisode debug: pid, uid, db path. */
+"appstate.episode.start.debug_format" = "startNewEpisode: pid=%@, uid=%@, db=%@";
+
+/* Log when startNewEpisode guard fails due to missing pid or dbURL. */
+"appstate.episode.start.guard_failed" = "startNewEpisode: guard failed (no pid or dbURL)";
+
+/* Log when startNewEpisode cannot open the bundle database. */
+"appstate.episode.start.open_failed" = "startNewEpisode: sqlite3_open_v2 failed";
+
+/* Log when episode INSERT prepare fails; %@ is the sqlite error message. */
+"appstate.episode.start.insert_prepare_failed_format" = "startNewEpisode: INSERT prepare failed: %@";
+
+/* Log when episode INSERT step fails; %@ is the sqlite error message. */
+"appstate.episode.start.insert_failed_format" = "startNewEpisode: INSERT failed: %@";
+
+/* Log when a new episode row is inserted; %d is the new episode id; %@ is the user_id description. */
+"appstate.episode.start.inserted_format" = "startNewEpisode: inserted row id %d, user_id=%@";
+
+/* Log when there is no active clinician id; mirroring to bundle users is skipped. */
+"appstate.users_mirror.no_active_user_id" = "ensureActiveClinicianMirroredIntoBundleUsers: no activeUserID; skipping";
+
+/* Log when clinicians DB cannot be opened; %@ is the clinicians DB path. */
+"appstate.users_mirror.open_clinicians_db_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: failed to open clinicians DB at %@";
+
+/* Log when preparing the clinicians name SELECT fails; %@ is the sqlite error. */
+"appstate.users_mirror.name_select_prepare_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: name SELECT prepare failed: %@";
+
+/* Log when no clinician row exists; %d is the clinician id. */
+"appstate.users_mirror.no_clinician_row_found_format" = "ensureActiveClinicianMirroredIntoBundleUsers: no clinician row found for id %d in clinicians.sqlite";
+
+/* Log when clinician name is empty; %d is the clinician id. */
+"appstate.users_mirror.empty_name_skip_format" = "ensureActiveClinicianMirroredIntoBundleUsers: clinician %d has empty name; skipping mirror";
+
+/* Log when there is no active bundle DB URL; mirroring to bundle users is skipped. */
+"appstate.users_mirror.no_current_db_url" = "ensureActiveClinicianMirroredIntoBundleUsers: no currentDBURL; skipping mirror";
+
+/* Log when bundle DB cannot be opened; %@ is the bundle DB path. */
+"appstate.users_mirror.open_bundle_db_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: failed to open bundle DB at %@";
+
+/* Log when CREATE TABLE users fails; %@ is the sqlite error. */
+"appstate.users_mirror.create_users_table_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: CREATE TABLE users failed: %@";
+
+/* Log when preparing the bundle users check SELECT fails; %@ is the sqlite error. */
+"appstate.users_mirror.check_select_prepare_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: check SELECT prepare failed: %@";
+
+/* Log when preparing UPDATE users fails; %@ is the sqlite error. */
+"appstate.users_mirror.update_prepare_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: UPDATE prepare failed: %@";
+
+/* Log when UPDATE users step fails; %@ is the sqlite error. */
+"appstate.users_mirror.update_step_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: UPDATE step failed: %@";
+
+/* Log when a clinician is updated in the bundle users table; %d is the clinician id. */
+"appstate.users_mirror.updated_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers: updated user %d in bundle users table";
+
+/* Log when preparing INSERT users fails; %@ is the sqlite error. */
+"appstate.users_mirror.insert_prepare_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: INSERT prepare failed: %@";
+
+/* Log when INSERT users step fails; %@ is the sqlite error. */
+"appstate.users_mirror.insert_step_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers: INSERT step failed: %@";
+
+/* Log when a clinician is inserted into the bundle users table; %d is the clinician id. */
+"appstate.users_mirror.inserted_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers: inserted user %d into bundle users table";
+
+/* Log when addGrowthPointManual is called without an active bundle DB URL. */
+"appstate.growth.add_manual.no_current_db_url" = "addGrowthPointManual: no current DB URL";
+
+/* Error shown when there is no active bundle DB for a growth write operation. */
+"appstate.growth.no_active_bundle_db" = "No active bundle DB";
+
+/* Log when deleteGrowthPointIfManual is called with a non-manual growth source. %@ is the source string. */
+"appstate.growth.delete_manual.ignored_non_manual_source_format" = "deleteGrowthPointIfManual: ignored non-manual source=%@";
+
+/* Log when deleteGrowthPointIfManual is called without an active bundle DB URL. */
+"appstate.growth.delete_manual.no_current_db_url" = "deleteGrowthPointIfManual: no current DB URL";
+
+/* Log when no db.sqlite is found while importing a ZIP. %@ is the staging folder path. */
+"appstate.zip_import.no_db_found_under_format" = "ZIP import: no db.sqlite found under %@";
+
+/* Log when bundle integrity validation fails during ZIP import. %@ is the bundle root path. */
+"appstate.zip_import.integrity_check_failed_format" = "ZIP import: integrity check failed for bundle at %@; skipping.";
+
+/* Log when no patient identity can be extracted during ZIP import. %@ is the bundle root path. */
+"appstate.zip_import.no_identity_found_format" = "ZIP import: no identity (manifest/db) found under %@ — registering as anonymous; duplicate detection skipped.";
+
+/* Log when an existing bundle is replaced during import. First %@ is the identity string, second %@ is the final path. */
+"appstate.zip_import.replaced_existing_bundle_format" = "Replaced existing bundle for %@ at %@";
+
+/* Log when replacing an existing bundle fails during import. %@ is the identity string. */
+"appstate.zip_import.failed_to_replace_existing_bundle_format" = "Failed to replace existing bundle for %@";
+
+/* Log when keeping both bundles during import. First %@ is the identity string, second %@ is the new bundle path. */
+"appstate.zip_import.kept_both_bundles_format" = "Kept both bundles for %@. New at %@";
+
+/* Log when the user cancels a ZIP import conflict. %@ is the identity string. */
+"appstate.zip_import.cancelled_import_format" = "Cancelled import for %@";
+
+/* Log when a new bundle is imported without auto-selecting it. First %@ is the identity string, second %@ is the bundle path. */
+"appstate.zip_import.imported_new_bundle_no_autoselect_format" = "Imported new bundle (no auto-select): %@ at %@";
+
+/* Log when a ZIP import fails. First %@ is the zip path, second %@ is the error description. */
+"appstate.zip_import.failed_for_zip_format" = "ZIP import failed for %@: %@";
+
+/* Title for the import conflict alert when a patient already exists. */
+"appstate.import_conflict.alert_title" = "Patient already exists";
+
+/* Message for the import conflict alert. %@ is the patient identity string. */
+"appstate.import_conflict.alert_message_format" = "Found an existing bundle for %@.\nWhat would you like to do?";
+
+/* Button title to replace the existing patient bundle during import. */
+"appstate.import_conflict.button_replace" = "Replace";
+
+/* Button title to keep both bundles during import. */
+"appstate.import_conflict.button_keep_both" = "Keep Both";
+
+/* Button title to cancel the import. */
+"appstate.import_conflict.button_cancel" = "Cancel";
+"appstate.archive_and_replace.failed_format" = "archiveAndReplace failed: %@";
+"appstate.new_patient.default_alias" = "New Patient";
+"appstate.new_patient.created_bundle_format" = "Created new bundle for %@ at %@";
+"appstate.golden_db.not_found_in_bundle" = "golden.db not found in bundle";
+"appstate.db.open_failed_at_path_format" = "Failed to open DB at %@";
+"appstate.db.schema_init_failed_format" = "Schema init failed: %@";
+"appstate.db.prepare_failed_format" = "Prepare failed: %@";
+"appstate.db.insert_failed_format" = "Insert failed: %@";
+/* Growth writes */
+"appstate.growth.add_manual.no_current_db_url" = "addGrowthPointManual: no current DB URL";
+"appstate.growth.delete_manual.no_current_db_url" = "deleteGrowthPointIfManual: no current DB URL";
+"appstate.growth.no_active_bundle_db" = "No active bundle DB";
+"appstate.growth.delete_manual.ignored_non_manual_source_format" = "deleteGrowthPointIfManual: ignored non-manual source=%@";
+
+/* ZIP import */
+"appstate.zip_import.no_db_found_under_format" = "ZIP import: no db.sqlite found under %@";
+"appstate.zip_import.integrity_check_failed_format" = "ZIP import: integrity check failed for bundle at %@; skipping.";
+"appstate.zip_import.no_identity_found_format" = "ZIP import: no identity (manifest/db) found under %@ — registering as anonymous; duplicate detection skipped.";
+"appstate.zip_import.replaced_existing_bundle_format" = "Replaced existing bundle for %@ at %@";
+"appstate.zip_import.failed_to_replace_existing_bundle_format" = "Failed to replace existing bundle for %@";
+"appstate.zip_import.kept_both_bundles_format" = "Kept both bundles for %@. New at %@";
+"appstate.zip_import.cancelled_import_format" = "Cancelled import for %@";
+"appstate.zip_import.imported_new_bundle_no_autoselect_format" = "Imported new bundle (no auto-select): %@ at %@";
+"appstate.zip_import.failed_for_zip_format" = "ZIP import failed for %@: %@";
+
+/* Import conflict alert (macOS) */
+"appstate.import_conflict.alert_title" = "Patient already exists";
+"appstate.import_conflict.alert_message_format" = "Found an existing bundle for %@.\nWhat would you like to do?";
+"appstate.import_conflict.button_replace" = "Replace";
+"appstate.import_conflict.button_keep_both" = "Keep Both";
+"appstate.import_conflict.button_cancel" = "Cancel";
+
+/* Archive/replace */
+"appstate.archive_and_replace.failed_format" = "archiveAndReplace failed: %@";
+
+/* New patient / bundle creation */
+"appstate.new_patient.default_alias" = "New Patient";
+"appstate.new_patient.created_bundle_format" = "Created new bundle for %@ at %@";
+
+/* Golden DB */
+"appstate.golden_db.not_found_in_bundle" = "golden.db not found in bundle";
+
+/* SQLite errors */
+"appstate.db.schema_init_failed_format" = "Schema init failed: %@";
+"appstate.db.insert_failed_format" = "Insert failed: %@";
+"appstate.db.no_patient_row_found" = "No patient row found";
+
+/* Manifest validation */
+"appstate.manifest.validate.not_dictionary_format" = "validateBundleIntegrity: manifest.json is not a dictionary at %@";
+"appstate.manifest.validate.no_db_sha256_skip" = "validateBundleIntegrity: manifest has no db_sha256; skipping DB hash check.";
+"appstate.manifest.validate.no_db_files_found_under_format" = "validateBundleIntegrity: no db.sqlite or db.sqlite.enc found under %@";
+"appstate.manifest.validate.failed_to_compute_db_hash_format" = "validateBundleIntegrity: failed to compute DB hash for %@";
+"appstate.manifest.validate.db_hash_mismatch_format" = "validateBundleIntegrity: DB hash mismatch for bundle at %@. expected=%@ actual=%@";
+"appstate.manifest.validate.docs_entry_missing_format" = "validateBundleIntegrity: docs entry missing on disk → %@";
+"appstate.manifest.validate.docs_hash_mismatch_format" = "validateBundleIntegrity: docs hash mismatch for %@. expected=%@ actual=%@";
+"appstate.manifest.validate.read_parse_failed_format" = "validateBundleIntegrity: failed to read/parse manifest at %@: %@";
+
+/* Manifest write */
+"appstate.manifest.write_v2.failed_format" = "writeManifestV2 failed: %@";
+
+/* Log/print when extracting a ZIP bundle fails. %@ is the error description. */
+"appstate.zip_extract.failed_format" = "ZIP extract failed: %@";
+
+/* Log/print when deleting an AI input row fails. %@ is the error description. */
+"appstate.ai_inputs.delete.failed_format" = "deleteAIInputRow failed: %@";
+
+/* Error when opening the bundle DB for deleting an AI input. %@ is the sqlite error. */
+"appstate.ai_inputs.delete.open_failed_format" = "open failed: %@";
+
+/* Error when preparing the DELETE ai_inputs statement fails. %@ is the sqlite error. */
+"appstate.ai_inputs.delete.prepare_failed_format" = "prepare delete ai_input failed: %@";
+
+/* Error when executing the DELETE ai_inputs statement fails. %@ is the sqlite error. */
+"appstate.ai_inputs.delete.step_failed_format" = "delete ai_input step failed: %@";
+

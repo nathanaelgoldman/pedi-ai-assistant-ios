@@ -175,14 +175,21 @@ struct SickEpisodeForm: View {
                     HStack {
                         Image(systemName: "stethoscope")
                             .font(.system(size: 22))
-                        Text(editingEpisodeID == nil ? "New Sick Episode" : "Edit Sick Episode #\(editingEpisodeID!)")
-                            .font(.title2.bold())
+                        Text(
+                            editingEpisodeID == nil
+                            ? NSLocalizedString("New Sick Episode", comment: "Title for creating a new sick episode")
+                            : String(
+                                format: NSLocalizedString("Edit Sick Episode #%d", comment: "Title for editing an existing sick episode with its numeric ID"),
+                                editingEpisodeID!
+                              )
+                        )
+                        .font(.title2.bold())
                         Spacer()
                     }
 
                     // Vitals (moved to top)
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader("Vitals")
+                        SectionHeader(NSLocalizedString("Vitals", comment: "Section header for vitals"))
                         // Live vitals classification badges
                         let badges = vitalsBadges()
                         if !badges.isEmpty {
@@ -199,40 +206,40 @@ struct SickEpisodeForm: View {
                             .padding(.bottom, 4)
                         }
                         if activeEpisodeID == nil {
-                            Text("Save the episode first to enable vitals entry.")
+                            Text(NSLocalizedString("Save the episode first to enable vitals entry.", comment: "Hint explaining that vitals entry is available only after saving the episode"))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         } else {
                             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                                 GridRow {
-                                    TextField("Weight (kg)", text: $weightKgField)
+                                    TextField(NSLocalizedString("Weight (kg)", comment: "Placeholder for weight in kilograms"), text: $weightKgField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField("Height (cm)", text: $heightCmField)
+                                    TextField(NSLocalizedString("Height (cm)", comment: "Placeholder for height in centimeters"), text: $heightCmField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField("Head circ (cm)", text: $headCircumferenceField)
+                                    TextField(NSLocalizedString("Head circ (cm)", comment: "Placeholder for head circumference in centimeters"), text: $headCircumferenceField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField("Temperature (°C)", text: $temperatureCField)
+                                    TextField(NSLocalizedString("Temperature (°C)", comment: "Placeholder for temperature in Celsius"), text: $temperatureCField)
                                         .textFieldStyle(.roundedBorder)
                                 }
                                 GridRow {
-                                    TextField("HR (bpm)", text: $heartRateField)
+                                    TextField(NSLocalizedString("HR (bpm)", comment: "Placeholder for heart rate in beats per minute"), text: $heartRateField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField("RR (/min)", text: $respiratoryRateField)
+                                    TextField(NSLocalizedString("RR (/min)", comment: "Placeholder for respiratory rate per minute"), text: $respiratoryRateField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField("SpO₂ (%)", text: $spo2Field)
+                                    TextField(NSLocalizedString("SpO₂ (%)", comment: "Placeholder for oxygen saturation in percent"), text: $spo2Field)
                                         .textFieldStyle(.roundedBorder)
                                     HStack {
-                                        TextField("BP systolic", text: $bpSysField)
+                                        TextField(NSLocalizedString("BP systolic", comment: "Placeholder for systolic blood pressure"), text: $bpSysField)
                                             .textFieldStyle(.roundedBorder)
-                                        TextField("BP diastolic", text: $bpDiaField)
+                                        TextField(NSLocalizedString("BP diastolic", comment: "Placeholder for diastolic blood pressure"), text: $bpDiaField)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
                                 GridRow {
-                                    TextField("Recorded at (ISO8601)", text: $recordedAtField)
+                                    TextField(NSLocalizedString("Recorded at (ISO8601)", comment: "Placeholder for recorded-at timestamp"), text: $recordedAtField)
                                         .textFieldStyle(.roundedBorder)
-                                        .help("Leave blank for current time.")
-                                    Toggle("Replace previous vitals for this episode", isOn: $replacePreviousVitals)
+                                        .help(NSLocalizedString("Leave blank for current time.", comment: "Help text for recorded-at field"))
+                                    Toggle(NSLocalizedString("Replace previous vitals for this episode", comment: "Option to replace existing vitals for this episode"), isOn: $replacePreviousVitals)
                                         .toggleStyle(.switch)
                                         .gridCellColumns(3)
                                 }
@@ -242,7 +249,7 @@ struct SickEpisodeForm: View {
                                 Button {
                                     saveVitalsTapped()
                                 } label: {
-                                    Label("Save vitals", systemImage: "heart.text.square")
+                                    Label(NSLocalizedString("Save vitals", comment: "Button to save vitals"), systemImage: "heart.text.square")
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(activeEpisodeID == nil)
@@ -252,7 +259,7 @@ struct SickEpisodeForm: View {
 
                             if !vitalsHistory.isEmpty {
                                 Divider()
-                                Text("Vitals history (oldest → newest)").font(.subheadline.bold())
+                                Text(NSLocalizedString("Vitals history (oldest → newest)", comment: "Header for vitals history list")).font(.subheadline.bold())
                                 VStack(alignment: .leading, spacing: 6) {
                                     ForEach(vitalsHistory) { row in
                                         HStack {
@@ -262,23 +269,24 @@ struct SickEpisodeForm: View {
                                         }
                                     }
                                 }
-                                HStack {
-                                    Picker("Delete a row…", selection: $vitalsDeleteSelection) {
-                                        Text("—").tag(Int64?.none)
-                                        ForEach(vitalsHistory) { row in
-                                            Text("\(row.recordedAt)").tag(Optional(row.id))
-                                        }
-                                    }
-                                    .labelsHidden()
-                                    Button(role: .destructive) {
-                                        deleteSelectedVitals()
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                    .disabled(vitalsDeleteSelection == nil)
-                                }
+                          HStack {
+                              Picker(NSLocalizedString("sick_episode_form.vitals.delete_picker.title", comment: "Title for the vitals row deletion picker"), selection: $vitalsDeleteSelection) {
+                                  Text(NSLocalizedString("sick_episode_form.vitals.delete_picker.none", comment: "Placeholder option for no vitals row selected")).tag(Int64?.none)
+                                  ForEach(vitalsHistory) { row in
+                                      Text("\(row.recordedAt)").tag(Optional(row.id))
+                                  }
+                              }
+                              .labelsHidden()
+
+                              Button(role: .destructive) {
+                                  deleteSelectedVitals()
+                              } label: {
+                                  Label(NSLocalizedString("sick_episode_form.vitals.delete_button", comment: "Button label to delete the selected vitals row"), systemImage: "trash")
+                              }
+                              .disabled(vitalsDeleteSelection == nil)
+                          }
                             } else {
-                                Text("No vitals recorded for this episode yet.")
+                                Text(NSLocalizedString("No vitals recorded for this episode yet.", comment: "Message when no vitals have been recorded"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -292,85 +300,85 @@ struct SickEpisodeForm: View {
                     HStack(alignment: .top, spacing: 20) {
                         // Column A (left)
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader("Main Complaint")
+                            SectionHeader(NSLocalizedString("Main Complaint", comment: "Section header for main complaint"))
                             complaintBlock
 
-                            SectionHeader("History of Present Illness")
-                            pickerRow("Appearance", $appearance, appearanceChoices)
-                            pickerRow("Feeding", $feeding, feedingChoices)
-                            pickerRow("Breathing", $breathing, breathingChoices)
-                            pickerRow("Urination", $urination, urinationChoices)
-                            pickerRow("Pain", $pain, painChoices)
-                            pickerRow("Stools", $stools, stoolsChoices)
-                            multiSelectChips(title: "Context", options: contextChoices, selection: $context)
-                            TextField("HPI summary", text: $hpi, axis: .vertical)
+                            SectionHeader(NSLocalizedString("History of Present Illness", comment: "Section header for HPI"))
+                            pickerRow(NSLocalizedString("Appearance", comment: "Label for appearance picker"), $appearance, appearanceChoices)
+                            pickerRow(NSLocalizedString("Feeding", comment: "Label for feeding picker"), $feeding, feedingChoices)
+                            pickerRow(NSLocalizedString("Breathing", comment: "Label for breathing picker"), $breathing, breathingChoices)
+                            pickerRow(NSLocalizedString("Urination", comment: "Label for urination picker"), $urination, urinationChoices)
+                            pickerRow(NSLocalizedString("Pain", comment: "Label for pain picker"), $pain, painChoices)
+                            pickerRow(NSLocalizedString("Stools", comment: "Label for stools picker"), $stools, stoolsChoices)
+                            multiSelectChips(title: NSLocalizedString("Context", comment: "Label for context multiselect"), options: contextChoices, selection: $context)
+                            TextField(NSLocalizedString("HPI summary", comment: "Placeholder for HPI summary"), text: $hpi, axis: .vertical)
                                 .textFieldStyle(.roundedBorder)
                                 .lineLimit(3...6)
-                            TextField("Duration (hours)", text: $duration)
+                            TextField(NSLocalizedString("Duration (hours)", comment: "Placeholder for duration in hours"), text: $duration)
                                 .textFieldStyle(.roundedBorder)
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
 
                         // Column B (right)
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader("Physical Examination")
-                            pickerRow("General appearance", $generalAppearance, generalChoices)
-                            pickerRow("Hydration", $hydration, hydrationChoices)
-                            pickerRow("Color / Hemodynamics", $color, colorChoices)
-                            multiSelectChips(title: "Skin", options: skinOptionsMulti, selection: $skinSet)
-                            multiSelectChips(title: "ENT", options: entChoices, selection: $ent)
-                            pickerRow("Right ear", $rightEar, earChoices)
-                            pickerRow("Left ear", $leftEar, earChoices)
-                            pickerRow("Right eye", $rightEye, eyeChoices)
-                            pickerRow("Left eye", $leftEye, eyeChoices)
-                            pickerRow("Heart", $heart, heartChoices)
-                            multiSelectChips(title: "Lungs", options: lungsOptionsMulti, selection: $lungsSet)
-                            multiSelectChips(title: "Abdomen", options: abdomenOptionsMulti, selection: $abdomenSet)
-                            pickerRow("Peristalsis", $peristalsis, peristalsisChoices)
-                            multiSelectChips(title: "Genitalia", options: genitaliaOptionsMulti, selection: $genitaliaSet)
-                            pickerRow("Neurological", $neurological, neuroChoices)
-                            pickerRow("Musculoskeletal", $musculoskeletal, mskChoices)
-                            multiSelectChips(title: "Lymph nodes", options: nodesOptionsMulti, selection: $lymphNodesSet)
+                            SectionHeader(NSLocalizedString("Physical Examination", comment: "Section header for physical exam"))
+                            pickerRow(NSLocalizedString("General appearance", comment: "Label for general appearance picker"), $generalAppearance, generalChoices)
+                            pickerRow(NSLocalizedString("Hydration", comment: "Label for hydration picker"), $hydration, hydrationChoices)
+                            pickerRow(NSLocalizedString("Color / Hemodynamics", comment: "Label for color/hemodynamics picker"), $color, colorChoices)
+                            multiSelectChips(title: NSLocalizedString("Skin", comment: "Label for skin multiselect"), options: skinOptionsMulti, selection: $skinSet)
+                            multiSelectChips(title: NSLocalizedString("ENT", comment: "Label for ENT multiselect"), options: entChoices, selection: $ent)
+                            pickerRow(NSLocalizedString("Right ear", comment: "Label for right ear picker"), $rightEar, earChoices)
+                            pickerRow(NSLocalizedString("Left ear", comment: "Label for left ear picker"), $leftEar, earChoices)
+                            pickerRow(NSLocalizedString("Right eye", comment: "Label for right eye picker"), $rightEye, eyeChoices)
+                            pickerRow(NSLocalizedString("Left eye", comment: "Label for left eye picker"), $leftEye, eyeChoices)
+                            pickerRow(NSLocalizedString("Heart", comment: "Label for heart picker"), $heart, heartChoices)
+                            multiSelectChips(title: NSLocalizedString("Lungs", comment: "Label for lungs multiselect"), options: lungsOptionsMulti, selection: $lungsSet)
+                            multiSelectChips(title: NSLocalizedString("Abdomen", comment: "Label for abdomen multiselect"), options: abdomenOptionsMulti, selection: $abdomenSet)
+                            pickerRow(NSLocalizedString("Peristalsis", comment: "Label for peristalsis picker"), $peristalsis, peristalsisChoices)
+                            multiSelectChips(title: NSLocalizedString("Genitalia", comment: "Label for genitalia multiselect"), options: genitaliaOptionsMulti, selection: $genitaliaSet)
+                            pickerRow(NSLocalizedString("Neurological", comment: "Label for neurological picker"), $neurological, neuroChoices)
+                            pickerRow(NSLocalizedString("Musculoskeletal", comment: "Label for musculoskeletal picker"), $musculoskeletal, mskChoices)
+                            multiSelectChips(title: NSLocalizedString("Lymph nodes", comment: "Label for lymph nodes multiselect"), options: nodesOptionsMulti, selection: $lymphNodesSet)
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
 
                     // Plan
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader("Problem Listing")
+                        SectionHeader(NSLocalizedString("Problem Listing", comment: "Section header for problem listing"))
                         HStack {
                             Button {
                                 generateProblemList()
                             } label: {
-                                Label("Generate Problem List", systemImage: "brain.head.profile")
+                                Label(NSLocalizedString("Generate Problem List", comment: "Button to generate problem listing"), systemImage: "brain.head.profile")
                             }
                             .buttonStyle(.borderedProminent)
-                            .help("Build an aggregated problem listing from patient age/sex, complaint, duration, and abnormal findings.")
+                            .help(NSLocalizedString("Build an aggregated problem listing from patient age/sex, complaint, duration, and abnormal findings.", comment: "Help for generating problem listing"))
                             Spacer()
                         }
                         TextEditor(text: $problemListing)
                             .frame(minHeight: 120)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-                        TextField("Complementary investigations", text: $complementaryInvestigations, axis: .vertical)
+                        TextField(NSLocalizedString("Complementary investigations", comment: "Placeholder for complementary investigations"), text: $complementaryInvestigations, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
-                        TextField("Working diagnosis", text: $diagnosis)
+                        TextField(NSLocalizedString("Working diagnosis", comment: "Placeholder for working diagnosis"), text: $diagnosis)
                             .textFieldStyle(.roundedBorder)
-                        TextField("ICD-10", text: $icd10)
+                        TextField(NSLocalizedString("ICD-10", comment: "Placeholder for ICD-10 code(s)"), text: $icd10)
                             .textFieldStyle(.roundedBorder)
-                        SectionHeader("Plan")
+                        SectionHeader(NSLocalizedString("Plan", comment: "Section header for plan"))
                         TextEditor(text: $medications)
                             .frame(minHeight: 80)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-                        pickerRow("Anticipatory guidance", $anticipatoryGuidance, guidanceChoices)
-                        TextField("Comments", text: $comments, axis: .vertical)
+                        pickerRow(NSLocalizedString("Anticipatory guidance", comment: "Label for anticipatory guidance picker"), $anticipatoryGuidance, guidanceChoices)
+                        TextField(NSLocalizedString("Comments", comment: "Placeholder for comments"), text: $comments, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
                     }
                     .padding(.top, 8)
 
                     // AI assistance (JSON flags + API – stubbed for now)
                     VStack(alignment: .leading, spacing: 10) {
-                        SectionHeader("AI Assistance")
-                        Text("JSON guideline flags run locally and do not change the record; AI queries will later be configured in the clinician profile.")
+                        SectionHeader(NSLocalizedString("AI Assistance", comment: "Section header for AI assistance"))
+                        Text(NSLocalizedString("JSON guideline flags run locally and do not change the record; AI queries will later be configured in the clinician profile.", comment: "Description of AI assistance behavior"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -378,7 +386,7 @@ struct SickEpisodeForm: View {
                             Button {
                                 triggerGuidelineFlags()
                             } label: {
-                                Label("Check guideline flags", systemImage: "exclamationmark.triangle")
+                                Label(NSLocalizedString("Check guideline flags", comment: "Button to check JSON guideline flags"), systemImage: "exclamationmark.triangle")
                             }
                             .buttonStyle(.bordered)
 
@@ -389,9 +397,9 @@ struct SickEpisodeForm: View {
                                     ProgressView()
                                         .scaleEffect(0.7)
                                         .padding(.trailing, 4)
-                                    Text("Asking AI…")
+                                    Text(NSLocalizedString("Asking AI…", comment: "Status text while AI is running"))
                                 } else {
-                                    Label("Ask AI", systemImage: "sparkles")
+                                    Label(NSLocalizedString("Ask AI", comment: "Button to send query to AI"), systemImage: "sparkles")
                                 }
                             }
                             .buttonStyle(.borderedProminent)
@@ -400,7 +408,7 @@ struct SickEpisodeForm: View {
                             Button {
                                 previewAIPrompt()
                             } label: {
-                                Label("Preview AI JSON", systemImage: "doc.plaintext")
+                                Label(NSLocalizedString("Preview AI JSON", comment: "Button to preview AI JSON payload"), systemImage: "doc.plaintext")
                             }
                             .buttonStyle(.bordered)
 
@@ -411,7 +419,7 @@ struct SickEpisodeForm: View {
                         if let icdSuggestion = appState.icd10SuggestionForActiveEpisode,
                            !icdSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Suggested ICD-10")
+                                Text(NSLocalizedString("Suggested ICD-10", comment: "Header for suggested ICD-10 code"))
                                     .font(.subheadline.bold())
                                 Text(icdSuggestion)
                                     .font(.caption)
@@ -422,12 +430,12 @@ struct SickEpisodeForm: View {
                                         // Apply the suggestion into the editable ICD-10 field.
                                         icd10 = icdSuggestion
                                     } label: {
-                                        Label("Apply to ICD-10 field", systemImage: "arrow.down.doc")
+                                        Label(NSLocalizedString("Apply to ICD-10 field", comment: "Button label to apply suggested ICD-10"), systemImage: "arrow.down.doc")
                                     }
                                     .buttonStyle(.bordered)
 
                                     if !icd10.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Text("Current ICD-10 will be replaced.")
+                                        Text(NSLocalizedString("Current ICD-10 will be replaced.", comment: "Warning about replacing current ICD-10 field"))
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
@@ -443,10 +451,10 @@ struct SickEpisodeForm: View {
                         // All ICD-10-like codes detected in the latest AI note
                         if !appState.aiICD10CandidatesForActiveEpisode.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("ICD-10 codes found in AI note")
+                                Text(NSLocalizedString("ICD-10 codes found in AI note", comment: "Header for ICD-10 codes found in AI note"))
                                     .font(.subheadline.bold())
 
-                                Text("Tap a code to append it to the ICD-10 field. Duplicates are ignored.")
+                                Text(NSLocalizedString("Tap a code to append it to the ICD-10 field. Duplicates are ignored.", comment: "Instruction for using ICD-10 candidate buttons"))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
 
@@ -476,7 +484,7 @@ struct SickEpisodeForm: View {
 
                         if !appState.aiGuidelineFlagsForActiveEpisode.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Guideline flags (local JSON)")
+                                Text(NSLocalizedString("Guideline flags (local JSON)", comment: "Header for guideline flags from local JSON"))
                                     .font(.subheadline.bold())
                                 ForEach(appState.aiGuidelineFlagsForActiveEpisode, id: \.self) { flag in
                                     HStack(alignment: .top, spacing: 6) {
@@ -494,12 +502,14 @@ struct SickEpisodeForm: View {
 
                         if !appState.aiSummariesForActiveEpisode.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("AI notes (per provider)")
+                                Text(NSLocalizedString("AI notes (per provider)", comment: "Header for AI notes per provider"))
                                     .font(.subheadline.bold())
                                 ForEach(appState.aiSummariesForActiveEpisode.keys.sorted(), id: \.self) { provider in
                                     if let text = appState.aiSummariesForActiveEpisode[provider] {
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(provider == "local-stub" ? "AI (stub)" : provider)
+                                            Text(provider == "local-stub"
+                                                 ? NSLocalizedString("AI (stub)", comment: "Label for local stub AI provider")
+                                                 : provider)
                                                 .font(.caption.bold())
                                                 .foregroundStyle(.secondary)
                                             Text(text)
@@ -526,14 +536,14 @@ struct SickEpisodeForm: View {
                                         } label: {
                                             VStack(alignment: .leading, spacing: 2) {
                                                 HStack {
-                                                    Text(row.createdAtISO.isEmpty ? "Time: n/a" : row.createdAtISO)
+                                                    Text(row.createdAtISO.isEmpty ? NSLocalizedString("Time: n/a", comment: "Fallback when timestamp is not available") : row.createdAtISO)
                                                         .font(.caption2.monospaced())
                                                     Spacer()
-                                                    Text(row.model.isEmpty ? "provider: unknown" : row.model)
+                                                    Text(row.model.isEmpty ? NSLocalizedString("provider: unknown", comment: "Fallback when AI provider is unknown") : row.model)
                                                         .font(.caption2)
                                                         .foregroundStyle(.secondary)
                                                 }
-                                                Text(row.responsePreview.isEmpty ? "(no response stored)" : row.responsePreview)
+                                                Text(row.responsePreview.isEmpty ? NSLocalizedString("(no response stored)", comment: "Fallback when no AI response is stored") : row.responsePreview)
                                                     .font(.caption)
                                                     .lineLimit(2)
                                             }
@@ -553,10 +563,10 @@ struct SickEpisodeForm: View {
                                     if let selectedID = selectedAIHistoryID,
                                        let selectedRow = appState.aiInputsForActiveEpisode.first(where: { $0.id == selectedID }) {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Selected AI response")
+                                            Text(NSLocalizedString("Selected AI response", comment: "Header for selected AI response viewer"))
                                                 .font(.subheadline.bold())
                                             ScrollView {
-                                                Text(selectedRow.fullResponse.isEmpty ? "(no response stored)" : selectedRow.fullResponse)
+                                                Text(selectedRow.fullResponse.isEmpty ? NSLocalizedString("(no response stored)", comment: "Fallback when no AI response is stored") : selectedRow.fullResponse)
                                                     .font(.caption)
                                                     .textSelection(.enabled)
                                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -574,7 +584,7 @@ struct SickEpisodeForm: View {
                                                 Button(role: .destructive) {
                                                     deleteSelectedAIHistory()
                                                 } label: {
-                                                    Label("Delete this AI entry", systemImage: "trash")
+                                                    Label(NSLocalizedString("Delete this AI entry", comment: "Button to delete selected AI history entry"), systemImage: "trash")
                                                 }
                                             }
                                             .padding(.top, 4)
@@ -583,7 +593,7 @@ struct SickEpisodeForm: View {
                                 }
                                 .padding(.top, 4)
                             } label: {
-                                Text("AI history for this episode")
+                                Text(NSLocalizedString("AI history for this episode", comment: "Header for AI history list"))
                                     .font(.subheadline.bold())
                             }
                             .padding(8)
@@ -593,7 +603,7 @@ struct SickEpisodeForm: View {
 
                         if !aiPromptPreview.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Structured episode JSON (debug)")
+                                Text(NSLocalizedString("Structured episode JSON (debug)", comment: "Header for structured episode JSON debug view"))
                                     .font(.subheadline.bold())
                                 ScrollView {
                                     Text(aiPromptPreview)
@@ -614,7 +624,7 @@ struct SickEpisodeForm: View {
                     // Inline Done button so the user can close the form after saving without relying on the toolbar
                     HStack {
                         Spacer()
-                        Button("Done") {
+                        Button(NSLocalizedString("Done", comment: "Button to close the form")) {
                             dismiss()
                         }
                         .buttonStyle(.borderedProminent)
@@ -627,14 +637,14 @@ struct SickEpisodeForm: View {
                    minHeight: 580, idealHeight: 720, maxHeight: .infinity)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(NSLocalizedString("Cancel", comment: "Toolbar cancel button")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { saveTapped() }
+                    Button(NSLocalizedString("Save", comment: "Toolbar save button")) { saveTapped() }
                         .keyboardShortcut(.defaultAction)
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Done") { dismiss() }
+                    Button(NSLocalizedString("Done", comment: "Toolbar done button")) { dismiss() }
                 }
             }
             .onAppear {
@@ -655,14 +665,14 @@ struct SickEpisodeForm: View {
 
     private var complaintBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Select common complaints")
+            Text(NSLocalizedString("Select common complaints", comment: "Instruction to select common complaints"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             // Simple chip-like toggles in rows of 4 for predictable wrapping
             WrappingChips(strings: complaintOptions, selection: $presetComplaints)
 
-            TextField("Other complaints (comma-separated)", text: $otherComplaints)
+            TextField(NSLocalizedString("Other complaints (comma-separated)", comment: "Text field for other complaints, comma-separated"), text: $otherComplaints)
                 .textFieldStyle(.roundedBorder)
         }
     }
@@ -673,7 +683,9 @@ struct SickEpisodeForm: View {
                 .frame(width: 220, alignment: .leading)
                 .foregroundStyle(.secondary)
             Picker(title, selection: selection) {
-                ForEach(options, id: \.self) { Text($0).tag($0) }
+                ForEach(options, id: \.self) { opt in
+                    Text(sickChoiceText(opt)).tag(opt)
+                }
             }
             .labelsHidden()
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -683,6 +695,7 @@ struct SickEpisodeForm: View {
     private func multiSelectChips(title: String, options: [String], selection: Binding<Set<String>>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).foregroundStyle(.secondary)
+            // (Note: `title` is already passed in as a localized string where used above.)
             WrappingChips(strings: options, selection: selection)
         }
     }
@@ -699,7 +712,19 @@ struct SickEpisodeForm: View {
         if sqlite3_open(url.path, &db) != SQLITE_OK {
             defer { if db != nil { sqlite3_close(db) } }
             let msg = String(cString: sqlite3_errmsg(db))
-            throw NSError(domain: "SickEpisodeForm.DB", code: 1, userInfo: [NSLocalizedDescriptionKey: "open failed: \(msg)"])
+            throw NSError(
+                domain: "SickEpisodeForm.DB",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: String(
+                        format: NSLocalizedString(
+                            "sick_episode_form.db.open_failed",
+                            comment: "Error message when opening the SQLite database fails."
+                        ),
+                        msg
+                    )
+                ]
+            )
         }
         return db
     }
@@ -1542,20 +1567,20 @@ struct SickEpisodeForm: View {
 
         if yrs >= 2 {
             // For older kids we keep it simple: "10 y"
-            return "\(yrs) y"
+            return String(format: NSLocalizedString("sick_episode_form.age.years_format", comment: "Age string for >=2 years, e.g. '10 y'"), yrs)
         } else if yrs == 1 {
             // This is the case that was wrong before (e.g. 1 y 4 mo)
             if mos > 0 {
-                return "1 y \(mos) mo"
+                return String(format: NSLocalizedString("sick_episode_form.age.one_year_months_format", comment: "Age string for 1 year plus months, e.g. '1 y 4 mo'"), mos)
             } else {
-                return "1 y"
+                return NSLocalizedString("sick_episode_form.age.one_year", comment: "Age string for exactly 1 year")
             }
         } else if mos >= 1 {
             // Under 1 year → months only
-            return "\(mos) mo"
+            return String(format: NSLocalizedString("sick_episode_form.age.months_format", comment: "Age string for months, e.g. '6 mo'"), mos)
         } else {
             // Newborns / very young infants → days
-            return "\(days) d"
+            return String(format: NSLocalizedString("sick_episode_form.age.days_format", comment: "Age string for days, e.g. '12 d'"), days)
         }
     }
 
@@ -1570,40 +1595,55 @@ struct SickEpisodeForm: View {
             let demo = fetchPatientDemographics(dbURL: dbURL, patientID: Int64(pid))
             // Intentionally omit patient name from the problem listing to avoid identifiers.
             if let a = ageText(from: demo.dobISO) {
-                lines.append("Age: \(a)")
+                lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.age", comment: "Problem list line: Age"), a))
             }
             if let sx = demo.sex, !sx.isEmpty {
-                lines.append("Sex: \(sx)")
+                lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.sex", comment: "Problem list line: Sex"), sx))
             }
             if let vax = demo.vax,
                !vax.isEmpty,
                vax.lowercased() != "up to date",
                vax.lowercased() != "up-to-date" {
-                lines.append("Vaccination status: \(vax)")
+                lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vaccination_status", comment: "Problem list line: Vaccination status"), vax))
             }
         }
 
         // Main complaint + duration
         let mc = currentMainComplaintString()
-        if !mc.isEmpty { lines.append("Main complaint: \(mc)") }
+        if !mc.isEmpty {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.main_complaint", comment: "Problem list line: Main complaint"), mc))
+        }
         if !duration.trimmingCharacters(in: .whitespaces).isEmpty {
-            lines.append("Duration: \(duration) hours")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.duration_hours", comment: "Problem list line: Duration in hours"), duration))
         }
         // Free-text HPI summary (so items like "blood in stool" are visible to AI)
         if !hpi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("HPI summary: \(hpi)")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.hpi_summary", comment: "Problem list line: HPI summary"), hpi))
         }
 
         // Structured HPI abnormalities
-        if appearance != "Well" { lines.append("Appearance: \(appearance)") }
-        if feeding != "Normal" { lines.append("Feeding: \(feeding)") }
-        if breathing != "Normal" { lines.append("Breathing: \(breathing)") }
-        if urination != "Normal" { lines.append("Urination: \(urination)") }
-        if pain != "None" { lines.append("Pain: \(pain)") }
-        if stools != "Normal" { lines.append("Stools: \(stools)") }
+        if appearance != "Well" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.appearance", comment: "Problem list line: Appearance"), sickChoiceText(appearance)))
+        }
+        if feeding != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.feeding", comment: "Problem list line: Feeding"), sickChoiceText(feeding)))
+        }
+        if breathing != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.breathing", comment: "Problem list line: Breathing"), sickChoiceText(breathing)))
+        }
+        if urination != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.urination", comment: "Problem list line: Urination"), sickChoiceText(urination)))
+        }
+        if pain != "None" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.pain", comment: "Problem list line: Pain"), sickChoiceText(pain)))
+        }
+        if stools != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.stools", comment: "Problem list line: Stools"), sickChoiceText(stools)))
+        }
         let ctx = Array(context).filter { $0 != "None" }
         if !ctx.isEmpty {
-            lines.append("Context: \(ctx.sorted().joined(separator: ", "))")
+            let ctxText = ctx.sorted().map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.context", comment: "Problem list line: Context"), ctxText))
         }
 
         // Vitals abnormalities – use current UI fields + classification badges
@@ -1613,69 +1653,97 @@ struct SickEpisodeForm: View {
 
             let tText = temperatureCField.trimmingCharacters(in: .whitespaces)
             if !tText.isEmpty {
-                vitalsPieces.append("T \(tText)°C")
+                vitalsPieces.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vitals.temp", comment: "Vitals piece: temperature"), tText))
             }
 
             let hrText = heartRateField.trimmingCharacters(in: .whitespaces)
             if !hrText.isEmpty {
-                vitalsPieces.append("HR \(hrText)")
+                vitalsPieces.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vitals.hr", comment: "Vitals piece: heart rate"), hrText))
             }
 
             let rrText = respiratoryRateField.trimmingCharacters(in: .whitespaces)
             if !rrText.isEmpty {
-                vitalsPieces.append("RR \(rrText)")
+                vitalsPieces.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vitals.rr", comment: "Vitals piece: respiratory rate"), rrText))
             }
 
             let s2Text = spo2Field.trimmingCharacters(in: .whitespaces)
             if !s2Text.isEmpty {
-                vitalsPieces.append("SpO₂ \(s2Text)%")
+                vitalsPieces.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vitals.spo2", comment: "Vitals piece: SpO2"), s2Text))
             }
 
             let sysText = bpSysField.trimmingCharacters(in: .whitespaces)
             let diaText = bpDiaField.trimmingCharacters(in: .whitespaces)
             if !sysText.isEmpty && !diaText.isEmpty {
-                vitalsPieces.append("BP \(sysText)/\(diaText)")
+                vitalsPieces.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vitals.bp", comment: "Vitals piece: blood pressure"), sysText, diaText))
             }
 
             let valuesPart = vitalsPieces.joined(separator: ", ")
             let flagsPart = vitalsFlags.joined(separator: ", ")
 
             if !valuesPart.isEmpty {
-                lines.append("Abnormal vitals: \(valuesPart) [\(flagsPart)]")
+                lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.abnormal_vitals.values_and_flags", comment: "Problem list line: abnormal vitals with values and flags"), valuesPart, flagsPart))
             } else {
-                lines.append("Abnormal vitals: \(flagsPart)")
+                lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.abnormal_vitals.flags_only", comment: "Problem list line: abnormal vitals with flags only"), flagsPart))
             }
         }
 
         // PE abnormalities
-        if generalAppearance != "Well" { lines.append("General Appearance: \(generalAppearance)") }
-        if hydration != "Normal" { lines.append("Hydration: \(hydration)") }
-        if heart != "Normal" { lines.append("Heart: \(heart)") }
-        if color != "Normal" { lines.append("Color: \(color)") }
+        if generalAppearance != "Well" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.general_appearance", comment: "Problem list line: General appearance"), sickChoiceText(generalAppearance)))
+        }
+        if hydration != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.hydration", comment: "Problem list line: Hydration"), sickChoiceText(hydration)))
+        }
+        if heart != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.heart", comment: "Problem list line: Heart"), sickChoiceText(heart)))
+        }
+        if color != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.color", comment: "Problem list line: Color"), sickChoiceText(color)))
+        }
         if !(skinSet.count == 1 && skinSet.contains("Normal")) {
-            lines.append("Skin: \(Array(skinSet).sorted().joined(separator: ", "))")
+            let joined = Array(skinSet).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.skin", comment: "Problem list line: Skin"), joined))
         }
         if !(ent.count == 1 && ent.contains("Normal")) {
-            lines.append("ENT: \(Array(ent).sorted().joined(separator: ", "))")
+            let joined = Array(ent).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.ent", comment: "Problem list line: ENT"), joined))
         }
-        if rightEar != "Normal" { lines.append("Right Ear: \(rightEar)") }
-        if leftEar  != "Normal" { lines.append("Left Ear: \(leftEar)") }
-        if rightEye != "Normal" { lines.append("Right Eye: \(rightEye)") }
-        if leftEye  != "Normal" { lines.append("Left Eye: \(leftEye)") }
+        if rightEar != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.right_ear", comment: "Problem list line: Right ear"), sickChoiceText(rightEar)))
+        }
+        if leftEar  != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.left_ear", comment: "Problem list line: Left ear"), sickChoiceText(leftEar)))
+        }
+        if rightEye != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.right_eye", comment: "Problem list line: Right eye"), sickChoiceText(rightEye)))
+        }
+        if leftEye  != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.left_eye", comment: "Problem list line: Left eye"), sickChoiceText(leftEye)))
+        }
         if !(lungsSet.count == 1 && lungsSet.contains("Normal")) {
-            lines.append("Lungs: \(Array(lungsSet).sorted().joined(separator: ", "))")
+            let joined = Array(lungsSet).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.lungs", comment: "Problem list line: Lungs"), joined))
         }
         if !(abdomenSet.count == 1 && abdomenSet.contains("Normal")) {
-            lines.append("Abdomen: \(Array(abdomenSet).sorted().joined(separator: ", "))")
+            let joined = Array(abdomenSet).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.abdomen", comment: "Problem list line: Abdomen"), joined))
         }
-        if peristalsis != "Normal" { lines.append("Peristalsis: \(peristalsis)") }
+        if peristalsis != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.peristalsis", comment: "Problem list line: Peristalsis"), sickChoiceText(peristalsis)))
+        }
         if !(genitaliaSet.count == 1 && genitaliaSet.contains("Normal")) {
-            lines.append("Genitalia: \(Array(genitaliaSet).sorted().joined(separator: ", "))")
+            let joined = Array(genitaliaSet).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.genitalia", comment: "Problem list line: Genitalia"), joined))
         }
-        if neurological != "Alert" { lines.append("Neurological: \(neurological)") }
-        if musculoskeletal != "Normal" { lines.append("MSK: \(musculoskeletal)") }
+        if neurological != "Alert" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.neurological", comment: "Problem list line: Neurological"), sickChoiceText(neurological)))
+        }
+        if musculoskeletal != "Normal" {
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.msk", comment: "Problem list line: Musculoskeletal"), sickChoiceText(musculoskeletal)))
+        }
         if !(lymphNodesSet.count == 1 && lymphNodesSet.contains("None")) {
-            lines.append("Lymph Nodes: \(Array(lymphNodesSet).sorted().joined(separator: ", "))")
+            let joined = Array(lymphNodesSet).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.lymph_nodes", comment: "Problem list line: Lymph nodes"), joined))
         }
 
         problemListing = lines.joined(separator: "\n")
@@ -1733,7 +1801,10 @@ struct SickEpisodeForm: View {
     private func triggerGuidelineFlags() {
         guard let ctx = buildEpisodeAIContext() else {
             appState.aiGuidelineFlagsForActiveEpisode = [
-                "Cannot run guideline flags: please ensure a patient and saved episode are selected."
+                NSLocalizedString(
+                    "sick_episode_form.ai.cannot_run_guideline_flags",
+                    comment: "Shown when guideline flags cannot run because no patient or saved episode is selected."
+                )
             ]
             return
         }
@@ -1746,7 +1817,10 @@ struct SickEpisodeForm: View {
     private func triggerAIForEpisode() {
         guard let ctx = buildEpisodeAIContext() else {
             appState.aiSummariesForActiveEpisode = [
-                "local-stub": "Cannot run AI: please ensure a patient and saved episode are selected."
+                "local-stub": NSLocalizedString(
+                    "sick_episode_form.ai.cannot_run_ai",
+                    comment: "Shown when AI cannot run because no patient or saved episode is selected."
+                )
             ]
             return
         }
@@ -1759,7 +1833,10 @@ struct SickEpisodeForm: View {
     /// Build and store a debug preview of the structured JSON snapshot for the current episode.
     private func previewAIPrompt() {
         guard let ctx = buildEpisodeAIContext() else {
-            aiPromptPreview = "Cannot build AI prompt: please ensure a patient and saved episode are selected, and that problem listing and complementary investigations are filled in as appropriate."
+            aiPromptPreview = NSLocalizedString(
+                "sick_episode_form.ai.cannot_build_prompt",
+                comment: "Shown when the AI prompt preview cannot be built because required context is missing."
+            )
             return
         }
         let fullPrompt = appState.buildSickAIPrompt(using: ctx)
@@ -1890,6 +1967,32 @@ struct SickEpisodeForm: View {
 
 // MARK: - Small helpers
 
+/// Convert a raw stored choice string into a stable localization key suffix.
+/// e.g. "Runny nose" -> "runny_nose", "Red & Bulging with pus" -> "red_bulging_with_pus".
+private func sickChoiceKey(_ raw: String) -> String {
+    let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789")
+    var out = ""
+    var lastWasUnderscore = false
+    for ch in raw.lowercased() {
+        if allowed.contains(ch) {
+            out.append(ch)
+            lastWasUnderscore = false
+        } else if !lastWasUnderscore {
+            out.append("_")
+            lastWasUnderscore = true
+        }
+    }
+    return out.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+}
+
+/// Localized label for a stored choice value.
+/// Falls back to the raw value if the key is missing.
+private func sickChoiceText(_ raw: String) -> String {
+    let key = "sick_episode.choice.\(sickChoiceKey(raw))"
+    let localized = NSLocalizedString(key, comment: "SickEpisodeForm choice label")
+    return (localized == key) ? raw : localized
+}
+
 private func summary(for row: SickEpisodeForm.VitalsRow) -> String {
     var parts: [String] = []
     if let w = row.weightKg { parts.append("Wt \(String(format: "%.1f", w))kg") }
@@ -1933,7 +2036,7 @@ private struct WrappingChips: View {
                                 if on { selection.insert(s) } else { selection.remove(s) }
                             })
                         ) {
-                            Text(s)
+                            Text(sickChoiceText(s))
                         }
                         .toggleStyle(.button)
                         .buttonStyle(.bordered)
@@ -1963,7 +2066,7 @@ extension SickEpisodeForm {
         }
 
         let ageY = ageYears(from: dobISO)
-        let band = ageBandLabel(forYears: ageY)
+        let bandLabel = localizedAgeBandLabel(forYears: ageY) // localized human label, or nil
 
         // Parse current UI values (prefer what's typed now)
         func i(_ s: String) -> Int? {
@@ -1985,33 +2088,82 @@ extension SickEpisodeForm {
         if let hr = hr, let a = ageY {
             let (lo, hi) = hrRange(forYears: a)
             if let lo = lo, hr < lo {
-                out.append(band != nil ? "HR low for \(band!)" : "HR low")
+                if let band = bandLabel {
+                    out.append(String(format: NSLocalizedString(
+                        "sick_episode.vitals.badge.hr_low_for",
+                        comment: "Vitals badge: HR low for a given age band."
+                    ), band))
+                } else {
+                    out.append(NSLocalizedString(
+                        "sick_episode.vitals.badge.hr_low",
+                        comment: "Vitals badge: HR low."
+                    ))
+                }
             } else if let hi = hi, hr > hi {
-                out.append(band != nil ? "HR high for \(band!)" : "HR high")
+                if let band = bandLabel {
+                    out.append(String(format: NSLocalizedString(
+                        "sick_episode.vitals.badge.hr_high_for",
+                        comment: "Vitals badge: HR high for a given age band."
+                    ), band))
+                } else {
+                    out.append(NSLocalizedString(
+                        "sick_episode.vitals.badge.hr_high",
+                        comment: "Vitals badge: HR high."
+                    ))
+                }
             }
         }
 
         if let rr = rr, let a = ageY {
             let (lo, hi) = rrRange(forYears: a)
             if let lo = lo, rr < lo {
-                out.append(band != nil ? "RR low for \(band!)" : "RR low")
+                if let band = bandLabel {
+                    out.append(String(format: NSLocalizedString(
+                        "sick_episode.vitals.badge.rr_low_for",
+                        comment: "Vitals badge: RR low for a given age band."
+                    ), band))
+                } else {
+                    out.append(NSLocalizedString(
+                        "sick_episode.vitals.badge.rr_low",
+                        comment: "Vitals badge: RR low."
+                    ))
+                }
             } else if let hi = hi, rr > hi {
-                out.append(band != nil ? "RR high for \(band!)" : "RR high")
+                if let band = bandLabel {
+                    out.append(String(format: NSLocalizedString(
+                        "sick_episode.vitals.badge.rr_high_for",
+                        comment: "Vitals badge: RR high for a given age band."
+                    ), band))
+                } else {
+                    out.append(NSLocalizedString(
+                        "sick_episode.vitals.badge.rr_high",
+                        comment: "Vitals badge: RR high."
+                    ))
+                }
             }
         }
 
         // Temperature flags
         if let t = temp {
             if t >= 38.0 {
-                out.append("Fever")
+                out.append(NSLocalizedString(
+                    "sick_episode.vitals.badge.fever",
+                    comment: "Vitals badge: Fever."
+                ))
             } else if t < 35.5 {
-                out.append("Hypothermia")
+                out.append(NSLocalizedString(
+                    "sick_episode.vitals.badge.hypothermia",
+                    comment: "Vitals badge: Hypothermia."
+                ))
             }
         }
 
         // SpO₂ flags
         if let s2 = s2, s2 < 95 {
-            out.append("SpO₂ low")
+            out.append(NSLocalizedString(
+                "sick_episode.vitals.badge.spo2_low",
+                comment: "Vitals badge: SpO2 low."
+            ))
         }
 
         // Pediatric BP category (AAP 2017) via VitalsBP
@@ -2026,34 +2178,69 @@ extension SickEpisodeForm {
                 sys: Double(sysInt),
                 dia: Double(diaInt)
             )
+
             // Append badge only for non-normal, known categories
             switch res.category {
             case .normal, .unknown:
                 break
             case .elevated, .stage1, .stage2:
+                // If VitalsBP already provided a message, keep it (can be localized later in VitalsBP).
                 if let msg = res.message, !msg.isEmpty {
                     out.append(msg)
                 } else {
-                    let label: String
+                    let labelKey: String
                     switch res.category {
-                    case .elevated: label = "Elevated"
-                    case .stage1:   label = "Stage 1"
-                    case .stage2:   label = "Stage 2"
-                    default:        label = "Abnormal"
+                    case .elevated:
+                        labelKey = "sick_episode.vitals.bp_label.elevated"
+                    case .stage1:
+                        labelKey = "sick_episode.vitals.bp_label.stage1"
+                    case .stage2:
+                        labelKey = "sick_episode.vitals.bp_label.stage2"
+                    default:
+                        labelKey = "sick_episode.vitals.bp_label.abnormal"
                     }
-                    out.append("BP \(sysInt)/\(diaInt) \(label)")
+                    let label = NSLocalizedString(labelKey, comment: "BP category label")
+                    out.append(String(format: NSLocalizedString(
+                        "sick_episode.vitals.badge.bp_value_label",
+                        comment: "Vitals badge: BP value with category label."
+                    ), sysInt, diaInt, label))
                 }
             default:
                 // Handles any future/extra categories (e.g., low-for-age / hypotension)
                 if let msg = res.message, !msg.isEmpty {
                     out.append(msg)
                 } else {
-                    out.append("BP \(sysInt)/\(diaInt) Abnormal")
+                    let abnormal = NSLocalizedString(
+                        "sick_episode.vitals.bp_label.abnormal",
+                        comment: "BP category label: abnormal."
+                    )
+                    out.append(String(format: NSLocalizedString(
+                        "sick_episode.vitals.badge.bp_value_label",
+                        comment: "Vitals badge: BP value with category label."
+                    ), sysInt, diaInt, abnormal))
                 }
             }
         }
 
         return out
+    }
+
+    /// Localized human-readable band label ("neonate", "infant", etc.)
+    private func localizedAgeBandLabel(forYears y: Double?) -> String? {
+        guard let y = y else { return nil }
+        let neonate = 28.0 / 365.25
+
+        let key: String
+        if y < neonate { key = "sick_episode.vitals.age_band.neonate" }
+        else if y < 1.0 { key = "sick_episode.vitals.age_band.infant" }
+        else if y < 3.0 { key = "sick_episode.vitals.age_band.toddler" }
+        else if y < 6.0 { key = "sick_episode.vitals.age_band.preschool" }
+        else if y < 12.0 { key = "sick_episode.vitals.age_band.school_age" }
+        else if y < 16.0 { key = "sick_episode.vitals.age_band.adolescent" }
+        else { key = "sick_episode.vitals.age_band.adult_like" }
+
+        let localized = NSLocalizedString(key, comment: "Age band label used in vitals badges")
+        return (localized == key) ? nil : localized
     }
 
     /// Parse "YYYY-MM-DD" → years as Double
@@ -2069,17 +2256,10 @@ extension SickEpisodeForm {
         return Double(days) / 365.25
     }
 
-    /// Human-readable band label ("neonate", "infant", "toddler", etc.)
+    /// Human-readable band label (localized when available).
+    /// Delegates to `localizedAgeBandLabel(forYears:)` to avoid leaking English.
     private func ageBandLabel(forYears y: Double?) -> String? {
-        guard let y = y else { return nil }
-        let neonate = 28.0 / 365.25
-        if y < neonate { return "neonate" }
-        else if y < 1.0 { return "infant" }
-        else if y < 3.0 { return "toddler" }
-        else if y < 6.0 { return "preschool" }
-        else if y < 12.0 { return "school age" }
-        else if y < 16.0 { return "adolescent" }
-        else { return "adult-like" }
+        localizedAgeBandLabel(forYears: y)
     }
 
     /// Heart-rate normal range (low, high) for given age in years

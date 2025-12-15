@@ -218,13 +218,13 @@ final class ClinicianStore: ObservableObject {
                 instagram: s(9),
                 linkedin: s(10),
                 aiEndpoint: s(11),
-                aiAPIKey: s(13),
+                aiAPIKey: s(14),
                 aiModel: s(12),
                 aiProvider: s(13),
-                aiSickPrompt: s(14),
-                aiWellPrompt: s(15),
-                aiSickRulesJSON: s(16),
-                aiWellRulesJSON: s(17)
+                aiSickPrompt: s(15),
+                aiWellPrompt: s(16),
+                aiSickRulesJSON: s(17),
+                aiWellRulesJSON: s(18)
             )
             out.append(user)
         }

@@ -552,6 +552,9 @@ final class AppState: ObservableObject {
                                     sql: "SELECT vaccination_status FROM patients WHERE id=? LIMIT 1;",
                                     bindID: patientID)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let yesText = NSLocalizedString("common.yes", comment: "Generic yes label")
+        let noText  = NSLocalizedString("common.no", comment: "Generic no label")
         
         // PMH: Prefer past_medical_history table if present, else fallback to patients.parent_notes
         var pmh: String? = nil
@@ -578,13 +581,27 @@ final class AppState: ObservableObject {
                         return s.isEmpty ? nil : s
                     }
                     var parts: [String] = []
-                    if let v = intOpt(0), v != 0 { parts.append("Asthma: Yes") }
-                    if let v = intOpt(1), v != 0 { parts.append("Otitis: Yes") }
-                    if let v = intOpt(2), v != 0 { parts.append("UTI: Yes") }
-                    if let v = intOpt(3), v != 0 { parts.append("Allergies: Yes") }
-                    if let v = strOpt(5) { parts.append("Allergy details: \(v)") }
-                    if let v = strOpt(4) { parts.append("Other: \(v)") }
-                    if let v = strOpt(6) { parts.append("PMH updated: \(v)") }
+                    if let v = intOpt(0), v != 0 {
+                        parts.append(NSLocalizedString("appstate.profile.pmh.asthma_yes", comment: "PMH badge line: asthma present"))
+                    }
+                    if let v = intOpt(1), v != 0 {
+                        parts.append(NSLocalizedString("appstate.profile.pmh.otitis_yes", comment: "PMH badge line: otitis present"))
+                    }
+                    if let v = intOpt(2), v != 0 {
+                        parts.append(NSLocalizedString("appstate.profile.pmh.uti_yes", comment: "PMH badge line: UTI present"))
+                    }
+                    if let v = intOpt(3), v != 0 {
+                        parts.append(NSLocalizedString("appstate.profile.pmh.allergies_yes", comment: "PMH badge line: allergies present"))
+                    }
+                    if let v = strOpt(5) {
+                        parts.append(String(format: NSLocalizedString("appstate.profile.pmh.allergy_details_format", comment: "PMH badge line: allergy details"), v))
+                    }
+                    if let v = strOpt(4) {
+                        parts.append(String(format: NSLocalizedString("appstate.profile.pmh.other_format", comment: "PMH badge line: other PMH"), v))
+                    }
+                    if let v = strOpt(6) {
+                        parts.append(String(format: NSLocalizedString("appstate.profile.pmh.updated_format", comment: "PMH badge line: PMH last updated"), v))
+                    }
                     if !parts.isEmpty { pmh = parts.joined(separator: " • ") }
                 }
             }
@@ -650,42 +667,45 @@ final class AppState: ObservableObject {
                     }
                     func yn(_ i: Int32) -> String? {
                         guard let v = intOpt(i) else { return nil }
-                        return v == 0 ? "No" : "Yes"
+                        return v == 0 ? noText : yesText
                     }
-                    
+
                     var parts: [String] = []
-                    if let v = str(0)  { parts.append("Pregnancy risk: \(v)") }
-                    if let v = str(1)  { parts.append("Birth mode: \(v)") }
-                    if let v = intOpt(2) { parts.append("Term: \(v) weeks") }
-                    if let v = str(3)  { parts.append("Resuscitation: \(v)") }
-                    if let v = intOpt(4) { parts.append("NICU stay: \(v) days") }
-                    if let v = str(5)  { parts.append("Infection risk: \(v)") }
-                    if let v = intOpt(6) { parts.append("Birth weight: \(v) g") }
-                    if let v = realOpt(7) { parts.append(String(format: "Birth length: %.1f cm", v)) }
-                    if let v = realOpt(8) { parts.append(String(format: "Head circ: %.1f cm", v)) }
-                    if let v = str(9)  { parts.append("Maternity events: \(v)") }
-                    if let v = str(10) { parts.append("Maternity vaccs: \(v)") }
-                    if let v = intOpt(11) { parts.append("Vitamin K: \(v == 0 ? "No" : "Yes")") }
-                    if let v = str(12) { parts.append("Feeding in maternity: \(v)") }
-                    if let v = yn(13)  { parts.append("Passed meconium 24h: \(v)") }
-                    if let v = yn(14)  { parts.append("Urination 24h: \(v)") }
-                    if let v = str(15) { parts.append("Heart screening: \(v)") }
-                    if let v = str(16) { parts.append("Metabolic screening: \(v)") }
-                    if let v = str(17) { parts.append("Hearing screening: \(v)") }
-                    if let v = str(18) { parts.append("Mother vaccs: \(v)") }
-                    if let v = str(19) { parts.append("Family vaccs: \(v)") }
-                    if let v = str(20) { parts.append("Discharge date: \(v)") }
-                    if let v = intOpt(21) { parts.append("Discharge weight: \(v) g") }
-                    if let v = str(22) { parts.append("Illnesses after birth: \(v)") }
-                    if let v = str(23) { parts.append("Updated at: \(v)") }
-                    if let v = str(24) { parts.append("Evolution since maternity: \(v)") }
+                    if let v = str(0)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.pregnancy_risk_format", comment: "Perinatal badge line: pregnancy risk"), v)) }
+                    if let v = str(1)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.birth_mode_format", comment: "Perinatal badge line: birth mode"), v)) }
+                    if let v = intOpt(2) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.term_weeks_format", comment: "Perinatal badge line: term in weeks"), v)) }
+                    if let v = str(3)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.resuscitation_format", comment: "Perinatal badge line: resuscitation"), v)) }
+                    if let v = intOpt(4) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.nicu_stay_days_format", comment: "Perinatal badge line: NICU stay in days"), v)) }
+                    if let v = str(5)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.infection_risk_format", comment: "Perinatal badge line: infection risk"), v)) }
+                    if let v = intOpt(6) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.birth_weight_g_format", comment: "Perinatal badge line: birth weight in grams"), v)) }
+                    if let v = realOpt(7) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.birth_length_cm_format", comment: "Perinatal badge line: birth length in cm"), v)) }
+                    if let v = realOpt(8) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.birth_hc_cm_format", comment: "Perinatal badge line: birth head circumference in cm"), v)) }
+                    if let v = str(9)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.maternity_events_format", comment: "Perinatal badge line: maternity stay events"), v)) }
+                    if let v = str(10) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.maternity_vaccinations_format", comment: "Perinatal badge line: maternity vaccinations"), v)) }
+                    if let v = intOpt(11) {
+                        let ynText = (v == 0) ? noText : yesText
+                        parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.vitamin_k_format", comment: "Perinatal badge line: vitamin K given"), ynText))
+                    }
+                    if let v = str(12) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.feeding_in_maternity_format", comment: "Perinatal badge line: feeding in maternity"), v)) }
+                    if let v = yn(13)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.passed_meconium_24h_format", comment: "Perinatal badge line: passed meconium within 24h"), v)) }
+                    if let v = yn(14)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.urination_24h_format", comment: "Perinatal badge line: urination within 24h"), v)) }
+                    if let v = str(15) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.heart_screening_format", comment: "Perinatal badge line: heart screening"), v)) }
+                    if let v = str(16) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.metabolic_screening_format", comment: "Perinatal badge line: metabolic screening"), v)) }
+                    if let v = str(17) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.hearing_screening_format", comment: "Perinatal badge line: hearing screening"), v)) }
+                    if let v = str(18) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.mother_vaccinations_format", comment: "Perinatal badge line: mother vaccinations"), v)) }
+                    if let v = str(19) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.family_vaccinations_format", comment: "Perinatal badge line: family vaccinations"), v)) }
+                    if let v = str(20) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.discharge_date_format", comment: "Perinatal badge line: maternity discharge date"), v)) }
+                    if let v = intOpt(21) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.discharge_weight_g_format", comment: "Perinatal badge line: discharge weight in grams"), v)) }
+                    if let v = str(22) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.illnesses_after_birth_format", comment: "Perinatal badge line: illnesses after birth"), v)) }
+                    if let v = str(23) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.updated_at_format", comment: "Perinatal badge line: updated at"), v)) }
+                    if let v = str(24) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.evolution_since_maternity_format", comment: "Perinatal badge line: evolution since maternity"), v)) }
 
                     if !parts.isEmpty {
                         peri = parts.joined(separator: " • ")
                     }
-                    }
                 }
             }
+        }
             
         let profile = PatientProfile(
             vaccinationStatus: vacc,
@@ -1129,6 +1149,14 @@ final class AppState: ObservableObject {
             // --- Perinatal summary (if perinatal_summary or perinatal table exists) ---
             var perinatal: String? = nil
             do {
+                let perinatalKVFormat = NSLocalizedString(
+                    "appstate.summary.perinatal.kv_format",
+                    comment: "Patient summary: perinatal item like 'birth_weight: 3200'"
+                )
+                let perinatalSeparator = NSLocalizedString(
+                    "appstate.summary.perinatal.separator",
+                    comment: "Patient summary: separator between items in perinatal summary"
+                )
                 let candidateTables = ["perinatal_summary","perinatal"]
                 var chosen: String? = nil
                 for t in candidateTables where tableExists(db, name: t) {
@@ -1157,11 +1185,11 @@ final class AppState: ObservableObject {
                                     if let c = sqlite3_column_text(stmt, Int32(i)) {
                                         let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
                                         if !s.isEmpty {
-                                            parts.append("\(selectCols[i]): \(s)")
+                                            parts.append(String(format: perinatalKVFormat, selectCols[i], ": ", s))
                                         }
                                     }
                                 }
-                                if !parts.isEmpty { perinatal = parts.joined(separator: " • ") }
+                                if !parts.isEmpty { perinatal = parts.joined(separator: perinatalSeparator) }
                             }
                         }
                     }
@@ -1176,6 +1204,8 @@ final class AppState: ObservableObject {
             )
         }
         
+
+
         /// Load a concise summary for a specific visit row by probing likely tables/columns.
         func loadVisitSummary(for visit: VisitRow) {
             guard let dbURL = currentDBURL,
@@ -1333,7 +1363,11 @@ final class AppState: ObservableObject {
 
             // --- Patient snapshot (from current selection) ---
             let pid: Int? = self.selectedPatientID
-            var patientName = "Anon Patient"
+            let anonPatientName = NSLocalizedString(
+                "appstate.visitdetails.patient.anonymous",
+                comment: "Default patient name placeholder shown in visit details"
+            )
+            var patientName = anonPatientName
             var patientDOB: String? = nil
             var patientSex: String? = nil
             if let pid {
@@ -1507,11 +1541,29 @@ final class AppState: ObservableObject {
                         }
                     }
                     if total > 0 {
-                        let prefix = "Achieved \(achieved)/\(total)"
+                        let achievedFormat = NSLocalizedString(
+                            "appstate.visitdetails.milestones.achieved_format",
+                            comment: "Milestones summary: achieved count format, e.g. 'Achieved 3/5'"
+                        )
+                        let flagsLabel = NSLocalizedString(
+                            "appstate.visitdetails.milestones.flags_label",
+                            comment: "Milestones summary label for flagged items, e.g. 'Flags:'"
+                        )
+                        let withFlagsFormat = NSLocalizedString(
+                            "appstate.visitdetails.milestones.summary_with_flags_format",
+                            comment: "Milestones summary: full line when flags exist. Example '%@; %@ %@'"
+                        )
+                        let flagsSeparator = NSLocalizedString(
+                            "appstate.visitdetails.milestones.flags_list_separator",
+                            comment: "Milestones summary: separator between flagged milestone labels"
+                        )
+
+                        let achievedText = String(format: achievedFormat, achieved, total)
                         if !flags.isEmpty {
-                            milestonesSummary = prefix + "; Flags: " + flags.prefix(4).joined(separator: ", ")
+                            let joinedFlags = flags.prefix(4).joined(separator: flagsSeparator)
+                            milestonesSummary = String(format: withFlagsFormat, achievedText, flagsLabel, joinedFlags)
                         } else {
-                            milestonesSummary = prefix
+                            milestonesSummary = achievedText
                         }
                     }
                 }
@@ -1642,9 +1694,13 @@ final class AppState: ObservableObject {
             if savePerinatalHistoryForSelectedPatient(history) {
                 return true
             } else {
+                let msg = NSLocalizedString(
+                    "appstate.perinatal.save_failed",
+                    comment: "Error message when saving perinatal history fails"
+                )
                 throw NSError(domain: "AppState",
                               code: 500,
-                              userInfo: [NSLocalizedDescriptionKey: "Failed to save perinatal history"])
+                              userInfo: [NSLocalizedDescriptionKey: msg])
             }
         }
 
@@ -1707,9 +1763,13 @@ final class AppState: ObservableObject {
             if savePMHForSelectedPatient(history) {
                 return true
             } else {
+                let msg = NSLocalizedString(
+                    "appstate.pmh.save_failed",
+                    comment: "Error message when saving past medical history (PMH) fails"
+                )
                 throw NSError(domain: "AppState",
                               code: 500,
-                              userInfo: [NSLocalizedDescriptionKey: "Failed to save PMH"])
+                              userInfo: [NSLocalizedDescriptionKey: msg])
             }
         }
     
@@ -1726,41 +1786,82 @@ final class AppState: ObservableObject {
                 return nil
             }
 
+            // Localized labels and formats (used for AI/guideline context text)
+            let condAsthma = NSLocalizedString(
+                "appstate.ai.pmh.condition.asthma",
+                comment: "PMH summary: condition label 'asthma'"
+            )
+            let condOtitis = NSLocalizedString(
+                "appstate.ai.pmh.condition.recurrent_otitis",
+                comment: "PMH summary: condition label 'recurrent otitis'"
+            )
+            let condUTI = NSLocalizedString(
+                "appstate.ai.pmh.condition.uti",
+                comment: "PMH summary: condition label 'urinary tract infection'"
+            )
+            let condAllergies = NSLocalizedString(
+                "appstate.ai.pmh.condition.allergies",
+                comment: "PMH summary: condition label 'allergies'"
+            )
+
+            let conditionsSeparator = NSLocalizedString(
+                "appstate.ai.pmh.conditions.separator",
+                comment: "PMH summary: separator between condition labels, e.g. '; '"
+            )
+            let partsSeparator = NSLocalizedString(
+                "appstate.ai.pmh.parts.separator",
+                comment: "PMH summary: separator between sentences/parts, e.g. ' '"
+            )
+
+            let pmhLineFormat = NSLocalizedString(
+                "appstate.ai.pmh.line.pmh_format",
+                comment: "PMH summary: full PMH line format, e.g. 'Past medical history: %@.'"
+            )
+            let allergyDetailsFormat = NSLocalizedString(
+                "appstate.ai.pmh.line.allergy_details_format",
+                comment: "PMH summary: allergy details line format, e.g. 'Allergy details: %@.'"
+            )
+            let otherPMHFormat = NSLocalizedString(
+                "appstate.ai.pmh.line.other_pmh_format",
+                comment: "PMH summary: other PMH line format, e.g. 'Other PMH: %@.'"
+            )
+
             var conditions: [String] = []
 
-            // Boolean flags → simple condition labels
+            // Boolean flags → localized condition labels
             if (pmh.asthma ?? 0) != 0 {
-                conditions.append("asthma")
+                conditions.append(condAsthma)
             }
             if (pmh.otitis ?? 0) != 0 {
-                conditions.append("recurrent otitis")
+                conditions.append(condOtitis)
             }
             if (pmh.uti ?? 0) != 0 {
-                conditions.append("urinary tract infection")
+                conditions.append(condUTI)
             }
             if (pmh.allergies ?? 0) != 0 {
-                conditions.append("allergies")
+                conditions.append(condAllergies)
             }
 
             var parts: [String] = []
 
             if !conditions.isEmpty {
-                parts.append("Past medical history: " + conditions.joined(separator: "; ") + ".")
+                let joined = conditions.joined(separator: conditionsSeparator)
+                parts.append(String(format: pmhLineFormat, joined))
             }
 
             // Free-text allergy details (if present)
             if let allergyDetails = pmh.allergyDetails?.trimmingCharacters(in: .whitespacesAndNewlines),
                !allergyDetails.isEmpty {
-                parts.append("Allergy details: \(allergyDetails).")
+                parts.append(String(format: allergyDetailsFormat, allergyDetails))
             }
 
             // Free-text 'other' PMH (if present)
             if let other = pmh.other?.trimmingCharacters(in: .whitespacesAndNewlines),
                !other.isEmpty {
-                parts.append("Other PMH: \(other).")
+                parts.append(String(format: otherPMHFormat, other))
             }
 
-            let summary = parts.joined(separator: " ")
+            let summary = parts.joined(separator: partsSeparator)
 
             return summary.isEmpty ? nil : summary
         }
@@ -1888,27 +1989,57 @@ final class AppState: ObservableObject {
                 combined.contains(needle)
             }
 
-            // NOTE: These are intentionally broad, best-effort mappings for stub use only.
+            // Localized display strings (shown to clinicians as suggestions)
+            let icdBronchiolitis = NSLocalizedString(
+                "appstate.ai.icd10.bronchiolitis",
+                comment: "ICD-10 suggestion string for bronchiolitis (code + short description)"
+            )
+            let icdPneumonia = NSLocalizedString(
+                "appstate.ai.icd10.pneumonia",
+                comment: "ICD-10 suggestion string for pneumonia (code + short description)"
+            )
+            let icdOtitis = NSLocalizedString(
+                "appstate.ai.icd10.otitis",
+                comment: "ICD-10 suggestion string for otitis media (code + short description)"
+            )
+            let icdAsthma = NSLocalizedString(
+                "appstate.ai.icd10.asthma",
+                comment: "ICD-10 suggestion string for asthma (code + short description)"
+            )
+            let icdDiarrhea = NSLocalizedString(
+                "appstate.ai.icd10.diarrhea",
+                comment: "ICD-10 suggestion string for diarrhea (code + short description)"
+            )
+            let icdUTI = NSLocalizedString(
+                "appstate.ai.icd10.uti",
+                comment: "ICD-10 suggestion string for UTI (code + short description)"
+            )
+            let icdFever = NSLocalizedString(
+                "appstate.ai.icd10.fever",
+                comment: "ICD-10 suggestion string for fever (code + short description)"
+            )
+
+            // NOTE: These are intentionally broad, best-effort mappings for fallback use only.
             if contains("bronchiolitis") {
-                return "J21.9 – Acute bronchiolitis, unspecified"
+                return icdBronchiolitis
             }
             if contains("pneumonia") {
-                return "J18.9 – Pneumonia, unspecified organism"
+                return icdPneumonia
             }
             if contains("otitis") || (contains("ear") && contains("pain")) {
-                return "H66.9 – Otitis media, unspecified"
+                return icdOtitis
             }
             if contains("asthma") || contains("wheezing") {
-                return "J45.9 – Asthma, unspecified"
+                return icdAsthma
             }
             if contains("diarrhea") || contains("diarrhoea") {
-                return "R19.7 – Diarrhea, unspecified"
+                return icdDiarrhea
             }
             if contains("uti") || contains("urinary tract infection") || contains("cystitis") {
-                return "N39.0 – Urinary tract infection, site not specified"
+                return icdUTI
             }
             if contains("fever") {
-                return "R50.9 – Fever, unspecified"
+                return icdFever
             }
 
             return nil
@@ -1918,6 +2049,20 @@ final class AppState: ObservableObject {
         /// This is now intentionally minimal: it only reports that either
         /// no rules are configured or that none matched the current episode.
         func runGuidelineFlagsStub(using context: EpisodeAIContext) {
+            // Localized stub messages
+            let rulesLoaded = NSLocalizedString(
+                "appstate.ai.guidelines.rules_loaded",
+                comment: "Guideline stub message when rules JSON is present"
+            )
+            let noMatchFound = NSLocalizedString(
+                "appstate.ai.guidelines.no_match",
+                comment: "Guideline stub message when no guideline criteria matched"
+            )
+            let noRulesConfigured = NSLocalizedString(
+                "appstate.ai.guidelines.no_rules_configured",
+                comment: "Guideline stub message when no guideline rules are configured"
+            )
+
             // Check whether any clinician-specific rules JSON appears to be configured.
             let hasRulesJSON: Bool = {
                 if let raw = sickRulesJSONResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1928,15 +2073,13 @@ final class AppState: ObservableObject {
             }()
 
             if hasRulesJSON {
-                // JSON is present but either parsing failed or no rule produced a flag.
                 aiGuidelineFlagsForActiveEpisode = [
-                    "Guideline rules JSON loaded.",
-                    "No matching guideline criteria found for this episode."
+                    rulesLoaded,
+                    noMatchFound
                 ]
             } else {
-                // No JSON rules configured at all.
                 aiGuidelineFlagsForActiveEpisode = [
-                    "No guideline rules configured yet. Add pediatric guideline rules JSON in your profile to enable guideline-based flags."
+                    noRulesConfigured
                 ]
             }
         }
@@ -2427,49 +2570,99 @@ final class AppState: ObservableObject {
             let basePrompt = sickPromptResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines)
             let header: String
 
+            // Localized default prompt + section labels (used when clinician hasn't configured a custom prompt)
+            let defaultHeader = NSLocalizedString(
+                "appstate.ai.prompt.sick.default_header",
+                comment: "Default sick-visit AI prompt header/instructions (multi-line)."
+            )
+
+            let sectionContextTitle = NSLocalizedString(
+                "appstate.ai.prompt.section.episode_context",
+                comment: "Section title line for the sick-visit prompt, e.g. 'Patient/episode context'"
+            )
+            let sectionStructuredTitle = NSLocalizedString(
+                "appstate.ai.prompt.section.structured_episode_json",
+                comment: "Section title line for the sick-visit prompt, e.g. 'Structured episode snapshot (JSON)'"
+            )
+
+            let labelProblemListing = NSLocalizedString(
+                "appstate.ai.prompt.label.problem_listing",
+                comment: "Label line for sick-visit prompt, e.g. 'Problem listing:'"
+            )
+            let labelInvestigations = NSLocalizedString(
+                "appstate.ai.prompt.label.complementary_investigations",
+                comment: "Label line for sick-visit prompt, e.g. 'Complementary investigations:'"
+            )
+
+            let noneProvided = NSLocalizedString(
+                "appstate.ai.prompt.placeholder.none_provided",
+                comment: "Placeholder when a field has no content, e.g. '(none provided)'"
+            )
+            let noneDocumented = NSLocalizedString(
+                "appstate.ai.prompt.placeholder.none_documented",
+                comment: "Placeholder when a field has no content, e.g. '(none documented)'"
+            )
+
+            let vaccLineFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.vaccination_status_format",
+                comment: "Format for vaccination line, e.g. 'Vaccination status: %@'"
+            )
+            let vaccNotDocumented = NSLocalizedString(
+                "appstate.ai.prompt.line.vaccination_status_not_documented",
+                comment: "Line when vaccination is missing, e.g. 'Vaccination status: not documented.'"
+            )
+
+            let pmhLineFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.pmh_format",
+                comment: "Format for PMH line, e.g. 'Past medical history: %@'"
+            )
+            let pmhNotDocumented = NSLocalizedString(
+                "appstate.ai.prompt.line.pmh_not_documented",
+                comment: "Line when PMH is missing, e.g. 'Past medical history: not documented.'"
+            )
+
+            let structuredJsonHeader = NSLocalizedString(
+                "appstate.ai.prompt.label.structured_json_header",
+                comment: "Header label before JSON blob, e.g. 'Structured episode snapshot (JSON)'"
+            )
+
             if let bp = basePrompt, !bp.isEmpty {
                 header = bp
             } else {
-                header = """
-                You are assisting with a pediatric sick visit. Read the clinical context below (problem listing, investigations, vaccination status, and past medical history) and provide:
-                1) A concise clinical summary.
-                2) A prioritized differential diagnosis list.
-                3) Suggested investigations only if they are clearly indicated.
-                4) A suggested ICD-10 code (or a short list), with brief justification.
-                """
+                header = defaultHeader
             }
 
             var lines: [String] = []
             lines.append(header)
             lines.append("")
             lines.append("---")
-            lines.append("Patient/episode context")
+            lines.append(sectionContextTitle)
             lines.append("---")
             lines.append("")
-            lines.append("Problem listing:")
+            lines.append(labelProblemListing)
             let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
-            lines.append(sanitizedProblems.isEmpty ? "(none provided)" : sanitizedProblems)
+            lines.append(sanitizedProblems.isEmpty ? noneProvided : sanitizedProblems)
             lines.append("")
-            lines.append("Complementary investigations:")
-            lines.append(context.complementaryInvestigations.isEmpty ? "(none documented)" : context.complementaryInvestigations)
+            lines.append(labelInvestigations)
+            lines.append(context.complementaryInvestigations.isEmpty ? noneDocumented : context.complementaryInvestigations)
             lines.append("")
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
                !vacc.isEmpty {
-                lines.append("Vaccination status: \(vacc)")
+                lines.append(String(format: vaccLineFormat, vacc))
             } else {
-                lines.append("Vaccination status: not documented.")
+                lines.append(vaccNotDocumented)
             }
             if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
                !pmh.isEmpty {
-                lines.append("Past medical history: \(pmh)")
+                lines.append(String(format: pmhLineFormat, pmh))
             } else {
-                lines.append("Past medical history: not documented.")
+                lines.append(pmhNotDocumented)
             }
 
             // Append a machine-readable JSON snapshot of the same episode context.
             lines.append("")
             lines.append("---")
-            lines.append("Structured episode snapshot (JSON)")
+            lines.append(sectionStructuredTitle)
             lines.append("---")
             lines.append("")
             let jsonSnapshot = buildSickEpisodeJSON(using: context)
@@ -2487,64 +2680,123 @@ final class AppState: ObservableObject {
             let basePrompt = wellPromptResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines)
             let header: String
 
+            // Localized default prompt + section labels (used when clinician hasn't configured a custom prompt)
+            let defaultHeader = NSLocalizedString(
+                "appstate.ai.prompt.well.default_header",
+                comment: "Default well-visit AI prompt header/instructions (multi-line)."
+            )
+
+            let sectionContextTitle = NSLocalizedString(
+                "appstate.ai.prompt.section.well_context",
+                comment: "Section title line for the well-visit prompt, e.g. 'Patient/well-visit context'"
+            )
+            let sectionStructuredTitle = NSLocalizedString(
+                "appstate.ai.prompt.section.structured_well_json",
+                comment: "Section title line for the well-visit prompt, e.g. 'Structured well-visit snapshot (JSON)'"
+            )
+
+            let visitTypeFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.visit_type_format",
+                comment: "Format for visit type line, e.g. 'Visit type: %@'"
+            )
+            let ageDaysFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.age_days_format",
+                comment: "Format for age in days line, e.g. 'Age (days): %d'"
+            )
+            let ageDaysNotDocumented = NSLocalizedString(
+                "appstate.ai.prompt.line.age_days_not_documented",
+                comment: "Line when age days is missing, e.g. 'Age (days): not documented.'"
+            )
+
+            let labelProblemListing = NSLocalizedString(
+                "appstate.ai.prompt.label.problem_listing",
+                comment: "Label line for well-visit prompt, e.g. 'Problem listing:'"
+            )
+
+            let noneProvided = NSLocalizedString(
+                "appstate.ai.prompt.placeholder.none_provided",
+                comment: "Placeholder when a field has no content, e.g. '(none provided)'"
+            )
+
+            let perinatalLineFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.perinatal_history_format",
+                comment: "Format for perinatal line, e.g. 'Perinatal history: %@'"
+            )
+            let perinatalNotDocumented = NSLocalizedString(
+                "appstate.ai.prompt.line.perinatal_history_not_documented",
+                comment: "Line when perinatal history is missing, e.g. 'Perinatal history: not documented.'"
+            )
+
+            let pmhLineFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.pmh_format",
+                comment: "Format for PMH line, e.g. 'Past medical history: %@'"
+            )
+            let pmhNotDocumented = NSLocalizedString(
+                "appstate.ai.prompt.line.pmh_not_documented",
+                comment: "Line when PMH is missing, e.g. 'Past medical history: not documented.'"
+            )
+
+            let vaccLineFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.vaccination_status_format",
+                comment: "Format for vaccination line, e.g. 'Vaccination status: %@'"
+            )
+            let vaccNotDocumented = NSLocalizedString(
+                "appstate.ai.prompt.line.vaccination_status_not_documented",
+                comment: "Line when vaccination is missing, e.g. 'Vaccination status: not documented.'"
+            )
+
             if let bp = basePrompt, !bp.isEmpty {
                 header = bp
             } else {
-                header = """
-                You are assisting with a pediatric well-child visit (preventive care). Read the clinical context below (problem listing, perinatal history, past medical history, vaccination status, age and visit type) and provide:
-                1) A concise wellness assessment summary.
-                2) Key positive and negative findings relevant to growth and development.
-                3) Priority preventive care and anticipatory guidance topics for this visit.
-                4) Any red flags that would warrant further evaluation or investigations.
-                """
+                header = defaultHeader
             }
 
             var lines: [String] = []
             lines.append(header)
             lines.append("")
             lines.append("---")
-            lines.append("Patient/well-visit context")
+            lines.append(sectionContextTitle)
             lines.append("---")
             lines.append("")
 
-            lines.append("Visit type: \(context.visitType)")
+            lines.append(String(format: visitTypeFormat, context.visitType))
             if let age = context.ageDays {
-                lines.append("Age (days): \(age)")
+                lines.append(String(format: ageDaysFormat, age))
             } else {
-                lines.append("Age (days): not documented.")
+                lines.append(ageDaysNotDocumented)
             }
             lines.append("")
 
-            lines.append("Problem listing:")
+            lines.append(labelProblemListing)
             let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
-            lines.append(sanitizedProblems.isEmpty ? "(none provided)" : sanitizedProblems)
+            lines.append(sanitizedProblems.isEmpty ? noneProvided : sanitizedProblems)
             lines.append("")
 
             if let perinatal = context.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
                !perinatal.isEmpty {
-                lines.append("Perinatal history: \(perinatal)")
+                lines.append(String(format: perinatalLineFormat, perinatal))
             } else {
-                lines.append("Perinatal history: not documented.")
+                lines.append(perinatalNotDocumented)
             }
 
             if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
                !pmh.isEmpty {
-                lines.append("Past medical history: \(pmh)")
+                lines.append(String(format: pmhLineFormat, pmh))
             } else {
-                lines.append("Past medical history: not documented.")
+                lines.append(pmhNotDocumented)
             }
 
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
                !vacc.isEmpty {
-                lines.append("Vaccination status: \(vacc)")
+                lines.append(String(format: vaccLineFormat, vacc))
             } else {
-                lines.append("Vaccination status: not documented.")
+                lines.append(vaccNotDocumented)
             }
 
             // Append a machine-readable JSON snapshot of the same well-visit context.
             lines.append("")
             lines.append("---")
-            lines.append("Structured well-visit snapshot (JSON)")
+            lines.append(sectionStructuredTitle)
             lines.append("---")
             lines.append("")
             let jsonSnapshot = buildWellVisitJSON(using: context)
@@ -2772,8 +3024,13 @@ final class AppState: ObservableObject {
                         self.log.error("runAIForEpisode: provider error: \(String(describing: error), privacy: .public)")
                         // Keep things safe and visible to the clinician.
                         DispatchQueue.main.async {
+                            let msgFormat = NSLocalizedString(
+                                "appstate.ai.provider_error_fallback_format",
+                                comment: "Displayed when an AI provider fails; %@ is the provider error description."
+                            )
+                            let msg = String(format: msgFormat, error.localizedDescription)
                             self.aiSummariesForActiveEpisode = [
-                                "error": "AI provider error: \(error.localizedDescription). Falling back to local stub."
+                                "error": msg
                             ]
                         }
                         // Fallback: still give a local stub summary and ICD-10 suggestion.
@@ -2841,8 +3098,13 @@ final class AppState: ObservableObject {
                         self.log.error("runAIForWellVisit: provider error: \(String(describing: error), privacy: .public)")
                         // Keep things safe and visible to the clinician.
                         DispatchQueue.main.async {
+                            let msgFormat = NSLocalizedString(
+                                "appstate.ai.provider_error_fallback_format",
+                                comment: "Displayed when an AI provider fails; %@ is the provider error description."
+                            )
+                            let msg = String(format: msgFormat, error.localizedDescription)
                             self.aiSummariesForActiveWellVisit = [
-                                "error": "AI provider error: \(error.localizedDescription). Falling back to local stub."
+                                "error": msg
                             ]
                         }
                         // Fallback: still provide a local stub-style summary.
@@ -2862,30 +3124,68 @@ final class AppState: ObservableObject {
         // Build the full prompt (even for the stub) so we can persist it alongside the response.
         let prompt = buildWellAIPrompt(using: context)
 
+        // --- Localized stub pieces ---
+        let pieceProblemListingProvided = NSLocalizedString(
+            "appstate.ai.stub.well.piece.problem_listing_provided",
+            comment: "Stub well-visit piece: problem listing was provided."
+        )
+        let piecePerinatalIncluded = NSLocalizedString(
+            "appstate.ai.stub.well.piece.perinatal_included",
+            comment: "Stub well-visit piece: perinatal history included."
+        )
+        let piecePMHIncluded = NSLocalizedString(
+            "appstate.ai.stub.well.piece.pmh_included",
+            comment: "Stub well-visit piece: PMH included."
+        )
+        let pieceVaccinationIncluded = NSLocalizedString(
+            "appstate.ai.stub.well.piece.vaccination_included",
+            comment: "Stub well-visit piece: vaccination summary included."
+        )
+        let pieceAgeDaysFormat = NSLocalizedString(
+            "appstate.ai.stub.well.piece.age_days_format",
+            comment: "Stub well-visit piece format: age in days. %d is the age in days."
+        )
+        let pieceCustomPromptConfigured = NSLocalizedString(
+            "appstate.ai.stub.well.piece.custom_prompt_configured",
+            comment: "Stub well-visit piece: clinician well-visit prompt configured."
+        )
+        let pieceUsingDefaultPrompt = NSLocalizedString(
+            "appstate.ai.stub.well.piece.using_default_prompt",
+            comment: "Stub well-visit piece: using default well-visit AI prompt."
+        )
+        let summaryNoContext = NSLocalizedString(
+            "appstate.ai.stub.well.summary.no_context",
+            comment: "Stub well-visit summary when no context is provided."
+        )
+        let summaryFormat = NSLocalizedString(
+            "appstate.ai.stub.well.summary.format",
+            comment: "Stub well-visit summary format. %@ is the joined bullet list of pieces."
+        )
+
         var pieces: [String] = []
 
         let trimmedProblems = context.problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedProblems.isEmpty {
-            pieces.append("Problem listing provided")
+            pieces.append(pieceProblemListingProvided)
         }
 
         if let perinatal = context.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
            !perinatal.isEmpty {
-            pieces.append("Perinatal history included")
+            pieces.append(piecePerinatalIncluded)
         }
 
         if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
            !pmh.isEmpty {
-            pieces.append("PMH included")
+            pieces.append(piecePMHIncluded)
         }
 
         if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
            !vacc.isEmpty {
-            pieces.append("Vaccination summary included")
+            pieces.append(pieceVaccinationIncluded)
         }
 
         if let age = context.ageDays {
-            pieces.append("Age in days: \(age)")
+            pieces.append(String(format: pieceAgeDaysFormat, age))
         }
 
         let hasCustomPrompt: Bool = {
@@ -2895,14 +3195,14 @@ final class AppState: ObservableObject {
             }
             return false
         }()
-        pieces.append(hasCustomPrompt ? "Clinician well-visit prompt configured"
-                                      : "Using default well-visit AI prompt")
+        pieces.append(hasCustomPrompt ? pieceCustomPromptConfigured
+                                      : pieceUsingDefaultPrompt)
 
         let summary: String
         if pieces.isEmpty {
-            summary = "Placeholder well-visit AI summary – no well-visit context was provided. Once configured, AI providers will analyze problem listing, perinatal history, PMH and vaccination status."
+            summary = summaryNoContext
         } else {
-            summary = "Stub well-visit AI summary based on current context → " + pieces.joined(separator: " • ")
+            summary = String(format: summaryFormat, pieces.joined(separator: " • "))
         }
 
         // Persist this stub interaction into well_ai_inputs.
@@ -2935,30 +3235,68 @@ final class AppState: ObservableObject {
         func runAIStub(using context: EpisodeAIContext) {
             var pieces: [String] = []
 
+            // --- Localized stub pieces ---
+            let pieceProblemListingProvided = NSLocalizedString(
+                "appstate.ai.stub.episode.piece.problem_listing_provided",
+                comment: "Stub sick-visit piece: problem listing was provided."
+            )
+            let pieceInvestigationsDescribed = NSLocalizedString(
+                "appstate.ai.stub.episode.piece.investigations_described",
+                comment: "Stub sick-visit piece: investigations described."
+            )
+            let pieceVaccinationFormat = NSLocalizedString(
+                "appstate.ai.stub.episode.piece.vaccination_format",
+                comment: "Stub sick-visit piece format: vaccination status. %@ is the vaccination summary text."
+            )
+            let piecePMHIncluded = NSLocalizedString(
+                "appstate.ai.stub.episode.piece.pmh_included",
+                comment: "Stub sick-visit piece: PMH included."
+            )
+            let pieceICD10AvailableFormat = NSLocalizedString(
+                "appstate.ai.stub.episode.piece.icd10_available_format",
+                comment: "Stub sick-visit piece format: ICD-10 suggestion available. %@ is the suggested code string."
+            )
+            let pieceCustomPromptConfigured = NSLocalizedString(
+                "appstate.ai.stub.episode.piece.custom_prompt_configured",
+                comment: "Stub sick-visit piece: clinician sick-visit prompt configured."
+            )
+            let pieceUsingDefaultPrompt = NSLocalizedString(
+                "appstate.ai.stub.episode.piece.using_default_prompt",
+                comment: "Stub sick-visit piece: using default sick-visit AI prompt."
+            )
+            let summaryNoContext = NSLocalizedString(
+                "appstate.ai.stub.episode.summary.no_context",
+                comment: "Stub sick-visit summary when no episode context is provided."
+            )
+            let summaryFormat = NSLocalizedString(
+                "appstate.ai.stub.episode.summary.format",
+                comment: "Stub sick-visit summary format. %@ is the joined bullet list of pieces."
+            )
+
             let trimmedProblems = context.problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedProblems.isEmpty {
-                pieces.append("Problem listing provided")
+                pieces.append(pieceProblemListingProvided)
             }
 
             let trimmedInv = context.complementaryInvestigations.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedInv.isEmpty {
-                pieces.append("Investigations described")
+                pieces.append(pieceInvestigationsDescribed)
             }
 
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
                !vacc.isEmpty {
-                pieces.append("Vaccination: \(vacc)")
+                pieces.append(String(format: pieceVaccinationFormat, vacc))
             }
 
             if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
                !pmh.isEmpty {
-                pieces.append("PMH included")
+                pieces.append(piecePMHIncluded)
             }
 
             // Derive a very simple ICD-10 suggestion from the free-text context (stub only).
             let icdSuggestion = deriveICD10Suggestion(from: context)
             if let icdSuggestion {
-                pieces.append("ICD-10 suggestion available (\(icdSuggestion))")
+                pieces.append(String(format: pieceICD10AvailableFormat, icdSuggestion))
             }
 
             // Check whether a clinician-specific sick prompt is configured.
@@ -2969,13 +3307,13 @@ final class AppState: ObservableObject {
                 }
                 return false
             }()
-            pieces.append(hasCustomPrompt ? "Clinician sick-visit prompt configured" : "Using default sick-visit AI prompt")
+            pieces.append(hasCustomPrompt ? pieceCustomPromptConfigured : pieceUsingDefaultPrompt)
 
             let summary: String
             if pieces.isEmpty {
-                summary = "Placeholder AI summary – no episode context was provided. Once configured, AI providers will analyze problem listing, investigations, vaccination status and past medical history."
+                summary = summaryNoContext
             } else {
-                summary = "Stub AI summary based on current episode → " + pieces.joined(separator: " • ")
+                summary = String(format: summaryFormat, pieces.joined(separator: " • "))
             }
 
             // Wrap the stub output into a provider-agnostic result and funnel it
@@ -3299,7 +3637,12 @@ final class AppState: ObservableObject {
             // Rebuild the per-visit summary map from the most recent AI entry
             // for this well visit (Option A: latest row overall, regardless of model).
             if let latest = rows.first {
-                let modelKey = latest.model.isEmpty ? "Unknown" : latest.model
+                let modelKey = latest.model.isEmpty
+                    ? NSLocalizedString(
+                        "appstate.ai.inputs.model_unknown",
+                        comment: "Fallback model label when an AI input row has an empty model name."
+                    )
+                    : latest.model
                 self.aiSummariesByWellVisit[wellVisitID] = [
                     modelKey: latest.fullResponse
                 ]
@@ -3391,18 +3734,36 @@ final class AppState: ObservableObject {
     @discardableResult
     func startNewEpisode(force: Bool = false) -> Int? {
         // DEBUG: what are we about to use?
-        log.info("startNewEpisode: pid=\(String(describing: self.selectedPatientID)), uid=\(String(describing: self.activeUserID)), db=\(self.currentDBURL?.path ?? "nil")")
+        let startDebugFmt = NSLocalizedString(
+            "appstate.episode.start.debug_format",
+            comment: "Log format for startNewEpisode debug: pid, uid, db path."
+        )
+        let startDebugMsg = String(
+            format: startDebugFmt,
+            String(describing: self.selectedPatientID),
+            String(describing: self.activeUserID),
+            self.currentDBURL?.path ?? "nil"
+        )
+        log.info("\(startDebugMsg, privacy: .public)")
 
         guard let pid = selectedPatientID,
               let dbURL = currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else {
-            log.error("startNewEpisode: guard failed (no pid or dbURL)")
+            let msg = NSLocalizedString(
+                "appstate.episode.start.guard_failed",
+                comment: "Log when startNewEpisode guard fails due to missing pid or dbURL."
+            )
+            log.error("\(msg, privacy: .public)")
             return nil
         }
 
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
-            log.error("startNewEpisode: sqlite3_open_v2 failed")
+            let msg = NSLocalizedString(
+                "appstate.episode.start.open_failed",
+                comment: "Log when startNewEpisode cannot open the bundle database."
+            )
+            log.error("\(msg, privacy: .public)")
             return nil
         }
         defer { sqlite3_close(db) }
@@ -3440,7 +3801,12 @@ final class AppState: ObservableObject {
         let insertSQL = "INSERT INTO episodes (patient_id, user_id) VALUES (?, ?);"
         guard sqlite3_prepare_v2(db, insertSQL, -1, &ins, nil) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(db))
-            log.error("startNewEpisode: INSERT prepare failed: \(msg)")
+            let fmt = NSLocalizedString(
+                "appstate.episode.start.insert_prepare_failed_format",
+                comment: "Log when episode INSERT prepare fails; %@ is the sqlite error message."
+            )
+            let line = String(format: fmt, msg)
+            log.error("\(line, privacy: .public)")
             return nil
         }
         sqlite3_bind_int64(ins, 1, sqlite3_int64(pid))
@@ -3451,12 +3817,22 @@ final class AppState: ObservableObject {
         }
         guard sqlite3_step(ins) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
-            log.error("startNewEpisode: INSERT failed: \(msg)")
+            let fmt = NSLocalizedString(
+                "appstate.episode.start.insert_failed_format",
+                comment: "Log when episode INSERT step fails; %@ is the sqlite error message."
+            )
+            let line = String(format: fmt, msg)
+            log.error("\(line, privacy: .public)")
             return nil
         }
 
         let newID = Int(sqlite3_last_insert_rowid(db))
-        log.info("startNewEpisode: inserted row id \(newID), user_id=\(String(describing: self.activeUserID))")
+        let insertedFmt = NSLocalizedString(
+            "appstate.episode.start.inserted_format",
+            comment: "Log when a new episode row is inserted; %d is the new episode id; %@ is the user_id description."
+        )
+        let insertedMsg = String(format: insertedFmt, newID, String(describing: self.activeUserID))
+        log.info("\(insertedMsg, privacy: .public)")
 
         // Make sure the active clinician exists in this bundle's users table
         self.ensureActiveClinicianMirroredIntoBundleUsers()
@@ -3465,8 +3841,6 @@ final class AppState: ObservableObject {
         // Keep the right pane lists fresh
         self.reloadVisitsForSelectedPatient()
         return newID
-        
-        
     }
     
     // MARK: - Clinician mirroring into bundle DB (users table)
@@ -3477,7 +3851,11 @@ final class AppState: ObservableObject {
     /// to a "first_name + last_name" without leaking all clinician details.
     private func ensureActiveClinicianMirroredIntoBundleUsers() {
         guard let activeUserID = self.activeUserID else {
-            log.info("ensureActiveClinicianMirroredIntoBundleUsers: no activeUserID; skipping")
+            let msg = NSLocalizedString(
+                "appstate.users_mirror.no_active_user_id",
+                comment: "Log when there is no active clinician id; mirroring to bundle users is skipped."
+            )
+            log.info("\(msg, privacy: .public)")
             return
         }
 
@@ -3500,7 +3878,12 @@ final class AppState: ObservableObject {
         var cliniciansDB: OpaquePointer?
         guard sqlite3_open_v2(cliniciansDBURL.path, &cliniciansDB, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
               let cliniciansDBUnwrapped = cliniciansDB else {
-            log.error("ensureActiveClinicianMirroredIntoBundleUsers: failed to open clinicians DB at \(cliniciansDBURL.path, privacy: .public)")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.open_clinicians_db_failed_format",
+                comment: "Log when clinicians DB cannot be opened; %@ is the clinicians DB path."
+            )
+            let line = String(format: fmt, cliniciansDBURL.path)
+            log.error("\(line, privacy: .public)")
             return
         }
         defer { sqlite3_close(cliniciansDBUnwrapped) }
@@ -3518,14 +3901,24 @@ final class AppState: ObservableObject {
 
         guard sqlite3_prepare_v2(cliniciansDBUnwrapped, nameSQL, -1, &nameStmt, nil) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(cliniciansDBUnwrapped))
-            log.error("ensureActiveClinicianMirroredIntoBundleUsers: name SELECT prepare failed: \(msg, privacy: .public)")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.name_select_prepare_failed_format",
+                comment: "Log when preparing the clinicians name SELECT fails; %@ is the sqlite error."
+            )
+            let line = String(format: fmt, msg)
+            log.error("\(line, privacy: .public)")
             return
         }
 
         sqlite3_bind_int64(nameStmt, 1, sqlite3_int64(activeUserID))
 
         guard sqlite3_step(nameStmt) == SQLITE_ROW else {
-            log.warning("ensureActiveClinicianMirroredIntoBundleUsers: no clinician row found for id \(activeUserID, privacy: .public) in clinicians.sqlite")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.no_clinician_row_found_format",
+                comment: "Log when no clinician row exists; %d is the clinician id."
+            )
+            let line = String(format: fmt, activeUserID)
+            log.warning("\(line, privacy: .public)")
             return
         }
 
@@ -3535,21 +3928,35 @@ final class AppState: ObservableObject {
         let trimmedLast  = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedFirst.isEmpty || !trimmedLast.isEmpty else {
-            log.warning("ensureActiveClinicianMirroredIntoBundleUsers: clinician \(activeUserID, privacy: .public) has empty name; skipping mirror")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.empty_name_skip_format",
+                comment: "Log when clinician name is empty; %d is the clinician id."
+            )
+            let line = String(format: fmt, activeUserID)
+            log.warning("\(line, privacy: .public)")
             return
         }
 
         // 2) Open current bundle DB and upsert this clinician into db.sqlite.users
         guard let bundleDBURL = currentDBURL,
               fm.fileExists(atPath: bundleDBURL.path) else {
-            log.error("ensureActiveClinicianMirroredIntoBundleUsers: no currentDBURL; skipping mirror")
+            let msg = NSLocalizedString(
+                "appstate.users_mirror.no_current_db_url",
+                comment: "Log when there is no active bundle DB URL; mirroring to bundle users is skipped."
+            )
+            log.error("\(msg, privacy: .public)")
             return
         }
 
         var bundleDB: OpaquePointer?
         guard sqlite3_open_v2(bundleDBURL.path, &bundleDB, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
               let bundleDBUnwrapped = bundleDB else {
-            log.error("ensureActiveClinicianMirroredIntoBundleUsers: failed to open bundle DB at \(bundleDBURL.path, privacy: .public)")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.open_bundle_db_failed_format",
+                comment: "Log when bundle DB cannot be opened; %@ is the bundle DB path."
+            )
+            let line = String(format: fmt, bundleDBURL.path)
+            log.error("\(line, privacy: .public)")
             return
         }
         defer { sqlite3_close(bundleDBUnwrapped) }
@@ -3565,7 +3972,12 @@ final class AppState: ObservableObject {
         """
         if sqlite3_exec(bundleDBUnwrapped, createSQL, nil, nil, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
-            log.error("ensureActiveClinicianMirroredIntoBundleUsers: CREATE TABLE users failed: \(msg, privacy: .public)")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.create_users_table_failed_format",
+                comment: "Log when CREATE TABLE users fails; %@ is the sqlite error."
+            )
+            let line = String(format: fmt, msg)
+            log.error("\(line, privacy: .public)")
             return
         }
 
@@ -3576,7 +3988,12 @@ final class AppState: ObservableObject {
         let checkSQL = "SELECT 1 FROM users WHERE id = ? LIMIT 1;"
         guard sqlite3_prepare_v2(bundleDBUnwrapped, checkSQL, -1, &checkStmt, nil) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
-            log.error("ensureActiveClinicianMirroredIntoBundleUsers: check SELECT prepare failed: \(msg, privacy: .public)")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.check_select_prepare_failed_format",
+                comment: "Log when preparing the bundle users check SELECT fails; %@ is the sqlite error."
+            )
+            let line = String(format: fmt, msg)
+            log.error("\(line, privacy: .public)")
             return
         }
         sqlite3_bind_int64(checkStmt, 1, sqlite3_int64(activeUserID))
@@ -3595,7 +4012,12 @@ final class AppState: ObservableObject {
             """
             guard sqlite3_prepare_v2(bundleDBUnwrapped, updSQL, -1, &updStmt, nil) == SQLITE_OK else {
                 let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
-                log.error("ensureActiveClinicianMirroredIntoBundleUsers: UPDATE prepare failed: \(msg, privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.users_mirror.update_prepare_failed_format",
+                    comment: "Log when preparing UPDATE users fails; %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                log.error("\(line, privacy: .public)")
                 return
             }
 
@@ -3605,11 +4027,21 @@ final class AppState: ObservableObject {
 
             if sqlite3_step(updStmt) != SQLITE_DONE {
                 let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
-                log.error("ensureActiveClinicianMirroredIntoBundleUsers: UPDATE step failed: \(msg, privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.users_mirror.update_step_failed_format",
+                    comment: "Log when UPDATE users step fails; %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                log.error("\(line, privacy: .public)")
                 return
             }
 
-            log.info("ensureActiveClinicianMirroredIntoBundleUsers: updated user \(activeUserID, privacy: .public) in bundle users table")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.updated_user_format",
+                comment: "Log when a clinician is updated in the bundle users table; %d is the clinician id."
+            )
+            let line = String(format: fmt, activeUserID)
+            log.info("\(line, privacy: .public)")
         } else {
             // INSERT
             var insStmt: OpaquePointer?
@@ -3621,7 +4053,12 @@ final class AppState: ObservableObject {
             """
             guard sqlite3_prepare_v2(bundleDBUnwrapped, insSQL, -1, &insStmt, nil) == SQLITE_OK else {
                 let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
-                log.error("ensureActiveClinicianMirroredIntoBundleUsers: INSERT prepare failed: \(msg, privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.users_mirror.insert_prepare_failed_format",
+                    comment: "Log when preparing INSERT users fails; %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                log.error("\(line, privacy: .public)")
                 return
             }
 
@@ -3631,11 +4068,21 @@ final class AppState: ObservableObject {
 
             if sqlite3_step(insStmt) != SQLITE_DONE {
                 let msg = String(cString: sqlite3_errmsg(bundleDBUnwrapped))
-                log.error("ensureActiveClinicianMirroredIntoBundleUsers: INSERT step failed: \(msg, privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.users_mirror.insert_step_failed_format",
+                    comment: "Log when INSERT users step fails; %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                log.error("\(line, privacy: .public)")
                 return
             }
 
-            log.info("ensureActiveClinicianMirroredIntoBundleUsers: inserted user \(activeUserID, privacy: .public) into bundle users table")
+            let fmt = NSLocalizedString(
+                "appstate.users_mirror.inserted_user_format",
+                comment: "Log when a clinician is inserted into the bundle users table; %d is the clinician id."
+            )
+            let line = String(format: fmt, activeUserID)
+            log.info("\(line, privacy: .public)")
         }
     }
 
@@ -3653,8 +4100,17 @@ final class AppState: ObservableObject {
         ) throws -> Int {
             guard let dbURL = currentDBURL,
                   FileManager.default.fileExists(atPath: dbURL.path) else {
-                log.error("addGrowthPointManual: no current DB URL")
-                throw NSError(domain: "AppState", code: 404, userInfo: [NSLocalizedDescriptionKey: "No active bundle DB"])
+                let logMsg = NSLocalizedString(
+                    "appstate.growth.add_manual.no_current_db_url",
+                    comment: "Log when addGrowthPointManual is called without an active bundle DB URL."
+                )
+                log.error("\(logMsg, privacy: .public)")
+
+                let errMsg = NSLocalizedString(
+                    "appstate.growth.no_active_bundle_db",
+                    comment: "Error shown when there is no active bundle DB for a growth write operation."
+                )
+                throw NSError(domain: "AppState", code: 404, userInfo: [NSLocalizedDescriptionKey: errMsg])
             }
             let newID = try GrowthStore().addManualGrowth(
                 dbURL: dbURL,
@@ -3672,13 +4128,27 @@ final class AppState: ObservableObject {
         /// Delete a manual growth point if the provided `GrowthPoint` was manually entered.
         func deleteGrowthPointIfManual(_ gp: GrowthPoint) throws {
             guard gp.source.lowercased() == "manual" else {
-                log.info("deleteGrowthPointIfManual: ignored non-manual source=\(gp.source, privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.growth.delete_manual.ignored_non_manual_source_format",
+                    comment: "Log when deleteGrowthPointIfManual is called with a non-manual growth source. %@ is the source string."
+                )
+                let line = String(format: fmt, gp.source)
+                log.info("\(line, privacy: .public)")
                 return
             }
             guard let dbURL = currentDBURL,
                   FileManager.default.fileExists(atPath: dbURL.path) else {
-                log.error("deleteGrowthPointIfManual: no current DB URL")
-                throw NSError(domain: "AppState", code: 404, userInfo: [NSLocalizedDescriptionKey: "No active bundle DB"])
+                let logMsg = NSLocalizedString(
+                    "appstate.growth.delete_manual.no_current_db_url",
+                    comment: "Log when deleteGrowthPointIfManual is called without an active bundle DB URL."
+                )
+                log.error("\(logMsg, privacy: .public)")
+
+                let errMsg = NSLocalizedString(
+                    "appstate.growth.no_active_bundle_db",
+                    comment: "Error shown when there is no active bundle DB for a growth write operation."
+                )
+                throw NSError(domain: "AppState", code: 404, userInfo: [NSLocalizedDescriptionKey: errMsg])
             }
             try GrowthStore().deleteManualGrowth(dbURL: dbURL, id: gp.id)
             if let pid = selectedPatientID {
@@ -3723,7 +4193,12 @@ final class AppState: ObservableObject {
 
                     // Find the bundle root (folder containing db.sqlite)
                     guard let bundleRoot = self.findBundleRoot(startingAt: staged) else {
-                        self.log.warning("ZIP import: no db.sqlite found under \(staged.path, privacy: .public)")
+                        let fmt = NSLocalizedString(
+                            "appstate.zip_import.no_db_found_under_format",
+                            comment: "Log when no db.sqlite is found while importing a ZIP. %@ is the staging folder path."
+                        )
+                        let line = String(format: fmt, staged.path)
+                        self.log.warning("\(line, privacy: .public)")
                         continue
                     }
 
@@ -3731,13 +4206,23 @@ final class AppState: ObservableObject {
                     // verify the DB on disk matches before proceeding. This helps catch
                     // tampering/corruption while staying backward‑compatible for older bundles.
                     if !self.validateBundleIntegrity(at: bundleRoot) {
-                        self.log.error("ZIP import: integrity check failed for bundle at \(bundleRoot.path, privacy: .public); skipping.")
+                        let fmt = NSLocalizedString(
+                            "appstate.zip_import.integrity_check_failed_format",
+                            comment: "Log when bundle integrity validation fails during ZIP import. %@ is the bundle root path."
+                        )
+                        let line = String(format: fmt, bundleRoot.path)
+                        self.log.error("\(line, privacy: .public)")
                         continue
                     }
 
                     // Extract patient identity from the staged bundle
                     guard let identity = self.extractPatientIdentity(from: bundleRoot) else {
-                        self.log.warning("ZIP import: no identity (manifest/db) found under \(bundleRoot.path, privacy: .public) — registering as anonymous; duplicate detection skipped.")
+                        let fmt = NSLocalizedString(
+                            "appstate.zip_import.no_identity_found_format",
+                            comment: "Log when no patient identity can be extracted during ZIP import. %@ is the bundle root path."
+                        )
+                        let line = String(format: fmt, bundleRoot.path)
+                        self.log.warning("\(line, privacy: .public)")
                         if !self.bundleLocations.contains(bundleRoot) {
                             self.bundleLocations.append(bundleRoot)
                             self.addToRecents(bundleRoot)
@@ -3760,9 +4245,19 @@ final class AppState: ObservableObject {
                                     self.bundleLocations[idx] = finalURL
                                 }
                                 self.addToRecents(finalURL)
-                                self.log.info("Replaced existing bundle for \(self.identityString(identity), privacy: .public) at \(finalURL.path, privacy: .public)")
+                                let fmt = NSLocalizedString(
+                                    "appstate.zip_import.replaced_existing_bundle_format",
+                                    comment: "Log when an existing bundle is replaced during import. First %@ is the identity string, second %@ is the final path."
+                                )
+                                let line = String(format: fmt, self.identityString(identity), finalURL.path)
+                                self.log.info("\(line, privacy: .public)")
                             } else {
-                                self.log.error("Failed to replace existing bundle for \(self.identityString(identity), privacy: .public)")
+                                let fmt = NSLocalizedString(
+                                    "appstate.zip_import.failed_to_replace_existing_bundle_format",
+                                    comment: "Log when replacing an existing bundle fails during import. %@ is the identity string."
+                                )
+                                let line = String(format: fmt, self.identityString(identity))
+                                self.log.error("\(line, privacy: .public)")
                             }
 
                         case .keepBoth:
@@ -3771,12 +4266,22 @@ final class AppState: ObservableObject {
                                 self.bundleLocations.append(bundleRoot)
                             }
                             self.addToRecents(bundleRoot)
-                            self.log.info("Kept both bundles for \(self.identityString(identity), privacy: .public). New at \(bundleRoot.path, privacy: .public)")
+                            let fmt = NSLocalizedString(
+                                "appstate.zip_import.kept_both_bundles_format",
+                                comment: "Log when keeping both bundles during import. First %@ is the identity string, second %@ is the new bundle path."
+                            )
+                            let line = String(format: fmt, self.identityString(identity), bundleRoot.path)
+                            self.log.info("\(line, privacy: .public)")
 
                         case .cancel:
                             // Drop this staged import.
                             try? fm.removeItem(at: bundleRoot)
-                            self.log.info("Cancelled import for \(self.identityString(identity), privacy: .public)")
+                            let fmt = NSLocalizedString(
+                                "appstate.zip_import.cancelled_import_format",
+                                comment: "Log when the user cancels a ZIP import conflict. %@ is the identity string."
+                            )
+                            let line = String(format: fmt, self.identityString(identity))
+                            self.log.info("\(line, privacy: .public)")
                             continue
                         }
                         #else
@@ -3797,7 +4302,12 @@ final class AppState: ObservableObject {
                             self.bundleLocations.append(bundleRoot)
                         }
                         self.addToRecents(bundleRoot)
-                        self.log.info("Imported new bundle (no auto-select): \(self.identityString(identity), privacy: .public) at \(bundleRoot.path, privacy: .public)")
+                        let fmt = NSLocalizedString(
+                            "appstate.zip_import.imported_new_bundle_no_autoselect_format",
+                            comment: "Log when a new bundle is imported without auto-selecting it. First %@ is the identity string, second %@ is the bundle path."
+                        )
+                        let line = String(format: fmt, self.identityString(identity), bundleRoot.path)
+                        self.log.info("\(line, privacy: .public)")
                     }
 
                     // Cleanup: remove staging parent if it is empty (best-effort)
@@ -3810,7 +4320,12 @@ final class AppState: ObservableObject {
                         // benign
                     }
                 } catch {
-                    self.log.error("ZIP import failed for \(zipURL.path, privacy: .public): \(String(describing: error), privacy: .public)")
+                    let fmt = NSLocalizedString(
+                        "appstate.zip_import.failed_for_zip_format",
+                        comment: "Log when a ZIP import fails. First %@ is the zip path, second %@ is the error description."
+                    )
+                    let line = String(format: fmt, zipURL.path, String(describing: error))
+                    self.log.error("\(line, privacy: .public)")
                 }
             }
             // IMPORTANT: We do NOT change currentBundleURL or selectedPatientID here.
@@ -3824,11 +4339,29 @@ final class AppState: ObservableObject {
         private func presentImportConflictAlert(identity: PatientIdentity, existingURL: URL) -> ImportChoice {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Patient already exists"
-            alert.informativeText = "Found an existing bundle for \(identityString(identity)).\nWhat would you like to do?"
-            alert.addButton(withTitle: "Replace")   // 1
-            alert.addButton(withTitle: "Keep Both") // 2
-            alert.addButton(withTitle: "Cancel")    // 3
+            alert.messageText = NSLocalizedString(
+                "appstate.import_conflict.alert_title",
+                comment: "Title for the import conflict alert when a patient already exists."
+            )
+
+            let infoFmt = NSLocalizedString(
+                "appstate.import_conflict.alert_message_format",
+                comment: "Message for the import conflict alert. %@ is the patient identity string."
+            )
+            alert.informativeText = String(format: infoFmt, identityString(identity))
+
+            alert.addButton(withTitle: NSLocalizedString(
+                "appstate.import_conflict.button_replace",
+                comment: "Button title to replace the existing patient bundle during import."
+            ))   // 1
+            alert.addButton(withTitle: NSLocalizedString(
+                "appstate.import_conflict.button_keep_both",
+                comment: "Button title to keep both bundles during import."
+            )) // 2
+            alert.addButton(withTitle: NSLocalizedString(
+                "appstate.import_conflict.button_cancel",
+                comment: "Button title to cancel the import."
+            ))    // 3
             let response = alert.runModal()
             switch response {
             case .alertFirstButtonReturn:  return .replace
@@ -4156,7 +4689,12 @@ final class AppState: ObservableObject {
                 try fm.moveItem(at: incoming, to: dest)
                 return dest
             } catch {
-                log.error("archiveAndReplace failed: \(String(describing: error), privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.archive_and_replace.failed_format",
+                    comment: "Log when archiveAndReplace fails; %@ is the error description."
+                )
+                let line = String(format: fmt, String(describing: error))
+                log.error("\(line, privacy: .public)")
                 return nil
             }
         }
@@ -4226,7 +4764,14 @@ final class AppState: ObservableObject {
             let fm = FileManager.default
 
             // 1) Make a unique, safe folder name
-            let safeAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "New Patient" : alias
+            let safeAlias: String = {
+                let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+                return NSLocalizedString(
+                    "appstate.new_patient.default_alias",
+                    comment: "Default patient alias used when creating a new patient and the alias field is empty."
+                )
+            }()
             let baseName = safeAlias
                 .replacingOccurrences(of: "/", with: "–")
                 .replacingOccurrences(of: ":", with: "–")
@@ -4339,7 +4884,12 @@ final class AppState: ObservableObject {
             let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
             try manifestData.write(to: bundleURL.appendingPathComponent("manifest.json"), options: .atomic)
 
-            log.info("Created new bundle for \(safeAlias, privacy: .public) at \(bundleURL.path, privacy: .public)")
+            let fmt = NSLocalizedString(
+                "appstate.new_patient.created_bundle_format",
+                comment: "Log when a new patient bundle is created. First %@ is the patient alias, second %@ is the bundle path."
+            )
+            let line = String(format: fmt, safeAlias, bundleURL.path)
+            log.info("\(line, privacy: .public)")
 
             // 6) Activate
             selectBundle(bundleURL)
@@ -4390,8 +4940,12 @@ final class AppState: ObservableObject {
     private func copyGoldenDB(to targetDBURL: URL, overwrite: Bool = false) throws {
         let fm = FileManager.default
         guard let src = bundledGoldenDBURL() else {
+            let errMsg = NSLocalizedString(
+                "appstate.golden_db.not_found_in_bundle",
+                comment: "Error shown when the bundled golden.db database resource cannot be found."
+            )
             throw NSError(domain: "AppState", code: 404,
-                          userInfo: [NSLocalizedDescriptionKey: "golden.db not found in bundle"])
+                          userInfo: [NSLocalizedDescriptionKey: errMsg])
         }
         if fm.fileExists(atPath: targetDBURL.path) {
             if overwrite {
@@ -4441,7 +4995,12 @@ final class AppState: ObservableObject {
             if sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) != SQLITE_OK {
                 let code = sqlite3_errcode(db)
                 defer { sqlite3_close(db) }
-                throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: "Failed to open DB at \(path)"])
+                let fmt = NSLocalizedString(
+                    "appstate.db.open_failed_at_path_format",
+                    comment: "Error shown when SQLite cannot open a database file. %@ is the file path."
+                )
+                let line = String(format: fmt, path)
+                throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: line])
             }
             defer { sqlite3_close(db) }
             
@@ -4465,7 +5024,12 @@ final class AppState: ObservableObject {
         """
             if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
                 let msg = String(cString: sqlite3_errmsg(db))
-                throw NSError(domain: "SQLite", code: 1, userInfo: [NSLocalizedDescriptionKey: "Schema init failed: \(msg)"])
+                let fmt = NSLocalizedString(
+                    "appstate.db.schema_init_failed_format",
+                    comment: "Error shown when initializing the minimal SQLite schema fails. %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                throw NSError(domain: "SQLite", code: 1, userInfo: [NSLocalizedDescriptionKey: line])
             }
             
             // --- Migrations / compatibility with older bundles ---
@@ -4527,7 +5091,12 @@ final class AppState: ObservableObject {
             if sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
                 let code = sqlite3_errcode(db)
                 defer { sqlite3_close(db) }
-                throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: "Failed to open DB at \(path)"])
+                let fmt = NSLocalizedString(
+                    "appstate.db.open_failed_at_path_format",
+                    comment: "Error shown when SQLite cannot open a database file. %@ is the file path."
+                )
+                let line = String(format: fmt, path)
+                throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: line])
             }
             defer { sqlite3_close(db) }
 
@@ -4543,7 +5112,12 @@ final class AppState: ObservableObject {
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
                 let msg = String(cString: sqlite3_errmsg(db))
-                throw NSError(domain: "SQLite", code: 2, userInfo: [NSLocalizedDescriptionKey: "Prepare failed: \(msg)"])
+                let fmt = NSLocalizedString(
+                    "appstate.db.prepare_failed_format",
+                    comment: "Error shown when preparing a SQLite statement fails. %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                throw NSError(domain: "SQLite", code: 2, userInfo: [NSLocalizedDescriptionKey: line])
             }
             defer { sqlite3_finalize(stmt) }
 
@@ -4578,7 +5152,12 @@ final class AppState: ObservableObject {
 
             if sqlite3_step(stmt) != SQLITE_DONE {
                 let msg = String(cString: sqlite3_errmsg(db))
-                throw NSError(domain: "SQLite", code: 3, userInfo: [NSLocalizedDescriptionKey: "Insert failed: \(msg)"])
+                let fmt = NSLocalizedString(
+                    "appstate.db.insert_failed_format",
+                    comment: "Error shown when inserting into SQLite fails. %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                throw NSError(domain: "SQLite", code: 3, userInfo: [NSLocalizedDescriptionKey: line])
             }
             let newID = Int(sqlite3_last_insert_rowid(db))
             return newID
@@ -4645,7 +5224,12 @@ final class AppState: ObservableObject {
                 let data = try Data(contentsOf: manifestURL)
                 guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     // Malformed manifest → treat as non‑fatal for now, but log.
-                    log.warning("validateBundleIntegrity: manifest.json is not a dictionary at \(manifestURL.lastPathComponent, privacy: .public)")
+                    let fmt = NSLocalizedString(
+                        "appstate.manifest.validate.not_dictionary_format",
+                        comment: "Log when manifest.json is not a dictionary. %@ is the manifest file name."
+                    )
+                    let line = String(format: fmt, manifestURL.lastPathComponent)
+                    log.warning("\(line, privacy: .public)")
                     return true
                 }
 
@@ -4653,7 +5237,11 @@ final class AppState: ObservableObject {
                 guard let expectedDBHash = (obj["db_sha256"] as? String)?
                         .trimmingCharacters(in: .whitespacesAndNewlines),
                       !expectedDBHash.isEmpty else {
-                    log.info("validateBundleIntegrity: manifest has no db_sha256; skipping DB hash check.")
+                    let msg = NSLocalizedString(
+                        "appstate.manifest.validate.no_db_sha256_skip",
+                        comment: "Log when manifest has no db_sha256 and DB hash validation is skipped."
+                    )
+                    log.info("\(msg, privacy: .public)")
                     return true
                 }
 
@@ -4671,7 +5259,12 @@ final class AppState: ObservableObject {
                     // Fallback: encrypted present even if manifest encrypted=false
                     dbToHash = encDB
                 } else {
-                    log.error("validateBundleIntegrity: no db.sqlite or db.sqlite.enc found under \(bundleRoot.path, privacy: .public)")
+                    let fmt = NSLocalizedString(
+                        "appstate.manifest.validate.no_db_files_found_under_format",
+                        comment: "Log when neither db.sqlite nor db.sqlite.enc is found during manifest validation. %@ is the bundle root path."
+                    )
+                    let line = String(format: fmt, bundleRoot.path)
+                    log.error("\(line, privacy: .public)")
                     return false
                 }
 
@@ -4681,12 +5274,22 @@ final class AppState: ObservableObject {
 
                 let actualHash = sha256OfFile(at: dbURL)
                 guard !actualHash.isEmpty else {
-                    log.error("validateBundleIntegrity: failed to compute DB hash for \(dbURL.path, privacy: .public)")
+                    let fmt = NSLocalizedString(
+                        "appstate.manifest.validate.failed_to_compute_db_hash_format",
+                        comment: "Log when computing the DB SHA-256 fails. %@ is the DB file path."
+                    )
+                    let line = String(format: fmt, dbURL.path)
+                    log.error("\(line, privacy: .public)")
                     return false
                 }
 
                 if actualHash.lowercased() != expectedDBHash.lowercased() {
-                    log.error("validateBundleIntegrity: DB hash mismatch for bundle at \(bundleRoot.path, privacy: .public). expected=\(expectedDBHash, privacy: .public) actual=\(actualHash, privacy: .public)")
+                    let fmt = NSLocalizedString(
+                        "appstate.manifest.validate.db_hash_mismatch_format",
+                        comment: "Log when bundle DB hash mismatches manifest. %@ is bundle path, %@ expected hash, %@ actual hash."
+                    )
+                    let line = String(format: fmt, bundleRoot.path, expectedDBHash, actualHash)
+                    log.error("\(line, privacy: .public)")
                     return false
                 }
 
@@ -4701,7 +5304,12 @@ final class AppState: ObservableObject {
 
                         let docURL = bundleRoot.appendingPathComponent(relPath)
                         guard fm.fileExists(atPath: docURL.path) else {
-                            log.warning("validateBundleIntegrity: docs entry missing on disk → \(relPath, privacy: .public)")
+                            let fmt = NSLocalizedString(
+                                "appstate.manifest.validate.docs_entry_missing_format",
+                                comment: "Log when a docs_manifest entry is missing on disk. %@ is the relative docs path."
+                            )
+                            let line = String(format: fmt, relPath)
+                            log.warning("\(line, privacy: .public)")
                             continue
                         }
 
@@ -4709,7 +5317,12 @@ final class AppState: ObservableObject {
                         if !expectedDocHash.isEmpty,
                            !actualDocHash.isEmpty,
                            actualDocHash.lowercased() != expectedDocHash.lowercased() {
-                            log.warning("validateBundleIntegrity: docs hash mismatch for \(relPath, privacy: .public). expected=\(expectedDocHash, privacy: .public) actual=\(actualDocHash, privacy: .public)")
+                            let fmt = NSLocalizedString(
+                                "appstate.manifest.validate.docs_hash_mismatch_format",
+                                comment: "Log when a docs file hash mismatches the manifest. %@ is relative path, %@ expected hash, %@ actual hash."
+                            )
+                            let line = String(format: fmt, relPath, expectedDocHash, actualDocHash)
+                            log.warning("\(line, privacy: .public)")
                         }
                     }
                 }
@@ -4717,7 +5330,12 @@ final class AppState: ObservableObject {
                 // All checks passed or only non‑fatal warnings → accept bundle.
                 return true
             } catch {
-                log.warning("validateBundleIntegrity: failed to read/parse manifest at \(manifestURL.path, privacy: .public): \(String(describing: error), privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.manifest.validate.read_parse_failed_format",
+                    comment: "Log when reading/parsing manifest fails. First %@ is manifest path, second %@ is the error."
+                )
+                let line = String(format: fmt, manifestURL.path, String(describing: error))
+                log.warning("\(line, privacy: .public)")
                 // Treat manifest read errors as non‑fatal to stay compatible.
                 return true
             }
@@ -4807,7 +5425,12 @@ final class AppState: ObservableObject {
                 try data.write(to: bundleRoot.appendingPathComponent("manifest.json"), options: .atomic)
                 return true
             } catch {
-                log.error("writeManifestV2 failed: \(String(describing: error), privacy: .public)")
+                let fmt = NSLocalizedString(
+                    "appstate.manifest.write_v2.failed_format",
+                    comment: "Log when writing manifest.json v2 fails. %@ is the error description."
+                )
+                let line = String(format: fmt, String(describing: error))
+                log.error("\(line, privacy: .public)")
                 return false
             }
         }
@@ -4824,7 +5447,12 @@ final class AppState: ObservableObject {
             if sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK {
                 let code = sqlite3_errcode(db)
                 defer { sqlite3_close(db) }
-                throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: "Open failed"])
+                let fmt = NSLocalizedString(
+                    "appstate.db.open_failed_at_path_format",
+                    comment: "Error shown when SQLite cannot open a database file. %@ is the file path."
+                )
+                let line = String(format: fmt, path)
+                throw NSError(domain: "SQLite", code: Int(code), userInfo: [NSLocalizedDescriptionKey: line])
             }
             defer { sqlite3_close(db) }
             var stmt: OpaquePointer?
@@ -4832,10 +5460,19 @@ final class AppState: ObservableObject {
             let sql = "SELECT id FROM patients ORDER BY id DESC LIMIT 1;"
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
                 let msg = String(cString: sqlite3_errmsg(db))
-                throw NSError(domain: "SQLite", code: 2, userInfo: [NSLocalizedDescriptionKey: "Prepare failed: \(msg)"])
+                let fmt = NSLocalizedString(
+                    "appstate.db.prepare_failed_format",
+                    comment: "Error shown when preparing a SQLite statement fails. %@ is the sqlite error."
+                )
+                let line = String(format: fmt, msg)
+                throw NSError(domain: "SQLite", code: 2, userInfo: [NSLocalizedDescriptionKey: line])
             }
             guard sqlite3_step(stmt) == SQLITE_ROW else {
-                throw NSError(domain: "SQLite", code: 3, userInfo: [NSLocalizedDescriptionKey: "No patient row found"])
+                let errMsg = NSLocalizedString(
+                    "appstate.db.no_patient_row_found",
+                    comment: "Error shown when no patient row can be found in the patients table."
+                )
+                throw NSError(domain: "SQLite", code: 3, userInfo: [NSLocalizedDescriptionKey: errMsg])
             }
             return Int(sqlite3_column_int64(stmt, 0))
         }
@@ -4911,7 +5548,12 @@ extension AppState {
                 }
                 return target
             } catch {
-                print("Zip extract failed: \(error)")
+                let fmt = NSLocalizedString(
+                    "appstate.zip_extract.failed_format",
+                    comment: "Log/print when extracting a ZIP bundle fails. %@ is the error description."
+                )
+                let line = String(format: fmt, String(describing: error))
+                print(line)
                 return nil
             }
         }
@@ -4941,8 +5583,12 @@ extension AppState {
                 self.aiInputsForActiveEpisode.removeAll { $0.id == id }
             }
         } catch {
-            // Keep it simple to avoid extra logger dependencies.
-            print("deleteAIInputRow failed: \(error)")
+            let fmt = NSLocalizedString(
+                "appstate.ai_inputs.delete.failed_format",
+                comment: "Log/print when deleting an AI input row fails. %@ is the error description."
+            )
+            let line = String(format: fmt, String(describing: error))
+            print(line)
         }
     }
 
@@ -4951,10 +5597,15 @@ extension AppState {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db else {
             let msg = String(cString: sqlite3_errmsg(db))
+            let fmt = NSLocalizedString(
+                "appstate.ai_inputs.delete.open_failed_format",
+                comment: "Error when opening the bundle DB for deleting an AI input. %@ is the sqlite error."
+            )
+            let line = String(format: fmt, msg)
             throw NSError(
                 domain: "AppState.DB",
                 code: 201,
-                userInfo: [NSLocalizedDescriptionKey: "open failed: \(msg)"]
+                userInfo: [NSLocalizedDescriptionKey: line]
             )
         }
         defer { sqlite3_close(db) }
@@ -4963,10 +5614,15 @@ extension AppState {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
             let msg = String(cString: sqlite3_errmsg(db))
+            let fmt = NSLocalizedString(
+                "appstate.ai_inputs.delete.prepare_failed_format",
+                comment: "Error when preparing the DELETE ai_inputs statement fails. %@ is the sqlite error."
+            )
+            let line = String(format: fmt, msg)
             throw NSError(
                 domain: "AppState.DB",
                 code: 202,
-                userInfo: [NSLocalizedDescriptionKey: "prepare delete ai_input failed: \(msg)"]
+                userInfo: [NSLocalizedDescriptionKey: line]
             )
         }
         defer { sqlite3_finalize(stmt) }
@@ -4975,12 +5631,35 @@ extension AppState {
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
+            let fmt = NSLocalizedString(
+                "appstate.ai_inputs.delete.step_failed_format",
+                comment: "Error when executing the DELETE ai_inputs statement fails. %@ is the sqlite error."
+            )
+            let line = String(format: fmt, msg)
             throw NSError(
                 domain: "AppState.DB",
                 code: 203,
-                userInfo: [NSLocalizedDescriptionKey: "delete ai_input step failed: \(msg)"]
+                userInfo: [NSLocalizedDescriptionKey: line]
             )
         }
     }
 }
 
+
+
+
+/// User-facing category label (localized). The stored `category` value remains a stable code.
+/// Note: `VisitRow` is a shared model type (not nested in AppState).
+extension VisitRow {
+    var localizedCategory: String {
+        let raw = category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch raw {
+        case "episode":
+            return NSLocalizedString("visit.category.episode", comment: "Visit category label for sick episodes")
+        case "well":
+            return NSLocalizedString("visit.category.well", comment: "Visit category label for well visits")
+        default:
+            return category
+        }
+    }
+}

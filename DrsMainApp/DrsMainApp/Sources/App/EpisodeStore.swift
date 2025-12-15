@@ -477,9 +477,21 @@ public struct EpisodeStore {
         let code = sqlite3_errcode(db)
         if let cmsg = sqlite3_errmsg(db) {
             let msg = String(cString: cmsg)
-            return NSError(domain: "EpisodeStore", code: Int(code), userInfo: [NSLocalizedDescriptionKey: "\(context): \(msg)"])
+            let desc = String(
+                format: NSLocalizedString("episodestore.error.sqlite_with_message", comment: "SQLite error with context + message"),
+                locale: Locale.current,
+                context,
+                msg
+            )
+            return NSError(domain: "EpisodeStore", code: Int(code), userInfo: [NSLocalizedDescriptionKey: desc])
         }
-        return NSError(domain: "EpisodeStore", code: Int(code), userInfo: [NSLocalizedDescriptionKey: context])
+
+        let desc = String(
+            format: NSLocalizedString("episodestore.error.sqlite_context_only", comment: "SQLite error with context only"),
+            locale: Locale.current,
+            context
+        )
+        return NSError(domain: "EpisodeStore", code: Int(code), userInfo: [NSLocalizedDescriptionKey: desc])
     }
 }
 

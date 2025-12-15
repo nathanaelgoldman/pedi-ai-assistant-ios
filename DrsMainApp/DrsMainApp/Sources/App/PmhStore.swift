@@ -49,7 +49,7 @@ public final class PmhStore {
     public func ensureSchema(dbURL: URL) throws {
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK, let db = db else {
-            throw NSError(domain: "PmhStore", code: 100, userInfo: [NSLocalizedDescriptionKey: "Unable to open database"])
+            throw NSError(domain: "PmhStore", code: 100, userInfo: [NSLocalizedDescriptionKey: String(localized: "pmhstore.error.open_db", comment: "PmhStore: unable to open database")])
         }
         defer { sqlite3_close(db) }
 
@@ -70,7 +70,7 @@ public final class PmhStore {
 
         if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw NSError(domain: "PmhStore", code: 101, userInfo: [NSLocalizedDescriptionKey: "Schema error: \(msg)"])
+            throw NSError(domain: "PmhStore", code: 101, userInfo: [NSLocalizedDescriptionKey: "\(String(localized: "pmhstore.error.schema", comment: "PmhStore: schema error")): \(msg)"])
         }
     }
 
@@ -78,7 +78,7 @@ public final class PmhStore {
     public func fetch(dbURL: URL, for patientID: Int64) throws -> PastMedicalHistory? {
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK, let db = db else {
-            throw NSError(domain: "PmhStore", code: 200, userInfo: [NSLocalizedDescriptionKey: "Unable to open database"])
+            throw NSError(domain: "PmhStore", code: 200, userInfo: [NSLocalizedDescriptionKey: String(localized: "pmhstore.error.open_db", comment: "PmhStore: unable to open database")])
         }
         defer { sqlite3_close(db) }
 
@@ -94,7 +94,7 @@ public final class PmhStore {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt else {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw NSError(domain: "PmhStore", code: 201, userInfo: [NSLocalizedDescriptionKey: "Prepare failed: \(msg)"])
+            throw NSError(domain: "PmhStore", code: 201, userInfo: [NSLocalizedDescriptionKey: "\(String(localized: "pmhstore.error.prepare", comment: "PmhStore: prepare statement failed")): \(msg)"])
         }
         defer { sqlite3_finalize(stmt) }
 
@@ -136,7 +136,7 @@ public final class PmhStore {
     public func upsert(dbURL: URL, for patientID: Int64, history: PastMedicalHistory) throws {
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK, let db = db else {
-            throw NSError(domain: "PmhStore", code: 300, userInfo: [NSLocalizedDescriptionKey: "Unable to open database"])
+            throw NSError(domain: "PmhStore", code: 300, userInfo: [NSLocalizedDescriptionKey: String(localized: "pmhstore.error.open_db", comment: "PmhStore: unable to open database")])
         }
         defer { sqlite3_close(db) }
 
@@ -145,7 +145,7 @@ public final class PmhStore {
         // Begin transaction
         guard sqlite3_exec(db, "BEGIN;", nil, nil, nil) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(db))
-            throw NSError(domain: "PmhStore", code: 301, userInfo: [NSLocalizedDescriptionKey: "BEGIN failed: \(msg)"])
+            throw NSError(domain: "PmhStore", code: 301, userInfo: [NSLocalizedDescriptionKey: "\(String(localized: "pmhstore.error.begin", comment: "PmhStore: begin transaction failed")): \(msg)"])
         }
         defer { _ = sqlite3_exec(db, "COMMIT;", nil, nil, nil) }
 
@@ -155,13 +155,13 @@ public final class PmhStore {
             var stmtDel: OpaquePointer?
             guard sqlite3_prepare_v2(db, del, -1, &stmtDel, nil) == SQLITE_OK, let stmtDel = stmtDel else {
                 let msg = String(cString: sqlite3_errmsg(db))
-                throw NSError(domain: "PmhStore", code: 302, userInfo: [NSLocalizedDescriptionKey: "Prepare delete failed: \(msg)"])
+                throw NSError(domain: "PmhStore", code: 302, userInfo: [NSLocalizedDescriptionKey: "\(String(localized: "pmhstore.error.prepare_delete", comment: "PmhStore: prepare delete failed")): \(msg)"])
             }
             sqlite3_bind_int64(stmtDel, 1, patientID)
             if sqlite3_step(stmtDel) != SQLITE_DONE {
                 let msg = String(cString: sqlite3_errmsg(db))
                 sqlite3_finalize(stmtDel)
-                throw NSError(domain: "PmhStore", code: 303, userInfo: [NSLocalizedDescriptionKey: "Delete failed: \(msg)"])
+                throw NSError(domain: "PmhStore", code: 303, userInfo: [NSLocalizedDescriptionKey: "\(String(localized: "pmhstore.error.delete", comment: "PmhStore: delete failed")): \(msg)"])
             }
             sqlite3_finalize(stmtDel)
         }
@@ -177,7 +177,7 @@ public final class PmhStore {
             var stmtIns: OpaquePointer?
             guard sqlite3_prepare_v2(db, ins, -1, &stmtIns, nil) == SQLITE_OK, let stmtIns = stmtIns else {
                 let msg = String(cString: sqlite3_errmsg(db))
-                throw NSError(domain: "PmhStore", code: 304, userInfo: [NSLocalizedDescriptionKey: "Prepare insert failed: \(msg)"])
+                throw NSError(domain: "PmhStore", code: 304, userInfo: [NSLocalizedDescriptionKey: "\(String(localized: "pmhstore.error.prepare_insert", comment: "PmhStore: prepare insert failed")): \(msg)"])
             }
             defer { sqlite3_finalize(stmtIns) }
 
@@ -199,7 +199,7 @@ public final class PmhStore {
 
             if sqlite3_step(stmtIns) != SQLITE_DONE {
                 let msg = String(cString: sqlite3_errmsg(db))
-                throw NSError(domain: "PmhStore", code: 305, userInfo: [NSLocalizedDescriptionKey: "Insert failed: \(msg)"])
+                throw NSError(domain: "PmhStore", code: 305, userInfo: [NSLocalizedDescriptionKey: "\(String(localized: "pmhstore.error.insert", comment: "PmhStore: insert failed")): \(msg)"])
             }
         }
     }

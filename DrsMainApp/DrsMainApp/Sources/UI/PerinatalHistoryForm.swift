@@ -46,27 +46,96 @@ struct PerinatalHistoryForm: View {
     @State private var showSavedToast = false
 
     // MARK: - Standardized choice sets (mirrors Python app)
-    static let CH_PREGNANCY = [
-        "normal", "gestational diabetes", "preeclampsia",
-        "infection", "threat of premature birth", "intrauterine growth retardation"
+    static let CH_PREGNANCY: [String] = [
+        String(localized: "perinatal.choice.pregnancy.normal"),
+        String(localized: "perinatal.choice.pregnancy.gestational_diabetes"),
+        String(localized: "perinatal.choice.pregnancy.preeclampsia"),
+        String(localized: "perinatal.choice.pregnancy.infection"),
+        String(localized: "perinatal.choice.pregnancy.threat_premature_birth"),
+        String(localized: "perinatal.choice.pregnancy.iugr")
     ]
-    static let CH_BIRTH_MODE = [
-        "normal vaginal delivery", "emergent c/s", "planned c/s",
-        "instrumental unspecified", "vacuum", "forceps"
+
+    static let CH_BIRTH_MODE: [String] = [
+        String(localized: "perinatal.choice.birth_mode.normal_vaginal"),
+        String(localized: "perinatal.choice.birth_mode.emergent_cs"),
+        String(localized: "perinatal.choice.birth_mode.planned_cs"),
+        String(localized: "perinatal.choice.birth_mode.instrumental_unspecified"),
+        String(localized: "perinatal.choice.birth_mode.vacuum"),
+        String(localized: "perinatal.choice.birth_mode.forceps")
     ]
-    static let CH_RESUSC = ["none", "free oxygen", "bag mask", "chest compression", "fluids & drugs"]
-    static let CH_INF_RISK = ["PROM", "Seroconversion TORCH", "GBS+ & no treatment", "GBS+ & treatment"]
-    static let CH_MAT_STAY_EVENTS = [
-        "none", "weight loss &gt;= 10%", "hyperbilirubinemia with PT",
-        "hyperbilirubinemia w/o PT", "hypoglycemia", "suspicion infection"
+
+    static let CH_RESUSC: [String] = [
+        String(localized: "perinatal.choice.resusc.none"),
+        String(localized: "perinatal.choice.resusc.free_oxygen"),
+        String(localized: "perinatal.choice.resusc.bag_mask"),
+        String(localized: "perinatal.choice.resusc.chest_compression"),
+        String(localized: "perinatal.choice.resusc.fluids_drugs")
     ]
-    static let CH_VACCINATIONS_MAT = ["BCG", "Hep. B", "RSV", "Anti-HBV Immunoglobulins"]
-    static let CH_MOTHER_VAX = ["no vaccination", "dtap", "flu", "covid", "rsv"]
-    static let CH_FAMILY_VAX = ["no vaccination", "dtap", "flu", "covid", "rsv"]
-    static let CH_HEART = ["normal", "abnormal", "not done"]
-    static let CH_METAB = ["done pending", "normal", "abnormal"]
-    static let CH_HEARING = ["normal", "abnormal", "abnormal right", "abnormal left", "not done"]
-    static let CH_FEEDING = ["EBF", "mixed", "exclusive formula feeding"]
+
+    static let CH_INF_RISK: [String] = [
+        String(localized: "perinatal.choice.infrisk.prom"),
+        String(localized: "perinatal.choice.infrisk.seroconversion_torch"),
+        String(localized: "perinatal.choice.infrisk.gbs_no_treatment"),
+        String(localized: "perinatal.choice.infrisk.gbs_treatment")
+    ]
+
+    static let CH_MAT_STAY_EVENTS: [String] = [
+        String(localized: "perinatal.choice.maternity_event.none"),
+        String(localized: "perinatal.choice.maternity_event.weight_loss_10"),
+        String(localized: "perinatal.choice.maternity_event.hyperbili_with_pt"),
+        String(localized: "perinatal.choice.maternity_event.hyperbili_without_pt"),
+        String(localized: "perinatal.choice.maternity_event.hypoglycemia"),
+        String(localized: "perinatal.choice.maternity_event.suspicion_infection")
+    ]
+
+    static let CH_VACCINATIONS_MAT: [String] = [
+        String(localized: "perinatal.choice.maternity_vax.bcg"),
+        String(localized: "perinatal.choice.maternity_vax.hepb"),
+        String(localized: "perinatal.choice.maternity_vax.rsv"),
+        String(localized: "perinatal.choice.maternity_vax.anti_hbv_ig")
+    ]
+
+    static let CH_MOTHER_VAX: [String] = [
+        String(localized: "perinatal.choice.mother_vax.none"),
+        String(localized: "perinatal.choice.mother_vax.dtap"),
+        String(localized: "perinatal.choice.mother_vax.flu"),
+        String(localized: "perinatal.choice.mother_vax.covid"),
+        String(localized: "perinatal.choice.mother_vax.rsv")
+    ]
+
+    static let CH_FAMILY_VAX: [String] = [
+        String(localized: "perinatal.choice.family_vax.none"),
+        String(localized: "perinatal.choice.family_vax.dtap"),
+        String(localized: "perinatal.choice.family_vax.flu"),
+        String(localized: "perinatal.choice.family_vax.covid"),
+        String(localized: "perinatal.choice.family_vax.rsv")
+    ]
+
+    static let CH_HEART: [String] = [
+        String(localized: "perinatal.choice.heart.normal"),
+        String(localized: "perinatal.choice.heart.abnormal"),
+        String(localized: "perinatal.choice.heart.not_done")
+    ]
+
+    static let CH_METAB: [String] = [
+        String(localized: "perinatal.choice.metab.done_pending"),
+        String(localized: "perinatal.choice.metab.normal"),
+        String(localized: "perinatal.choice.metab.abnormal")
+    ]
+
+    static let CH_HEARING: [String] = [
+        String(localized: "perinatal.choice.hearing.normal"),
+        String(localized: "perinatal.choice.hearing.abnormal"),
+        String(localized: "perinatal.choice.hearing.abnormal_right"),
+        String(localized: "perinatal.choice.hearing.abnormal_left"),
+        String(localized: "perinatal.choice.hearing.not_done")
+    ]
+
+    static let CH_FEEDING: [String] = [
+        String(localized: "perinatal.choice.feeding.ebf"),
+        String(localized: "perinatal.choice.feeding.mixed"),
+        String(localized: "perinatal.choice.feeding.exclusive_formula")
+    ]
 
     // Working state for multi-select fields (CSV-backed)
     @State private var pregnancyRiskSet: Set<String> = []
@@ -125,28 +194,32 @@ struct PerinatalHistoryForm: View {
             // Safety net: if the form is dismissed in another way, still autosave
             autosavePreviousPatientIfNeeded()
         }
-        .navigationTitle("Perinatal History")
+        .navigationTitle(String(localized: "perinatal.form.nav.title"))
         .interactiveDismissDisabled(false)
         .toolbar {
             ToolbarItemGroup(placement: .confirmationAction) {
                 Button {
                     save()
                 } label: {
-                    if saving { ProgressView() } else { Text("Save") }
+                    if saving {
+                        ProgressView()
+                    } else {
+                        Text(String(localized: "generic.button.save"))
+                    }
                 }
                 .disabled(saving)
             }
             ToolbarItemGroup(placement: .cancellationAction) {
-                Button("Done") { onDone() }
-                Button("Reset") { loadFromAppState() }
+                Button(String(localized: "generic.button.done")) { onDone() }
+                Button(String(localized: "generic.button.reset")) { loadFromAppState() }
             }
         }
         .alert(
-            "Save failed",
+            String(localized: "perinatal.alert.save_failed.title"),
             isPresented: Binding(get: { saveError != nil },
                                  set: { if !$0 { saveError = nil } }),
             actions: {
-                Button("OK") { saveError = nil }
+                Button(String(localized: "generic.button.ok")) { saveError = nil }
             },
             message: {
                 Text(saveError ?? "")
@@ -217,7 +290,7 @@ struct PerinatalHistoryForm: View {
 
     private func save() {
         guard let pid = app.selectedPatientID else {
-            saveError = "No active patient selected."
+            saveError = String(localized: "perinatal.error.no_active_patient")
             return
         }
 
@@ -240,7 +313,7 @@ struct PerinatalHistoryForm: View {
             originalHistory = app.perinatalHistory
             flashSavedToast()
         } else {
-            saveError = "App failed to save the perinatal history."
+            saveError = String(localized: "perinatal.error.save_failed.app")
         }
     }
 
@@ -365,7 +438,7 @@ struct PerinatalHistoryForm: View {
     private var savedToast: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
-            Text("Saved")
+            Text(String(localized: "generic.toast.saved"))
                 .font(.headline)
         }
         .padding(.horizontal, 14)
@@ -414,7 +487,7 @@ struct PerinatalHistoryForm: View {
                 Spacer()
                 Text({
                     let csv = setToCSV(selection.wrappedValue)
-                    return csv.isEmpty ? "—" : csv
+                    return csv.isEmpty ? String(localized: "generic.placeholder.none") : csv
                 }())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -427,89 +500,139 @@ struct PerinatalHistoryForm: View {
 
     @ViewBuilder
     private var columnLeft: some View {
-        Section(header: Text("Birth & Pregnancy")) {
+        Section(header: Text(String(localized: "perinatal.section.birth_pregnancy"))) {
             // Multi-select pregnancy issues
-            multiSelectMenu(title: "Pregnancy issues",
-                            options: Self.CH_PREGNANCY,
-                            selection: $pregnancyRiskSet)
+            multiSelectMenu(
+                title: String(localized: "perinatal.field.pregnancy_issues"),
+                options: Self.CH_PREGNANCY,
+                selection: $pregnancyRiskSet
+            )
 
             // Single-choice pickers
-            Picker("Birth mode", selection: $birthMode) {
-                Text("— Select —").tag("")
+            Picker(String(localized: "perinatal.field.birth_mode"), selection: $birthMode) {
+                Text(String(localized: "generic.menu.select.placeholder")).tag("")
                 ForEach(Self.CH_BIRTH_MODE, id: \.self) { Text($0) }
-            }.pickerStyle(.menu)
+            }
+            .pickerStyle(.menu)
 
-            TextField("Gestational age (weeks)", text: $birthTermWeeks)
+            TextField(
+                String(localized: "perinatal.field.gestational_age_weeks"),
+                text: $birthTermWeeks
+            )
 
-            Picker("Resuscitation at birth", selection: $resuscitation) {
-                Text("— Select —").tag("")
+            Picker(String(localized: "perinatal.field.resuscitation_at_birth"), selection: $resuscitation) {
+                Text(String(localized: "generic.menu.select.placeholder")).tag("")
                 ForEach(Self.CH_RESUSC, id: \.self) { Text($0) }
-            }.pickerStyle(.menu)
+            }
+            .pickerStyle(.menu)
 
-            Toggle("NICU stay", isOn: $nicuStay)
+            Toggle(String(localized: "perinatal.field.nicu_stay"), isOn: $nicuStay)
 
             // Infection risk multi-select
-            multiSelectMenu(title: "Infection risk factors",
-                            options: Self.CH_INF_RISK,
-                            selection: $infectionRiskSet)
+            multiSelectMenu(
+                title: String(localized: "perinatal.field.infection_risk_factors"),
+                options: Self.CH_INF_RISK,
+                selection: $infectionRiskSet
+            )
         }
-        Section(header: Text("Measurements at Birth")) {
-            TextField("Birth weight (g)", text: $birthWeightG)
-            TextField("Birth length (cm)", text: $birthLengthCm)
-            TextField("Head circumference (cm)", text: $birthHeadCircumferenceCm)
-            TextField("Discharge weight (g)", text: $dischargeWeightG)
+
+        Section(header: Text(String(localized: "perinatal.section.measurements_birth"))) {
+            TextField(
+                String(localized: "perinatal.field.birth_weight_g"),
+                text: $birthWeightG
+            )
+            TextField(
+                String(localized: "perinatal.field.birth_length_cm"),
+                text: $birthLengthCm
+            )
+            TextField(
+                String(localized: "perinatal.field.head_circumference_cm"),
+                text: $birthHeadCircumferenceCm
+            )
+            TextField(
+                String(localized: "perinatal.field.discharge_weight_g"),
+                text: $dischargeWeightG
+            )
         }
     }
 
     @ViewBuilder
     private var columnRight: some View {
-        Section(header: Text("Maternity Stay")) {
-            multiSelectMenu(title: "Events",
-                            options: Self.CH_MAT_STAY_EVENTS,
-                            selection: $maternityStayEventsSet)
+        Section(header: Text(String(localized: "perinatal.section.maternity_stay"))) {
+            multiSelectMenu(
+                title: String(localized: "perinatal.field.maternity_events"),
+                options: Self.CH_MAT_STAY_EVENTS,
+                selection: $maternityStayEventsSet
+            )
 
-            multiSelectMenu(title: "Vaccinations in maternity",
-                            options: Self.CH_VACCINATIONS_MAT,
-                            selection: $maternityVaccinationsSet)
+            multiSelectMenu(
+                title: String(localized: "perinatal.field.vaccinations_maternity"),
+                options: Self.CH_VACCINATIONS_MAT,
+                selection: $maternityVaccinationsSet
+            )
 
-            Toggle("Vitamin K given", isOn: $vitaminK)
+            Toggle(String(localized: "perinatal.field.vitamin_k_given"), isOn: $vitaminK)
 
-            Picker("Feeding in maternity", selection: $feedingInMaternity) {
-                Text("— Select —").tag("")
+            Picker(String(localized: "perinatal.field.feeding_maternity"), selection: $feedingInMaternity) {
+                Text(String(localized: "generic.menu.select.placeholder")).tag("")
                 ForEach(Self.CH_FEEDING, id: \.self) { Text($0) }
-            }.pickerStyle(.menu)
+            }
+            .pickerStyle(.menu)
 
-            Toggle("Passed meconium in 24h", isOn: $passedMeconium24h)
-            Toggle("Urination in 24h", isOn: $urination24h)
+            Toggle(String(localized: "perinatal.field.passed_meconium_24h"), isOn: $passedMeconium24h)
+            Toggle(String(localized: "perinatal.field.urination_24h"), isOn: $urination24h)
 
-            TextField("Discharge date (YYYY-MM-DD)", text: $maternityDischargeDate)
-            TextField("Discharge weight (g)", text: $dischargeWeightG)
+            TextField(
+                String(localized: "perinatal.field.discharge_date"),
+                text: $maternityDischargeDate
+            )
+            TextField(
+                String(localized: "perinatal.field.discharge_weight_g"),
+                text: $dischargeWeightG
+            )
         }
-        Section(header: Text("Screenings")) {
-            Picker("Heart screening", selection: $heartScreening) {
-                Text("— Select —").tag("")
+
+        Section(header: Text(String(localized: "perinatal.section.screenings"))) {
+            Picker(String(localized: "perinatal.field.heart_screening"), selection: $heartScreening) {
+                Text(String(localized: "generic.menu.select.placeholder")).tag("")
                 ForEach(Self.CH_HEART, id: \.self) { Text($0) }
-            }.pickerStyle(.menu)
+            }
+            .pickerStyle(.menu)
 
-            Picker("Metabolic screening", selection: $metabolicScreening) {
-                Text("— Select —").tag("")
+            Picker(String(localized: "perinatal.field.metabolic_screening"), selection: $metabolicScreening) {
+                Text(String(localized: "generic.menu.select.placeholder")).tag("")
                 ForEach(Self.CH_METAB, id: \.self) { Text($0) }
-            }.pickerStyle(.menu)
+            }
+            .pickerStyle(.menu)
 
-            Picker("Hearing screening", selection: $hearingScreening) {
-                Text("— Select —").tag("")
+            Picker(String(localized: "perinatal.field.hearing_screening"), selection: $hearingScreening) {
+                Text(String(localized: "generic.menu.select.placeholder")).tag("")
                 ForEach(Self.CH_HEARING, id: \.self) { Text($0) }
-            }.pickerStyle(.menu)
+            }
+            .pickerStyle(.menu)
         }
-        Section(header: Text("Family & Aftercare")) {
-            multiSelectMenu(title: "Mother vaccinations",
-                            options: Self.CH_MOTHER_VAX,
-                            selection: $motherVaccinationsSet)
-            multiSelectMenu(title: "Family vaccinations",
-                            options: Self.CH_FAMILY_VAX,
-                            selection: $familyVaccinationsSet)
-            TextField("Illnesses after birth", text: $illnessesAfterBirth)
-            TextField("Evolution since maternity", text: $evolutionSinceMaternity)
+
+        Section(header: Text(String(localized: "perinatal.section.family_aftercare"))) {
+            multiSelectMenu(
+                title: String(localized: "perinatal.field.mother_vaccinations"),
+                options: Self.CH_MOTHER_VAX,
+                selection: $motherVaccinationsSet
+            )
+
+            multiSelectMenu(
+                title: String(localized: "perinatal.field.family_vaccinations"),
+                options: Self.CH_FAMILY_VAX,
+                selection: $familyVaccinationsSet
+            )
+
+            TextField(
+                String(localized: "perinatal.field.illnesses_after_birth"),
+                text: $illnessesAfterBirth
+            )
+            TextField(
+                String(localized: "perinatal.field.evolution_since_maternity"),
+                text: $evolutionSinceMaternity
+            )
         }
     }
 
