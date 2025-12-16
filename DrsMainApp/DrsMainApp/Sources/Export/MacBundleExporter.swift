@@ -11,6 +11,11 @@ import Foundation
 import AppKit
 import UniformTypeIdentifiers
 
+@inline(__always)
+private func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, tableName: nil, bundle: .main, value: key, comment: comment)
+}
+
 // MARK: - macOS front-end wrapper
 @MainActor
 struct MacBundleExporter {
@@ -20,7 +25,7 @@ struct MacBundleExporter {
         var errorDescription: String? {
             switch self {
             case .noActiveBundle:
-                return "No active patient bundle is open to export."
+                return L("exporter.mac.error.no_active_bundle", comment: "Shown when export is requested but no patient bundle is currently open")
             }
         }
     }
@@ -38,7 +43,7 @@ struct MacBundleExporter {
 
             // 3) Ask the user where to save it
             let panel = NSSavePanel()
-            panel.title = "Export peMR Bundle"
+            panel.title = L("exporter.mac.savepanel.title", comment: "Title for the macOS save panel when exporting a peMR bundle")
             panel.canCreateDirectories = true
 
             // Suggest a clean `.pemr` name regardless of the temp file's extension

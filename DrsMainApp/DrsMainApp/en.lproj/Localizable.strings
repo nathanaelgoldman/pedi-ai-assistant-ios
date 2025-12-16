@@ -1603,3 +1603,743 @@
 /* Error when executing the DELETE ai_inputs statement fails. %@ is the sqlite error. */
 "appstate.ai_inputs.delete.step_failed_format" = "delete ai_input step failed: %@";
 
+/* ReportBuilder */
+/* Report export */
+"report.export.cancelled_or_no_url" = "User cancelled or no destination was chosen.";
+"report.export.rtf.body_only_failed" = "RTF export failed.";
+"report.export.rtf.sick_failed" = "RTF export failed.";
+
+/* Common */
+"report.common.notes" = "Notes";
+"report.common.other" = "Other";
+
+/* Header (Well) */
+"report.well.title" = "Well Visit Summary";
+"report.header.triad_format" = "Created: %@   •   Last Edited: %@   •   Report Generated: %@";
+"report.header.alias_mrn_format" = "Alias: %@   •   MRN: %@";
+"report.header.name_format" = "Name: %@";
+"report.header.dob_sex_age_format" = "DOB: %@   •   Sex: %@   •   Age at Visit: %@";
+"report.header.visit_date_type_format" = "Visit Date: %@   •   Visit Type: %@";
+"report.header.clinician_format" = "Clinician: %@";
+
+/* Visit type fallback */
+"visit.type.well" = "Well Visit";
+
+/* Sections (Well) */
+"report.well.section.perinatal_summary" = "Perinatal Summary";
+"report.well.section.previous_findings" = "Findings from Previous Well Visits";
+"report.well.current_visit_title_format" = "Current Visit — %@";
+"report.well.section.parents_concerns" = "Parents’ Concerns";
+"report.well.section.feeding" = "Feeding";
+"report.well.section.supplementation" = "Supplementation";
+"report.well.section.stool" = "Stool";
+"report.well.section.sleep" = "Sleep";
+"report.well.section.development" = "Developmental Evaluation";
+"report.well.section.milestones" = "Age-specific Milestones";
+"report.well.section.measurements" = "Measurements";
+"report.well.section.physical_exam" = "Physical Examination";
+"report.well.section.problem_listing" = "Problem Listing";
+"report.well.section.conclusions" = "Conclusions";
+"report.well.section.anticipatory_guidance" = "Anticipatory Guidance";
+"report.well.section.clinician_comments" = "Clinician Comments";
+"report.well.section.next_visit_date" = "Next Visit Date";
+
+/* Previous visit age append */
+"report.label.age" = "Age";
+"report.previous.age_append_format" = " · Age %@";
+
+/* Feeding labels (stored keys stay English; display labels are localized) */
+"report.well.feeding.breastfeeding" = "Breastfeeding";
+"report.well.feeding.formula" = "Formula";
+"report.well.feeding.solids" = "Solids";
+
+/* Supplementation labels */
+"report.well.supplementation.vitamin_d" = "Vitamin D";
+"report.well.supplementation.iron" = "Iron";
+
+/* Stool labels */
+"report.well.stool.pattern" = "Stool pattern";
+"report.well.stool.comment" = "Stool comment";
+
+/* Sleep labels */
+"report.well.sleep.total_hours" = "Total hours";
+"report.well.sleep.naps" = "Naps";
+"report.well.sleep.night_wakings" = "Night wakings";
+"report.well.sleep.quality" = "Quality";
+
+/* Development labels */
+"report.well.development.parent_concerns" = "Parent Concerns";
+"report.well.development.mchat" = "M-CHAT";
+"report.well.development.developmental_test" = "Developmental Test";
+
+/* Milestones */
+"report.well.milestones.achieved_format" = "Achieved: %d/%d";
+"report.well.milestones.no_flags" = "No flags.";
+
+/* Measurement labels */
+"report.well.measurements.weight" = "Weight";
+"report.well.measurements.length" = "Length";
+"report.well.measurements.head_circumference" = "Head Circumference";
+"report.well.measurements.weight_gain_since_discharge" = "Weight gain since discharge";
+
+/* Section title: AI Assistant */
+"report.ai_assistant.title" = "AI Assistant";
+
+/* AI assistant meta line: model name */
+"report.ai_assistant.model_format" = "Model: %@";
+
+/* AI assistant meta line suffix with timestamp */
+"report.ai_assistant.time_suffix_format" = "   •   Time: %@";
+
+/* Section title: growth charts */
+"report.well.charts.title" = "Growth Charts";
+
+/* Sex label: female */
+"report.sex.female" = "Female";
+
+/* Sex label: male */
+"report.sex.male" = "Male";
+
+/* Charts meta line with sex, DOB and cutoff */
+"report.charts.sex_dob_cutoff_format" = "Sex: %@   •   DOB: %@   •   Cutoff: %@";
+
+/* Charts range label when there are no points */
+"report.charts.range.zero" = "0 points";
+
+/* Charts range label for exactly one point */
+"report.charts.range.single_format" = "%d point (%@–%@ mo)";
+
+/* Charts range label for multiple points */
+"report.charts.range.multi_format" = "%d points (%@–%@ mo)";
+
+/* Charts summary line: weight-for-age */
+"report.charts.wfa_line_format" = "Weight-for-Age: %@";
+
+/* Charts summary line: length/height-for-age */
+"report.charts.lhfa_line_format" = "Length/Height-for-Age: %@";
+
+/* Charts summary line: head circumference-for-age */
+"report.charts.hcfa_line_format" = "Head Circumference-for-Age: %@";
+
+/* Charts caption: weight-for-age */
+"report.charts.caption.wfa" = "Weight-for-Age";
+
+/* Charts caption: length/height-for-age */
+"report.charts.caption.lhfa" = "Length/Height-for-Age";
+
+/* Charts caption: head circumference-for-age */
+"report.charts.caption.hcfa" = "Head Circumference-for-Age";
+/* === Report Export Errors === */
+"report.error.pdf_consumer" = "PDF export error: failed to create PDF consumer";
+"report.error.pdf_context" = "PDF export error: failed to create PDF context";
+"report.error.zip_rtfd_format" = "Zip export error: failed to zip folder: %@";
+
+/* === Common placeholders === */
+"report.placeholder.emdash" = "—";
+
+/* === AI Assistant (Well) === */
+"report.section.ai_assistant" = "AI Assistant";
+"report.ai.model_format" = "Model: %@";
+"report.ai.time_format" = "Time: %@";
+
+/* === Growth Charts (Well) === */
+"report.section.growth_charts" = "Growth Charts";
+"report.growth.meta_line_format" = "Sex: %@   •   DOB: %@   •   Cutoff: %@";
+
+"report.growth.wfa_summary_format" = "Weight-for-Age: %@";
+"report.growth.lhfa_summary_format" = "Length/Height-for-Age: %@";
+"report.growth.hcfa_summary_format" = "Head Circumference-for-Age: %@";
+
+"report.growth.range_singular_format" = "%d point (%@–%@ mo)";
+"report.growth.range_plural_format" = "%d points (%@–%@ mo)";
+
+/* Captions for chart pages */
+"report.growth.caption.wfa" = "Weight-for-Age";
+"report.growth.caption.lhfa" = "Length/Height-for-Age";
+"report.growth.caption.hcfa" = "Head Circumference-for-Age";
+
+/* Sex values */
+"report.sex.female" = "Female";
+"report.sex.male" = "Male";
+
+/* === Visit type labels (buildContent fallback meta) === */
+"report.visit_type.sick" = "Sick Visit";
+"report.visit_type.well" = "Well Visit";
+
+/* === Fallback meta keys (assembleAttributed / buildContent) === */
+"report.meta.patient" = "Patient";
+"report.meta.dob" = "DOB";
+"report.meta.sex" = "Sex";
+"report.meta.mrn" = "MRN";
+"report.meta.visit_type" = "Visit Type";
+"report.meta.visit_date" = "Visit Date";
+"report.meta.clinician" = "Clinician";
+
+/* === Generic report titles === */
+"report.title.clinical_report" = "Clinical Report";
+"report.title.sick_visit_report" = "Sick Visit Report";
+
+/* === Sick Visit section headings === */
+"report.section.main_complaint" = "Main Complaint";
+"report.section.hpi" = "History of Present Illness";
+"report.section.duration" = "Duration";
+"report.section.basics" = "Basics";
+"report.section.pmh" = "Past Medical History";
+"report.section.perinatal_history" = "Perinatal History";
+"report.section.other_pmh" = "Other Past Medical History";
+"report.section.vaccination" = "Vaccination";
+"report.section.vitals" = "Vitals";
+"report.section.physical_exam" = "Physical Examination";
+"report.section.problem_listing" = "Problem Listing";
+"report.section.investigations" = "Investigations";
+"report.section.working_diagnosis" = "Working Diagnosis";
+"report.section.icd10" = "ICD-10";
+"report.section.plan_guidance" = "Plan & Anticipatory Guidance";
+"report.section.medications" = "Medications";
+"report.section.clinician_comments" = "Clinician Comments";
+"report.section.follow_up" = "Follow-up / Next Visit";
+
+/* Basics line labels */
+"report.basics.feeding" = "Feeding";
+"report.basics.urination" = "Urination";
+"report.basics.breathing" = "Breathing";
+"report.basics.pain" = "Pain";
+"report.basics.context" = "Context";
+
+/* Sick header triad labels */
+"report.meta.created" = "Created";
+"report.meta.last_edited" = "Last Edited";
+"report.meta.report_generated" = "Report Generated";
+
+/* Sick header line labels */
+"report.meta.alias" = "Alias";
+"report.meta.name" = "Name";
+"report.meta.age_at_visit" = "Age at Visit";
+/* DOCX title parser: prefix for patient line (must match rendered report label, e.g., 'Patient:') */
+"report.docx.parse.patient_prefix" = "Patient:";
+
+/* DOCX title parser: prefix for current visit line (must match rendered report label, e.g., 'Current Visit') */
+"report.docx.parse.current_visit_prefix" = "Current Visit";
+
+/* DOCX title fallback when patient name cannot be parsed */
+"report.docx.title.fallback" = "Clinical Report";
+
+/* DOCX title separator between patient name and visit type (includes surrounding spaces if desired) */
+"report.docx.title.separator" = " — ";
+
+/* DOCX export error: failed to create archive (format expects 1 path) */
+"report.error.docx_archive_create_format" = "Failed to create DOCX archive at %@";
+
+/* DOCX export error: failed to enumerate package directory (format expects 1 path) */
+"report.error.docx_package_enumerate_format" = "Failed to enumerate DOCX package at %@";
+
+/* DOCX export error: failed to add an entry (format expects entry path, then docx path) */
+"report.error.docx_add_entry_format" = "Failed to add %@ to DOCX at %@";
+
+/* DOCX export error: failed to zip package (format expects 1 path) */
+"report.error.docx_zip_failed_format" = "Failed to zip DOCX at %@";
+
+/* DOCX heading detection: prefix for the 'Current Visit — …' line (must match rendered report) */
+"report.docx.heading.current_visit_line_prefix" = "Current Visit —";
+
+/* DOCX heading detection: Well Visit Summary */
+"report.docx.heading.well_visit_summary" = "Well Visit Summary";
+/* DOCX heading detection: Perinatal Summary */
+"report.docx.heading.perinatal_summary" = "Perinatal Summary";
+/* DOCX heading detection: Findings from Previous Well Visits */
+"report.docx.heading.findings_previous_well_visits" = "Findings from Previous Well Visits";
+
+/* DOCX heading detection: Parents’ Concerns */
+"report.docx.heading.parents_concerns" = "Parents’ Concerns";
+/* DOCX heading detection: Feeding */
+"report.docx.heading.feeding" = "Feeding";
+/* DOCX heading detection: Supplementation */
+"report.docx.heading.supplementation" = "Supplementation";
+/* DOCX heading detection: Sleep */
+"report.docx.heading.sleep" = "Sleep";
+/* DOCX heading detection: Developmental Evaluation */
+"report.docx.heading.developmental_evaluation" = "Developmental Evaluation";
+/* DOCX heading detection: Age-specific Milestones */
+"report.docx.heading.age_specific_milestones" = "Age-specific Milestones";
+/* DOCX heading detection: Measurements */
+"report.docx.heading.measurements" = "Measurements";
+/* DOCX heading detection: Physical Examination */
+"report.docx.heading.physical_examination" = "Physical Examination";
+/* DOCX heading detection: Problem Listing */
+"report.docx.heading.problem_listing" = "Problem Listing";
+/* DOCX heading detection: Conclusions */
+"report.docx.heading.conclusions" = "Conclusions";
+/* DOCX heading detection: Anticipatory Guidance */
+"report.docx.heading.anticipatory_guidance" = "Anticipatory Guidance";
+/* DOCX heading detection: Clinician Comments */
+"report.docx.heading.clinician_comments" = "Clinician Comments";
+/* DOCX heading detection: Next Visit Date */
+"report.docx.heading.next_visit_date" = "Next Visit Date";
+/* DOCX heading detection: Growth Charts */
+"report.docx.heading.growth_charts" = "Growth Charts";
+
+/* DOCX heading detection: Sick Visit Report */
+"report.docx.heading.sick_visit_report" = "Sick Visit Report";
+/* DOCX heading detection: Main Complaint */
+"report.docx.heading.main_complaint" = "Main Complaint";
+/* DOCX heading detection: History of Present Illness */
+"report.docx.heading.hpi" = "History of Present Illness";
+/* DOCX heading detection: Duration */
+"report.docx.heading.duration" = "Duration";
+/* DOCX heading detection: Basics */
+"report.docx.heading.basics" = "Basics";
+/* DOCX heading detection: Past Medical History */
+"report.docx.heading.past_medical_history" = "Past Medical History";
+/* DOCX heading detection: Vaccination */
+"report.docx.heading.vaccination" = "Vaccination";
+/* DOCX heading detection: Vitals */
+"report.docx.heading.vitals" = "Vitals";
+/* DOCX heading detection: Investigations */
+"report.docx.heading.investigations" = "Investigations";
+/* DOCX heading detection: Working Diagnosis */
+"report.docx.heading.working_diagnosis" = "Working Diagnosis";
+/* DOCX heading detection: ICD-10 */
+"report.docx.heading.icd10" = "ICD-10";
+/* DOCX heading detection: Plan & Anticipatory Guidance */
+"report.docx.heading.plan_anticipatory" = "Plan & Anticipatory Guidance";
+/* DOCX heading detection: Medications */
+"report.docx.heading.medications" = "Medications";
+/* DOCX heading detection: Follow-up / Next Visit */
+"report.docx.heading.followup_next_visit" = "Follow-up / Next Visit";
+"report.debug.docx_charts_embedded_count_format" = "DOCX charts embedded count = %d  sizePts=(%.1f×%.1f)";
+"report.export.wrote_docx_format" = "wrote DOCX %@";
+"report.export.rtf_shim_returned_docx_format" = "(RTF shim) returned DOCX instead: %@";
+"report.error.generate_rtf_data" = "Failed to generate RTF data";
+"report.error.rtf_create_base_body" = "Failed to create base RTF for body";
+"report.error.rtf_body_not_ascii" = "Body RTF is not ASCII-serializable";
+"report.error.rtf_encode_final_ascii" = "Failed to encode final RTF as ASCII";
+/* PDF export error: failed to read intermediate PDF part (format expects 1-based part index) */
+"report.error.read_intermediate_pdf_part_format" = "Failed to read intermediate PDF part #%d";
+
+/* PDF export error: failed to create merged PDF data */
+"report.error.create_merged_pdf_data" = "Failed to create merged PDF data";
+
+/* PDF export error: ChartsPDF consumer creation failed */
+"report.error.charts_pdf_consumer_failed" = "ChartsPDF: consumer failed";
+
+/* PDF export error: ChartsPDF context creation failed */
+"report.error.charts_pdf_context_failed" = "ChartsPDF: context failed";
+
+/* Chart caption: Weight-for-Age */
+"report.chart.caption.weight_for_age" = "Weight-for-Age";
+
+/* Chart caption: Length/Height-for-Age */
+"report.chart.caption.length_for_age" = "Length/Height-for-Age";
+
+/* Chart caption: Head Circumference-for-Age */
+"report.chart.caption.head_circumference_for_age" = "Head Circumference-for-Age";
+"report.error.rtf_create_base_body" = "Failed to create base RTF for body";
+"report.error.rtf_body_not_ascii" = "RTF body is not ASCII-serializable";
+"report.error.rtf_encode_final_ascii" = "Failed to encode final RTF as ASCII";
+
+/* ReportDataLoader */
+/* Common */
+"common.yes" = "yes";
+"common.no" = "no";
+
+/* Visit type titles */
+"visit.type.one_month" = "1-month visit";
+"visit.type.two_month" = "2-month visit";
+"visit.type.four_month" = "4-month visit";
+"visit.type.six_month" = "6-month visit";
+"visit.type.nine_month" = "9-month visit";
+"visit.type.twelve_month" = "12-month visit";
+"visit.type.fifteen_month" = "15-month visit";
+"visit.type.eighteen_month" = "18-month visit";
+"visit.type.twentyfour_month" = "24-month visit";
+"visit.type.thirty_month" = "30-month visit";
+"visit.type.thirtysix_month" = "36-month visit";
+"visit.type.newborn_1st_after_maternity" = "Newborn 1st After Maternity";
+"visit.type.episode" = "Sick visit";
+
+/* Well report */
+"report.well_visit.default_title" = "Well Visit";
+
+/* Previous well visit summary */
+"report.previous.age" = "Age %@";
+"report.previous.issues_since_last" = "Issues since last: %@";
+"report.previous.problems" = "Problems: %@";
+"report.previous.conclusions" = "Conclusions: %@";
+"report.previous.parents_concerns" = "Parents’ concerns: %@";
+"report.previous.comments" = "Comments: %@";
+
+/* Perinatal summary parts */
+"report.perinatal.pregnancy_risk" = "Pregnancy risk: %@";
+"report.perinatal.birth_mode" = "Birth mode: %@";
+"report.perinatal.gestation_age_weeks" = "GA: %d w";
+"report.perinatal.resuscitation" = "Resuscitation: %@";
+"report.perinatal.nicu" = "NICU: %@";
+"report.perinatal.infection_risk" = "Infection risk: %@";
+
+"report.perinatal.birth_weight_g" = "BW: %@ g";
+"report.perinatal.birth_length_cm" = "BL: %@ cm";
+"report.perinatal.birth_head_circumference_cm" = "HC: %@ cm";
+
+"report.perinatal.maternity_stay_events" = "Maternity stay: %@";
+"report.perinatal.maternity_vaccinations" = "Maternity vacc: %@";
+"report.perinatal.vitamin_k" = "Vitamin K: %@";
+"report.perinatal.feeding_in_maternity" = "Feeding: %@";
+"report.perinatal.meconium_24h" = "Meconium 24h: %@";
+"report.perinatal.urination_24h" = "Urination 24h: %@";
+
+"report.perinatal.heart_screening" = "Heart: %@";
+"report.perinatal.metabolic_screening" = "Metabolic: %@";
+"report.perinatal.hearing_screening" = "Hearing: %@";
+
+"report.perinatal.mother_vaccinations" = "Mother vacc: %@";
+"report.perinatal.family_vaccinations" = "Family vacc: %@";
+
+"report.perinatal.maternity_discharge_date" = "Discharge date: %@";
+"report.perinatal.discharge_weight_g" = "Discharge Wt: %@ g";
+
+"report.perinatal.illnesses_after_birth" = "After birth: %@";
+"report.perinatal.evolution_since_maternity" = "Since discharge: %@";
+
+/* Well - Development */
+"report.dev.mchat" = "M-CHAT";
+"report.dev.devtest" = "Developmental Test";
+"report.dev.parent_concerns" = "Parent Concerns";
+
+/* Milestones */
+"report.milestone.default_title" = "Milestone";
+
+/* Sick - Basics */
+"report.sick.basics.feeding" = "Feeding";
+"report.sick.basics.urination" = "Urination";
+"report.sick.basics.breathing" = "Breathing";
+"report.sick.basics.pain" = "Pain";
+"report.sick.basics.context" = "Context";
+
+/* Sick - PE labels */
+"report.sick.pe.general_appearance" = "General appearance";
+"report.sick.pe.hydration" = "Hydration";
+"report.sick.pe.color" = "Color";
+"report.sick.pe.skin" = "Skin";
+"report.sick.pe.ent" = "ENT";
+"report.sick.pe.right_ear" = "Right ear";
+"report.sick.pe.left_ear" = "Left ear";
+"report.sick.pe.right_eye" = "Right eye";
+"report.sick.pe.left_eye" = "Left eye";
+"report.sick.pe.heart" = "Heart";
+"report.sick.pe.lungs" = "Lungs";
+"report.sick.pe.abdomen" = "Abdomen";
+"report.sick.pe.peristalsis" = "Peristalsis";
+"report.sick.pe.genitalia" = "Genitalia";
+"report.sick.pe.neurological" = "Neurological";
+"report.sick.pe.musculoskeletal" = "Musculoskeletal";
+"report.sick.pe.lymph_nodes" = "Lymph nodes";
+
+/* Sick - PE groups */
+"report.sick.pe.group.general" = "General";
+"report.sick.pe.group.ent" = "ENT";
+"report.sick.pe.group.cardiorespiratory" = "Cardiorespiratory";
+"report.sick.pe.group.abdomen" = "Abdomen";
+"report.sick.pe.group.genitalia" = "Genitalia";
+"report.sick.pe.group.neuro_msk_lymph" = "Neuro / MSK / Lymph";
+"report.sick.pmh.asthma" = "Asthma";
+"report.sick.pmh.otitis" = "Otitis";
+"report.sick.pmh.uti" = "UTI";
+"report.sick.pmh.allergies" = "Allergies";
+/* AI */
+"ai.model.label" = "Model";
+"ai.model.unknown" = "Unknown";
+/* Previous well visits */
+"report.previousWell.visitLabel.default" = "Well Visit";
+"report.previousWell.title.agePart" = "Age %@";
+"report.previousWell.line.issuesSinceLast" = "Issues since last: %@";
+"report.previousWell.line.problems" = "Problems: %@";
+"report.previousWell.line.conclusions" = "Conclusions: %@";
+"report.previousWell.line.parentsConcerns" = "Parents’ concerns: %@";
+"report.previousWell.line.comments" = "Comments: %@";
+
+/* Current well visit (Feeding labels) */
+"report.well.current.label.notes" = "Notes";
+"report.well.current.label.breastfeeding" = "Breastfeeding";
+"report.well.current.label.formula" = "Formula";
+"report.well.current.label.solids" = "Solids";
+
+"error.bundle.noActivePatientBundle" = "No active patient bundle opened";
+
+"common.user.number" = "User #%d";
+
+"common.yes" = "yes";
+"common.no" = "no";
+"common.normal" = "normal";
+"common.abnormal" = "abnormal";
+
+"report.age.format.days" = "%dd";
+"report.age.format.months" = "%dm";
+"report.age.format.monthsDays" = "%dm %dd";
+"report.age.format.years" = "%dy";
+"report.age.format.yearsMonths" = "%dy %dm";
+
+"report.pe.group.general" = "General";
+"report.pe.group.headEyes" = "Head & Eyes";
+"report.pe.group.cardioPulses" = "Cardio / Pulses";
+"report.pe.group.abdomen" = "Abdomen";
+"report.pe.group.genitalia" = "Genitalia";
+"report.pe.group.spineHips" = "Spine & Hips";
+"report.pe.group.skin" = "Skin";
+"report.pe.group.neuroDevelopment" = "Neuro / Development";
+
+"report.pe.line.labelStatus" = "%@: %@";
+"report.pe.line.color" = "Color: %@";
+"report.pe.line.teethPresent" = "Teeth present: %@";
+"report.pe.line.teethCount" = "Number of teeth: %@";
+"report.pe.line.abdominalMassPresent" = "Abdominal mass: present";
+"report.pe.line.genitalia" = "Genitalia: %@";
+"report.pe.line.testiclesDescended" = "Testicles descended: %@";
+
+"report.pe.item.trophic" = "Trophic";
+"report.pe.item.hydration" = "Hydration";
+"report.pe.item.tone" = "Tone";
+"report.pe.item.breathing" = "Breathing";
+"report.pe.item.wakefulness" = "Wakefulness";
+
+"report.pe.item.fontanelle" = "Fontanelle";
+"report.pe.item.teethDentition" = "Teeth / dentition";
+"report.pe.item.pupilsRR" = "Pupils RR";
+"report.pe.item.ocularMotility" = "Ocular motility";
+
+"report.pe.item.heartSounds" = "Heart sounds";
+"report.pe.item.femoralPulses" = "Femoral pulses";
+
+"report.pe.item.liverSpleen" = "Liver/Spleen";
+"report.pe.item.umbilic" = "Umbilic";
+
+"report.pe.item.spine" = "Spine";
+"report.pe.item.hips" = "Hips";
+
+"report.pe.item.marks" = "Marks";
+"report.pe.item.integrity" = "Integrity";
+"report.pe.item.rash" = "Rash";
+
+"report.pe.item.muscleTone" = "Muscle tone";
+"report.pe.item.moro" = "Moro";
+"report.pe.item.primitiveNeuro" = "Primitive neuro";
+"report.pe.item.handsInFist" = "Hands in fist";
+"report.pe.item.symmetry" = "Symmetry";
+"report.pe.item.followsMidline" = "Follows midline";
+/* Problem listing (stools) */
+"report.well.problem.stools.abnormalPattern" = "Stools: abnormal pattern reported";
+"report.well.problem.stools.hardConstipated" = "Stools: hard / constipated";
+"report.well.problem.stools.other" = "Stools: %@";
+
+/* Current well visit — Feeding */
+"report.well.current.label.feedingComment" = "Feeding Comment";
+"report.well.current.label.milkTypes" = "Milk Types";
+"report.well.current.label.foodVarietyQuantity" = "Food Variety / Quantity";
+"report.well.current.label.dairyAmount" = "Dairy Amount";
+"report.well.current.label.feedingIssue" = "Feeding Issue";
+
+"report.well.current.label.feedsPer24h" = "Feeds / 24h";
+"report.well.current.label.feedVolumeML" = "Feed Volume (ml)";
+"report.well.current.label.estimatedTotalML24h" = "Estimated Total (ml/24h)";
+"report.well.current.label.estimatedMLkg24h" = "Estimated (ml/kg/24h)";
+
+"report.well.current.label.regurgitation" = "Regurgitation";
+"report.well.current.label.wakesForFeeds" = "Wakes for Feeds";
+"report.well.current.label.expressedBM" = "Expressed BM";
+
+"report.well.current.label.solidFoodsStarted" = "Solid Foods Started";
+"report.well.current.label.solidFoodStart" = "Solid Food Start";
+"report.well.current.label.solidFoodQuality" = "Solid Food Quality";
+"report.well.current.label.solidFoodNotes" = "Solid Food Notes";
+
+/* Current well visit — Stool */
+"report.well.current.label.stoolPattern" = "Stool pattern";
+"report.well.current.label.stoolComment" = "Stool comment";
+
+/* Current well visit — Supplementation */
+"report.well.current.label.vitaminD" = "Vitamin D";
+"report.well.current.label.vitaminDGiven" = "Vitamin D Given";
+"report.well.current.label.iron" = "Iron";
+"report.well.current.label.other" = "Other";
+
+/* Current well visit — Sleep */
+"report.well.current.label.totalHours" = "Total hours";
+"report.well.current.label.naps" = "Naps";
+"report.well.current.label.nightWakings" = "Night wakings";
+"report.well.current.label.sleepQuality" = "Quality";
+"report.well.current.label.sleepRegular" = "Regular";
+"report.well.current.label.sleepSnoring" = "Snoring";
+"report.well.current.label.sleepIssueReported" = "Issue Reported";
+"report.well.current.label.sleepIssueNotes" = "Issue Notes";
+/* WELL visit — Measurements */
+"report.well.measurement.weight" = "Weight";
+"report.well.measurement.length" = "Length";
+"report.well.measurement.headCircumference" = "Head Circumference";
+"report.well.measurement.weightGainSinceDischarge" = "Weight gain since discharge";
+"report.well.measurement.weightGain.value.overDays" = "%@%d g over %d days";
+"report.well.measurement.weightGain.value.simple" = "%@%d g";
+
+/* Sick episode — Vitals summary parts */
+"report.vitals.part.weight" = "Weight: %@";
+"report.vitals.part.heightLength" = "Height/Length: %@";
+"report.vitals.part.temp" = "Temp: %@";
+"report.vitals.part.hr" = "HR: %@";
+"report.vitals.part.rr" = "RR: %@";
+"report.vitals.part.spo2" = "SpO₂: %@";
+"report.vitals.part.bp" = "BP: %@";
+"report.vitals.part.measured" = "Measured: %@";
+
+/* ReportGrowthRenderer */
+"report.growth.title.wfa_0_60m" = "Weight-for-Age (0–60 m)";
+"report.growth.title.lhfa_0_60m" = "Length/Height-for-Age (0–60 m)";
+"report.growth.title.hcfa_0_60m" = "Head Circumference-for-Age (0–60 m)";
+
+/* GrowthChartRenderer */
+"report.growth.error.who_csv_not_found_fmt" = "WHO CSV not found for %1$@ %2$@";
+"report.growth.error.bad_header_fmt" = "Bad WHO header in %1$@";
+"report.growth.axis.age_months" = "Age (months)";
+"report.growth.legend.patient" = "Patient";
+
+
+/* GrowthWHO.swift */
+"growth.who.error.resource_not_found" = "WHO resource not found: %@";
+"growth.who.error.bad_header" = "Bad header in %@.csv";
+"growth.who.error.no_data_rows" = "No data rows in %@.csv";
+
+/* MacBundleExporter */
+"exporter.mac.error.no_active_bundle" = "No active patient bundle is open to export.";
+"exporter.mac.savepanel.title" = "Export peMR Bundle";
+
+/* BundleExporter */
+/* Bundle zip error: source is not a directory */
+"exporter.bundlezip.error.source_not_directory" = "Source is not a directory: %@";
+
+/* Bundle zip error: zip creation failed */
+"exporter.bundlezip.error.zip_failed" = "Failed to create zip (code %d). Output:\n%@";
+
+/* GrowthdataFetcher */
+"growthdatafetcher.log.open_db_failed" = "Open DB failed at %@";
+"growthdatafetcher.log.dob_missing" = "DOB missing/unparseable for patient id %lld";
+
+/* AliasGenerator */
+"alias.color.gold" = "Gold";
+"alias.color.silver" = "Silver";
+"alias.color.emerald" = "Emerald";
+"alias.color.sapphire" = "Sapphire";
+"alias.color.ruby" = "Ruby";
+"alias.color.amber" = "Amber";
+"alias.color.indigo" = "Indigo";
+"alias.color.ivory" = "Ivory";
+"alias.color.obsidian" = "Obsidian";
+"alias.color.coral" = "Coral";
+"alias.color.mint" = "Mint";
+"alias.color.violet" = "Violet";
+"alias.color.azure" = "Azure";
+"alias.color.cocoa" = "Cocoa";
+"alias.color.slate" = "Slate";
+"alias.animal.dolphin" = "Dolphin";
+"alias.animal.panda" = "Panda";
+"alias.animal.falcon" = "Falcon";
+"alias.animal.tiger" = "Tiger";
+"alias.animal.owl" = "Owl";
+"alias.animal.turtle" = "Turtle";
+"alias.animal.koala" = "Koala";
+"alias.animal.unicorn" = "Unicorn";
+"alias.animal.penguin" = "Penguin";
+"alias.animal.whale" = "Whale";
+"alias.animal.lion" = "Lion";
+"alias.animal.parrot" = "Parrot";
+"alias.animal.butterfly" = "Butterfly";
+"alias.animal.octopus" = "Octopus";
+"alias.animal.dragon" = "Dragon";
+"alias.animal.zebra" = "Zebra";
+
+/* VitalsRanges */
+/* Vitals: age bands */
+"vitals.band.neonate" = "neonate";
+"vitals.band.infant" = "infant";
+"vitals.band.toddler" = "toddler";
+"vitals.band.preschool" = "preschool";
+"vitals.band.schoolAge" = "school age";
+"vitals.band.adolescent" = "adolescent";
+"vitals.band.adultLike" = "adult-like";
+
+/* Vitals: classifier words (displayed in parentheses) */
+"vitals.class.low" = "low";
+"vitals.class.high" = "high";
+"vitals.class.normal" = "normal";
+"vitals.class.unknown" = "unknown";
+
+/* Vitals: human-readable flags */
+"vitals.flag.hr" = "Heart rate %d bpm (%@) for %@.";
+"vitals.flag.rr" = "Respiratory rate %d/min (%@) for %@.";
+"vitals.flag.fever" = "Fever: %.1f °C (≥ %.1f).";
+"vitals.flag.hypothermia" = "Hypothermia: %.1f °C (< %.1f).";
+"vitals.flag.spo2low" = "Low SpO₂: %d%% (< %d%%).";
+
+/* VitalsBP */
+/* Hypotension classification message. */
+"bp.msg.low" = "BP %d/%d mmHg is %@ for age (threshold %d systolic).";
+
+/* Infant BP acceptable range message. */
+"bp.msg.infant_ok" = "BP %d/%d mmHg is within acceptable range for infants (PALS hypotension threshold %d systolic).";
+
+/* BP reference table missing. */
+"bp.msg.table_missing" = "BP reference table not available.";
+
+/* No matching BP reference row. */
+"bp.msg.no_row" = "No matching BP reference row found.";
+
+/* BP classification message. */
+"bp.msg.classified" = "BP %d/%d mmHg is %@ for age/height.";
+
+/* BP category label: Normal */
+"bp.label.normal" = "Normal";
+
+/* BP category label: Elevated */
+"bp.label.elevated" = "Elevated";
+
+/* BP category label: Low */
+"bp.label.low" = "Low";
+
+/* BP category label: Stage 1 */
+"bp.label.stage1" = "Stage 1";
+
+/* BP category label: Stage 2 */
+"bp.label.stage2" = "Stage 2";
+
+/* BP category label: Unknown */
+"bp.label.unknown" = "—";
+
+/* WellVisitRules*/
+"report.section.perinatal_summary" = "Perinatal Summary";
+"report.section.supplementation" = "Supplementation";
+
+/*WellVisitReportRules */
+"log.well_visit_report_rules.csv_not_found_fallback" = "⚠️ WellVisitReportRules: could not find well_visit_age_mapping.csv in bundle, falling back to legacy hard-coded rules.";
+"log.well_visit_report_rules.csv_read_failed_fallback" = "⚠️ WellVisitReportRules: failed to read well_visit_age_mapping.csv, falling back to legacy hard-coded rules.";
+"log.well_visit_report_rules.csv_empty_fallback" = "⚠️ WellVisitReportRules: CSV appears empty, falling back to legacy hard-coded rules.";
+"log.well_visit_report_rules.csv_missing_columns_fallback" = "⚠️ WellVisitReportRules: CSV header missing required columns, falling back to legacy hard-coded rules.";
+"log.well_visit_report_rules.no_row_default_false" = "⚠️ WellVisitReportRules: no CSV age-matrix row for visitTypeID %@; defaulting all flags to false.";
+
+/* BundleCrypto */
+"bundlecrypto.error.aesgcm_combined_missing" = "Failed to obtain combined AES-GCM box for %@.";
+"bundlecrypto.error.encrypted_file_too_short" = "Encrypted file is too short to contain HMAC and ciphertext at %@.";
+"bundlecrypto.error.hmac_verification_failed" = "HMAC verification failed for %@.";
+"bundlecrypto.error.remove_plaintext_failed" = "Failed to remove plaintext db.sqlite after encryption at %@.";
+"bundlecrypto.error.no_db_found" = "Neither db.sqlite nor db.sqlite.enc found under %@.";
+
+/* OpenAIProvider */
+"openai.error.invalid_response" = "Invalid response from the AI server.";
+"openai.error.empty_content" = "The AI response was empty.";
+"openai.error.http_status" = "AI server returned HTTP %d.\n%@";
+
+/* AnthropicProvider */
+"anthropic.error.invalid_response" = "Invalid response from the AI server.";
+"anthropic.error.empty_content" = "The AI response was empty.";
+"anthropic.error.http_status" = "AI server returned HTTP %d.\n%@";
+
+/* GeminiProvider */
+"ai.gemini.error.invalid_url" = "Invalid Gemini API URL.";
+"ai.gemini.error.invalid_response" = "Invalid response from Gemini.";
+"ai.gemini.error.http_status" = "Gemini request failed (HTTP %d).";
+"ai.gemini.error.empty_content" = "Gemini returned an empty response.";

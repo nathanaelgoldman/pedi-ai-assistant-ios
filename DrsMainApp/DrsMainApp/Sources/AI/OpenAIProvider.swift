@@ -172,8 +172,24 @@ private struct OpenAIChatResponse: Decodable {
     let choices: [Choice]
 }
 
-enum OpenAIProviderError: Error {
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+enum OpenAIProviderError: Error, LocalizedError {
     case invalidResponse
     case httpStatus(code: Int, body: String)
     case emptyContent
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return L("openai.error.invalid_response")
+        case .emptyContent:
+            return L("openai.error.empty_content")
+        case .httpStatus(let code, let body):
+            // Use a format string so translators can reorder placeholders.
+            return String(format: L("openai.error.http_status"), code, body)
+        }
+    }
 }

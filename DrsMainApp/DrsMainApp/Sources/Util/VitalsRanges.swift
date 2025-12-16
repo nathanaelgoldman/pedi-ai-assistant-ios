@@ -7,6 +7,26 @@
 
 import Foundation
 
+// MARK: - Localization (keep local to this file)
+fileprivate func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+fileprivate func Lf(_ key: String, _ args: CVarArg...) -> String {
+    let format = NSLocalizedString(key, comment: "")
+    return String(format: format, locale: Locale.current, arguments: args)
+}
+
+fileprivate func localizedVitalsClass(_ token: String) -> String {
+    switch token {
+    case "low": return L("vitals.class.low")
+    case "high": return L("vitals.class.high")
+    case "normal": return L("vitals.class.normal")
+    case "unknown": return L("vitals.class.unknown")
+    default: return token
+    }
+}
+
 /// Age-banded ranges and simple classifiers for HR/RR/Temp/SpO₂.
 /// Keep this file tiny and dependency-free so it can be reused anywhere.
 
@@ -28,6 +48,19 @@ public enum VitalsAgeBand: CaseIterable {
         case .schoolAge:  return "school age"
         case .adolescent: return "adolescent"
         case .adultLike:  return "adult-like"
+        }
+    }
+
+    /// Localized, user-facing label for UI/report text.
+    public var localizedLabel: String {
+        switch self {
+        case .neonate:    return L("vitals.band.neonate")
+        case .infant:     return L("vitals.band.infant")
+        case .toddler:    return L("vitals.band.toddler")
+        case .preschool:  return L("vitals.band.preschool")
+        case .schoolAge:  return L("vitals.band.schoolAge")
+        case .adolescent: return L("vitals.band.adolescent")
+        case .adultLike:  return L("vitals.band.adultLike")
         }
     }
 }
@@ -122,22 +155,26 @@ public enum VitalsRanges {
     public static func flags(ageYears: Double,
                              hr: Int?, rr: Int?, tempC: Double?, spo2: Int?) -> [String] {
         var out: [String] = []
-        let bandName = band(forAgeYears: ageYears).label
+        let bandName = band(forAgeYears: ageYears).localizedLabel
 
         switch classifyHR(hr, ageYears: ageYears) {
-        case "low", "high": out.append("Heart rate \(hr ?? 0) bpm (\(classifyHR(hr, ageYears: ageYears))) for \(bandName).")
+        case "low", "high":
+            let cls = localizedVitalsClass(classifyHR(hr, ageYears: ageYears))
+            out.append(Lf("vitals.flag.hr", hr ?? 0, cls, bandName))
         default: break
         }
         switch classifyRR(rr, ageYears: ageYears) {
-            case "low", "high": out.append("Respiratory rate \(rr ?? 0)/min (\(classifyRR(rr, ageYears: ageYears))) for \(bandName).")
+            case "low", "high":
+                let cls = localizedVitalsClass(classifyRR(rr, ageYears: ageYears))
+                out.append(Lf("vitals.flag.rr", rr ?? 0, cls, bandName))
             default: break
         }
         switch classifyTempC(tempC) {
-            case "fever": out.append(String(format: "Fever: %.1f °C (≥ 38.0).", tempC ?? 0))
-            case "hypothermia": out.append(String(format: "Hypothermia: %.1f °C (< 35.5).", tempC ?? 0))
+            case "fever": out.append(Lf("vitals.flag.fever", tempC ?? 0, 38.0))
+            case "hypothermia": out.append(Lf("vitals.flag.hypothermia", tempC ?? 0, 35.5))
             default: break
         }
-        if classifySpO2(spo2) == "low" { out.append("Low SpO₂: \(spo2 ?? 0)% (< 95%).") }
+        if classifySpO2(spo2) == "low" { out.append(Lf("vitals.flag.spo2low", spo2 ?? 0, 95)) }
         return out
     }
 }

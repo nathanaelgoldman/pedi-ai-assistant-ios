@@ -4,7 +4,17 @@
 //
 //  Created by yunastic on 11/26/25.
 //
+
 import Foundation
+
+// MARK: - Localization helpers (file-local)
+fileprivate func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+fileprivate func Lf(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), arguments: args)
+}
 
 /// Shared gating rules for well-visits, used by both the SwiftUI form
 /// and by the report (DOCX/PDF) builder.
@@ -451,7 +461,7 @@ extension WellVisitRules {
         print("[WellVisitRules] shouldIncludeSection? title='\(title)'")
 
         // Perinatal Summary must ALWAYS be present, regardless of age or visit type
-        if title == "Perinatal Summary" {
+        if title == L("report.section.perinatal_summary") {
             print("[WellVisitRules] shouldIncludeSection: always include Perinatal Summary")
             return true
         }
@@ -506,7 +516,7 @@ extension WellVisitRules {
             // Age gating example:
             // For toddler / preschool visits, hide the standalone "Supplementation" section.
             // (Those visits usually only need Feeding text, without infant-style supplementation block.)
-            if title == "Supplementation" {
+            if title == L("report.section.supplementation") {
                 show = false
             } else {
                 show = true

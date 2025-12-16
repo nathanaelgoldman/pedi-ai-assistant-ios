@@ -157,8 +157,19 @@ private struct AnthropicMessagesResponse: Decodable {
     let content: [ContentBlock]
 }
 
-enum AnthropicProviderError: Error {
+enum AnthropicProviderError: Error, LocalizedError {
     case invalidResponse
     case httpStatus(code: Int, body: String)
     case emptyContent
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return L("anthropic.error.invalid_response")
+        case .emptyContent:
+            return L("anthropic.error.empty_content")
+        case .httpStatus(let code, let body):
+            return L("anthropic.error.http_status", code, body)
+        }
+    }
 }

@@ -15,7 +15,17 @@
 //
 
 
+
 import Foundation
+
+// MARK: - Localization helpers (file-local)
+fileprivate func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+fileprivate func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), arguments: args)
+}
 
 /// Fine‑grained age‑based rules that decide which well‑visit fields
 /// should actually be pulled into the report for a given visit type.
@@ -115,13 +125,13 @@ enum WellVisitReportRules {
     /// Any missing or unparsable value is treated as `false`.
     private static func loadAgeMatrix() -> [String: AgeMatrixRow] {
         guard let url = Bundle.main.url(forResource: "well_visit_age_mapping", withExtension: "csv") else {
-            NSLog("⚠️ WellVisitReportRules: could not find well_visit_age_mapping.csv in bundle, falling back to legacy hard‑coded rules.")
+            NSLog("%@", L("log.well_visit_report_rules.csv_not_found_fallback"))
             return [:]
         }
 
         guard let data = try? Data(contentsOf: url),
               let rawString = String(data: data, encoding: .utf8) else {
-            NSLog("⚠️ WellVisitReportRules: failed to read well_visit_age_mapping.csv, falling back to legacy hard‑coded rules.")
+            NSLog("%@", L("log.well_visit_report_rules.csv_read_failed_fallback"))
             return [:]
         }
 
@@ -132,7 +142,7 @@ enum WellVisitReportRules {
             .map { String($0) }
 
         guard let headerLine = lines.first else {
-            NSLog("⚠️ WellVisitReportRules: CSV appears empty, falling back to legacy hard‑coded rules.")
+            NSLog("%@", L("log.well_visit_report_rules.csv_empty_fallback"))
             return [:]
         }
 
@@ -161,7 +171,7 @@ enum WellVisitReportRules {
             let idxDevTestScore = index(of: "DevTestScore"),
             let idxDevTestResult = index(of: "DevTestResult")
         else {
-            NSLog("⚠️ WellVisitReportRules: CSV header missing required columns, falling back to legacy hard‑coded rules.")
+            NSLog("%@", L("log.well_visit_report_rules.csv_missing_columns_fallback"))
             return [:]
         }
 
@@ -246,7 +256,7 @@ enum WellVisitReportRules {
 
         // If there is no CSV row, default to "all false" so we never leak
         // unexpected content into the current‑visit sections.
-        NSLog("⚠️ WellVisitReportRules: no CSV age‑matrix row for visitTypeID \(visitTypeID); defaulting all flags to false.")
+        NSLog("%@", LF("log.well_visit_report_rules.no_row_default_false", visitTypeID))
         return WellVisitReportFlags(
             visitTypeID: visitTypeID,
             isWeightDeltaVisit: false,

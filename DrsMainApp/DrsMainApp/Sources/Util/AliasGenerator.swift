@@ -13,9 +13,15 @@ import Foundation
 enum AliasGenerator {
 
     // MARK: - Vocabularies
-    private static let emojis  = ["🐬","🦊","🐼","🦁","🦉","🐢","🐨","🦄","🐧","🐳","🐯","🦜","🦋","🐙","🦕","🦓"]
-    private static let colors  = ["Gold","Silver","Emerald","Sapphire","Ruby","Amber","Indigo","Ivory","Obsidian","Coral","Mint","Violet","Azure","Cocoa","Slate"]
-    private static let animals = ["Dolphin","Panda","Falcon","Tiger","Owl","Turtle","Koala","Unicorn","Penguin","Whale","Lion","Parrot","Butterfly","Octopus","Dragon","Zebra"]
+    private static let emojis = ["🐬","🦊","🐼","🦁","🦉","🐢","🐨","🦄","🐧","🐳","🐯","🦜","🦋","🐙","🦕","🦓"]
+
+    // Tokens are stable (used for machine-safe ids). Display labels are localized.
+    private static let colorTokens  = [
+        "gold","silver","emerald","sapphire","ruby","amber","indigo","ivory","obsidian","coral","mint","violet","azure","cocoa","slate"
+    ]
+    private static let animalTokens = [
+        "dolphin","panda","falcon","tiger","owl","turtle","koala","unicorn","penguin","whale","lion","parrot","butterfly","octopus","dragon","zebra"
+    ]
 
     // MARK: - Public API
 
@@ -33,12 +39,12 @@ enum AliasGenerator {
 
     /// Generate an alias with a caller-supplied RNG (useful for testing).
     static func generate<R: RandomNumberGenerator>(using rng: inout R) -> (label: String, id: String) {
-        let color  = pick(Self.colors, using: &rng)
-        let animal = pick(Self.animals, using: &rng)
-        let emoji  = pick(Self.emojis, using: &rng)
+        let colorToken  = pick(Self.colorTokens, using: &rng)
+        let animalToken = pick(Self.animalTokens, using: &rng)
+        let emoji       = pick(Self.emojis, using: &rng)
 
-        let label = "\(color)_\(animal)_\(emoji)"
-        let rawID = "\(color)_\(animal)"
+        let label = "\(displayColor(colorToken))_\(displayAnimal(animalToken))_\(emoji)"
+        let rawID = "\(colorToken)_\(animalToken)"
         let id = sanitize(rawID)
 
         return (label, id)
@@ -58,7 +64,15 @@ enum AliasGenerator {
             let a = generate(using: &rng)
             let candidate = "\(a.id)_\(attempt)"
             if !existingIDs.contains(candidate) {
-                let label = a.label.replacingOccurrences(of: "_\(a.id.split(separator: "_").last ?? "")", with: "_\(a.id.split(separator: "_").last ?? "")_\(attempt)")
+                // Insert the numeric suffix just before the emoji segment in the human label.
+                var parts = a.label.split(separator: "_", omittingEmptySubsequences: false).map(String.init)
+                if parts.count >= 2 {
+                    let insertAt = max(parts.count - 1, 1)
+                    parts.insert(String(attempt), at: insertAt)
+                } else {
+                    parts.append(String(attempt))
+                }
+                let label = parts.joined(separator: "_")
                 return (label, candidate)
             }
             attempt += 1
@@ -66,6 +80,24 @@ enum AliasGenerator {
     }
 
     // MARK: - Helpers
+
+    /// Localized string helper (kept local so this file compiles without external dependencies).
+    private static func L(_ key: String, _ comment: String = "") -> String {
+        NSLocalizedString(key, comment: comment)
+    }
+
+    private static func displayColor(_ token: String) -> String {
+        let key = "alias.color.\(token)"
+        let v = L(key, "Alias color")
+        // Fallback to a readable value if a key is missing.
+        return v == key ? token.capitalized : v
+    }
+
+    private static func displayAnimal(_ token: String) -> String {
+        let key = "alias.animal.\(token)"
+        let v = L(key, "Alias animal")
+        return v == key ? token.capitalized : v
+    }
 
     /// Pick a random element.
     private static func pick<T>(_ array: [T], using rng: inout some RandomNumberGenerator) -> T {

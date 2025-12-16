@@ -27,7 +27,13 @@ import ZIPFoundation
 // MARK: - Report geometry (single source of truth)
 fileprivate let REPORT_PAGE_SIZE = CGSize(width: 595.0, height: 842.0) // US Letter; switch here if you use A4
 fileprivate let REPORT_INSET: CGFloat = 36.0
+
 fileprivate let DEBUG_REPORT_EXPORT: Bool = true
+
+// MARK: - Localization helper
+fileprivate func L(_ key: String, comment: String) -> String {
+    NSLocalizedString(key, comment: comment)
+}
 
 
 // MARK: - Visit selection + format
@@ -76,7 +82,12 @@ final class ReportBuilder {
         panel.allowedContentTypes = (format == .pdf ? [UTType.pdf] : [UTType.rtf])
 
         guard panel.runModal() == .OK, let dest = panel.url else {
-            throw NSError(domain: "ReportExport", code: 1, userInfo: [NSLocalizedDescriptionKey: "User cancelled or no URL"])
+            throw NSError(
+                domain: "ReportExport",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: L("report.export.cancelled_or_no_url",
+                                                       comment: "User cancelled the save panel or the destination URL was missing")]
+            )
         }
 
         // 3) Write
@@ -171,9 +182,12 @@ final class ReportBuilder {
                                                              documentAttributes: [
                                                                 .documentType: NSAttributedString.DocumentType.rtf
                                                              ]) else {
-                                throw NSError(domain: "ReportExport", code: 3004,
-                                              userInfo: [NSLocalizedDescriptionKey:
-                                                            "RTF body-only generation failed"])
+                                throw NSError(
+                                    domain: "ReportExport",
+                                    code: 3004,
+                                    userInfo: [NSLocalizedDescriptionKey: L("report.export.rtf.body_only_failed",
+                                                                           comment: "RTF export failed when generating a body-only document")]
+                                )
                             }
                             try rtfData.write(to: dest, options: .atomic)
                         }
@@ -185,9 +199,12 @@ final class ReportBuilder {
                                                            documentAttributes: [
                                                             .documentType: NSAttributedString.DocumentType.rtf
                                                            ]) else {
-                            throw NSError(domain: "ReportExport", code: 3005,
-                                          userInfo: [NSLocalizedDescriptionKey:
-                                                        "RTF generation failed (sick)"])
+                            throw NSError(
+                                domain: "ReportExport",
+                                code: 3005,
+                                userInfo: [NSLocalizedDescriptionKey: L("report.export.rtf.sick_failed",
+                                                                       comment: "RTF export failed for a sick visit report")]
+                            )
                         }
                         try rtfData.write(to: dest, options: .atomic)
                     }
@@ -232,6 +249,93 @@ final class ReportBuilder {
                                               attributes: [.font: font, .foregroundColor: color]))
         }
 
+        // Localized display labels for stored dictionary keys (keep storage keys stable).
+        func feedingLabel(_ storageKey: String) -> String {
+            switch storageKey {
+            case "Breastfeeding":
+                return L("report.well.feeding.breastfeeding", comment: "Feeding label: breastfeeding")
+            case "Formula":
+                return L("report.well.feeding.formula", comment: "Feeding label: formula")
+            case "Solids":
+                return L("report.well.feeding.solids", comment: "Feeding label: solids")
+            case "Notes":
+                return L("report.common.notes", comment: "Generic label: notes")
+            default:
+                return storageKey
+            }
+        }
+
+        func supplementationLabel(_ storageKey: String) -> String {
+            switch storageKey {
+            case "Vitamin D":
+                return L("report.well.supplementation.vitamin_d", comment: "Supplementation label: Vitamin D")
+            case "Iron":
+                return L("report.well.supplementation.iron", comment: "Supplementation label: iron")
+            case "Other":
+                return L("report.common.other", comment: "Generic label: other")
+            case "Notes":
+                return L("report.common.notes", comment: "Generic label: notes")
+            default:
+                return storageKey
+            }
+        }
+
+        func stoolLabel(_ storageKey: String) -> String {
+            switch storageKey {
+            case "Stool pattern":
+                return L("report.well.stool.pattern", comment: "Stool label: pattern")
+            case "Stool comment":
+                return L("report.well.stool.comment", comment: "Stool label: comment")
+            default:
+                return storageKey
+            }
+        }
+
+        func sleepLabel(_ storageKey: String) -> String {
+            switch storageKey {
+            case "Total hours":
+                return L("report.well.sleep.total_hours", comment: "Sleep label: total hours")
+            case "Naps":
+                return L("report.well.sleep.naps", comment: "Sleep label: naps")
+            case "Night wakings":
+                return L("report.well.sleep.night_wakings", comment: "Sleep label: night wakings")
+            case "Quality":
+                return L("report.well.sleep.quality", comment: "Sleep label: quality")
+            case "Notes":
+                return L("report.common.notes", comment: "Generic label: notes")
+            default:
+                return storageKey
+            }
+        }
+
+        func developmentalLabel(_ storageKey: String) -> String {
+            switch storageKey {
+            case "Parent Concerns":
+                return L("report.well.development.parent_concerns", comment: "Development label: parent concerns")
+            case "M-CHAT":
+                return L("report.well.development.mchat", comment: "Development label: M-CHAT")
+            case "Developmental Test":
+                return L("report.well.development.developmental_test", comment: "Development label: developmental test")
+            default:
+                return storageKey
+            }
+        }
+
+        func measurementLabel(_ storageKey: String) -> String {
+            switch storageKey {
+            case "Weight":
+                return L("report.well.measurements.weight", comment: "Measurement label: weight")
+            case "Length":
+                return L("report.well.measurements.length", comment: "Measurement label: length")
+            case "Head Circumference":
+                return L("report.well.measurements.head_circumference", comment: "Measurement label: head circumference")
+            case "Weight gain since discharge":
+                return L("report.well.measurements.weight_gain_since_discharge", comment: "Measurement label: weight gain since discharge")
+            default:
+                return storageKey
+            }
+        }
+
         // Age-gated section visibility is precomputed in WellVisitReportRules + ReportDataLoader.
         // ReportBuilder only reads these flags and renders sections accordingly.
         let visibility = data.visibility
@@ -271,13 +375,21 @@ final class ReportBuilder {
         }
 
         // Header block (Well)
-        para("Well Visit Summary", font: .systemFont(ofSize: 20, weight: .semibold))
-        let triad = "Created: \(humanDateTime(data.meta.createdAtISO) ?? "—")   •   Last Edited: \(humanDateTime(data.meta.updatedAtISO) ?? "—")   •   Report Generated: \(humanDateTime(data.meta.generatedAtISO) ?? "—")"
+        para(L("report.well.title", comment: "Well visit report main title"),
+             font: .systemFont(ofSize: 20, weight: .semibold))
+        let triadFormat = L("report.header.triad_format",
+                            comment: "Header line with created/edited/generated timestamps")
+        let triad = String(format: triadFormat,
+                           humanDateTime(data.meta.createdAtISO) ?? "—",
+                           humanDateTime(data.meta.updatedAtISO) ?? "—",
+                           humanDateTime(data.meta.generatedAtISO) ?? "—")
         para(triad, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)
         content.append(NSAttributedString(string: "\n"))
 
-        para("Alias: \(data.meta.alias)   •   MRN: \(data.meta.mrn)", font: .systemFont(ofSize: 12))
-        para("Name: \(data.meta.name)", font: .systemFont(ofSize: 12))
+        let aliasMrnFormat = L("report.header.alias_mrn_format", comment: "Header line: Alias and MRN")
+        para(String(format: aliasMrnFormat, data.meta.alias, data.meta.mrn), font: .systemFont(ofSize: 12))
+        let nameFormat = L("report.header.name_format", comment: "Header line: patient name")
+        para(String(format: nameFormat, data.meta.name), font: .systemFont(ofSize: 12))
         let dobShortWell = humanDateOnly(data.meta.dobISO) ?? "—"
         let ageShortWell = {
             let pre = data.meta.ageAtVisit.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -286,9 +398,17 @@ final class ReportBuilder {
             }
             return pre
         }()
-        para("DOB: \(dobShortWell)   •   Sex: \(data.meta.sex)   •   Age at Visit: \(ageShortWell)", font: .systemFont(ofSize: 12))
-        para("Visit Date: \(humanDateOnly(data.meta.visitDateISO) ?? "—")   •   Visit Type: \(data.meta.visitTypeReadable ?? "Well Visit")", font: .systemFont(ofSize: 12))
-        para("Clinician: \(data.meta.clinicianName)", font: .systemFont(ofSize: 12))
+        let dobSexAgeFormat = L("report.header.dob_sex_age_format", comment: "Header line: DOB, sex, age at visit")
+        para(String(format: dobSexAgeFormat, dobShortWell, data.meta.sex, ageShortWell),
+             font: .systemFont(ofSize: 12))
+        let visitTypeFallback = L("visit.type.well", comment: "Fallback visit type label for a well visit")
+        let visitDateTypeFormat = L("report.header.visit_date_type_format", comment: "Header line: visit date and visit type")
+        para(String(format: visitDateTypeFormat,
+                    humanDateOnly(data.meta.visitDateISO) ?? "—",
+                    data.meta.visitTypeReadable ?? visitTypeFallback),
+             font: .systemFont(ofSize: 12))
+        let clinicianFormat = L("report.header.clinician_format", comment: "Header line: clinician")
+        para(String(format: clinicianFormat, data.meta.clinicianName), font: .systemFont(ofSize: 12))
         content.append(NSAttributedString(string: "\n"))
 
         // Steps 1–12 (copy of assembleAttributedWell up to just before Step 13)
@@ -296,7 +416,7 @@ final class ReportBuilder {
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
         // Perinatal Summary must always be present (never age‑gated or suppressed)
-        para("Perinatal Summary", font: headerFont)
+        para(L("report.well.section.perinatal_summary", comment: "Section title: perinatal summary"), font: headerFont)
         let periText = (data.perinatalSummary?
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? data.perinatalSummary!
@@ -305,7 +425,7 @@ final class ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         if !data.previousVisitFindings.isEmpty {
-            para("Findings from Previous Well Visits", font: headerFont)
+            para(L("report.well.section.previous_findings", comment: "Section title: findings from previous well visits"), font: headerFont)
             for item in data.previousVisitFindings {
                 var sub = item.title
                 let rawDate = item.date.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -319,10 +439,12 @@ final class ReportBuilder {
                 if !dobForAge.isEmpty && !rawDate.isEmpty {
                     let computed = computeAgeShort(dobISO: dobForAge, refISO: rawDate)
                     if computed != "—" {
+                        let ageLabel = L("report.label.age", comment: "Age label")
                         if let r = sub.range(of: "Age —") {
-                            sub.replaceSubrange(r, with: "Age \(computed)")
-                        } else if !sub.contains("Age ") {
-                            sub.append(" · Age \(computed)")
+                            sub.replaceSubrange(r, with: "\(ageLabel) \(computed)")
+                        } else if !sub.contains("\(ageLabel) ") && !sub.contains("Age ") {
+                            let ageAppendFormat = L("report.previous.age_append_format", comment: "Suffix appended to previous visit title to show computed age")
+                            sub.append(String(format: ageAppendFormat, computed))
                         }
                     }
                 }
@@ -345,12 +467,13 @@ final class ReportBuilder {
 
         let _currentTitle = data.currentVisitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if !_currentTitle.isEmpty {
-            para("Current Visit — \(_currentTitle)", font: headerFont)
+            let currentVisitFormat = L("report.well.current_visit_title_format", comment: "Title for current visit section, with visit type appended")
+            para(String(format: currentVisitFormat, _currentTitle), font: headerFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showParentsConcerns ?? true {
-            para("Parents’ Concerns", font: headerFont)
+            para(L("report.well.section.parents_concerns", comment: "Section title: parents' concerns"), font: headerFont)
             let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
                 ? data.parentsConcerns!
                 : "—"
@@ -359,7 +482,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showFeeding ?? true {
-            para("Feeding", font: headerFont)
+            para(L("report.well.section.feeding", comment: "Section title: feeding"), font: headerFont)
             if DEBUG_REPORT_EXPORT {
                 let keys = data.feeding.keys.sorted()
                 if let profile = visibility?.profile {
@@ -382,7 +505,7 @@ final class ReportBuilder {
                 let feedOrder = ["Breastfeeding","Formula","Solids","Notes"]
                 for key in feedOrder {
                     if let v = data.feeding[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(feedingLabel(key)): \(v)", font: bodyFont)
                     }
                 }
                 let extra = data.feeding.keys
@@ -390,7 +513,7 @@ final class ReportBuilder {
                     .sorted()
                 for key in extra {
                     if let v = data.feeding[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(feedingLabel(key)): \(v)", font: bodyFont)
                     }
                 }
             }
@@ -398,14 +521,14 @@ final class ReportBuilder {
         }
 
         if visibility?.showSupplementation ?? true {
-            para("Supplementation", font: headerFont)
+            para(L("report.well.section.supplementation", comment: "Section title: supplementation"), font: headerFont)
             if data.supplementation.isEmpty {
                 para("—", font: bodyFont)
             } else {
                 let order = ["Vitamin D","Iron","Other","Notes"]
                 for key in order {
                     if let v = data.supplementation[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(supplementationLabel(key)): \(v)", font: bodyFont)
                     }
                 }
                 let extra = data.supplementation.keys
@@ -413,7 +536,7 @@ final class ReportBuilder {
                     .sorted()
                 for key in extra {
                     if let v = data.supplementation[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(supplementationLabel(key)): \(v)", font: bodyFont)
                     }
                 }
             }
@@ -421,7 +544,7 @@ final class ReportBuilder {
         }
         
         // Stool (always shown; uses dictionary from WellReportData)
-        para("Stool", font: headerFont)
+        para(L("report.well.section.stool", comment: "Section title: stool"), font: headerFont)
         if data.stool.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -430,7 +553,7 @@ final class ReportBuilder {
                 if let raw = data.stool[key] {
                     let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                     if !trimmed.isEmpty {
-                        para("\(key): \(trimmed)", font: bodyFont)
+                        para("\(stoolLabel(key)): \(trimmed)", font: bodyFont)
                     }
                 }
             }
@@ -441,7 +564,7 @@ final class ReportBuilder {
                 if let raw = data.stool[key] {
                     let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                     if !trimmed.isEmpty {
-                        para("\(key): \(trimmed)", font: bodyFont)
+                        para("\(stoolLabel(key)): \(trimmed)", font: bodyFont)
                     }
                 }
             }
@@ -449,14 +572,14 @@ final class ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         if visibility?.showSleep ?? true {
-            para("Sleep", font: headerFont)
+            para(L("report.well.section.sleep", comment: "Section title: sleep"), font: headerFont)
             if data.sleep.isEmpty {
                 para("—", font: bodyFont)
             } else {
                 let order = ["Total hours","Naps","Night wakings","Quality","Notes"]
                 for key in order {
                     if let v = data.sleep[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(sleepLabel(key)): \(v)", font: bodyFont)
                     }
                 }
                 let extra = data.sleep.keys
@@ -464,7 +587,7 @@ final class ReportBuilder {
                     .sorted()
                 for key in extra {
                     if let v = data.sleep[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(sleepLabel(key)): \(v)", font: bodyFont)
                     }
                 }
             }
@@ -472,7 +595,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showDevelopment ?? true {
-            para("Developmental Evaluation", font: headerFont)
+            para(L("report.well.section.development", comment: "Section title: developmental evaluation"), font: headerFont)
             if data.developmental.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -480,7 +603,7 @@ final class ReportBuilder {
                 for key in devOrder {
                     guard let v = data.developmental[key],
                           !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                    para("\(key): \(v)", font: bodyFont)
+                    para("\(developmentalLabel(key)): \(v)", font: bodyFont)
                 }
                 let extra = data.developmental.keys
                     .filter { !["Parent Concerns","M-CHAT","Developmental Test"].contains($0) }
@@ -488,7 +611,7 @@ final class ReportBuilder {
                 for key in extra {
                     if let v = data.developmental[key],
                        !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(developmentalLabel(key)): \(v)", font: bodyFont)
                     }
                 }
             }
@@ -496,12 +619,13 @@ final class ReportBuilder {
         }
 
         if visibility?.showMilestones ?? true {
-            para("Age-specific Milestones", font: headerFont)
+            para(L("report.well.section.milestones", comment: "Section title: age-specific milestones"), font: headerFont)
             let achieved = data.milestonesAchieved.0
             let total = data.milestonesAchieved.1
-            para("Achieved: \(achieved)/\(total)", font: bodyFont)
+            let achievedFormat = L("report.well.milestones.achieved_format", comment: "Milestones achieved count line")
+            para(String(format: achievedFormat, achieved, total), font: bodyFont)
             if data.milestoneFlags.isEmpty {
-                para("No flags.", font: bodyFont)
+                para(L("report.well.milestones.no_flags", comment: "Text shown when there are no milestone flags"), font: bodyFont)
             } else {
                 for line in data.milestoneFlags {
                     para("• \(line)", font: bodyFont)
@@ -511,14 +635,14 @@ final class ReportBuilder {
         }
 
         if visibility?.showMeasurements ?? true {
-            para("Measurements", font: headerFont)
+            para(L("report.well.section.measurements", comment: "Section title: measurements"), font: headerFont)
             if data.measurements.isEmpty {
                 para("—", font: bodyFont)
             } else {
                 let measOrder = ["Weight","Length","Head Circumference","Weight gain since discharge"]
                 for key in measOrder {
                     if let v = data.measurements[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(measurementLabel(key)): \(v)", font: bodyFont)
                     }
                 }
                 let extra = data.measurements.keys
@@ -526,7 +650,7 @@ final class ReportBuilder {
                     .sorted()
                 for key in extra {
                     if let v = data.measurements[key], !v.isEmpty {
-                        para("\(key): \(v)", font: bodyFont)
+                        para("\(measurementLabel(key)): \(v)", font: bodyFont)
                     }
                 }
             }
@@ -534,7 +658,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showPhysicalExam ?? true {
-            para("Physical Examination", font: headerFont)
+            para(L("report.well.section.physical_exam", comment: "Section title: physical examination"), font: headerFont)
             if data.physicalExamGroups.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -555,35 +679,35 @@ final class ReportBuilder {
         }
 
         if visibility?.showProblemListing ?? true {
-            para("Problem Listing", font: headerFont)
+            para(L("report.well.section.problem_listing", comment: "Section title: problem listing"), font: headerFont)
             let _problem = data.problemListing?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_problem?.isEmpty == false ? _problem! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showConclusions ?? true {
-            para("Conclusions", font: headerFont)
+            para(L("report.well.section.conclusions", comment: "Section title: conclusions"), font: headerFont)
             let _conclusions = data.conclusions?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_conclusions?.isEmpty == false ? _conclusions! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showAnticipatoryGuidance ?? true {
-            para("Anticipatory Guidance", font: headerFont)
+            para(L("report.well.section.anticipatory_guidance", comment: "Section title: anticipatory guidance"), font: headerFont)
             let _ag = data.anticipatoryGuidance?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_ag?.isEmpty == false ? _ag! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showClinicianComments ?? true {
-            para("Clinician Comments", font: headerFont)
+            para(L("report.well.section.clinician_comments", comment: "Section title: clinician comments"), font: headerFont)
             let _cc = data.clinicianComments?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_cc?.isEmpty == false ? _cc! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showNextVisit ?? true {
-            para("Next Visit Date", font: headerFont)
+            para(L("report.well.section.next_visit_date", comment: "Section title: next visit date"), font: headerFont)
             if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines),
                !rawNext.isEmpty {
                 para(humanDateOnly(rawNext) ?? rawNext, font: bodyFont)
@@ -595,14 +719,23 @@ final class ReportBuilder {
 
         // AI Assistant – latest model response for this WELL visit (if any)
         if let ai = dataLoader.loadLatestAIInputForWell(visitID) {
-            para("AI Assistant", font: headerFont)
+            para(L("report.ai_assistant.title", comment: "Section title: AI Assistant"),
+                 font: headerFont)
 
-            var metaLine = "Model: \(ai.model)"
+            let modelLine = String(format: L("report.ai_assistant.model_format",
+                                            comment: "AI assistant meta line: model name"),
+                                   ai.model)
+            var metaLine = modelLine
+
             let ts = ai.createdAt.trimmingCharacters(in: .whitespacesAndNewlines)
             if !ts.isEmpty {
                 let pretty = humanDateTime(ts) ?? ts
-                metaLine += "   •   Time: \(pretty)"
+                let timeSuffix = String(format: L("report.ai_assistant.time_suffix_format",
+                                                 comment: "AI assistant meta line suffix with timestamp"),
+                                        pretty)
+                metaLine += timeSuffix
             }
+
             para(metaLine, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
 
@@ -631,22 +764,40 @@ final class ReportBuilder {
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
         // Summary header for charts document
-        para("Growth Charts", font: headerFont)
+        para(L("report.well.charts.title", comment: "Section title: growth charts"), font: headerFont)
         let dobPretty = humanDateOnly(gs.dobISO) ?? gs.dobISO
         let cutPretty = humanDateOnly(gs.visitDateISO) ?? gs.visitDateISO
-        let sexText = (gs.sex == .female) ? "Female" : "Male"
-        para("Sex: \(sexText)   •   DOB: \(dobPretty)   •   Cutoff: \(cutPretty)", font: bodyFont)
+        let sexText = (gs.sex == .female)
+            ? L("report.sex.female", comment: "Sex label: female")
+            : L("report.sex.male", comment: "Sex label: male")
+        let sexDobCutoffFormat = L("report.charts.sex_dob_cutoff_format",
+                                  comment: "Charts meta line with sex, DOB and cutoff")
+        para(String(format: sexDobCutoffFormat, sexText, dobPretty, cutPretty), font: bodyFont)
 
         func range(_ pts: [ReportGrowth.Point]) -> String {
-            guard let minA = pts.map({ $0.ageMonths }).min(), let maxA = pts.map({ $0.ageMonths }).max() else { return "0 points" }
+            guard let minA = pts.map({ $0.ageMonths }).min(),
+                  let maxA = pts.map({ $0.ageMonths }).max() else {
+                return L("report.charts.range.zero", comment: "Charts range label when there are no points")
+            }
             let nf = NumberFormatter(); nf.maximumFractionDigits = 1
             let lo = nf.string(from: NSNumber(value: minA)) ?? String(format: "%.1f", minA)
             let hi = nf.string(from: NSNumber(value: maxA)) ?? String(format: "%.1f", maxA)
-            return "\(pts.count) point\(pts.count == 1 ? "" : "s") (\(lo)–\(hi) mo)"
+
+            if pts.count == 1 {
+                let oneFmt = L("report.charts.range.single_format", comment: "Charts range label for exactly one point")
+                return String(format: oneFmt, pts.count, lo, hi)
+            } else {
+                let manyFmt = L("report.charts.range.multi_format", comment: "Charts range label for multiple points")
+                return String(format: manyFmt, pts.count, lo, hi)
+            }
         }
-        para("Weight‑for‑Age: \(range(gs.wfa))", font: bodyFont)
-        para("Length/Height‑for‑Age: \(range(gs.lhfa))", font: bodyFont)
-        para("Head Circumference‑for‑Age: \(range(gs.hcfa))", font: bodyFont)
+
+        let wfaLine = String(format: L("report.charts.wfa_line_format", comment: "Charts summary line: weight-for-age"), range(gs.wfa))
+        let lhfaLine = String(format: L("report.charts.lhfa_line_format", comment: "Charts summary line: length/height-for-age"), range(gs.lhfa))
+        let hcfaLine = String(format: L("report.charts.hcfa_line_format", comment: "Charts summary line: head circumference-for-age"), range(gs.hcfa))
+        para(wfaLine, font: bodyFont)
+        para(lhfaLine, font: bodyFont)
+        para(hcfaLine, font: bodyFont)
         content.append(NSAttributedString(string: "\n"))
 
         // Charts — each on its own page
@@ -665,7 +816,11 @@ final class ReportBuilder {
         }
         for (idx, img) in images.enumerated() {
             if idx > 0 { content.append(pageBreak()) }
-            let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
+            let caption = (idx == 0
+                           ? L("report.charts.caption.wfa", comment: "Charts caption: weight-for-age")
+                           : (idx == 1
+                              ? L("report.charts.caption.lhfa", comment: "Charts caption: length/height-for-age")
+                              : L("report.charts.caption.hcfa", comment: "Charts caption: head circumference-for-age")))
             content.append(centeredTitle(caption))
             content.append(attachmentStringFittedToContent(from: img, reservedTopBottom: 72))
             content.append(NSAttributedString(string: "\n\n"))
@@ -686,11 +841,15 @@ final class ReportBuilder {
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
         // Summary header for charts document
-        para("Growth Charts", font: headerFont)
+        para(L("report.well.charts.title", comment: "Section title: growth charts"), font: headerFont)
         let dobPretty = humanDateOnly(gs.dobISO) ?? gs.dobISO
         let cutPretty = humanDateOnly(gs.visitDateISO) ?? gs.visitDateISO
-        let sexText = (gs.sex == .female) ? "Female" : "Male"
-        para("Sex: \(sexText)   •   DOB: \(dobPretty)   •   Cutoff: \(cutPretty)", font: bodyFont)
+        let sexText = (gs.sex == .female)
+            ? L("report.sex.female", comment: "Sex label: female")
+            : L("report.sex.male", comment: "Sex label: male")
+        let sexDobCutoffFormat = L("report.charts.sex_dob_cutoff_format",
+                                  comment: "Charts meta line with sex, DOB and cutoff")
+        para(String(format: sexDobCutoffFormat, sexText, dobPretty, cutPretty), font: bodyFont)
         content.append(NSAttributedString(string: "\n"))
 
         // Render charts sized to the page content width (capped at 18 cm).
@@ -703,7 +862,11 @@ final class ReportBuilder {
 
         for (idx, img) in images.enumerated() {
             if idx > 0 { content.append(pageBreak()) }
-            let caption = (idx == 0 ? "Weight-for-Age" : (idx == 1 ? "Length/Height-for-Age" : "Head Circumference-for-Age"))
+            let caption = (idx == 0
+                           ? L("report.charts.caption.wfa", comment: "Charts caption: weight-for-age")
+                           : (idx == 1
+                              ? L("report.charts.caption.lhfa", comment: "Charts caption: length/height-for-age")
+                              : L("report.charts.caption.hcfa", comment: "Charts caption: head circumference-for-age")))
             content.append(centeredTitle(caption))
             // Use RTF-specific attachment so PNG is embedded and layout reserves full height.
             content.append(attachmentStringRTFFittedToContent(from: img, pageSize: REPORT_PAGE_SIZE, inset: REPORT_INSET, reservedTopBottom: 72))
@@ -1047,26 +1210,26 @@ extension ReportBuilder {
         // Summary (already computed in AppState)
         if let s = appState.visitSummary {
             if let p = s.problems, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                sections.append(.init(title: "Problem Listing", body: p))
+                sections.append(.init(title: L("report.section.problem_listing", comment: "Generic section title: problem listing"), body: p))
             }
             if let d = s.diagnosis, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                sections.append(.init(title: "Diagnosis", body: d))
+                sections.append(.init(title: L("report.section.diagnosis", comment: "Generic section title: diagnosis"), body: d))
             }
             if let c = s.conclusions, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                sections.append(.init(title: "Conclusions / Plan", body: c))
+                sections.append(.init(title: L("report.section.conclusions_plan", comment: "Generic section title: conclusions/plan"), body: c))
             }
         }
 
         // Perinatal / PMH snapshot
         if let prof = appState.currentPatientProfile {
             if let peri = prof.perinatalHistory, !peri.isEmpty {
-                sections.append(.init(title: "Perinatal", body: peri))
+                sections.append(.init(title: L("report.section.perinatal", comment: "Generic section title: perinatal"), body: peri))
             }
             if let pmh = prof.pmh, !pmh.isEmpty {
-                sections.append(.init(title: "Past Medical History", body: pmh))
+                sections.append(.init(title: L("report.section.past_medical_history", comment: "Generic section title: past medical history"), body: pmh))
             }
             if let vacc = prof.vaccinationStatus, !vacc.isEmpty {
-                sections.append(.init(title: "Vaccination", body: vacc))
+                sections.append(.init(title: L("report.section.vaccination", comment: "Generic section title: vaccination"), body: vacc))
             }
         }
 
@@ -1125,10 +1288,35 @@ extension ReportBuilder {
                                               attributes: [.font: font, .foregroundColor: color]))
         }
 
-        para("Clinical Report", font: .systemFont(ofSize: 20, weight: .semibold))
-        let pretty = Dictionary(uniqueKeysWithValues: meta.map { (k, v) in (k, humanizeIfDate(v)) })
+        para(L("report.title.clinical_report", comment: "Report title: clinical report"), font: .systemFont(ofSize: 20, weight: .semibold))
+        func metaLabel(_ key: String) -> String {
+            switch key {
+            case "Patient":   return L("report.meta.patient", comment: "Report meta label: patient")
+            case "DOB":       return L("report.meta.dob", comment: "Report meta label: DOB")
+            case "Sex":       return L("report.meta.sex", comment: "Report meta label: sex")
+            case "MRN":       return L("report.meta.mrn", comment: "Report meta label: MRN")
+            case "Visit Type":return L("report.meta.visit_type", comment: "Report meta label: visit type")
+            case "Visit Date":return L("report.meta.visit_date", comment: "Report meta label: visit date")
+            case "Clinician": return L("report.meta.clinician", comment: "Report meta label: clinician")
+            default:           return key
+            }
+        }
+
+        let pretty = Dictionary(uniqueKeysWithValues: meta.map { (k, v) in
+            // Localize the *value* for visit type while keeping internal keys stable.
+            if k == "Visit Type" {
+                if v == "Sick Visit" {
+                    return (k, L("report.visit_type.sick", comment: "Visit type label: sick"))
+                }
+                if v == "Well Visit" {
+                    return (k, L("report.visit_type.well", comment: "Visit type label: well"))
+                }
+            }
+            return (k, humanizeIfDate(v))
+        })
+
         let metaLine = pretty.sorted(by: { $0.key < $1.key })
-            .map { "\($0.key): \($0.value)" }
+            .map { "\(metaLabel($0.key)): \($0.value)" }
             .joined(separator: "   •   ")
         para(metaLine, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)
         content.append(NSAttributedString(string: "\n"))
@@ -1164,28 +1352,38 @@ extension ReportBuilder {
         let headerFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
-        para("Growth Charts", font: headerFont)
+        para(L("report.well.charts.title", comment: "Section title: growth charts"), font: headerFont)
         if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
             let dobPretty = humanDateOnly(gs.dobISO) ?? gs.dobISO
             let cutPretty = humanDateOnly(gs.visitDateISO) ?? gs.visitDateISO
-            let sexText = (gs.sex == .female) ? "Female" : "Male"
-            para("Sex: \(sexText)   •   DOB: \(dobPretty)   •   Cutoff: \(cutPretty)", font: bodyFont)
+            let sexText = (gs.sex == .female)
+                ? L("report.sex.female", comment: "Sex label: female")
+                : L("report.sex.male", comment: "Sex label: male")
+            let sexDobCutoffFormat = L("report.charts.sex_dob_cutoff_format",
+                                      comment: "Charts meta line with sex, DOB and cutoff")
+            para(String(format: sexDobCutoffFormat, sexText, dobPretty, cutPretty), font: bodyFont)
 
             func range(_ pts: [ReportGrowth.Point]) -> String {
                 guard let minA = pts.map({ $0.ageMonths }).min(),
                       let maxA = pts.map({ $0.ageMonths }).max() else {
-                    return "0 points"
+                    return L("report.charts.range.zero", comment: "Charts range label when there are no points")
                 }
-                let nf = NumberFormatter()
-                nf.maximumFractionDigits = 1
+                let nf = NumberFormatter(); nf.maximumFractionDigits = 1
                 let lo = nf.string(from: NSNumber(value: minA)) ?? String(format: "%.1f", minA)
                 let hi = nf.string(from: NSNumber(value: maxA)) ?? String(format: "%.1f", maxA)
-                return "\(pts.count) point\(pts.count == 1 ? "" : "s") (\(lo)–\(hi) mo)"
+
+                if pts.count == 1 {
+                    let oneFmt = L("report.charts.range.single_format", comment: "Charts range label for exactly one point")
+                    return String(format: oneFmt, pts.count, lo, hi)
+                } else {
+                    let manyFmt = L("report.charts.range.multi_format", comment: "Charts range label for multiple points")
+                    return String(format: manyFmt, pts.count, lo, hi)
+                }
             }
 
-            para("Weight‑for‑Age: \(range(gs.wfa))", font: bodyFont)
-            para("Length/Height‑for‑Age: \(range(gs.lhfa))", font: bodyFont)
-            para("Head Circumference‑for‑Age: \(range(gs.hcfa))", font: bodyFont)
+            para(String(format: L("report.charts.wfa_line_format", comment: "Charts summary line: weight-for-age"), range(gs.wfa)), font: bodyFont)
+            para(String(format: L("report.charts.lhfa_line_format", comment: "Charts summary line: length/height-for-age"), range(gs.lhfa)), font: bodyFont)
+            para(String(format: L("report.charts.hcfa_line_format", comment: "Charts summary line: head circumference-for-age"), range(gs.hcfa)), font: bodyFont)
         } else {
             para("—", font: bodyFont)
         }
@@ -1212,11 +1410,11 @@ extension ReportBuilder {
                 let caption: String
                 switch idx {
                 case 0:
-                    caption = "Weight‑for‑Age"
+                    caption = L("report.charts.caption.wfa", comment: "Charts caption: weight-for-age")
                 case 1:
-                    caption = "Length/Height‑for‑Age"
+                    caption = L("report.charts.caption.lhfa", comment: "Charts caption: length/height-for-age")
                 default:
-                    caption = "Head Circumference‑for‑Age"
+                    caption = L("report.charts.caption.hcfa", comment: "Charts caption: head circumference-for-age")
                 }
                 content.append(centeredTitle(caption))
                 content.append(attachmentStringFittedToContent(from: img, reservedTopBottom: 72))
@@ -1238,13 +1436,19 @@ extension ReportBuilder {
         
 
         // Header block (Sick)
-        para("Sick Visit Report", font: .systemFont(ofSize: 20, weight: .semibold))
-        let triad = "Created: \(humanDateTime(data.meta.createdAtISO) ?? "—")   •   Last Edited: \(humanDateTime(data.meta.updatedAtISO) ?? "—")   •   Report Generated: \(humanDateTime(data.meta.generatedAtISO) ?? "—")"
+        para(L("report.sick.title", comment: "Sick report title"), font: .systemFont(ofSize: 20, weight: .semibold))
+        let triadFmt = L("report.sick.meta.triad_format", comment: "Sick report header triad")
+        let triad = String(format: triadFmt,
+                           humanDateTime(data.meta.createdAtISO) ?? "—",
+                           humanDateTime(data.meta.updatedAtISO) ?? "—",
+                           humanDateTime(data.meta.generatedAtISO) ?? "—")
         para(triad, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)
         content.append(NSAttributedString(string: "\n"))
 
-        para("Alias: \(data.meta.alias)   •   MRN: \(data.meta.mrn)", font: .systemFont(ofSize: 12))
-        para("Name: \(data.meta.name)", font: .systemFont(ofSize: 12))
+        let aliasMrnFmt = L("report.sick.meta.alias_mrn_format", comment: "Sick report header: alias and MRN")
+        para(String(format: aliasMrnFmt, data.meta.alias, data.meta.mrn), font: .systemFont(ofSize: 12))
+        let nameFmt = L("report.sick.meta.name_format", comment: "Sick report header: name")
+        para(String(format: nameFmt, data.meta.name), font: .systemFont(ofSize: 12))
         let dobShortSick = humanDateOnly(data.meta.dobISO) ?? "—"
         let ageShortSick = {
             let pre = data.meta.ageAtVisit.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1253,9 +1457,12 @@ extension ReportBuilder {
             }
             return pre
         }()
-        para("DOB: \(dobShortSick)   •   Sex: \(data.meta.sex)   •   Age at Visit: \(ageShortSick)", font: .systemFont(ofSize: 12))
-        para("Visit Date: \(humanDateOnly(data.meta.visitDateISO) ?? "—")", font: .systemFont(ofSize: 12))
-        para("Clinician: \(data.meta.clinicianName)", font: .systemFont(ofSize: 12))
+        let dobSexAgeFmt = L("report.sick.meta.dob_sex_age_format", comment: "Sick report header: DOB/sex/age")
+        para(String(format: dobSexAgeFmt, dobShortSick, data.meta.sex, ageShortSick), font: .systemFont(ofSize: 12))
+        let visitDateFmt = L("report.sick.meta.visit_date_format", comment: "Sick report header: visit date")
+        para(String(format: visitDateFmt, humanDateOnly(data.meta.visitDateISO) ?? "—"), font: .systemFont(ofSize: 12))
+        let clinicianFmt = L("report.sick.meta.clinician_format", comment: "Sick report header: clinician")
+        para(String(format: clinicianFmt, data.meta.clinicianName), font: .systemFont(ofSize: 12))
         content.append(NSAttributedString(string: "\n"))
         
         // --- New: render core Sick sections from data (Step 2) ---
@@ -1270,18 +1477,28 @@ extension ReportBuilder {
         }
 
         // 8) Main Complaint
-        section("Main Complaint", data.mainComplaint)
+        section(L("report.sick.section.main_complaint", comment: "Sick section title: main complaint"), data.mainComplaint)
         // 9) History of Present Illness
-        section("History of Present Illness", data.hpi)
+        section(L("report.sick.section.hpi", comment: "Sick section title: HPI"), data.hpi)
         // 10) Duration
-        section("Duration", data.duration)
+        section(L("report.sick.section.duration", comment: "Sick section title: duration"), data.duration)
         // 11) Basics (Feeding · Urination · Breathing · Pain · Context)
         if !data.basics.isEmpty {
-            para("Basics", font: headerFont)
+            para(L("report.sick.section.basics", comment: "Sick section title: basics"), font: headerFont)
             let order = ["Feeding","Urination","Breathing","Pain","Context"]
+            func basicsLabel(_ key: String) -> String {
+                switch key {
+                case "Feeding":   return L("report.sick.basics.feeding", comment: "Basics label: feeding")
+                case "Urination": return L("report.sick.basics.urination", comment: "Basics label: urination")
+                case "Breathing": return L("report.sick.basics.breathing", comment: "Basics label: breathing")
+                case "Pain":      return L("report.sick.basics.pain", comment: "Basics label: pain")
+                case "Context":   return L("report.sick.basics.context", comment: "Basics label: context")
+                default:           return key
+                }
+            }
             for key in order {
                 if let val = data.basics[key], !val.isEmpty {
-                    para("\(key): \(val)", font: bodyFont)
+                    para("\(basicsLabel(key)): \(val)", font: bodyFont)
                 }
             }
             content.append(NSAttributedString(string: "\n"))
@@ -1290,7 +1507,7 @@ extension ReportBuilder {
         if data.perinatalSummary != nil {
             // When we have (or had) a perinatal summary for this age band:
             // render PMH as two subsections and use "—" for whichever is empty.
-            para("Past Medical History", font: headerFont)
+            para(L("report.sick.section.pmh", comment: "Sick section title: past medical history"), font: headerFont)
 
             let peri = data.perinatalSummary?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1298,7 +1515,7 @@ extension ReportBuilder {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
             // Perinatal history
-            para("Perinatal History", font: NSFont.systemFont(ofSize: 13, weight: .semibold))
+            para(L("report.sick.section.perinatal_history", comment: "Sick PMH subsection title: perinatal history"), font: NSFont.systemFont(ofSize: 13, weight: .semibold))
             if !peri.isEmpty {
                 para(peri, font: bodyFont)
             } else {
@@ -1306,7 +1523,7 @@ extension ReportBuilder {
             }
 
             // Other PMH
-            para("Other Past Medical History", font: NSFont.systemFont(ofSize: 13, weight: .semibold))
+            para(L("report.sick.section.other_pmh", comment: "Sick PMH subsection title: other PMH"), font: NSFont.systemFont(ofSize: 13, weight: .semibold))
             if !pmh.isEmpty {
                 para(pmh, font: bodyFont)
             } else {
@@ -1316,14 +1533,14 @@ extension ReportBuilder {
             content.append(NSAttributedString(string: "\n"))
         } else {
             // Fallback: pre-existing simple behavior when no perinatal summary
-            section("Past Medical History", data.pmh)
+            section(L("report.sick.section.pmh", comment: "Sick section title: past medical history"), data.pmh)
         }
 
         // 13) Vaccination
-        section("Vaccination", data.vaccination)
+        section(L("report.sick.section.vaccination", comment: "Sick section title: vaccination"), data.vaccination)
 
         // 14) Vitals (full block from vitalsSummary)
-        para("Vitals", font: headerFont)
+        para(L("report.sick.section.vitals", comment: "Sick section title: vitals"), font: headerFont)
         if data.vitalsSummary.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -1346,7 +1563,7 @@ extension ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         // 15) Physical Examination (grouped)
-        para("Physical Examination", font: headerFont)
+        para(L("report.sick.section.physical_exam", comment: "Sick section title: physical examination"), font: headerFont)
         if data.physicalExamGroups.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -1360,10 +1577,10 @@ extension ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         // 16) Problem Listing
-        section("Problem Listing", data.problemListing)
+        section(L("report.sick.section.problem_listing", comment: "Sick section title: problem listing"), data.problemListing)
 
         // 17) Investigations
-        para("Investigations", font: headerFont)
+        para(L("report.sick.section.investigations", comment: "Sick section title: investigations"), font: headerFont)
         if data.investigations.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -1374,7 +1591,7 @@ extension ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         // 18) Working Diagnosis
-        section("Working Diagnosis", data.workingDiagnosis)
+        section(L("report.sick.section.working_diagnosis", comment: "Sick section title: working diagnosis"), data.workingDiagnosis)
 
         // 19) ICD-10
         let icdStr: String? = {
@@ -1387,13 +1604,13 @@ extension ReportBuilder {
             }
             return nil
         }()
-        section("ICD-10", icdStr)
+        section(L("report.sick.section.icd10", comment: "Sick section title: ICD-10"), icdStr)
 
         // 20) Plan & Anticipatory Guidance
-        section("Plan & Anticipatory Guidance", data.planGuidance)
+        section(L("report.sick.section.plan_guidance", comment: "Sick section title: plan and anticipatory guidance"), data.planGuidance)
 
         // 21) Medications
-        para("Medications", font: headerFont)
+        para(L("report.sick.section.medications", comment: "Sick section title: medications"), font: headerFont)
         if data.medications.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -1404,10 +1621,10 @@ extension ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         // 22) Clinician Comments
-        section("Clinician Comments", data.clinicianComments)
+        section(L("report.sick.section.clinician_comments", comment: "Sick section title: clinician comments"), data.clinicianComments)
 
         // 23) Follow-up / Next Visit
-        section("Follow-up / Next Visit", data.nextVisitDate)
+        section(L("report.sick.section.follow_up", comment: "Sick section title: follow-up / next visit"), data.nextVisitDate)
         
         // 24) AI Assistant – latest model response (if any)
         if let ai = dataLoader.loadLatestAIInputForEpisode(episodeID) {
@@ -1495,12 +1712,12 @@ extension ReportBuilder {
         let data = NSMutableData()
         guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
             throw NSError(domain: "ReportExport", code: 100,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to create PDF consumer"])
+                          userInfo: [NSLocalizedDescriptionKey: L("report.error.pdf_consumer", comment: "PDF export error: failed to create PDF consumer")])
         }
         var mediaBox = CGRect(origin: .zero, size: pageSize)
         guard let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
             throw NSError(domain: "ReportExport", code: 101,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to create PDF context"])
+                          userInfo: [NSLocalizedDescriptionKey: L("report.error.pdf_context", comment: "PDF export error: failed to create PDF context")])
         }
 
         // Ensure visible text color (avoid white-on-white on some systems)
@@ -1759,13 +1976,19 @@ extension ReportBuilder {
         guard let bodyRTF = body.rtf(from: full,
                                      documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
             throw NSError(domain: "ReportExport", code: 3001,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to create base RTF for body"])
+                          userInfo: [NSLocalizedDescriptionKey: L(
+                            "report.error.rtf_create_base_body",
+                            comment: "RTF export error: failed to create base RTF for body"
+                          )])
         }
 
         // Decode as ASCII only (avoid UTF-8 multibyte characters in RTF stream)
         guard var rtf = String(data: bodyRTF, encoding: .ascii) else {
             throw NSError(domain: "ReportExport", code: 3002,
-                          userInfo: [NSLocalizedDescriptionKey: "Body RTF is not ASCII-serializable"])
+                          userInfo: [NSLocalizedDescriptionKey: L(
+                            "report.error.rtf_body_not_ascii",
+                            comment: "RTF export error: body RTF is not ASCII-serializable"
+                          )])
         }
 
         // 2) Remove the final closing brace of the root group safely
@@ -1868,7 +2091,10 @@ extension ReportBuilder {
         rtf += "}\n"
         guard let out = rtf.data(using: .ascii, allowLossyConversion: false) else {
             throw NSError(domain: "ReportExport", code: 3003,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to encode final RTF as ASCII"])
+                          userInfo: [NSLocalizedDescriptionKey: L(
+                            "report.error.rtf_encode_final_ascii",
+                            comment: "RTF export error: failed to encode final RTF as ASCII"
+                          )])
         }
         return out
     }
@@ -2017,7 +2243,7 @@ extension ReportBuilder {
             let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             NSLog("[ReportExport] zip failed (%d): %@", task.terminationStatus, out)
             throw NSError(domain: "ReportExport", code: 4001,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to zip RTFD at \(dir.path)"])
+                          userInfo: [NSLocalizedDescriptionKey: String(format: L("report.error.zip_rtfd_format", comment: "Zip export error with path"), dir.path)])
         }
     }
 
@@ -2028,13 +2254,24 @@ extension ReportBuilder {
         var patientName: String?
         var visitType: String?
 
+        // NOTE: These prefixes must match the labels used in the rendered report text.
+        // They are localized so DOCX titles remain correct in non-English locales.
+        let patientPrefix = L(
+            "report.docx.parse.patient_prefix",
+            comment: "DOCX title parser: prefix for patient line (must match rendered report label, e.g., 'Patient:')"
+        )
+        let currentVisitPrefix = L(
+            "report.docx.parse.current_visit_prefix",
+            comment: "DOCX title parser: prefix for current visit line (must match rendered report label, e.g., 'Current Visit')"
+        )
+
         for line in rawText.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty { continue }
 
             // Extract patient name from "Patient: Pablo Picasso (Alias ...)" line
-            if trimmed.hasPrefix("Patient:") {
-                let rest = trimmed.dropFirst("Patient:".count).trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix(patientPrefix) {
+                let rest = trimmed.dropFirst(patientPrefix.count).trimmingCharacters(in: .whitespaces)
                 if !rest.isEmpty {
                     if let parenIndex = rest.firstIndex(of: "(") {
                         let namePart = rest[..<parenIndex]
@@ -2046,7 +2283,7 @@ extension ReportBuilder {
             }
 
             // Extract visit type from "Current Visit — 1-month visit" line
-            if trimmed.hasPrefix("Current Visit") {
+            if trimmed.hasPrefix(currentVisitPrefix) {
                 // Look for an em dash or regular dash as separator
                 if let dashRange = trimmed.range(of: "—") ?? trimmed.range(of: "-") {
                     let after = trimmed[dashRange.upperBound...].trimmingCharacters(in: .whitespaces)
@@ -2061,9 +2298,16 @@ extension ReportBuilder {
             }
         }
 
-        let name = patientName ?? "Clinical Report"
+        let name = patientName ?? L(
+            "report.docx.title.fallback",
+            comment: "DOCX title fallback when patient name cannot be parsed"
+        )
+        let sep = L(
+            "report.docx.title.separator",
+            comment: "DOCX title separator between patient name and visit type (includes surrounding spaces if desired)"
+        )
         if let vt = visitType, !vt.isEmpty {
-            return "\(name) — \(vt)"
+            return "\(name)\(sep)\(vt)"
         } else {
             return name
         }
@@ -2106,7 +2350,10 @@ extension ReportBuilder {
                 throw NSError(
                     domain: "ReportExport",
                     code: 5002,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to create DOCX archive at \(zipFile.path)"]
+                    userInfo: [NSLocalizedDescriptionKey: String(format: L(
+                        "report.error.docx_archive_create_format",
+                        comment: "DOCX export error: failed to create archive (format expects 1 path)"
+                    ), zipFile.path)]
                 )
             }
 
@@ -2121,7 +2368,10 @@ extension ReportBuilder {
                 throw NSError(
                     domain: "ReportExport",
                     code: 5003,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to enumerate DOCX package at \(packageRoot.path)"]
+                    userInfo: [NSLocalizedDescriptionKey: String(format: L(
+                        "report.error.docx_package_enumerate_format",
+                        comment: "DOCX export error: failed to enumerate package directory (format expects 1 path)"
+                    ), packageRoot.path)]
                 )
             }
 
@@ -2157,7 +2407,10 @@ extension ReportBuilder {
                     throw NSError(
                         domain: "ReportExport",
                         code: 5004,
-                        userInfo: [NSLocalizedDescriptionKey: "Failed to add \(relPath) to DOCX at \(zipFile.path)"]
+                        userInfo: [NSLocalizedDescriptionKey: String(format: L(
+                            "report.error.docx_add_entry_format",
+                            comment: "DOCX export error: failed to add an entry (format expects entry path, then docx path)"
+                        ), relPath, zipFile.path)]
                     )
                 }
             }
@@ -2179,7 +2432,10 @@ extension ReportBuilder {
                 throw NSError(
                     domain: "ReportExport",
                     code: 5001,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to zip DOCX at \(packageRoot.path)"]
+                    userInfo: [NSLocalizedDescriptionKey: String(format: L(
+                        "report.error.docx_zip_failed_format",
+                        comment: "DOCX export error: failed to zip package (format expects 1 path)"
+                    ), packageRoot.path)]
                 )
             }
         }
@@ -2669,45 +2925,53 @@ extension ReportBuilder {
         // Title derived from body text (patient + visit type when available)
         let title = makeDocxTitle(from: bodyTextForDocx)
 
+        // Prefix used by the rendered report line: "Current Visit — …".
+        // Localized so Heading1 mapping works in non-English locales.
+        let currentVisitLinePrefix = L(
+            "report.docx.heading.current_visit_line_prefix",
+            comment: "DOCX heading detection: prefix for the 'Current Visit — …' line (must match rendered report)"
+        )
+
         // === Heading mapping for Word navigation / anchors ===
         // Only true section titles + current visit title become Heading1.
+        // Localized so we can correctly detect headings in the localized body text.
         let headingSet: Set<String> = [
             // Well visit sections (top of report)
-            "Well Visit Summary",
-            "Perinatal Summary",
-            "Findings from Previous Well Visits",
+            L("report.docx.heading.well_visit_summary", comment: "DOCX heading detection: Well Visit Summary"),
+            L("report.docx.heading.perinatal_summary", comment: "DOCX heading detection: Perinatal Summary"),
+            L("report.docx.heading.findings_previous_well_visits", comment: "DOCX heading detection: Findings from Previous Well Visits"),
 
             // Existing well visit sections
-            "Parents’ Concerns",
-            "Feeding",
-            "Supplementation",
-            "Sleep",
-            "Developmental Evaluation",
-            "Age-specific Milestones",
-            "Measurements",
-            "Physical Examination",
-            "Problem Listing",
-            "Conclusions",
-            "Anticipatory Guidance",
-            "Clinician Comments",
-            "Next Visit Date",
-            "Growth Charts",
+            L("report.docx.heading.parents_concerns", comment: "DOCX heading detection: Parents’ Concerns"),
+            L("report.docx.heading.feeding", comment: "DOCX heading detection: Feeding"),
+            L("report.docx.heading.supplementation", comment: "DOCX heading detection: Supplementation"),
+            L("report.docx.heading.sleep", comment: "DOCX heading detection: Sleep"),
+            L("report.docx.heading.developmental_evaluation", comment: "DOCX heading detection: Developmental Evaluation"),
+            L("report.docx.heading.age_specific_milestones", comment: "DOCX heading detection: Age-specific Milestones"),
+            L("report.docx.heading.measurements", comment: "DOCX heading detection: Measurements"),
+            L("report.docx.heading.physical_examination", comment: "DOCX heading detection: Physical Examination"),
+            L("report.docx.heading.problem_listing", comment: "DOCX heading detection: Problem Listing"),
+            L("report.docx.heading.conclusions", comment: "DOCX heading detection: Conclusions"),
+            L("report.docx.heading.anticipatory_guidance", comment: "DOCX heading detection: Anticipatory Guidance"),
+            L("report.docx.heading.clinician_comments", comment: "DOCX heading detection: Clinician Comments"),
+            L("report.docx.heading.next_visit_date", comment: "DOCX heading detection: Next Visit Date"),
+            L("report.docx.heading.growth_charts", comment: "DOCX heading detection: Growth Charts"),
 
             // Sick visit sections
-            "Sick Visit Report",
-            "Main Complaint",
-            "History of Present Illness",
-            "Duration",
-            "Basics",
-            "Past Medical History",
-            "Vaccination",
-            "Vitals",
-            "Investigations",
-            "Working Diagnosis",
-            "ICD-10",
-            "Plan & Anticipatory Guidance",
-            "Medications",
-            "Follow-up / Next Visit"
+            L("report.docx.heading.sick_visit_report", comment: "DOCX heading detection: Sick Visit Report"),
+            L("report.docx.heading.main_complaint", comment: "DOCX heading detection: Main Complaint"),
+            L("report.docx.heading.hpi", comment: "DOCX heading detection: History of Present Illness"),
+            L("report.docx.heading.duration", comment: "DOCX heading detection: Duration"),
+            L("report.docx.heading.basics", comment: "DOCX heading detection: Basics"),
+            L("report.docx.heading.past_medical_history", comment: "DOCX heading detection: Past Medical History"),
+            L("report.docx.heading.vaccination", comment: "DOCX heading detection: Vaccination"),
+            L("report.docx.heading.vitals", comment: "DOCX heading detection: Vitals"),
+            L("report.docx.heading.investigations", comment: "DOCX heading detection: Investigations"),
+            L("report.docx.heading.working_diagnosis", comment: "DOCX heading detection: Working Diagnosis"),
+            L("report.docx.heading.icd10", comment: "DOCX heading detection: ICD-10"),
+            L("report.docx.heading.plan_anticipatory", comment: "DOCX heading detection: Plan & Anticipatory Guidance"),
+            L("report.docx.heading.medications", comment: "DOCX heading detection: Medications"),
+            L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit")
         ]
 
         var styledParagraphs: [(text: String, style: String?)] = []
@@ -2717,7 +2981,7 @@ extension ReportBuilder {
             let s = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !s.isEmpty else { continue }
 
-            if s.hasPrefix("Current Visit —") || headingSet.contains(s) {
+            if s.hasPrefix(currentVisitLinePrefix) || headingSet.contains(s) {
                 styledParagraphs.append((s, "Heading1"))
             } else {
                 styledParagraphs.append((s, nil))
@@ -2744,8 +3008,14 @@ extension ReportBuilder {
                         images.append((data: png, filename: "image\(i+1).png", sizePts: renderSize))
                     }
                 }
-                NSLog("[ReportDebug] DOCX charts embedded count = %d  sizePts=(%.1f×%.1f)",
-                      images.count, images.first?.sizePts.width ?? 0, images.first?.sizePts.height ?? 0)
+                NSLog("[ReportDebug] %@",
+                      String(format: L(
+                        "report.debug.docx_charts_embedded_count_format",
+                        comment: "Debug log: DOCX embedded charts count and size in points (format: count, width, height)"
+                      ),
+                      images.count,
+                      images.first?.sizePts.width ?? 0,
+                      images.first?.sizePts.height ?? 0))
             }
         case .sick:
             break
@@ -2757,7 +3027,11 @@ extension ReportBuilder {
             images: images,
             destinationURL: outURL
         )
-        NSLog("[ReportExport] wrote DOCX %@", outURL.path)
+        NSLog("[ReportExport] %@",
+              String(format: L(
+                "report.export.wrote_docx_format",
+                comment: "Export log: wrote DOCX file (format expects 1 path)"
+              ), outURL.path))
         return outURL
     }
 
@@ -2954,7 +3228,7 @@ extension ReportBuilder {
         guard let data = attributed.rtf(from: range,
                                         documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else {
             throw NSError(domain: "ReportExport", code: 6001,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to generate RTF data"])
+                          userInfo: [NSLocalizedDescriptionKey: L("report.error.generate_rtf_data", comment: "RTF export error: failed to generate RTF data")])
         }
         return data
     }
@@ -2989,7 +3263,11 @@ extension ReportBuilder {
         // produces a Word file while we debug RTF/RTFD on macOS.
         // This keeps all call sites unchanged.
         let url = try exportDOCX(for: kind)
-        NSLog("[ReportExport] (RTF shim) returned DOCX instead: %@", url.path)
+        NSLog("[ReportExport] %@",
+              String(format: L(
+                "report.export.rtf_shim_returned_docx_format",
+                comment: "Export log: RTF shim returned DOCX instead (format expects 1 path)"
+              ), url.path))
         return url
     }
     
@@ -3009,8 +3287,14 @@ private extension ReportBuilder {
         var pageCursor = 0
         for (partIndex, d) in parts.enumerated() {
             guard let doc = PDFDocument(data: d) else {
-                throw NSError(domain: "ReportExport", code: 200 + partIndex,
-                              userInfo: [NSLocalizedDescriptionKey: "Failed to read intermediate PDF part #\(partIndex+1)"])
+                throw NSError(
+                    domain: "ReportExport",
+                    code: 200 + partIndex,
+                    userInfo: [NSLocalizedDescriptionKey: String(format: L(
+                        "report.error.read_intermediate_pdf_part_format",
+                        comment: "PDF export error: failed to read intermediate PDF part (format expects 1-based part index)"
+                    ), partIndex + 1)]
+                )
             }
             for i in 0..<doc.pageCount {
                 if let page = doc.page(at: i) {
@@ -3020,8 +3304,14 @@ private extension ReportBuilder {
             }
         }
         guard let data = out.dataRepresentation() else {
-            throw NSError(domain: "ReportExport", code: 299,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to create merged PDF data"])
+            throw NSError(
+                domain: "ReportExport",
+                code: 299,
+                userInfo: [NSLocalizedDescriptionKey: L(
+                    "report.error.create_merged_pdf_data",
+                    comment: "PDF export error: failed to create merged PDF data"
+                )]
+            )
         }
         return data
     }
@@ -3085,11 +3375,17 @@ private extension ReportBuilder {
         // Prepare PDF context
         let data = NSMutableData()
         guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
-            throw NSError(domain: "ReportExport", code: 310, userInfo: [NSLocalizedDescriptionKey: "ChartsPDF: consumer failed"])
+            throw NSError(domain: "ReportExport", code: 310, userInfo: [NSLocalizedDescriptionKey: L(
+                "report.error.charts_pdf_consumer_failed",
+                comment: "PDF export error: ChartsPDF consumer creation failed"
+            )])
         }
         var mediaBox = CGRect(origin: .zero, size: pageSize)
         guard let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
-            throw NSError(domain: "ReportExport", code: 311, userInfo: [NSLocalizedDescriptionKey: "ChartsPDF: context failed"])
+            throw NSError(domain: "ReportExport", code: 311, userInfo: [NSLocalizedDescriptionKey: L(
+                "report.error.charts_pdf_context_failed",
+                comment: "PDF export error: ChartsPDF context creation failed"
+            )])
         }
 
         for (idx, img) in images.enumerated() {
@@ -3100,7 +3396,15 @@ private extension ReportBuilder {
             // Draw using a non-flipped context and explicit coordinates (origin = bottom-left).
 
             // Caption at the top of the content rect (drawn with AppKit text)
-            let caption = (idx == 0 ? "Weight‑for‑Age" : (idx == 1 ? "Length/Height‑for‑Age" : "Head Circumference‑for‑Age"))
+            let caption: String
+            switch idx {
+            case 0:
+                caption = L("report.chart.caption.weight_for_age", comment: "Chart caption: Weight-for-Age")
+            case 1:
+                caption = L("report.chart.caption.length_for_age", comment: "Chart caption: Length/Height-for-Age")
+            default:
+                caption = L("report.chart.caption.head_circumference_for_age", comment: "Chart caption: Head Circumference-for-Age")
+            }
             let p = NSMutableParagraphStyle(); p.alignment = .center
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 12, weight: .semibold),

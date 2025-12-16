@@ -7,6 +7,17 @@
 
 import Foundation
 
+// MARK: - Localization (file-local)
+@inline(__always)
+private func L(_ key: String, _ comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
+}
+
+@inline(__always)
+private func Lf(_ key: String, _ comment: String = "", _ args: CVarArg...) -> String {
+    String(format: L(key, comment), locale: Locale.current, arguments: args)
+}
+
 // MARK: - Public API
 
 public enum BPCategory: String, Codable {
@@ -44,20 +55,33 @@ public enum VitalsBP {
         // Pediatric hypotension (PALS) — systolic thresholds
         let lowThresh = hypotensionThresholdSystolic(ageYears: age)
         if s < lowThresh {
-            let msg = "BP \(Int(s))/\(Int(d)) mmHg is Low for age (threshold \(Int(lowThresh)) systolic)."
+            let msg = Lf(
+                "bp.msg.low",
+                "Hypotension classification message.",
+                Int(s),
+                Int(d),
+                categoryLabel(.low),
+                Int(lowThresh)
+            )
             return BPClassification(category: .low, message: msg)
         }
         // For infants < 1 year, we only apply PALS hypotension thresholds;
         // AAP 2017 hypertension tables are not intended for this age group.
         if age < 1.0 {
-            let msg = "BP \(Int(s))/\(Int(d)) mmHg is within acceptable range for infants (PALS hypotension threshold \(Int(lowThresh)) systolic)."
+            let msg = Lf(
+                "bp.msg.infant_ok",
+                "Infant BP acceptable range message.",
+                Int(s),
+                Int(d),
+                Int(lowThresh)
+            )
             return BPClassification(category: .normal, message: msg)
         }
         guard let rows = loadRows(for: sex), !rows.isEmpty else {
-            return BPClassification(category: .unknown, message: "BP reference table not available.")
+            return BPClassification(category: .unknown, message: L("bp.msg.table_missing", "BP reference table missing."))
         }
         guard let ref = nearestRow(in: rows, ageYears: age, heightCm: heightCm) else {
-            return BPClassification(category: .unknown, message: "No matching BP reference row found.")
+            return BPClassification(category: .unknown, message: L("bp.msg.no_row", "No matching BP reference row."))
         }
 
         // Stage 2 thresholds: explicit if present; otherwise p95 + 12 rule.
@@ -79,21 +103,36 @@ public enum VitalsBP {
             }
         }
 
-        let label: String
-        switch category {
-        case .normal:   label = "Normal"
-        case .elevated: label = "Elevated"
-        case .low:      label = "Low"
-        case .stage1:   label = "Stage 1"
-        case .stage2:   label = "Stage 2"
-        case .unknown:  label = "—"
-        }
+        let label = categoryLabel(category)
 
         let msg = (category == .unknown)
             ? nil
-            : "BP \(Int(s))/\(Int(d)) mmHg is \(label) for age/height."
+            : Lf(
+                "bp.msg.classified",
+                "BP classification message.",
+                Int(s),
+                Int(d),
+                label
+            )
 
         return BPClassification(category: category, message: msg)
+    }
+
+    private static func categoryLabel(_ category: BPCategory) -> String {
+        switch category {
+        case .normal:
+            return L("bp.label.normal", "BP category label: Normal")
+        case .elevated:
+            return L("bp.label.elevated", "BP category label: Elevated")
+        case .low:
+            return L("bp.label.low", "BP category label: Low")
+        case .stage1:
+            return L("bp.label.stage1", "BP category label: Stage 1")
+        case .stage2:
+            return L("bp.label.stage2", "BP category label: Stage 2")
+        case .unknown:
+            return L("bp.label.unknown", "BP category label: Unknown")
+        }
     }
 }
 

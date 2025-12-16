@@ -17,6 +17,16 @@ final class GeminiProvider: EpisodeAIProvider {
     private let apiBaseURL: URL
     private let log = Logger(subsystem: "DrsMainApp", category: "GeminiProvider")
 
+    // MARK: - Localization
+    /// Localized string helper (fileprivate to avoid cross-file symbol collisions).
+    fileprivate static func tr(_ key: String, _ args: CVarArg...) -> String {
+        let format = NSLocalizedString(key, comment: "")
+        if args.isEmpty {
+            return format
+        }
+        return String(format: format, locale: Locale.current, arguments: args)
+    }
+
     /// - Parameters:
     ///   - apiKey: Secret API key for the Gemini project (from the clinician profile).
     ///   - model: Model identifier (e.g. "gemini-1.5-pro" or "gemini-1.5-flash").
@@ -176,9 +186,22 @@ private struct GeminiGenerateContentResponse: Decodable {
     let candidates: [Candidate]?
 }
 
-enum GeminiProviderError: Error {
+enum GeminiProviderError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
     case httpStatus(code: Int, body: String)
     case emptyContent
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return GeminiProvider.tr("ai.gemini.error.invalid_url")
+        case .invalidResponse:
+            return GeminiProvider.tr("ai.gemini.error.invalid_response")
+        case .httpStatus(let code, _):
+            return GeminiProvider.tr("ai.gemini.error.http_status", code)
+        case .emptyContent:
+            return GeminiProvider.tr("ai.gemini.error.empty_content")
+        }
+    }
 }

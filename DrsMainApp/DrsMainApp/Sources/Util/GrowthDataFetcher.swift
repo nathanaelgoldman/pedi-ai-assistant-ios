@@ -70,14 +70,16 @@ public enum GrowthDataFetcher {
     public static func fetchSeries(dbPath: String, patientID: Int64, measure: GrowthMeasure) -> [GrowthDataPoint] {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            log.error("open db failed at \(dbPath, privacy: .public)")
+            let msg = String(format: NSLocalizedString("growthdatafetcher.log.open_db_failed", comment: "GrowthDataFetcher log"), dbPath)
+            log.error("\(msg, privacy: .public)")
             return []
         }
         defer { sqlite3_close(db) }
 
         // 1) DOB
         guard let dob = readDOB(db: db, patientID: patientID) else {
-            log.error("DOB missing/unparseable for pid \(patientID, privacy: .public)")
+            let msg = String(format: NSLocalizedString("growthdatafetcher.log.dob_missing", comment: "GrowthDataFetcher log"), patientID)
+            log.error("\(msg, privacy: .public)")
             return []
         }
 

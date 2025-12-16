@@ -15,8 +15,18 @@
 //- we work with PDF and Docx.
 //- the contract is to filter the age appropriate current visit field to include in the report. Everything else is left unchanged.
 
+
 import Foundation
 import SQLite3
+
+// MARK: - Localization helpers (file-scope)
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), locale: .current, arguments: args)
+}
 
 // Ensure ordinal suffixes appear in lowercase (e.g., 1st, 2nd, 3rd, 4th)
 private func prettifyOrdinals(_ s: String) -> String {
@@ -44,19 +54,19 @@ private func prettifyOrdinals(_ s: String) -> String {
 
 // MARK: - Visit type mapping (file-scope)
 private let VISIT_TITLES: [String:String] = [
-    "one_month": "1-month visit",
-    "two_month": "2-month visit",
-    "four_month": "4-month visit",
-    "six_month": "6-month visit",
-    "nine_month": "9-month visit",
-    "twelve_month": "12-month visit",
-    "fifteen_month": "15-month visit",
-    "eighteen_month": "18-month visit",
-    "twentyfour_month": "24-month visit",
-    "thirty_month": "30-month visit",
-    "thirtysix_month": "36-month visit",
-    "newborn_1st_after_maternity": "Newborn 1st After Maternity",
-    "episode": "Sick visit"
+    "one_month": L("visit.type.one_month"),
+    "two_month": L("visit.type.two_month"),
+    "four_month": L("visit.type.four_month"),
+    "six_month": L("visit.type.six_month"),
+    "nine_month": L("visit.type.nine_month"),
+    "twelve_month": L("visit.type.twelve_month"),
+    "fifteen_month": L("visit.type.fifteen_month"),
+    "eighteen_month": L("visit.type.eighteen_month"),
+    "twentyfour_month": L("visit.type.twentyfour_month"),
+    "thirty_month": L("visit.type.thirty_month"),
+    "thirtysix_month": L("visit.type.thirtysix_month"),
+    "newborn_1st_after_maternity": L("visit.type.newborn_1st_after_maternity"),
+    "episode": L("visit.type.episode")
 ]
 
 private func readableVisitType(_ raw: String?) -> String? {
@@ -106,7 +116,7 @@ final class ReportDataLoader {
         print("[ReportDataLoader] well ageMonths for visitID=\(visitID): dob=\(meta.dobISO) visitDate=\(meta.visitDateISO) ageMonths=\(ageDebug)")
         // STEP 4: Current visit core fields (type subtitle, parents' concerns, feeding, supplementation, sleep)
         let core = loadCurrentWellCoreFields(visitID: visitID)
-        let currentVisitTitle = core.visitType ?? (meta.visitTypeReadable ?? "Well Visit")
+        let currentVisitTitle = core.visitType ?? (meta.visitTypeReadable ?? L("report.well_visit.default_title"))
         let parentsConcernsRaw = core.parentsConcerns
         let feedingRaw = core.feeding
         let supplementationRaw = core.supplementation
@@ -327,36 +337,36 @@ final class ReportDataLoader {
                 // 6) Build parts using whatever columns exist
                 var parts: [String] = []
 
-                if let v = val(["pregnancy_risk"]) { parts.append("Pregnancy risk: \(v)") }
-                if let v = val(["birth_mode"]) { parts.append("Birth mode: \(v)") }
-                if let w = ival(["birth_term_weeks"]) { parts.append("GA: \(w) w") }
-                if let v = val(["resuscitation"]) { parts.append("Resuscitation: \(v)") }
-                if let n = ival(["nicu_stay"]), n != 0 { parts.append("NICU: yes") }
-                if let v = val(["infection_risk"]) { parts.append("Infection risk: \(v)") }
+                if let v = val(["pregnancy_risk"]) { parts.append(LF("report.perinatal.pregnancy_risk", v)) }
+                if let v = val(["birth_mode"]) { parts.append(LF("report.perinatal.birth_mode", v)) }
+                if let w = ival(["birth_term_weeks"]) { parts.append(LF("report.perinatal.gestation_age_weeks", w)) }
+                if let v = val(["resuscitation"]) { parts.append(LF("report.perinatal.resuscitation", v)) }
+                if let n = ival(["nicu_stay"]), n != 0 { parts.append(LF("report.perinatal.nicu", L("common.yes"))) }
+                if let v = val(["infection_risk"]) { parts.append(LF("report.perinatal.infection_risk", v)) }
 
-                if let v = val(["birth_weight_g"]) { parts.append("BW: \(v)\u{00A0}g") }
-                if let v = val(["birth_length_cm"]) { parts.append("BL: \(v)\u{00A0}cm") }
-                if let v = val(["birth_head_circumference_cm"]) { parts.append("HC: \(v)\u{00A0}cm") }
+                if let v = val(["birth_weight_g"]) { parts.append(LF("report.perinatal.birth_weight_g", v)) }
+                if let v = val(["birth_length_cm"]) { parts.append(LF("report.perinatal.birth_length_cm", v)) }
+                if let v = val(["birth_head_circumference_cm"]) { parts.append(LF("report.perinatal.birth_head_circumference_cm", v)) }
 
-                if let v = val(["maternity_stay_events"]) { parts.append("Maternity stay: \(v)") }
-                if let v = val(["maternity_vaccinations"]) { parts.append("Maternity vacc: \(v)") }
-                if let k = ival(["vitamin_k"]) { parts.append("Vitamin K: \(k != 0 ? "yes" : "no")") }
-                if let v = val(["feeding_in_maternity"]) { parts.append("Feeding: \(v)") }
-                if let m = ival(["passed_meconium_24h"]) { parts.append("Meconium 24h: \(m != 0 ? "yes" : "no")") }
-                if let u = ival(["urination_24h"]) { parts.append("Urination 24h: \(u != 0 ? "yes" : "no")") }
+                if let v = val(["maternity_stay_events"]) { parts.append(LF("report.perinatal.maternity_stay_events", v)) }
+                if let v = val(["maternity_vaccinations"]) { parts.append(LF("report.perinatal.maternity_vaccinations", v)) }
+                if let k = ival(["vitamin_k"]) { parts.append(LF("report.perinatal.vitamin_k", (k != 0 ? L("common.yes") : L("common.no")))) }
+                if let v = val(["feeding_in_maternity"]) { parts.append(LF("report.perinatal.feeding_in_maternity", v)) }
+                if let m = ival(["passed_meconium_24h"]) { parts.append(LF("report.perinatal.meconium_24h", (m != 0 ? L("common.yes") : L("common.no")))) }
+                if let u = ival(["urination_24h"]) { parts.append(LF("report.perinatal.urination_24h", (u != 0 ? L("common.yes") : L("common.no")))) }
 
-                if let v = val(["heart_screening"]) { parts.append("Heart: \(v)") }
-                if let v = val(["metabolic_screening"]) { parts.append("Metabolic: \(v)") }
-                if let v = val(["hearing_screening"]) { parts.append("Hearing: \(v)") }
+                if let v = val(["heart_screening"]) { parts.append(LF("report.perinatal.heart_screening", v)) }
+                if let v = val(["metabolic_screening"]) { parts.append(LF("report.perinatal.metabolic_screening", v)) }
+                if let v = val(["hearing_screening"]) { parts.append(LF("report.perinatal.hearing_screening", v)) }
 
-                if let v = val(["mother_vaccinations"]) { parts.append("Mother vacc: \(v)") }
-                if let v = val(["family_vaccinations"]) { parts.append("Family vacc: \(v)") }
+                if let v = val(["mother_vaccinations"]) { parts.append(LF("report.perinatal.mother_vaccinations", v)) }
+                if let v = val(["family_vaccinations"]) { parts.append(LF("report.perinatal.family_vaccinations", v)) }
 
-                if let v = val(["maternity_discharge_date"]) { parts.append("Discharge date: \(v)") }
-                if let v = val(["discharge_weight_g"]) { parts.append("Discharge Wt: \(v)\u{00A0}g") }
+                if let v = val(["maternity_discharge_date"]) { parts.append(LF("report.perinatal.maternity_discharge_date", v)) }
+                if let v = val(["discharge_weight_g"]) { parts.append(LF("report.perinatal.discharge_weight_g", v)) }
 
-                if let v = val(["illnesses_after_birth"]) { parts.append("After birth: \(v)") }
-                if let v = val(["evolution_since_maternity"]) { parts.append("Since discharge: \(v)") }
+                if let v = val(["illnesses_after_birth"]) { parts.append(LF("report.perinatal.illnesses_after_birth", v)) }
+                if let v = val(["evolution_since_maternity"]) { parts.append(LF("report.perinatal.evolution_since_maternity", v)) }
 
                 let summary = parts.joined(separator: "; ")
                 dbg("summary: \(summary)")
@@ -452,20 +462,20 @@ final class ReportDataLoader {
                         let comments = col(idx); idx += 1
 
                         // Title: Date · Visit Type · Age
-                        let visitLabel = visitTypeRaw.isEmpty ? "Well Visit" : (readableVisitType(visitTypeRaw) ?? visitTypeRaw)
+                        let visitLabel = visitTypeRaw.isEmpty ? L("report.well_visit.default_title") : (readableVisitType(visitTypeRaw) ?? visitTypeRaw)
                         let age = visitDateISO.isEmpty ? "" : ageString(dobISO: effectiveDobISO, onDateISO: visitDateISO)
                         let dateShort = visitDateISO.isEmpty ? "—" : visitDateISO
-                        let title = [dateShort, visitLabel, age.isEmpty ? nil : "Age \(age)"]
+                        let title = [dateShort, visitLabel, age.isEmpty ? nil : LF("report.previous.age", age)]
                             .compactMap { $0 }
                             .joined(separator: " · ")
 
                         // Lines (short, prioritized)
                         var lines: [String] = []
-                        if !issues.isEmpty { lines.append("Issues since last: \(issues)") }
-                        if !problems.isEmpty { lines.append("Problems: \(problems)") }
-                        if !conclusions.isEmpty { lines.append("Conclusions: \(conclusions)") }
-                        if !parents.isEmpty { lines.append("Parents’ concerns: \(parents)") }
-                        if !comments.isEmpty { lines.append("Comments: \(comments)") }
+                        if !issues.isEmpty { lines.append(LF("report.previous.issues_since_last", issues)) }
+                        if !problems.isEmpty { lines.append(LF("report.previous.problems", problems)) }
+                        if !conclusions.isEmpty { lines.append(LF("report.previous.conclusions", conclusions)) }
+                        if !parents.isEmpty { lines.append(LF("report.previous.parents_concerns", parents)) }
+                        if !comments.isEmpty { lines.append(LF("report.previous.comments", comments)) }
 
                         // Keep it concise
                         if lines.count > 3 { lines = Array(lines.prefix(3)) }
@@ -592,27 +602,27 @@ final class ReportDataLoader {
                             let mScore = nonEmpty(row["mchat_score"])
                             let mRes   = nonEmpty(row["mchat_result"])
                             if let s = mScore, let r = mRes {
-                                dev["M-CHAT"] = "\(s) (\(r))"
+                                dev[L("report.dev.mchat")] = "\(s) (\(r))"
                             } else if let s = mScore {
-                                dev["M-CHAT"] = s
+                                dev[L("report.dev.mchat")] = s
                             } else if let r = mRes {
-                                dev["M-CHAT"] = r
+                                dev[L("report.dev.mchat")] = r
                             }
                         }
                         // Developmental test
                         let dScore = nonEmpty(row["devtest_score"])
                         let dRes   = nonEmpty(row["devtest_result"])
                         if let s = dScore, let r = dRes {
-                            dev["Developmental Test"] = "\(s) (\(r))"
+                            dev[L("report.dev.devtest")] = "\(s) (\(r))"
                         } else if let s = dScore {
-                            dev["Developmental Test"] = s
+                            dev[L("report.dev.devtest")] = s
                         } else if let r = dRes {
-                            dev["Developmental Test"] = r
+                            dev[L("report.dev.devtest")] = r
                         }
 
                         // Optional: a separate parent concerns string specifically under Development
                         if let pc = nonEmpty(row["parent_concerns"]) ?? nonEmpty(row["parents_concerns"]) {
-                            dev["Parent Concerns"] = pc
+                            dev[L("report.dev.parent_concerns")] = pc
                         }
                     }
                 }
@@ -669,7 +679,7 @@ final class ReportDataLoader {
                             if isAchieved {
                                 achieved += 1
                             } else {
-                                let title = !label.isEmpty ? label : (!code.isEmpty ? code : "Milestone")
+                                let title = !label.isEmpty ? label : (!code.isEmpty ? code : L("report.milestone.default_title"))
                                 var line = title
                                 if !status.isEmpty { line += " (\(status))" }
                                 if !note.isEmpty { line += " — \(note)" }
@@ -749,11 +759,11 @@ final class ReportDataLoader {
                         mainComplaint  = col(i); i += 1
                         hpi            = col(i); i += 1
                         duration       = col(i); i += 1
-                        if let v = col(i) { basics["Feeding"] = v }; i += 1
-                        if let v = col(i) { basics["Urination"] = v }; i += 1
-                        if let v = col(i) { basics["Breathing"] = v }; i += 1
-                        if let v = col(i) { basics["Pain"] = v }; i += 1
-                        if let v = col(i) { basics["Context"] = v }; i += 1
+                        if let v = col(i) { basics[L("report.sick.basics.feeding")] = v }; i += 1
+                        if let v = col(i) { basics[L("report.sick.basics.urination")] = v }; i += 1
+                        if let v = col(i) { basics[L("report.sick.basics.breathing")] = v }; i += 1
+                        if let v = col(i) { basics[L("report.sick.basics.pain")] = v }; i += 1
+                        if let v = col(i) { basics[L("report.sick.basics.context")] = v }; i += 1
 
                         problemListing = col(i); i += 1
                         let investigationsRaw = col(i); i += 1
@@ -763,14 +773,32 @@ final class ReportDataLoader {
                         planGuidance   = col(i); i += 1
                         clinicianComments = col(i); i += 1
 
-                        // PE fields
+                        // PE fields (localized labels)
+                        let peGeneralAppearance = L("report.sick.pe.general_appearance")
+                        let peHydration         = L("report.sick.pe.hydration")
+                        let peColor             = L("report.sick.pe.color")
+                        let peSkin              = L("report.sick.pe.skin")
+                        let peENT               = L("report.sick.pe.ent")
+                        let peRightEar          = L("report.sick.pe.right_ear")
+                        let peLeftEar           = L("report.sick.pe.left_ear")
+                        let peRightEye          = L("report.sick.pe.right_eye")
+                        let peLeftEye           = L("report.sick.pe.left_eye")
+                        let peHeart             = L("report.sick.pe.heart")
+                        let peLungs             = L("report.sick.pe.lungs")
+                        let peAbdomen           = L("report.sick.pe.abdomen")
+                        let pePeristalsis       = L("report.sick.pe.peristalsis")
+                        let peGenitalia         = L("report.sick.pe.genitalia")
+                        let peNeurological      = L("report.sick.pe.neurological")
+                        let peMusculoskeletal   = L("report.sick.pe.musculoskeletal")
+                        let peLymphNodes        = L("report.sick.pe.lymph_nodes")
+
                         let peNames = [
-                            "General appearance","Hydration","Color","Skin",
-                            "ENT","Right ear","Left ear","Right eye","Left eye",
-                            "Heart","Lungs",
-                            "Abdomen","Peristalsis",
-                            "Genitalia",
-                            "Neurological","Musculoskeletal","Lymph nodes"
+                            peGeneralAppearance, peHydration, peColor, peSkin,
+                            peENT, peRightEar, peLeftEar, peRightEye, peLeftEye,
+                            peHeart, peLungs,
+                            peAbdomen, pePeristalsis,
+                            peGenitalia,
+                            peNeurological, peMusculoskeletal, peLymphNodes
                         ]
                         var valuesByName: [String:String] = [:]
                         for name in peNames {
@@ -778,12 +806,12 @@ final class ReportDataLoader {
                             i += 1
                         }
                         let groupMap: [(String,[String])] = [
-                            ("General", ["General appearance","Hydration","Color","Skin"]),
-                            ("ENT", ["ENT","Right ear","Left ear","Right eye","Left eye"]),
-                            ("Cardiorespiratory", ["Heart","Lungs"]),
-                            ("Abdomen", ["Abdomen","Peristalsis"]),
-                            ("Genitalia", ["Genitalia"]),
-                            ("Neuro / MSK / Lymph", ["Neurological","Musculoskeletal","Lymph nodes"])
+                            (L("report.sick.pe.group.general"), [peGeneralAppearance, peHydration, peColor, peSkin]),
+                            (L("report.sick.pe.group.ent"), [peENT, peRightEar, peLeftEar, peRightEye, peLeftEye]),
+                            (L("report.sick.pe.group.cardiorespiratory"), [peHeart, peLungs]),
+                            (L("report.sick.pe.group.abdomen"), [peAbdomen, pePeristalsis]),
+                            (L("report.sick.pe.group.genitalia"), [peGenitalia]),
+                            (L("report.sick.pe.group.neuro_msk_lymph"), [peNeurological, peMusculoskeletal, peLymphNodes])
                         ]
                         for (group, names) in groupMap {
                             let lines = names.compactMap { n -> String? in
@@ -855,7 +883,15 @@ final class ReportDataLoader {
                                 let val = isNull ? 0 : sqlite3_column_int(stmt, idx)
                                 if val == 1 { items.append(label) }
                             }
-                            f(0,"Asthma"); f(1,"Otitis"); f(2,"UTI"); f(3,"Allergies")
+                            let pmhAsthma    = L("report.sick.pmh.asthma")
+                            let pmhOtitis    = L("report.sick.pmh.otitis")
+                            let pmhUTI       = L("report.sick.pmh.uti")
+                            let pmhAllergies = L("report.sick.pmh.allergies")
+
+                            f(0, pmhAsthma)
+                            f(1, pmhOtitis)
+                            f(2, pmhUTI)
+                            f(3, pmhAllergies)
                             if let cstr = sqlite3_column_text(stmt, 4) {
                                 let s = String(cString: cstr).trimmingCharacters(in: .whitespacesAndNewlines)
                                 if !s.isEmpty { items.append(s) }
@@ -1266,6 +1302,12 @@ final class ReportDataLoader {
 
     // MARK: - Meta builders (WELL)
 
+    // Simple localization helper used throughout this file
+    @inline(__always)
+    private func L(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     // NOTE: keep this NON-@MainActor to match current call sites and avoid actor churn.
     // We also avoid calling the @MainActor debug helper; we use currentBundleDBPath().
     private func buildMetaForWell(visitID: Int) throws -> ReportMeta {
@@ -1502,7 +1544,7 @@ final class ReportDataLoader {
                         // Require at least some response text to consider this valid
                         guard !response.isEmpty else { return nil }
 
-                        let finalModel = model.isEmpty ? "Unknown" : model
+                        let finalModel = model.isEmpty ? L("report.ai.model.unknown") : model
                         return LatestAIInput(
                             model: finalModel,
                             createdAt: createdAt,
@@ -1570,7 +1612,7 @@ final class ReportDataLoader {
                         // Require some response text
                         guard !response.isEmpty else { return nil }
 
-                        let finalModel = model.isEmpty ? "Unknown" : model
+                        let finalModel = model.isEmpty ? L("report.ai.model.unknown") : model
                         return LatestAIInput(
                             model: finalModel,
                             createdAt: createdAt,
@@ -1699,7 +1741,7 @@ final class ReportDataLoader {
                         let comments          = col(idx); idx += 1
 
                         // Title: Date · Visit Type · Age
-                        let visitLabel = visitTypeRaw.isEmpty ? "Well Visit" : (readableVisitType(visitTypeRaw) ?? visitTypeRaw)
+                        let visitLabel = visitTypeRaw.isEmpty ? L("report.previousWell.visitLabel.default") : (readableVisitType(visitTypeRaw) ?? visitTypeRaw)
 
                         // Compute age using an age-safe ISO-like date (YYYY-MM-DD when available); fallback to raw if needed.
                         let ageCalc = visitDateForAge.isEmpty ? "—" : ageString(dobISO: effectiveDobISO, onDateISO: visitDateForAge)
@@ -1708,17 +1750,18 @@ final class ReportDataLoader {
                         // Keep the raw (possibly pretty) date for display; ReportBuilder may reformat if needed.
                         let dateShort = visitDateRaw.isEmpty ? "—" : visitDateRaw
 
-                        let title = [dateShort, visitLabel, age.isEmpty ? nil : "Age \(age)"]
+                        let agePart = age.isEmpty ? nil : String(format: L("report.previousWell.title.agePart"), age)
+                        let title = [dateShort, visitLabel, agePart]
                             .compactMap { $0 }
                             .joined(separator: " · ")
 
                         // Lines (short, prioritized)
                         var lines: [String] = []
-                        if !issues.isEmpty     { lines.append("Issues since last: \(issues)") }
-                        if !problems.isEmpty   { lines.append("Problems: \(problems)") }
-                        if !conclusions.isEmpty { lines.append("Conclusions: \(conclusions)") }
-                        if !parents.isEmpty    { lines.append("Parents’ concerns: \(parents)") }
-                        if !comments.isEmpty   { lines.append("Comments: \(comments)") }
+                        if !issues.isEmpty     { lines.append(String(format: L("report.previousWell.line.issuesSinceLast"), issues)) }
+                        if !problems.isEmpty   { lines.append(String(format: L("report.previousWell.line.problems"), problems)) }
+                        if !conclusions.isEmpty { lines.append(String(format: L("report.previousWell.line.conclusions"), conclusions)) }
+                        if !parents.isEmpty    { lines.append(String(format: L("report.previousWell.line.parentsConcerns"), parents)) }
+                        if !comments.isEmpty   { lines.append(String(format: L("report.previousWell.line.comments"), comments)) }
 
                         // Keep it concise
                         if lines.count > 3 { lines = Array(lines.prefix(3)) }
@@ -2192,7 +2235,7 @@ extension ReportDataLoader {
     private func currentBundleDBPath() throws -> String {
         guard let root = appState.currentBundleURL else {
             throw NSError(domain: "ReportDataLoader", code: 10,
-                          userInfo: [NSLocalizedDescriptionKey: "No active patient bundle opened"])
+                          userInfo: [NSLocalizedDescriptionKey: L("error.bundle.noActivePatientBundle")])
         }
         return root.appendingPathComponent("db.sqlite").path
     }
@@ -2205,7 +2248,7 @@ extension ReportDataLoader {
         let first = reflectString(c, keys: ["firstName", "first_name"])
         let last  = reflectString(c, keys: ["lastName", "last_name"])
         let name  = [first, last].compactMap { $0 }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        return name.isEmpty ? "User #\(c.id)" : name
+        return name.isEmpty ? String(format: L("common.user.number"), c.id) : name
     }
 
     private func basicPatientStrings() -> (name: String, alias: String, mrn: String, dobISO: String, sex: String) {
@@ -2252,18 +2295,26 @@ extension ReportDataLoader {
         let d = comps.day ?? 0
 
         // < 1 month: days only
-        if y == 0 && m == 0 { return "\(max(d, 0))d" }
+        if y == 0 && m == 0 {
+            return String(format: L("report.age.format.days"), max(d, 0))
+        }
 
         // < 6 months: months + days
         if y == 0 && m < 6 {
-            return d > 0 ? "\(m)m \(d)d" : "\(m)m"
+            return d > 0
+            ? String(format: L("report.age.format.monthsDays"), m, d)
+            : String(format: L("report.age.format.months"), m)
         }
 
         // 6–11 months: months only
-        if y == 0 { return "\(m)m" }
+        if y == 0 {
+            return String(format: L("report.age.format.months"), m)
+        }
 
         // ≥ 12 months: years + months
-        return m > 0 ? "\(y)y \(m)m" : "\(y)y"
+        return m > 0
+        ? String(format: L("report.age.format.yearsMonths"), y, m)
+        : String(format: L("report.age.format.years"), y)
     }
 }
 
@@ -2350,8 +2401,8 @@ extension ReportDataLoader {
         func yn(_ raw: String?) -> String? {
             guard let s = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
             let l = s.lowercased()
-            if ["1","true","yes","y"].contains(l) { return "yes" }
-            if ["0","false","no","n"].contains(l) { return "no" }
+            if ["1","true","yes","y"].contains(l) { return L("common.yes") }
+            if ["0","false","no","n"].contains(l) { return L("common.no") }
             return s
         }
         func isYes(_ raw: String?) -> Bool? {
@@ -2404,6 +2455,14 @@ extension ReportDataLoader {
                         #endif
 
                         // --- Build grouped PE lines ---
+                        let gGeneral         = L("report.pe.group.general")
+                        let gHeadEyes        = L("report.pe.group.headEyes")
+                        let gCardioPulses    = L("report.pe.group.cardioPulses")
+                        let gAbdomen         = L("report.pe.group.abdomen")
+                        let gGenitalia       = L("report.pe.group.genitalia")
+                        let gSpineHips       = L("report.pe.group.spineHips")
+                        let gSkin            = L("report.pe.group.skin")
+                        let gNeuroDev        = L("report.pe.group.neuroDevelopment")
                         var groups: [String:[String]] = [:]
                         func add(_ group: String, _ line: String) {
                             groups[group, default: []].append(line)
@@ -2422,84 +2481,91 @@ extension ReportDataLoader {
                             let norm = isYes(row[normalKey])
                             let comment = nonEmpty(row[commentKey ?? ""])
                             if norm != nil || comment != nil {
-                                var line = "\(label): "
-                                if let n = norm { line += n ? "normal" : "abnormal" }
-                                else { line += "—" }
+                                let statusText: String
+                                if let n = norm {
+                                    statusText = n ? L("common.normal") : L("common.abnormal")
+                                } else {
+                                    statusText = "—"
+                                }
+
+                                var line = String(format: L("report.pe.line.labelStatus"), label, statusText)
                                 if let c = comment { line += " — \(c)" }
                                 add(group, line)
                             }
                         }
 
                         // General
-                        addNormal("General", "Trophic", normalKey: "pe_trophic_normal", commentKey: "pe_trophic_comment")
-                        addNormal("General", "Hydration", normalKey: "pe_hydration_normal", commentKey: "pe_hydration_comment")
+                        addNormal(gGeneral, L("report.pe.item.trophic"), normalKey: "pe_trophic_normal", commentKey: "pe_trophic_comment")
+                        addNormal(gGeneral, L("report.pe.item.hydration"), normalKey: "pe_hydration_normal", commentKey: "pe_hydration_comment")
                         if isAllowedPE(["pe_color", "pe_color_comment"]),
                            let color = nonEmpty(row["pe_color"]) ?? nonEmpty(row["pe_color_comment"]) {
-                            add("General", "Color: \(color)")
+                            add(gGeneral, String(format: L("report.pe.line.color"), color))
                         }
-                        addNormal("General", "Tone", normalKey: "pe_tone_normal", commentKey: "pe_tone_comment")
-                        addNormal("General", "Breathing", normalKey: "pe_breathing_normal", commentKey: "pe_breathing_comment")
-                        addNormal("General", "Wakefulness", normalKey: "pe_wakefulness_normal", commentKey: "pe_wakefulness_comment")
+                        addNormal(gGeneral, L("report.pe.item.tone"), normalKey: "pe_tone_normal", commentKey: "pe_tone_comment")
+                        addNormal(gGeneral, L("report.pe.item.breathing"), normalKey: "pe_breathing_normal", commentKey: "pe_breathing_comment")
+                        addNormal(gGeneral, L("report.pe.item.wakefulness"), normalKey: "pe_wakefulness_normal", commentKey: "pe_wakefulness_comment")
 
                         // Head & Eyes
-                        addNormal("Head & Eyes", "Fontanelle", normalKey: "pe_fontanelle_normal", commentKey: "pe_fontanelle_comment")
+                        addNormal(gHeadEyes, L("report.pe.item.fontanelle"), normalKey: "pe_fontanelle_normal", commentKey: "pe_fontanelle_comment")
 
                         // Teeth / dentition (age-gated via CSV)
-                        addNormal("Head & Eyes", "Teeth / dentition", normalKey: "pe_teeth_normal", commentKey: "pe_teeth_comment")
+                        addNormal(gHeadEyes, L("report.pe.item.teethDentition"), normalKey: "pe_teeth_normal", commentKey: "pe_teeth_comment")
                         if isAllowedPE(["pe_teeth_present", "pe_teeth_count"]) {
                             if let present = isYes(row["pe_teeth_present"]) {
-                                add("Head & Eyes", "Teeth present: \(present ? "yes" : "no")")
+                                let ynText = present ? L("common.yes") : L("common.no")
+                                add(gHeadEyes, String(format: L("report.pe.line.teethPresent"), ynText))
                             }
                             if let countStr = nonEmpty(row["pe_teeth_count"]) {
-                                add("Head & Eyes", "Number of teeth: \(countStr)")
+                                add(gHeadEyes, String(format: L("report.pe.line.teethCount"), countStr))
                             }
                         }
 
-                        addNormal("Head & Eyes", "Pupils RR", normalKey: "pe_pupils_rr_normal", commentKey: "pe_pupils_rr_comment")
-                        addNormal("Head & Eyes", "Ocular motility", normalKey: "pe_ocular_motility_normal", commentKey: "pe_ocular_motility_comment")
+                        addNormal(gHeadEyes, L("report.pe.item.pupilsRR"), normalKey: "pe_pupils_rr_normal", commentKey: "pe_pupils_rr_comment")
+                        addNormal(gHeadEyes, L("report.pe.item.ocularMotility"), normalKey: "pe_ocular_motility_normal", commentKey: "pe_ocular_motility_comment")
 
                         // Cardio / Pulses
-                        addNormal("Cardio / Pulses", "Heart sounds", normalKey: "pe_heart_sounds_normal", commentKey: "pe_heart_sounds_comment")
-                        addNormal("Cardio / Pulses", "Femoral pulses", normalKey: "pe_femoral_pulses_normal", commentKey: "pe_femoral_pulses_comment")
+                        addNormal(gCardioPulses, L("report.pe.item.heartSounds"), normalKey: "pe_heart_sounds_normal", commentKey: "pe_heart_sounds_comment")
+                        addNormal(gCardioPulses, L("report.pe.item.femoralPulses"), normalKey: "pe_femoral_pulses_normal", commentKey: "pe_femoral_pulses_comment")
 
                         // Abdomen
                         if isAllowedPE(["pe_abd_mass"]),
                            let massYes = isYes(row["pe_abd_mass"]) {
-                            if massYes { add("Abdomen", "Abdominal mass: present") }
+                            if massYes { add(gAbdomen, L("report.pe.line.abdominalMassPresent")) }
                         }
-                        addNormal("Abdomen", "Liver/Spleen", normalKey: "pe_liver_spleen_normal", commentKey: "pe_liver_spleen_comment")
-                        addNormal("Abdomen", "Umbilic", normalKey: "pe_umbilic_normal", commentKey: "pe_umbilic_comment")
+                        addNormal(gAbdomen, L("report.pe.item.liverSpleen"), normalKey: "pe_liver_spleen_normal", commentKey: "pe_liver_spleen_comment")
+                        addNormal(gAbdomen, L("report.pe.item.umbilic"), normalKey: "pe_umbilic_normal", commentKey: "pe_umbilic_comment")
 
                         // Genitalia
                         if isAllowedPE(["pe_genitalia"]),
                            let gen = nonEmpty(row["pe_genitalia"]) {
-                            add("Genitalia", "Genitalia: \(gen)")
+                            add(gGenitalia, String(format: L("report.pe.line.genitalia"), gen))
                         }
                         if isAllowedPE(["pe_testicles_descended"]),
                            let desc = isYes(row["pe_testicles_descended"]) {
-                            add("Genitalia", "Testicles descended: \(desc ? "yes" : "no")")
+                            let ynText = desc ? L("common.yes") : L("common.no")
+                            add(gGenitalia, String(format: L("report.pe.line.testiclesDescended"), ynText))
                         }
 
                         // Spine & Hips
-                        addNormal("Spine & Hips", "Spine", normalKey: "pe_spine_normal", commentKey: "pe_spine_comment")
-                        addNormal("Spine & Hips", "Hips", normalKey: "pe_hips_normal", commentKey: "pe_hips_comment")
+                        addNormal(gSpineHips, L("report.pe.item.spine"), normalKey: "pe_spine_normal", commentKey: "pe_spine_comment")
+                        addNormal(gSpineHips, L("report.pe.item.hips"), normalKey: "pe_hips_normal", commentKey: "pe_hips_comment")
 
                         // Skin
-                        addNormal("Skin", "Marks", normalKey: "pe_skin_marks_normal", commentKey: "pe_skin_marks_comment")
-                        addNormal("Skin", "Integrity", normalKey: "pe_skin_integrity_normal", commentKey: "pe_skin_integrity_comment")
-                        addNormal("Skin", "Rash", normalKey: "pe_skin_rash_normal", commentKey: "pe_skin_rash_comment")
+                        addNormal(gSkin, L("report.pe.item.marks"), normalKey: "pe_skin_marks_normal", commentKey: "pe_skin_marks_comment")
+                        addNormal(gSkin, L("report.pe.item.integrity"), normalKey: "pe_skin_integrity_normal", commentKey: "pe_skin_integrity_comment")
+                        addNormal(gSkin, L("report.pe.item.rash"), normalKey: "pe_skin_rash_normal", commentKey: "pe_skin_rash_comment")
 
                         // Neuro / Development
                         // Insert Muscle tone first, using same config as e.g. "Hydration" or "Spine"
-                        addNormal("Neuro / Development", "Muscle tone", normalKey: "pe_tone_normal", commentKey: "pe_tone_comment")
-                        addNormal("Neuro / Development", "Moro", normalKey: "pe_moro_normal", commentKey: "pe_moro_comment")
-                        addNormal("Neuro / Development", "Primitive neuro", normalKey: "pe_primitive_neuro_normal", commentKey: "pe_primitive_neuro_comment")
-                        addNormal("Neuro / Development", "Hands in fist", normalKey: "pe_hands_fist_normal", commentKey: "pe_hands_fist_comment")
-                        addNormal("Neuro / Development", "Symmetry", normalKey: "pe_symmetry_normal", commentKey: "pe_symmetry_comment")
-                        addNormal("Neuro / Development", "Follows midline", normalKey: "pe_follows_midline_normal", commentKey: "pe_follows_midline_comment")
+                        addNormal(gNeuroDev, L("report.pe.item.muscleTone"), normalKey: "pe_tone_normal", commentKey: "pe_tone_comment")
+                        addNormal(gNeuroDev, L("report.pe.item.moro"), normalKey: "pe_moro_normal", commentKey: "pe_moro_comment")
+                        addNormal(gNeuroDev, L("report.pe.item.primitiveNeuro"), normalKey: "pe_primitive_neuro_normal", commentKey: "pe_primitive_neuro_comment")
+                        addNormal(gNeuroDev, L("report.pe.item.handsInFist"), normalKey: "pe_hands_fist_normal", commentKey: "pe_hands_fist_comment")
+                        addNormal(gNeuroDev, L("report.pe.item.symmetry"), normalKey: "pe_symmetry_normal", commentKey: "pe_symmetry_comment")
+                        addNormal(gNeuroDev, L("report.pe.item.followsMidline"), normalKey: "pe_follows_midline_normal", commentKey: "pe_follows_midline_comment")
 
                         // Emit groups in a stable order
-                        let order = ["General","Head & Eyes","Cardio / Pulses","Abdomen","Genitalia","Spine & Hips","Skin","Neuro / Development"]
+                        let order = [gGeneral, gHeadEyes, gCardioPulses, gAbdomen, gGenitalia, gSpineHips, gSkin, gNeuroDev]
                         for g in order {
                             if let lines = groups[g], !lines.isEmpty {
                                 groupsOut.append((g, lines))
@@ -2520,11 +2586,11 @@ extension ReportDataLoader {
                             var stoolLine: String
                             switch statusRaw {
                             case "abnormal":
-                                stoolLine = "Stools: abnormal pattern reported"
+                                stoolLine = L("report.well.problem.stools.abnormalPattern")
                             case "hard":
-                                stoolLine = "Stools: hard / constipated"
+                                stoolLine = L("report.well.problem.stools.hardConstipated")
                             default:
-                                stoolLine = "Stools: \(statusRaw)"
+                                stoolLine = String(format: L("report.well.problem.stools.other"), statusRaw)
                             }
                             if let c = nonEmpty(row["poop_comment"]) {
                                 stoolLine += " — \(c)"
@@ -2590,78 +2656,78 @@ extension ReportDataLoader {
         // Gating (age/visit-type) is entirely handled by `allowedCols`.
         let fieldMap: [String: MappedField] = [
             // FEEDING NOTES & QUALITATIVE FIELDS
-            "feeding":              .init(section: .feeding, prettyKey: "Notes", kind: .plain),
-            "breastfeeding":        .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
-            "feeding_breast":       .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
-            "breast_milk":          .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
-            "nursing":              .init(section: .feeding, prettyKey: "Breastfeeding", kind: .plain),
-            "formula":              .init(section: .feeding, prettyKey: "Formula", kind: .plain),
-            "feeding_formula":      .init(section: .feeding, prettyKey: "Formula", kind: .plain),
-            "solids":               .init(section: .feeding, prettyKey: "Solids", kind: .plain),
-            "feeding_solids":       .init(section: .feeding, prettyKey: "Solids", kind: .plain),
-            "complementary_feeding":.init(section: .feeding, prettyKey: "Solids", kind: .plain),
-            "weaning":              .init(section: .feeding, prettyKey: "Solids", kind: .plain),
+            "feeding":              .init(section: .feeding, prettyKey: L("report.well.current.label.notes"), kind: .plain),
+            "breastfeeding":        .init(section: .feeding, prettyKey: L("report.well.current.label.breastfeeding"), kind: .plain),
+            "feeding_breast":       .init(section: .feeding, prettyKey: L("report.well.current.label.breastfeeding"), kind: .plain),
+            "breast_milk":          .init(section: .feeding, prettyKey: L("report.well.current.label.breastfeeding"), kind: .plain),
+            "nursing":              .init(section: .feeding, prettyKey: L("report.well.current.label.breastfeeding"), kind: .plain),
+            "formula":              .init(section: .feeding, prettyKey: L("report.well.current.label.formula"), kind: .plain),
+            "feeding_formula":      .init(section: .feeding, prettyKey: L("report.well.current.label.formula"), kind: .plain),
+            "solids":               .init(section: .feeding, prettyKey: L("report.well.current.label.solids"), kind: .plain),
+            "feeding_solids":       .init(section: .feeding, prettyKey: L("report.well.current.label.solids"), kind: .plain),
+            "complementary_feeding":.init(section: .feeding, prettyKey: L("report.well.current.label.solids"), kind: .plain),
+            "weaning":              .init(section: .feeding, prettyKey: L("report.well.current.label.solids"), kind: .plain),
 
-            "feeding_comment":      .init(section: .feeding, prettyKey: "Feeding Comment", kind: .plain),
-            "milk_types":           .init(section: .feeding, prettyKey: "Milk Types", kind: .plain),
-            "food_variety_quality": .init(section: .feeding, prettyKey: "Food Variety / Quantity", kind: .plain),
-            "dairy_amount_text":    .init(section: .feeding, prettyKey: "Dairy Amount", kind: .plain),
-            "feeding_issue":        .init(section: .feeding, prettyKey: "Feeding Issue", kind: .plain),
+            "feeding_comment":      .init(section: .feeding, prettyKey: L("report.well.current.label.feedingComment"), kind: .plain),
+            "milk_types":           .init(section: .feeding, prettyKey: L("report.well.current.label.milkTypes"), kind: .plain),
+            "food_variety_quality": .init(section: .feeding, prettyKey: L("report.well.current.label.foodVarietyQuantity"), kind: .plain),
+            "dairy_amount_text":    .init(section: .feeding, prettyKey: L("report.well.current.label.dairyAmount"), kind: .plain),
+            "feeding_issue":        .init(section: .feeding, prettyKey: L("report.well.current.label.feedingIssue"), kind: .plain),
 
             // FREQUENCY & VOLUMES
-            "feed_freq_per_24h":    .init(section: .feeding, prettyKey: "Feeds / 24h", kind: .plain),
-            "feeds_per_24h":        .init(section: .feeding, prettyKey: "Feeds / 24h", kind: .plain),
-            "feeds_per_day":        .init(section: .feeding, prettyKey: "Feeds / 24h", kind: .plain),
-            "feed_volume_ml":       .init(section: .feeding, prettyKey: "Feed Volume (ml)", kind: .numeric(unit: "ml")),
-            "est_total_ml":         .init(section: .feeding, prettyKey: "Estimated Total (ml/24h)", kind: .numeric(unit: "ml")),
-            "est_ml_per_kg_24h":    .init(section: .feeding, prettyKey: "Estimated (ml/kg/24h)", kind: .numeric(unit: "ml/kg/24h")),
+            "feed_freq_per_24h":    .init(section: .feeding, prettyKey: L("report.well.current.label.feedsPer24h"), kind: .plain),
+            "feeds_per_24h":        .init(section: .feeding, prettyKey: L("report.well.current.label.feedsPer24h"), kind: .plain),
+            "feeds_per_day":        .init(section: .feeding, prettyKey: L("report.well.current.label.feedsPer24h"), kind: .plain),
+            "feed_volume_ml":       .init(section: .feeding, prettyKey: L("report.well.current.label.feedVolumeML"), kind: .numeric(unit: "ml")),
+            "est_total_ml":         .init(section: .feeding, prettyKey: L("report.well.current.label.estimatedTotalML24h"), kind: .numeric(unit: "ml")),
+            "est_ml_per_kg_24h":    .init(section: .feeding, prettyKey: L("report.well.current.label.estimatedMLkg24h"), kind: .numeric(unit: "ml/kg/24h")),
 
             // FEEDING BOOLEANS / FLAGS
-            "regurgitation":        .init(section: .feeding, prettyKey: "Regurgitation", kind: .yesNo),
-            "wakes_for_feeds":      .init(section: .feeding, prettyKey: "Wakes for Feeds", kind: .yesNo),
-            "night_feeds":          .init(section: .feeding, prettyKey: "Wakes for Feeds", kind: .yesNo),
-            "wakes_to_feed":        .init(section: .feeding, prettyKey: "Wakes for Feeds", kind: .yesNo),
-            "expressed_bm":         .init(section: .feeding, prettyKey: "Expressed BM", kind: .yesNo),
+            "regurgitation":        .init(section: .feeding, prettyKey: L("report.well.current.label.regurgitation"), kind: .yesNo),
+            "wakes_for_feeds":      .init(section: .feeding, prettyKey: L("report.well.current.label.wakesForFeeds"), kind: .yesNo),
+            "night_feeds":          .init(section: .feeding, prettyKey: L("report.well.current.label.wakesForFeeds"), kind: .yesNo),
+            "wakes_to_feed":        .init(section: .feeding, prettyKey: L("report.well.current.label.wakesForFeeds"), kind: .yesNo),
+            "expressed_bm":         .init(section: .feeding, prettyKey: L("report.well.current.label.expressedBM"), kind: .yesNo),
 
             // SOLID FOODS DETAIL
-            "solid_food_started":   .init(section: .feeding, prettyKey: "Solid Foods Started", kind: .yesNo),
-            "solid_food_start_date":.init(section: .feeding, prettyKey: "Solid Food Start", kind: .plain),
-            "solid_food_quality":   .init(section: .feeding, prettyKey: "Solid Food Quality", kind: .plain),
-            "solid_food_comment":   .init(section: .feeding, prettyKey: "Solid Food Notes", kind: .plain),
+            "solid_food_started":   .init(section: .feeding, prettyKey: L("report.well.current.label.solidFoodsStarted"), kind: .yesNo),
+            "solid_food_start_date":.init(section: .feeding, prettyKey: L("report.well.current.label.solidFoodStart"), kind: .plain),
+            "solid_food_quality":   .init(section: .feeding, prettyKey: L("report.well.current.label.solidFoodQuality"), kind: .plain),
+            "solid_food_comment":   .init(section: .feeding, prettyKey: L("report.well.current.label.solidFoodNotes"), kind: .plain),
 
             // STOOL / STOOL PATTERN
-            "poop_status":         .init(section: .stool, prettyKey: "Stool pattern", kind: .plain),
-            "poop_comment":        .init(section: .stool, prettyKey: "Stool comment", kind: .plain),
+            "poop_status":         .init(section: .stool, prettyKey: L("report.well.current.label.stoolPattern"), kind: .plain),
+            "poop_comment":        .init(section: .stool, prettyKey: L("report.well.current.label.stoolComment"), kind: .plain),
 
             // SUPPLEMENTATION
-            "supplementation":      .init(section: .supplementation, prettyKey: "Notes", kind: .plain),
-            "supplements":          .init(section: .supplementation, prettyKey: "Notes", kind: .plain),
-            "vitamin_d":            .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
-            "vit_d":                .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
-            "vit_d_supplement":     .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
-            "vitamin_d_iu":         .init(section: .supplementation, prettyKey: "Vitamin D", kind: .plain),
-            "vitamin_d_given":      .init(section: .supplementation, prettyKey: "Vitamin D Given", kind: .yesNo),
-            "iron":                 .init(section: .supplementation, prettyKey: "Iron", kind: .plain),
-            "ferrous":              .init(section: .supplementation, prettyKey: "Iron", kind: .plain),
-            "others":               .init(section: .supplementation, prettyKey: "Other", kind: .plain),
-            "other_supplements":    .init(section: .supplementation, prettyKey: "Other", kind: .plain),
+            "supplementation":      .init(section: .supplementation, prettyKey: L("report.well.current.label.notes"), kind: .plain),
+            "supplements":          .init(section: .supplementation, prettyKey: L("report.well.current.label.notes"), kind: .plain),
+            "vitamin_d":            .init(section: .supplementation, prettyKey: L("report.well.current.label.vitaminD"), kind: .plain),
+            "vit_d":                .init(section: .supplementation, prettyKey: L("report.well.current.label.vitaminD"), kind: .plain),
+            "vit_d_supplement":     .init(section: .supplementation, prettyKey: L("report.well.current.label.vitaminD"), kind: .plain),
+            "vitamin_d_iu":         .init(section: .supplementation, prettyKey: L("report.well.current.label.vitaminD"), kind: .plain),
+            "vitamin_d_given":      .init(section: .supplementation, prettyKey: L("report.well.current.label.vitaminDGiven"), kind: .yesNo),
+            "iron":                 .init(section: .supplementation, prettyKey: L("report.well.current.label.iron"), kind: .plain),
+            "ferrous":              .init(section: .supplementation, prettyKey: L("report.well.current.label.iron"), kind: .plain),
+            "others":               .init(section: .supplementation, prettyKey: L("report.well.current.label.other"), kind: .plain),
+            "other_supplements":    .init(section: .supplementation, prettyKey: L("report.well.current.label.other"), kind: .plain),
 
             // SLEEP CORE FIELDS
-            "sleep":                .init(section: .sleep, prettyKey: "Notes", kind: .plain),
-            "sleep_hours":          .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
-            "sleep_total_hours":    .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
-            "sleep_total":          .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
-            "sleep_hours_text":     .init(section: .sleep, prettyKey: "Total hours", kind: .plain),
-            "naps":                 .init(section: .sleep, prettyKey: "Naps", kind: .plain),
-            "daytime_naps":         .init(section: .sleep, prettyKey: "Naps", kind: .plain),
-            "night_wakings":        .init(section: .sleep, prettyKey: "Night wakings", kind: .plain),
-            "night_wakes":          .init(section: .sleep, prettyKey: "Night wakings", kind: .plain),
-            "night_awakenings":     .init(section: .sleep, prettyKey: "Night wakings", kind: .plain),
-            "sleep_quality":        .init(section: .sleep, prettyKey: "Quality", kind: .plain),
-            "sleep_regular":        .init(section: .sleep, prettyKey: "Regular", kind: .plain),
-            "sleep_snoring":        .init(section: .sleep, prettyKey: "Snoring", kind: .yesNo),
-            "sleep_issue_reported": .init(section: .sleep, prettyKey: "Issue Reported", kind: .yesNo),
-            "sleep_issue_text":     .init(section: .sleep, prettyKey: "Issue Notes", kind: .plain)
+            "sleep":                .init(section: .sleep, prettyKey: L("report.well.current.label.notes"), kind: .plain),
+            "sleep_hours":          .init(section: .sleep, prettyKey: L("report.well.current.label.totalHours"), kind: .plain),
+            "sleep_total_hours":    .init(section: .sleep, prettyKey: L("report.well.current.label.totalHours"), kind: .plain),
+            "sleep_total":          .init(section: .sleep, prettyKey: L("report.well.current.label.totalHours"), kind: .plain),
+            "sleep_hours_text":     .init(section: .sleep, prettyKey: L("report.well.current.label.totalHours"), kind: .plain),
+            "naps":                 .init(section: .sleep, prettyKey: L("report.well.current.label.naps"), kind: .plain),
+            "daytime_naps":         .init(section: .sleep, prettyKey: L("report.well.current.label.naps"), kind: .plain),
+            "night_wakings":        .init(section: .sleep, prettyKey: L("report.well.current.label.nightWakings"), kind: .plain),
+            "night_wakes":          .init(section: .sleep, prettyKey: L("report.well.current.label.nightWakings"), kind: .plain),
+            "night_awakenings":     .init(section: .sleep, prettyKey: L("report.well.current.label.nightWakings"), kind: .plain),
+            "sleep_quality":        .init(section: .sleep, prettyKey: L("report.well.current.label.sleepQuality"), kind: .plain),
+            "sleep_regular":        .init(section: .sleep, prettyKey: L("report.well.current.label.sleepRegular"), kind: .plain),
+            "sleep_snoring":        .init(section: .sleep, prettyKey: L("report.well.current.label.sleepSnoring"), kind: .yesNo),
+            "sleep_issue_reported": .init(section: .sleep, prettyKey: L("report.well.current.label.sleepIssueReported"), kind: .yesNo),
+            "sleep_issue_text":     .init(section: .sleep, prettyKey: L("report.well.current.label.sleepIssueNotes"), kind: .plain)
         ]
 
         func renderValue(_ raw: String, kind: ValueKind) -> String? {
@@ -2673,8 +2739,8 @@ extension ReportDataLoader {
                 return trimmed
             case .yesNo:
                 let l = trimmed.lowercased()
-                if ["1","true","yes","y"].contains(l) { return "yes" }
-                if ["0","false","no","n"].contains(l) { return "no" }
+                if ["1","true","yes","y"].contains(l) { return L("common.yes") }
+                if ["0","false","no","n"].contains(l) { return L("common.no") }
                 return trimmed
             case .numeric(let unit):
                 if let d = Double(trimmed) {
@@ -2876,13 +2942,13 @@ extension ReportDataLoader {
 
                         // Core measurements
                         if let s = fmtNumber(row["weight_today_kg"], unit: "kg") {
-                            out["Weight"] = s
+                            out[L("report.well.measurement.weight")] = s
                         }
                         if let s = fmtNumber(row["length_today_cm"], unit: "cm") {
-                            out["Length"] = s
+                            out[L("report.well.measurement.length")] = s
                         }
                         if let s = fmtNumber(row["head_circ_today_cm"], unit: "cm") {
-                            out["Head Circumference"] = s
+                            out[L("report.well.measurement.headCircumference")] = s
                         }
 
                         // Weight gain since discharge
@@ -2890,10 +2956,11 @@ extension ReportDataLoader {
                         let dD = fmtInt(row["delta_days_since_discharge"])
                         if let dw = dW {
                             let sign = dw > 0 ? "+" : ""
+                            let label = L("report.well.measurement.weightGainSinceDischarge")
                             if let dd = dD {
-                                out["Weight gain since discharge"] = "\(sign)\(dw) g over \(dd) days"
+                                out[label] = String(format: L("report.well.measurement.weightGain.value.overDays"), sign, dw, dd)
                             } else {
-                                out["Weight gain since discharge"] = "\(sign)\(dw) g"
+                                out[label] = String(format: L("report.well.measurement.weightGain.value.simple"), sign, dw)
                             }
                         }
                     }
@@ -3244,44 +3311,38 @@ extension ReportDataLoader {
 
                         // Weight
                         if let w = val("weight_kg") ?? val("wt_kg") ?? val("weight") {
-                            if w.contains("kg") {
-                                parts.append("Weight: \(w)")
-                            } else {
-                                parts.append("Weight: \(w) kg")
-                            }
+                            let v = w.contains("kg") ? w : "\(w) kg"
+                            parts.append(String(format: L("report.vitals.part.weight"), v))
                         }
 
                         // Length / Height
                         if let l = val("length_cm") ?? val("height_cm") ?? val("stature_cm") ?? val("length") {
-                            if l.contains("cm") {
-                                parts.append("Height/Length: \(l)")
-                            } else {
-                                parts.append("Height/Length: \(l) cm")
-                            }
+                            let v = l.contains("cm") ? l : "\(l) cm"
+                            parts.append(String(format: L("report.vitals.part.heightLength"), v))
                         }
 
                         // Temperature (°C)
                         if let t = val("temp_c") ?? val("temperature_c") ?? val("temperature") ?? val("temp") {
-                            parts.append("Temp: \(t)\u{00A0}°C")
+                            let v = "\(t)\u{00A0}°C"
+                            parts.append(String(format: L("report.vitals.part.temp"), v))
                         }
 
                         // Heart rate
                         if let hr = val("heart_rate") ?? val("hr") ?? val("pulse") {
-                            parts.append("HR: \(hr)\u{00A0}bpm")
+                            let v = "\(hr)\u{00A0}bpm"
+                            parts.append(String(format: L("report.vitals.part.hr"), v))
                         }
 
                         // Respiratory rate
                         if let rr = val("resp_rate") ?? val("rr") ?? val("respiratory_rate") {
-                            parts.append("RR: \(rr)/min")
+                            let v = "\(rr)/min"
+                            parts.append(String(format: L("report.vitals.part.rr"), v))
                         }
 
                         // SpO2
                         if let spo2 = val("spo2") ?? val("SpO2") ?? val("spO2") ?? val("oxygen_saturation") {
-                            if spo2.contains("%") {
-                                parts.append("SpO₂: \(spo2)")
-                            } else {
-                                parts.append("SpO₂: \(spo2)%")
-                            }
+                            let v = spo2.contains("%") ? spo2 : "\(spo2)%"
+                            parts.append(String(format: L("report.vitals.part.spo2"), v))
                         }
 
                         // Blood pressure  ✅ now includes bp_systolic / bp_diastolic
@@ -3293,12 +3354,13 @@ extension ReportDataLoader {
                             bpPieces.append(dia)
                         }
                         if !bpPieces.isEmpty {
-                            parts.append("BP: \(bpPieces.joined(separator: "/")) mmHg")
+                            let v = "\(bpPieces.joined(separator: "/")) mmHg"
+                            parts.append(String(format: L("report.vitals.part.bp"), v))
                         }
 
                         // When measured
                         if let when = val("measured_at") ?? val("recorded_at") ?? val("date") {
-                            parts.append("Measured: \(when)")
+                            parts.append(String(format: L("report.vitals.part.measured"), when))
                         }
 
                         if !parts.isEmpty {

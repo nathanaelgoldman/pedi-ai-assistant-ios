@@ -5,8 +5,14 @@
 //  Created by yunastic on 11/5/25.
 //
 
+
 import Foundation
 import AppKit
+
+// Local helper (this file is used from Reports and may not see UI-level helpers).
+fileprivate func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
 
 /// Renders WHO growth charts (0–24 months) for the Well Visit report.
 /// - Loads WHO CSVs from `Resources/WHO/` (file names like `wfa_0_24m_M.csv`)
@@ -40,19 +46,19 @@ final class ReportGrowthRenderer {
         let lhfaCurves = (try? loadWHO(kind: .lhfa, sex: sex)) ?? fallbackFlatCurves()
         let hcfaCurves = (try? loadWHO(kind: .hcfa, sex: sex)) ?? fallbackFlatCurves()
 
-        let wfaImg = renderChart(title: "Weight‑for‑Age (0–60 m)",
+        let wfaImg = renderChart(title: L("report.growth.title.wfa_0_60m"),
                                  yLabel: "kg",
                                  curves: wfaCurves,
                                  points: series.wfa,
                                  size: clamped)
 
-        let lhfaImg = renderChart(title: "Length/Height‑for‑Age (0–60 m)",
+        let lhfaImg = renderChart(title: L("report.growth.title.lhfa_0_60m"),
                                   yLabel: "cm",
                                   curves: lhfaCurves,
                                   points: series.lhfa,
                                   size: clamped)
 
-        let hcfaImg = renderChart(title: "Head Circumference‑for‑Age (0–60 m)",
+        let hcfaImg = renderChart(title: L("report.growth.title.hcfa_0_60m"),
                                   yLabel: "cm",
                                   curves: hcfaCurves,
                                   points: series.hcfa,
@@ -107,9 +113,10 @@ final class ReportGrowthRenderer {
             #if DEBUG
             print("[ReportGrowthRenderer] WHO CSV not found for \(kind.rawValue) sex=\(sex == .male ? "M" : "F") in bundle paths {WHO/, who/, Resources/WHO/, root}. Falling back to flat curves.")
             #endif
+            let sexMarker = (sex == .male ? "M" : "F")
             throw NSError(domain: "ReportGrowthRenderer",
                           code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "WHO CSV not found for \(kind.rawValue) \(sex == .male ? "M" : "F")"])
+                          userInfo: [NSLocalizedDescriptionKey: String(format: L("report.growth.error.who_csv_not_found_fmt"), kind.rawValue, sexMarker)])
         }
 
         let raw = try String(contentsOf: url, encoding: .utf8)
@@ -127,7 +134,7 @@ final class ReportGrowthRenderer {
             #endif
             throw NSError(domain: "ReportGrowthRenderer",
                           code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "Bad WHO header in \(url.lastPathComponent)"])
+                          userInfo: [NSLocalizedDescriptionKey: String(format: L("report.growth.error.bad_header_fmt"), url.lastPathComponent)])
         }
 
         var ages: [Double] = []
@@ -395,7 +402,7 @@ final class ReportGrowthRenderer {
             s.draw(at: CGPoint(x: xx, y: yy))
         }
         // X axis title (centered), placed below labels with extra gap
-        let xAxis = NSAttributedString(string: "Age (months)", attributes: labelAttrs)
+        let xAxis = NSAttributedString(string: L("report.growth.axis.age_months"), attributes: labelAttrs)
         let xSize = xAxis.size()
         let xAxisY = plot.minY - (xLabelYOffset + 8 + xSize.height)
         xAxis.draw(at: CGPoint(x: plot.midX - xSize.width/2, y: xAxisY))
@@ -481,13 +488,13 @@ final class ReportGrowthRenderer {
     }
 
     private static func drawLegend(in plot: CGRect, style: Style) {
-        let items: [(String, NSColor, [CGFloat]?)] = [
-            ("P3",  style.curveP3,  [2,3]),
-            ("P15", style.curveP15, [4,3]),
-            ("P50", style.curveP50, nil),
-            ("P85", style.curveP85, [4,3]),
-            ("P97", style.curveP97, [2,3]),
-            ("Patient", style.pointColor, nil)
+        let items: [(id: String, label: String, color: NSColor, dash: [CGFloat]?)] = [
+            (id: "p3",  label: "P3",  color: style.curveP3,  dash: [2,3]),
+            (id: "p15", label: "P15", color: style.curveP15, dash: [4,3]),
+            (id: "p50", label: "P50", color: style.curveP50, dash: nil),
+            (id: "p85", label: "P85", color: style.curveP85, dash: [4,3]),
+            (id: "p97", label: "P97", color: style.curveP97, dash: [2,3]),
+            (id: "patient", label: L("report.growth.legend.patient"), color: style.pointColor, dash: nil)
         ]
 
         let padding: CGFloat = 6
@@ -498,7 +505,7 @@ final class ReportGrowthRenderer {
             .font: style.legendFont,
             .foregroundColor: style.legendText
         ]
-        let maxLabelW = items.map { NSAttributedString(string: $0.0, attributes: textAttrs).size().width }.max() ?? 0
+        let maxLabelW = items.map { NSAttributedString(string: $0.label, attributes: textAttrs).size().width }.max() ?? 0
         let legendW: CGFloat = padding*2 + swatchW + 8 + ceil(maxLabelW)
         let legendH: CGFloat = CGFloat(items.count) * rowH + padding*2
 
@@ -521,23 +528,23 @@ final class ReportGrowthRenderer {
             // swatch
             let swRect = CGRect(x: box.minX + padding, y: y, width: swatchW, height: 8)
             ctx.saveGState()
-            ctx.setStrokeColor(item.1.cgColor)
+            ctx.setStrokeColor(item.color.cgColor)
             let lw: CGFloat
-            switch item.0 {
-            case "P3", "P97": lw = 1.6
-            case "P15", "P85": lw = 1.3
-            case "P50": lw = 1.0
+            switch item.id {
+            case "p3", "p97": lw = 1.6
+            case "p15", "p85": lw = 1.3
+            case "p50": lw = 1.0
             default: lw = 1.2
             }
             ctx.setLineWidth(lw)
-            if let dash = item.2 { ctx.setLineDash(phase: 0, lengths: dash) }
+            if let dash = item.dash { ctx.setLineDash(phase: 0, lengths: dash) }
             ctx.move(to: CGPoint(x: swRect.minX, y: swRect.midY))
             ctx.addLine(to: CGPoint(x: swRect.maxX, y: swRect.midY))
             ctx.strokePath()
             ctx.restoreGState()
 
             // label
-            let label = NSAttributedString(string: item.0, attributes: textAttrs)
+            let label = NSAttributedString(string: item.label, attributes: textAttrs)
             label.draw(at: CGPoint(x: swRect.maxX + 8, y: swRect.minY - 2))
         }
 

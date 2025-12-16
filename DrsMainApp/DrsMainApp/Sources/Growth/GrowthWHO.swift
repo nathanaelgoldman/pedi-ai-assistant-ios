@@ -6,9 +6,27 @@
 //
 import Foundation
 
-enum GrowthWHOError: Error {
+// MARK: - Localization helper
+// Simple NSLocalizedString wrapper with optional String(format:) arguments.
+@inline(__always)
+func L(_ key: String, _ args: CVarArg...) -> String {
+    let format = NSLocalizedString(key, comment: "")
+    if args.isEmpty { return format }
+    return String(format: format, locale: Locale.current, arguments: args)
+}
+
+enum GrowthWHOError: LocalizedError {
     case resourceNotFound(String)
     case csvParseFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .resourceNotFound(let msg):
+            return msg
+        case .csvParseFailed(let msg):
+            return msg
+        }
+    }
 }
 
 final class GrowthWHO {
@@ -21,7 +39,7 @@ final class GrowthWHO {
 
         let file = "\(kind.rawValue)_0_24m_\(sex == .male ? "M" : "F")"
         guard let url = bundle.url(forResource: file, withExtension: "csv", subdirectory: "WHO") else {
-            throw GrowthWHOError.resourceNotFound("WHO/\(file).csv")
+            throw GrowthWHOError.resourceNotFound(L("growth.who.error.resource_not_found", "WHO/\(file).csv"))
         }
 
         let raw = try String(contentsOf: url, encoding: .utf8)
@@ -41,7 +59,7 @@ final class GrowthWHO {
               header.contains("p85"),
               header.contains("p97")
         else {
-            throw GrowthWHOError.csvParseFailed("Bad header in \(file).csv")
+            throw GrowthWHOError.csvParseFailed(L("growth.who.error.bad_header", file))
         }
 
         for line in lines.dropFirst() {
@@ -62,7 +80,7 @@ final class GrowthWHO {
         }
 
         guard ages.count > 1 else {
-            throw GrowthWHOError.csvParseFailed("No data rows in \(file).csv")
+            throw GrowthWHOError.csvParseFailed(L("growth.who.error.no_data_rows", file))
         }
 
         return ReportGrowth.Curves(agesMonths: ages, p3: p3, p15: p15, p50: p50, p85: p85, p97: p97)

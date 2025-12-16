@@ -8,6 +8,10 @@ import AppKit
 
 final class GrowthChartRenderer {
 
+    private static func L(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     struct Style {
         var inset: CGFloat = 36
         var gridColor: NSColor = .quaternaryLabelColor
@@ -95,7 +99,7 @@ final class GrowthChartRenderer {
         // Axis labels (x months)
         let labelAttrs: [NSAttributedString.Key: Any] = [.font: style.labelFont, .foregroundColor: NSColor.secondaryLabelColor]
         for month in stride(from: 0, through: 24, by: 3) {
-            let s = NSAttributedString(string: "\(month)m", attributes: labelAttrs)
+            let s = NSAttributedString(string: "\(month)\(L("report.growth.axis.month_suffix"))", attributes: labelAttrs)
             let p = CGPoint(x: X(Double(month)) - 8, y: plot.minY - 14)
             s.draw(at: p)
         }
@@ -153,18 +157,18 @@ final class GrowthChartRenderer {
     static func renderWFA(curves: ReportGrowth.Curves,
                           points: [ReportGrowth.Point],
                           size: CGSize = CGSize(width: 700, height: 450)) -> NSImage {
-        renderChart(title: "Weight-for-Age (0–24 m)", yLabel: "kg", curves: curves, points: points, size: size)
+        renderChart(title: L("report.growth.title.wfa_0_24m"), yLabel: "kg", curves: curves, points: points, size: size)
     }
 
     static func renderLHFA(curves: ReportGrowth.Curves,
                            points: [ReportGrowth.Point],
                            size: CGSize = CGSize(width: 700, height: 450)) -> NSImage {
-        renderChart(title: "Length/Height-for-Age (0–24 m)", yLabel: "cm", curves: curves, points: points, size: size)
+        renderChart(title: L("report.growth.title.lhfa_0_24m"), yLabel: "cm", curves: curves, points: points, size: size)
     }
 
     static func renderHCFA(curves: ReportGrowth.Curves,
                            points: [ReportGrowth.Point],
                            size: CGSize = CGSize(width: 700, height: 450)) -> NSImage {
-        renderChart(title: "Head Circumference-for-Age (0–24 m)", yLabel: "cm", curves: curves, points: points, size: size)
+        renderChart(title: L("report.growth.title.hcfa_0_24m"), yLabel: "cm", curves: curves, points: points, size: size)
     }
 }
