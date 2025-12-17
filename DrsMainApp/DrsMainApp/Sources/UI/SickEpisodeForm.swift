@@ -700,6 +700,177 @@ struct SickEpisodeForm: View {
         }
     }
 
+    // MARK: - Choice localization (display only)
+    /// Normalizes choice values for robust display-time localization.
+    /// We keep stored values stable, but strip common invisible/formatting characters that can
+    /// prevent switch-case matching (NBSP, zero-width spaces, BOM) and normalize whitespace.
+    private func normalizeChoiceValue(_ raw: String) -> String {
+        var s = raw.precomposedStringWithCanonicalMapping
+
+        // Replace NBSP with regular space.
+        s = s.replacingOccurrences(of: "\u{00A0}", with: " ")
+
+        // Remove zero-width and formatting characters that can sneak into stored values.
+        let forbiddenScalars: Set<Unicode.Scalar> = [
+            "\u{200B}", // ZERO WIDTH SPACE
+            "\u{200C}", // ZERO WIDTH NON-JOINER
+            "\u{200D}", // ZERO WIDTH JOINER
+            "\u{2060}", // WORD JOINER
+            "\u{FEFF}"  // ZERO WIDTH NO-BREAK SPACE / BOM
+        ]
+        s.unicodeScalars.removeAll { forbiddenScalars.contains($0) }
+
+        // Collapse multiple whitespace into single spaces.
+        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+
+        // Trim.
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Maps stable stored choice values (English “codes”) to localized display strings.
+    /// IMPORTANT: Do not change the underlying stored values; only localize at display-time.
+    private func sickChoiceText(_ raw: String) -> String {
+        let s = normalizeChoiceValue(raw)
+        switch s {
+        // Complaints
+        case "Fever": return NSLocalizedString("sick_episode_form.choice.fever", comment: "SickEpisodeForm choice")
+        case "Cough": return NSLocalizedString("sick_episode_form.choice.cough", comment: "SickEpisodeForm choice")
+        case "Runny nose": return NSLocalizedString("sick_episode_form.choice.runny_nose", comment: "SickEpisodeForm choice")
+        case "Diarrhea": return NSLocalizedString("sick_episode_form.choice.diarrhea", comment: "SickEpisodeForm choice")
+        case "Vomiting": return NSLocalizedString("sick_episode_form.choice.vomiting", comment: "SickEpisodeForm choice")
+        case "Rash": return NSLocalizedString("sick_episode_form.choice.rash", comment: "SickEpisodeForm choice")
+        case "Abdominal pain": return NSLocalizedString("sick_episode_form.choice.abdominal_pain", comment: "SickEpisodeForm choice")
+        case "Headache": return NSLocalizedString("sick_episode_form.choice.headache", comment: "SickEpisodeForm choice")
+
+        // Common single-choice values
+        case "Normal": return NSLocalizedString("sick_episode_form.choice.normal", comment: "SickEpisodeForm choice")
+        case "Well": return NSLocalizedString("sick_episode_form.choice.well", comment: "SickEpisodeForm choice")
+        case "Tired": return NSLocalizedString("sick_episode_form.choice.tired", comment: "SickEpisodeForm choice")
+        case "Irritable": return NSLocalizedString("sick_episode_form.choice.irritable", comment: "SickEpisodeForm choice")
+        case "Lethargic": return NSLocalizedString("sick_episode_form.choice.lethargic", comment: "SickEpisodeForm choice")
+        case "Decreased": return NSLocalizedString("sick_episode_form.choice.decreased", comment: "SickEpisodeForm choice")
+        case "Refuses": return NSLocalizedString("sick_episode_form.choice.refuses", comment: "SickEpisodeForm choice")
+        case "Fast": return NSLocalizedString("sick_episode_form.choice.fast", comment: "SickEpisodeForm choice")
+        case "Labored": return NSLocalizedString("sick_episode_form.choice.labored", comment: "SickEpisodeForm choice")
+        case "Noisy": return NSLocalizedString("sick_episode_form.choice.noisy", comment: "SickEpisodeForm choice")
+        case "Painful": return NSLocalizedString("sick_episode_form.choice.painful", comment: "SickEpisodeForm choice")
+        case "Foul-smelling": return NSLocalizedString("sick_episode_form.choice.foul_smelling", comment: "SickEpisodeForm choice")
+
+        // Pain locations
+        case "None": return NSLocalizedString("sick_episode_form.choice.none", comment: "SickEpisodeForm choice")
+        case "Abdominal": return NSLocalizedString("sick_episode_form.choice.abdominal", comment: "SickEpisodeForm choice")
+        case "Ear": return NSLocalizedString("sick_episode_form.choice.ear", comment: "SickEpisodeForm choice")
+        case "Throat": return NSLocalizedString("sick_episode_form.choice.throat", comment: "SickEpisodeForm choice")
+        case "Limb": return NSLocalizedString("sick_episode_form.choice.limb", comment: "SickEpisodeForm choice")
+        case "Head": return NSLocalizedString("sick_episode_form.choice.head", comment: "SickEpisodeForm choice")
+        case "Neck": return NSLocalizedString("sick_episode_form.choice.neck", comment: "SickEpisodeForm choice")
+
+        // Stools
+        case "Soft": return NSLocalizedString("sick_episode_form.choice.soft", comment: "SickEpisodeForm choice")
+        case "Liquid": return NSLocalizedString("sick_episode_form.choice.liquid", comment: "SickEpisodeForm choice")
+        case "Hard": return NSLocalizedString("sick_episode_form.choice.hard", comment: "SickEpisodeForm choice")
+        case "Bloody diarrhea": return NSLocalizedString("sick_episode_form.choice.bloody_diarrhea", comment: "SickEpisodeForm choice")
+
+        // Context
+        case "Travel": return NSLocalizedString("sick_episode_form.choice.travel", comment: "SickEpisodeForm choice")
+        case "Sick contact": return NSLocalizedString("sick_episode_form.choice.sick_contact", comment: "SickEpisodeForm choice")
+        case "Daycare": return NSLocalizedString("sick_episode_form.choice.daycare", comment: "SickEpisodeForm choice")
+
+        // Heart / color
+        case "Murmur": return NSLocalizedString("sick_episode_form.choice.murmur", comment: "SickEpisodeForm choice")
+        case "Tachycardia": return NSLocalizedString("sick_episode_form.choice.tachycardia", comment: "SickEpisodeForm choice")
+        case "Bradycardia": return NSLocalizedString("sick_episode_form.choice.bradycardia", comment: "SickEpisodeForm choice")
+        case "Pale": return NSLocalizedString("sick_episode_form.choice.pale", comment: "SickEpisodeForm choice")
+        case "Yellow": return NSLocalizedString("sick_episode_form.choice.yellow", comment: "SickEpisodeForm choice")
+
+        // ENT
+        case "Red throat": return NSLocalizedString("sick_episode_form.choice.red_throat", comment: "SickEpisodeForm choice")
+        case "Ear discharge": return NSLocalizedString("sick_episode_form.choice.ear_discharge", comment: "SickEpisodeForm choice")
+        case "Congested nose": return NSLocalizedString("sick_episode_form.choice.congested_nose", comment: "SickEpisodeForm choice")
+        case "Tonsil deposits": return NSLocalizedString("sick_episode_form.choice.tonsil_deposits", comment: "SickEpisodeForm choice")
+
+        // Ears
+        case "Red TM": return NSLocalizedString("sick_episode_form.choice.red_tm", comment: "SickEpisodeForm choice")
+        case "Red & Bulging with pus": return NSLocalizedString("sick_episode_form.choice.red_bulging_with_pus", comment: "SickEpisodeForm choice")
+        case "Pus in canal": return NSLocalizedString("sick_episode_form.choice.pus_in_canal", comment: "SickEpisodeForm choice")
+        case "Not seen (wax)": return NSLocalizedString("sick_episode_form.choice.not_seen_wax", comment: "SickEpisodeForm choice")
+        case "Red canal": return NSLocalizedString("sick_episode_form.choice.red_canal", comment: "SickEpisodeForm choice")
+
+        // Eyes
+        case "Discharge": return NSLocalizedString("sick_episode_form.choice.discharge", comment: "SickEpisodeForm choice")
+        case "Red": return NSLocalizedString("sick_episode_form.choice.red", comment: "SickEpisodeForm choice")
+        case "Crusty": return NSLocalizedString("sick_episode_form.choice.crusty", comment: "SickEpisodeForm choice")
+        case "Eyelid swelling": return NSLocalizedString("sick_episode_form.choice.eyelid_swelling", comment: "SickEpisodeForm choice")
+
+        // Skin (multi)
+        case "Dry, scaly rash": return NSLocalizedString("sick_episode_form.choice.dry_scaly_rash", comment: "SickEpisodeForm choice")
+        case "Papular rash": return NSLocalizedString("sick_episode_form.choice.papular_rash", comment: "SickEpisodeForm choice")
+        case "Macular rash": return NSLocalizedString("sick_episode_form.choice.macular_rash", comment: "SickEpisodeForm choice")
+        case "Maculopapular rash": return NSLocalizedString("sick_episode_form.choice.maculopapular_rash", comment: "SickEpisodeForm choice")
+        case "Petechiae": return NSLocalizedString("sick_episode_form.choice.petechiae", comment: "SickEpisodeForm choice")
+        case "Purpura": return NSLocalizedString("sick_episode_form.choice.purpura", comment: "SickEpisodeForm choice")
+
+        // Lungs (multi)
+        case "Crackles": return NSLocalizedString("sick_episode_form.choice.crackles", comment: "SickEpisodeForm choice")
+        case "Crackles (R)": return NSLocalizedString("sick_episode_form.choice.crackles_r", comment: "SickEpisodeForm choice")
+        case "Crackles (L)": return NSLocalizedString("sick_episode_form.choice.crackles_l", comment: "SickEpisodeForm choice")
+        case "Wheeze": return NSLocalizedString("sick_episode_form.choice.wheeze", comment: "SickEpisodeForm choice")
+        case "Wheeze (R)": return NSLocalizedString("sick_episode_form.choice.wheeze_r", comment: "SickEpisodeForm choice")
+        case "Wheeze (L)": return NSLocalizedString("sick_episode_form.choice.wheeze_l", comment: "SickEpisodeForm choice")
+        case "Rhonchi": return NSLocalizedString("sick_episode_form.choice.rhonchi", comment: "SickEpisodeForm choice")
+        case "Rhonchi (R)": return NSLocalizedString("sick_episode_form.choice.rhonchi_r", comment: "SickEpisodeForm choice")
+        case "Rhonchi (L)": return NSLocalizedString("sick_episode_form.choice.rhonchi_l", comment: "SickEpisodeForm choice")
+        case "Decreased sounds": return NSLocalizedString("sick_episode_form.choice.decreased_sounds", comment: "SickEpisodeForm choice")
+        case "Decreased sounds (R)": return NSLocalizedString("sick_episode_form.choice.decreased_sounds_r", comment: "SickEpisodeForm choice")
+        case "Decreased sounds (L)": return NSLocalizedString("sick_episode_form.choice.decreased_sounds_l", comment: "SickEpisodeForm choice")
+
+        // Abdomen (multi)
+        case "Tender": return NSLocalizedString("sick_episode_form.choice.tender", comment: "SickEpisodeForm choice")
+        case "Distended": return NSLocalizedString("sick_episode_form.choice.distended", comment: "SickEpisodeForm choice")
+        case "Epigastric pain": return NSLocalizedString("sick_episode_form.choice.epigastric_pain", comment: "SickEpisodeForm choice")
+        case "Periumbilical pain": return NSLocalizedString("sick_episode_form.choice.periumbilical_pain", comment: "SickEpisodeForm choice")
+        case "RLQ pain": return NSLocalizedString("sick_episode_form.choice.rlq_pain", comment: "SickEpisodeForm choice")
+        case "LLQ pain": return NSLocalizedString("sick_episode_form.choice.llq_pain", comment: "SickEpisodeForm choice")
+        case "Hypogastric pain": return NSLocalizedString("sick_episode_form.choice.hypogastric_pain", comment: "SickEpisodeForm choice")
+        case "Guarding": return NSLocalizedString("sick_episode_form.choice.guarding", comment: "SickEpisodeForm choice")
+        case "Rebound": return NSLocalizedString("sick_episode_form.choice.rebound", comment: "SickEpisodeForm choice")
+
+        // Genitalia (multi)
+        case "Swelling": return NSLocalizedString("sick_episode_form.choice.swelling", comment: "SickEpisodeForm choice")
+        case "Redness": return NSLocalizedString("sick_episode_form.choice.redness", comment: "SickEpisodeForm choice")
+
+        // Lymph nodes (multi)
+        case "Cervical": return NSLocalizedString("sick_episode_form.choice.cervical", comment: "SickEpisodeForm choice")
+        case "Submandibular": return NSLocalizedString("sick_episode_form.choice.submandibular", comment: "SickEpisodeForm choice")
+        case "Tender": return NSLocalizedString("sick_episode_form.choice.tender", comment: "SickEpisodeForm choice")
+        case "Generalized": return NSLocalizedString("sick_episode_form.choice.generalized", comment: "SickEpisodeForm choice")
+
+        // Peristalsis
+        case "Increased": return NSLocalizedString("sick_episode_form.choice.increased", comment: "SickEpisodeForm choice")
+
+        // Neuro
+        case "Alert": return NSLocalizedString("sick_episode_form.choice.alert", comment: "SickEpisodeForm choice")
+        case "Sleepy": return NSLocalizedString("sick_episode_form.choice.sleepy", comment: "SickEpisodeForm choice")
+        case "Abnormal tone": return NSLocalizedString("sick_episode_form.choice.abnormal_tone", comment: "SickEpisodeForm choice")
+
+        // MSK
+        case "Limping": return NSLocalizedString("sick_episode_form.choice.limping", comment: "SickEpisodeForm choice")
+        case "Swollen joint": return NSLocalizedString("sick_episode_form.choice.swollen_joint", comment: "SickEpisodeForm choice")
+        case "Pain": return NSLocalizedString("sick_episode_form.choice.pain", comment: "SickEpisodeForm choice")
+
+        // Guidance
+        case "See Plan": return NSLocalizedString("sick_episode_form.choice.see_plan", comment: "SickEpisodeForm choice")
+        case "URI": return NSLocalizedString("sick_episode_form.choice.uri", comment: "SickEpisodeForm choice")
+        case "AGE": return NSLocalizedString("sick_episode_form.choice.age", comment: "SickEpisodeForm choice")
+        case "UTI": return NSLocalizedString("sick_episode_form.choice.uti", comment: "SickEpisodeForm choice")
+        case "Otitis": return NSLocalizedString("sick_episode_form.choice.otitis", comment: "SickEpisodeForm choice")
+
+        default:
+            // Fallback: if we missed a value, show it normalized (still stable).
+            return s
+        }
+    }
+
     // MARK: - DB Helpers (local insert/update)
     private func isoNow() -> String {
         let f = ISO8601DateFormatter()
@@ -1988,7 +2159,7 @@ private func sickChoiceKey(_ raw: String) -> String {
 /// Localized label for a stored choice value.
 /// Falls back to the raw value if the key is missing.
 private func sickChoiceText(_ raw: String) -> String {
-    let key = "sick_episode.choice.\(sickChoiceKey(raw))"
+    let key = "sick_episode_form.choice.\(sickChoiceKey(raw))"
     let localized = NSLocalizedString(key, comment: "SickEpisodeForm choice label")
     return (localized == key) ? raw : localized
 }

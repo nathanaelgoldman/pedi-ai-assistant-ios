@@ -2530,3 +2530,118 @@
 "common.done" = "Terminé";
 "common.cancel" = "Annuler";
 "common.save" = "Enregistrer";
+
+/* SickEpisodeForm — Choice values (display only) */
+"sick_episode_form.choice.fever" = "Fièvre";
+"sick_episode_form.choice.cough" = "Toux";
+"sick_episode_form.choice.runny_nose" = "Nez qui coule";
+"sick_episode_form.choice.diarrhea" = "Diarrhée";
+"sick_episode_form.choice.vomiting" = "Vomissements";
+"sick_episode_form.choice.rash" = "Éruption cutanée";
+"sick_episode_form.choice.abdominal_pain" = "Douleur abdominale";
+"sick_episode_form.choice.headache" = "Céphalée";
+
+"sick_episode_form.choice.normal" = "Normal";
+"sick_episode_form.choice.well" = "Bon état général";
+"sick_episode_form.choice.tired" = "Fatigué";
+"sick_episode_form.choice.irritable" = "Irritable";
+"sick_episode_form.choice.lethargic" = "Léthargique";
+"sick_episode_form.choice.decreased" = "Diminué";
+"sick_episode_form.choice.refuses" = "Refuse";
+"sick_episode_form.choice.fast" = "Rapide";
+"sick_episode_form.choice.labored" = "Laborieuse";
+"sick_episode_form.choice.noisy" = "Bruyante";
+"sick_episode_form.choice.painful" = "Douloureux";
+"sick_episode_form.choice.foul_smelling" = "Malodorant";
+
+"sick_episode_form.choice.none" = "Aucune";
+"sick_episode_form.choice.abdominal" = "Abdominale";
+"sick_episode_form.choice.ear" = "Oreille";
+"sick_episode_form.choice.throat" = "Gorge";
+"sick_episode_form.choice.limb" = "Membre";
+"sick_episode_form.choice.head" = "Tête";
+"sick_episode_form.choice.neck" = "Cou";
+
+"sick_episode_form.choice.soft" = "Molle";
+"sick_episode_form.choice.liquid" = "Liquide";
+"sick_episode_form.choice.hard" = "Dure";
+"sick_episode_form.choice.bloody_diarrhea" = "Diarrhée sanglante";
+
+"sick_episode_form.choice.travel" = "Voyage";
+"sick_episode_form.choice.sick_contact" = "Contact malade";
+"sick_episode_form.choice.daycare" = "Crèche";
+
+"sick_episode_form.choice.murmur" = "Souffle";
+"sick_episode_form.choice.tachycardia" = "Tachycardie";
+"sick_episode_form.choice.bradycardia" = "Bradycardie";
+"sick_episode_form.choice.pale" = "Pâle";
+"sick_episode_form.choice.yellow" = "Jaune";
+
+"sick_episode_form.choice.red_throat" = "Gorge rouge";
+"sick_episode_form.choice.ear_discharge" = "Écoulement auriculaire";
+"sick_episode_form.choice.congested_nose" = "Nez congestionné";
+"sick_episode_form.choice.tonsil_deposits" = "Dépôts amygdaliens";
+
+"sick_episode_form.choice.red_tm" = "TM rouge";
+"sick_episode_form.choice.red_bulging_with_pus" = "Rouge et bombé avec pus";
+"sick_episode_form.choice.pus_in_canal" = "Pus dans le conduit";
+"sick_episode_form.choice.not_seen_wax" = "Non vu (cérumen)";
+"sick_episode_form.choice.red_canal" = "Conduit rouge";
+
+"sick_episode_form.choice.discharge" = "Écoulement";
+"sick_episode_form.choice.red" = "Rouge";
+"sick_episode_form.choice.crusty" = "Croûtes";
+"sick_episode_form.choice.eyelid_swelling" = "Œdème de la paupière";
+
+"sick_episode_form.choice.dry_scaly_rash" = "Éruption sèche et squameuse";
+"sick_episode_form.choice.papular_rash" = "Éruption papuleuse";
+"sick_episode_form.choice.macular_rash" = "Éruption maculeuse";
+"sick_episode_form.choice.maculopapular_rash" = "Éruption maculopapuleuse";
+"sick_episode_form.choice.petechiae" = "Pétéchies";
+"sick_episode_form.choice.purpura" = "Purpura";
+
+"sick_episode_form.choice.crackles" = "Crépitants";
+"sick_episode_form.choice.crackles_r" = "Crépitants (D)";
+"sick_episode_form.choice.crackles_l" = "Crépitants (G)";
+"sick_episode_form.choice.wheeze" = "Sibilants";
+"sick_episode_form.choice.wheeze_r" = "Sibilants (D)";
+"sick_episode_form.choice.wheeze_l" = "Sibilants (G)";
+"sick_episode_form.choice.rhonchi" = "Ronchis";
+"sick_episode_form.choice.rhonchi_r" = "Ronchis (D)";
+"sick_episode_form.choice.rhonchi_l" = "Ronchis (G)";
+"sick_episode_form.choice.decreased_sounds" = "Murmure diminué";
+"sick_episode_form.choice.decreased_sounds_r" = "Murmure diminué (D)";
+"sick_episode_form.choice.decreased_sounds_l" = "Murmure diminué (G)";
+
+"sick_episode_form.choice.tender" = "Douloureux";
+"sick_episode_form.choice.distended" = "Distendu";
+"sick_episode_form.choice.epigastric_pain" = "Douleur épigastrique";
+"sick_episode_form.choice.periumbilical_pain" = "Douleur péri-ombilicale";
+"sick_episode_form.choice.rlq_pain" = "Douleur FID";
+"sick_episode_form.choice.llq_pain" = "Douleur FIG";
+"sick_episode_form.choice.hypogastric_pain" = "Douleur hypogastrique";
+"sick_episode_form.choice.guarding" = "Défense";
+"sick_episode_form.choice.rebound" = "Rebond";
+
+"sick_episode_form.choice.swelling" = "Gonflement";
+"sick_episode_form.choice.redness" = "Rougeur";
+
+"sick_episode_form.choice.cervical" = "Cervical";
+"sick_episode_form.choice.submandibular" = "Sous-mandibulaire";
+"sick_episode_form.choice.generalized" = "Généralisé";
+
+"sick_episode_form.choice.increased" = "Augmenté";
+
+"sick_episode_form.choice.alert" = "Alerte";
+"sick_episode_form.choice.sleepy" = "Somnolent";
+"sick_episode_form.choice.abnormal_tone" = "Tonus anormal";
+
+"sick_episode_form.choice.limping" = "Boiterie";
+"sick_episode_form.choice.swollen_joint" = "Articulation gonflée";
+"sick_episode_form.choice.pain" = "Douleur";
+
+"sick_episode_form.choice.see_plan" = "Voir le plan";
+"sick_episode_form.choice.uri" = "IVRS";
+"sick_episode_form.choice.age" = "GEA";
+"sick_episode_form.choice.uti" = "IVU";
+"sick_episode_form.choice.otitis" = "Otite";
