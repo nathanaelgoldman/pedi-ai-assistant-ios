@@ -177,9 +177,9 @@ struct SickEpisodeForm: View {
                             .font(.system(size: 22))
                         Text(
                             editingEpisodeID == nil
-                            ? NSLocalizedString("New Sick Episode", comment: "Title for creating a new sick episode")
+                            ? NSLocalizedString("sickEpisode.title.new", comment: "Title for creating a new sick episode")
                             : String(
-                                format: NSLocalizedString("Edit Sick Episode #%d", comment: "Title for editing an existing sick episode with its numeric ID"),
+                                format: NSLocalizedString("sickEpisode.title.editWithID", comment: "Title for editing an existing sick episode with its numeric ID"),
                                 editingEpisodeID!
                               )
                         )
@@ -187,9 +187,9 @@ struct SickEpisodeForm: View {
                         Spacer()
                     }
 
-                    // Vitals (moved to top)
+                  // Vitals (moved to top)
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(NSLocalizedString("Vitals", comment: "Section header for vitals"))
+                        SectionHeader(NSLocalizedString("sick_episode_form.vitals.section_title", comment: "Section header for vitals"))
                         // Live vitals classification badges
                         let badges = vitalsBadges()
                         if !badges.isEmpty {
@@ -206,40 +206,40 @@ struct SickEpisodeForm: View {
                             .padding(.bottom, 4)
                         }
                         if activeEpisodeID == nil {
-                            Text(NSLocalizedString("Save the episode first to enable vitals entry.", comment: "Hint explaining that vitals entry is available only after saving the episode"))
+                            Text(NSLocalizedString("sick_episode_form.vitals.save_episode_first_hint", comment: "Hint explaining that vitals entry is available only after saving the episode"))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         } else {
                             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                                 GridRow {
-                                    TextField(NSLocalizedString("Weight (kg)", comment: "Placeholder for weight in kilograms"), text: $weightKgField)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.weight_kg.placeholder", comment: "Placeholder for weight in kilograms"), text: $weightKgField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("Height (cm)", comment: "Placeholder for height in centimeters"), text: $heightCmField)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.height_cm.placeholder", comment: "Placeholder for height in centimeters"), text: $heightCmField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("Head circ (cm)", comment: "Placeholder for head circumference in centimeters"), text: $headCircumferenceField)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.head_circ_cm.placeholder", comment: "Placeholder for head circumference in centimeters"), text: $headCircumferenceField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("Temperature (°C)", comment: "Placeholder for temperature in Celsius"), text: $temperatureCField)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.temperature_c.placeholder", comment: "Placeholder for temperature in Celsius"), text: $temperatureCField)
                                         .textFieldStyle(.roundedBorder)
                                 }
                                 GridRow {
-                                    TextField(NSLocalizedString("HR (bpm)", comment: "Placeholder for heart rate in beats per minute"), text: $heartRateField)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.hr_bpm.placeholder", comment: "Placeholder for heart rate in beats per minute"), text: $heartRateField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("RR (/min)", comment: "Placeholder for respiratory rate per minute"), text: $respiratoryRateField)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.rr_per_min.placeholder", comment: "Placeholder for respiratory rate per minute"), text: $respiratoryRateField)
                                         .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("SpO₂ (%)", comment: "Placeholder for oxygen saturation in percent"), text: $spo2Field)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.spo2_percent.placeholder", comment: "Placeholder for oxygen saturation in percent"), text: $spo2Field)
                                         .textFieldStyle(.roundedBorder)
                                     HStack {
-                                        TextField(NSLocalizedString("BP systolic", comment: "Placeholder for systolic blood pressure"), text: $bpSysField)
+                                        TextField(NSLocalizedString("sick_episode_form.vitals.bp_systolic.placeholder", comment: "Placeholder for systolic blood pressure"), text: $bpSysField)
                                             .textFieldStyle(.roundedBorder)
-                                        TextField(NSLocalizedString("BP diastolic", comment: "Placeholder for diastolic blood pressure"), text: $bpDiaField)
+                                        TextField(NSLocalizedString("sick_episode_form.vitals.bp_diastolic.placeholder", comment: "Placeholder for diastolic blood pressure"), text: $bpDiaField)
                                             .textFieldStyle(.roundedBorder)
                                     }
                                 }
                                 GridRow {
-                                    TextField(NSLocalizedString("Recorded at (ISO8601)", comment: "Placeholder for recorded-at timestamp"), text: $recordedAtField)
+                                    TextField(NSLocalizedString("sick_episode_form.vitals.recorded_at_iso8601.placeholder", comment: "Placeholder for recorded-at timestamp"), text: $recordedAtField)
                                         .textFieldStyle(.roundedBorder)
-                                        .help(NSLocalizedString("Leave blank for current time.", comment: "Help text for recorded-at field"))
-                                    Toggle(NSLocalizedString("Replace previous vitals for this episode", comment: "Option to replace existing vitals for this episode"), isOn: $replacePreviousVitals)
+                                        .help(NSLocalizedString("sick_episode_form.vitals.recorded_at_iso8601.help", comment: "Help text for recorded-at field"))
+                                    Toggle(NSLocalizedString("sick_episode_form.vitals.replace_previous_toggle", comment: "Option to replace existing vitals for this episode"), isOn: $replacePreviousVitals)
                                         .toggleStyle(.switch)
                                         .gridCellColumns(3)
                                 }
@@ -249,7 +249,7 @@ struct SickEpisodeForm: View {
                                 Button {
                                     saveVitalsTapped()
                                 } label: {
-                                    Label(NSLocalizedString("Save vitals", comment: "Button to save vitals"), systemImage: "heart.text.square")
+                                    Label(NSLocalizedString("sick_episode_form.vitals.save_button", comment: "Button to save vitals"), systemImage: "heart.text.square")
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(activeEpisodeID == nil)
@@ -259,7 +259,7 @@ struct SickEpisodeForm: View {
 
                             if !vitalsHistory.isEmpty {
                                 Divider()
-                                Text(NSLocalizedString("Vitals history (oldest → newest)", comment: "Header for vitals history list")).font(.subheadline.bold())
+                                Text(NSLocalizedString("sick_episode_form.vitals.history_title", comment: "Header for vitals history list")).font(.subheadline.bold())
                                 VStack(alignment: .leading, spacing: 6) {
                                     ForEach(vitalsHistory) { row in
                                         HStack {
@@ -286,7 +286,7 @@ struct SickEpisodeForm: View {
                               .disabled(vitalsDeleteSelection == nil)
                           }
                             } else {
-                                Text(NSLocalizedString("No vitals recorded for this episode yet.", comment: "Message when no vitals have been recorded"))
+                                Text(NSLocalizedString("sick_episode_form.vitals.none_message", comment: "Message when no vitals have been recorded"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -300,85 +300,85 @@ struct SickEpisodeForm: View {
                     HStack(alignment: .top, spacing: 20) {
                         // Column A (left)
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(NSLocalizedString("Main Complaint", comment: "Section header for main complaint"))
+                            SectionHeader(NSLocalizedString("sick_episode_form.section.main_complaint", comment: "Section header for main complaint"))
                             complaintBlock
 
-                            SectionHeader(NSLocalizedString("History of Present Illness", comment: "Section header for HPI"))
-                            pickerRow(NSLocalizedString("Appearance", comment: "Label for appearance picker"), $appearance, appearanceChoices)
-                            pickerRow(NSLocalizedString("Feeding", comment: "Label for feeding picker"), $feeding, feedingChoices)
-                            pickerRow(NSLocalizedString("Breathing", comment: "Label for breathing picker"), $breathing, breathingChoices)
-                            pickerRow(NSLocalizedString("Urination", comment: "Label for urination picker"), $urination, urinationChoices)
-                            pickerRow(NSLocalizedString("Pain", comment: "Label for pain picker"), $pain, painChoices)
-                            pickerRow(NSLocalizedString("Stools", comment: "Label for stools picker"), $stools, stoolsChoices)
-                            multiSelectChips(title: NSLocalizedString("Context", comment: "Label for context multiselect"), options: contextChoices, selection: $context)
-                            TextField(NSLocalizedString("HPI summary", comment: "Placeholder for HPI summary"), text: $hpi, axis: .vertical)
+                            SectionHeader(NSLocalizedString("sick_episode_form.section.hpi", comment: "Section header for HPI"))
+                            pickerRow(NSLocalizedString("sick_episode_form.hpi.appearance.label", comment: "Label for appearance picker"), $appearance, appearanceChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.hpi.feeding.label", comment: "Label for feeding picker"), $feeding, feedingChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.hpi.breathing.label", comment: "Label for breathing picker"), $breathing, breathingChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.hpi.urination.label", comment: "Label for urination picker"), $urination, urinationChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.hpi.pain.label", comment: "Label for pain picker"), $pain, painChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.hpi.stools.label", comment: "Label for stools picker"), $stools, stoolsChoices)
+                            multiSelectChips(title: NSLocalizedString("sick_episode_form.hpi.context.label", comment: "Label for context multiselect"), options: contextChoices, selection: $context)
+                            TextField(NSLocalizedString("sick_episode_form.hpi.summary.placeholder", comment: "Placeholder for HPI summary"), text: $hpi, axis: .vertical)
                                 .textFieldStyle(.roundedBorder)
                                 .lineLimit(3...6)
-                            TextField(NSLocalizedString("Duration (hours)", comment: "Placeholder for duration in hours"), text: $duration)
+                            TextField(NSLocalizedString("sick_episode_form.hpi.duration_hours.placeholder", comment: "Placeholder for duration in hours"), text: $duration)
                                 .textFieldStyle(.roundedBorder)
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
 
                         // Column B (right)
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(NSLocalizedString("Physical Examination", comment: "Section header for physical exam"))
-                            pickerRow(NSLocalizedString("General appearance", comment: "Label for general appearance picker"), $generalAppearance, generalChoices)
-                            pickerRow(NSLocalizedString("Hydration", comment: "Label for hydration picker"), $hydration, hydrationChoices)
-                            pickerRow(NSLocalizedString("Color / Hemodynamics", comment: "Label for color/hemodynamics picker"), $color, colorChoices)
-                            multiSelectChips(title: NSLocalizedString("Skin", comment: "Label for skin multiselect"), options: skinOptionsMulti, selection: $skinSet)
-                            multiSelectChips(title: NSLocalizedString("ENT", comment: "Label for ENT multiselect"), options: entChoices, selection: $ent)
-                            pickerRow(NSLocalizedString("Right ear", comment: "Label for right ear picker"), $rightEar, earChoices)
-                            pickerRow(NSLocalizedString("Left ear", comment: "Label for left ear picker"), $leftEar, earChoices)
-                            pickerRow(NSLocalizedString("Right eye", comment: "Label for right eye picker"), $rightEye, eyeChoices)
-                            pickerRow(NSLocalizedString("Left eye", comment: "Label for left eye picker"), $leftEye, eyeChoices)
-                            pickerRow(NSLocalizedString("Heart", comment: "Label for heart picker"), $heart, heartChoices)
-                            multiSelectChips(title: NSLocalizedString("Lungs", comment: "Label for lungs multiselect"), options: lungsOptionsMulti, selection: $lungsSet)
-                            multiSelectChips(title: NSLocalizedString("Abdomen", comment: "Label for abdomen multiselect"), options: abdomenOptionsMulti, selection: $abdomenSet)
-                            pickerRow(NSLocalizedString("Peristalsis", comment: "Label for peristalsis picker"), $peristalsis, peristalsisChoices)
-                            multiSelectChips(title: NSLocalizedString("Genitalia", comment: "Label for genitalia multiselect"), options: genitaliaOptionsMulti, selection: $genitaliaSet)
-                            pickerRow(NSLocalizedString("Neurological", comment: "Label for neurological picker"), $neurological, neuroChoices)
-                            pickerRow(NSLocalizedString("Musculoskeletal", comment: "Label for musculoskeletal picker"), $musculoskeletal, mskChoices)
-                            multiSelectChips(title: NSLocalizedString("Lymph nodes", comment: "Label for lymph nodes multiselect"), options: nodesOptionsMulti, selection: $lymphNodesSet)
+                            SectionHeader(NSLocalizedString("sick_episode_form.section.physical_exam", comment: "Section header for physical exam"))
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.general_appearance.label", comment: "Label for general appearance picker"), $generalAppearance, generalChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.hydration.label", comment: "Label for hydration picker"), $hydration, hydrationChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.color_hemodynamics.label", comment: "Label for color/hemodynamics picker"), $color, colorChoices)
+                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.skin.label", comment: "Label for skin multiselect"), options: skinOptionsMulti, selection: $skinSet)
+                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.ent.label", comment: "Label for ENT multiselect"), options: entChoices, selection: $ent)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.right_ear.label", comment: "Label for right ear picker"), $rightEar, earChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.left_ear.label", comment: "Label for left ear picker"), $leftEar, earChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.right_eye.label", comment: "Label for right eye picker"), $rightEye, eyeChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.left_eye.label", comment: "Label for left eye picker"), $leftEye, eyeChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.heart.label", comment: "Label for heart picker"), $heart, heartChoices)
+                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.lungs.label", comment: "Label for lungs multiselect"), options: lungsOptionsMulti, selection: $lungsSet)
+                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.abdomen.label", comment: "Label for abdomen multiselect"), options: abdomenOptionsMulti, selection: $abdomenSet)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.peristalsis.label", comment: "Label for peristalsis picker"), $peristalsis, peristalsisChoices)
+                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.genitalia.label", comment: "Label for genitalia multiselect"), options: genitaliaOptionsMulti, selection: $genitaliaSet)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.neurological.label", comment: "Label for neurological picker"), $neurological, neuroChoices)
+                            pickerRow(NSLocalizedString("sick_episode_form.pe.musculoskeletal.label", comment: "Label for musculoskeletal picker"), $musculoskeletal, mskChoices)
+                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.lymph_nodes.label", comment: "Label for lymph nodes multiselect"), options: nodesOptionsMulti, selection: $lymphNodesSet)
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
 
                     // Plan
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(NSLocalizedString("Problem Listing", comment: "Section header for problem listing"))
+                        SectionHeader(NSLocalizedString("sick_episode_form.section.problem_listing", comment: "Section header for problem listing"))
                         HStack {
                             Button {
                                 generateProblemList()
                             } label: {
-                                Label(NSLocalizedString("Generate Problem List", comment: "Button to generate problem listing"), systemImage: "brain.head.profile")
+                                Label(NSLocalizedString("sick_episode_form.problem_listing.generate_button", comment: "Button to generate problem listing"), systemImage: "brain.head.profile")
                             }
                             .buttonStyle(.borderedProminent)
-                            .help(NSLocalizedString("Build an aggregated problem listing from patient age/sex, complaint, duration, and abnormal findings.", comment: "Help for generating problem listing"))
+                            .help(NSLocalizedString("sick_episode_form.problem_listing.generate_help", comment: "Help for generating problem listing"))
                             Spacer()
                         }
                         TextEditor(text: $problemListing)
                             .frame(minHeight: 120)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-                        TextField(NSLocalizedString("Complementary investigations", comment: "Placeholder for complementary investigations"), text: $complementaryInvestigations, axis: .vertical)
+                        TextField(NSLocalizedString("sick_episode_form.problem_listing.complementary_investigations.placeholder", comment: "Placeholder for complementary investigations"), text: $complementaryInvestigations, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
-                        TextField(NSLocalizedString("Working diagnosis", comment: "Placeholder for working diagnosis"), text: $diagnosis)
+                        TextField(NSLocalizedString("sick_episode_form.problem_listing.working_diagnosis.placeholder", comment: "Placeholder for working diagnosis"), text: $diagnosis)
                             .textFieldStyle(.roundedBorder)
-                        TextField(NSLocalizedString("ICD-10", comment: "Placeholder for ICD-10 code(s)"), text: $icd10)
+                        TextField(NSLocalizedString("sick_episode_form.problem_listing.icd10.placeholder", comment: "Placeholder for ICD-10 code(s)"), text: $icd10)
                             .textFieldStyle(.roundedBorder)
-                        SectionHeader(NSLocalizedString("Plan", comment: "Section header for plan"))
+                        SectionHeader(NSLocalizedString("sick_episode_form.section.plan", comment: "Section header for plan"))
                         TextEditor(text: $medications)
                             .frame(minHeight: 80)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-                        pickerRow(NSLocalizedString("Anticipatory guidance", comment: "Label for anticipatory guidance picker"), $anticipatoryGuidance, guidanceChoices)
-                        TextField(NSLocalizedString("Comments", comment: "Placeholder for comments"), text: $comments, axis: .vertical)
+                        pickerRow(NSLocalizedString("sick_episode_form.plan.anticipatory_guidance.label", comment: "Label for anticipatory guidance picker"), $anticipatoryGuidance, guidanceChoices)
+                        TextField(NSLocalizedString("sick_episode_form.plan.comments.placeholder", comment: "Placeholder for comments"), text: $comments, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
                     }
                     .padding(.top, 8)
 
                     // AI assistance (JSON flags + API – stubbed for now)
                     VStack(alignment: .leading, spacing: 10) {
-                        SectionHeader(NSLocalizedString("AI Assistance", comment: "Section header for AI assistance"))
-                        Text(NSLocalizedString("JSON guideline flags run locally and do not change the record; AI queries will later be configured in the clinician profile.", comment: "Description of AI assistance behavior"))
+                        SectionHeader(NSLocalizedString("sick_episode_form.section.ai_assistance", comment: "Section header for AI assistance"))
+                        Text(NSLocalizedString("sick_episode_form.ai_assistance.description", comment: "Description of AI assistance behavior"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -386,7 +386,7 @@ struct SickEpisodeForm: View {
                             Button {
                                 triggerGuidelineFlags()
                             } label: {
-                                Label(NSLocalizedString("Check guideline flags", comment: "Button to check JSON guideline flags"), systemImage: "exclamationmark.triangle")
+                                Label(NSLocalizedString("sick_episode_form.ai_assistance.check_guideline_flags.button", comment: "Button to check JSON guideline flags"), systemImage: "exclamationmark.triangle")
                             }
                             .buttonStyle(.bordered)
 
@@ -397,9 +397,9 @@ struct SickEpisodeForm: View {
                                     ProgressView()
                                         .scaleEffect(0.7)
                                         .padding(.trailing, 4)
-                                    Text(NSLocalizedString("Asking AI…", comment: "Status text while AI is running"))
+                                    Text(NSLocalizedString("sick_episode_form.ai_assistance.asking_ai.status", comment: "Status text while AI is running"))
                                 } else {
-                                    Label(NSLocalizedString("Ask AI", comment: "Button to send query to AI"), systemImage: "sparkles")
+                                    Label(NSLocalizedString("sick_episode_form.ai_assistance.ask_ai.button", comment: "Button to send query to AI"), systemImage: "sparkles")
                                 }
                             }
                             .buttonStyle(.borderedProminent)
@@ -408,7 +408,7 @@ struct SickEpisodeForm: View {
                             Button {
                                 previewAIPrompt()
                             } label: {
-                                Label(NSLocalizedString("Preview AI JSON", comment: "Button to preview AI JSON payload"), systemImage: "doc.plaintext")
+                                Label(NSLocalizedString("sick_episode_form.ai_assistance.preview_ai_json.button", comment: "Button to preview AI JSON payload"), systemImage: "doc.plaintext")
                             }
                             .buttonStyle(.bordered)
 
@@ -419,7 +419,7 @@ struct SickEpisodeForm: View {
                         if let icdSuggestion = appState.icd10SuggestionForActiveEpisode,
                            !icdSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(NSLocalizedString("Suggested ICD-10", comment: "Header for suggested ICD-10 code"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.suggested_icd10.header", comment: "Header for suggested ICD-10 code"))
                                     .font(.subheadline.bold())
                                 Text(icdSuggestion)
                                     .font(.caption)
@@ -430,12 +430,12 @@ struct SickEpisodeForm: View {
                                         // Apply the suggestion into the editable ICD-10 field.
                                         icd10 = icdSuggestion
                                     } label: {
-                                        Label(NSLocalizedString("Apply to ICD-10 field", comment: "Button label to apply suggested ICD-10"), systemImage: "arrow.down.doc")
+                                        Label(NSLocalizedString("sick_episode_form.ai_assistance.apply_to_icd10.button", comment: "Button label to apply suggested ICD-10"), systemImage: "arrow.down.doc")
                                     }
                                     .buttonStyle(.bordered)
 
                                     if !icd10.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Text(NSLocalizedString("Current ICD-10 will be replaced.", comment: "Warning about replacing current ICD-10 field"))
+                                        Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_replace_warning", comment: "Warning about replacing current ICD-10 field"))
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
@@ -451,10 +451,10 @@ struct SickEpisodeForm: View {
                         // All ICD-10-like codes detected in the latest AI note
                         if !appState.aiICD10CandidatesForActiveEpisode.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(NSLocalizedString("ICD-10 codes found in AI note", comment: "Header for ICD-10 codes found in AI note"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_candidates.header", comment: "Header for ICD-10 codes found in AI note"))
                                     .font(.subheadline.bold())
 
-                                Text(NSLocalizedString("Tap a code to append it to the ICD-10 field. Duplicates are ignored.", comment: "Instruction for using ICD-10 candidate buttons"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_candidates.instruction", comment: "Instruction for using ICD-10 candidate buttons"))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
 
@@ -484,7 +484,7 @@ struct SickEpisodeForm: View {
 
                         if !appState.aiGuidelineFlagsForActiveEpisode.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(NSLocalizedString("Guideline flags (local JSON)", comment: "Header for guideline flags from local JSON"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.guideline_flags.header", comment: "Header for guideline flags from local JSON"))
                                     .font(.subheadline.bold())
                                 ForEach(appState.aiGuidelineFlagsForActiveEpisode, id: \.self) { flag in
                                     HStack(alignment: .top, spacing: 6) {
@@ -502,13 +502,13 @@ struct SickEpisodeForm: View {
 
                         if !appState.aiSummariesForActiveEpisode.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(NSLocalizedString("AI notes (per provider)", comment: "Header for AI notes per provider"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.ai_notes.header", comment: "Header for AI notes per provider"))
                                     .font(.subheadline.bold())
                                 ForEach(appState.aiSummariesForActiveEpisode.keys.sorted(), id: \.self) { provider in
                                     if let text = appState.aiSummariesForActiveEpisode[provider] {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(provider == "local-stub"
-                                                 ? NSLocalizedString("AI (stub)", comment: "Label for local stub AI provider")
+                                                 ? NSLocalizedString("sick_episode_form.ai_assistance.ai_stub.label", comment: "Label for local stub AI provider")
                                                  : provider)
                                                 .font(.caption.bold())
                                                 .foregroundStyle(.secondary)
@@ -536,14 +536,14 @@ struct SickEpisodeForm: View {
                                         } label: {
                                             VStack(alignment: .leading, spacing: 2) {
                                                 HStack {
-                                                    Text(row.createdAtISO.isEmpty ? NSLocalizedString("Time: n/a", comment: "Fallback when timestamp is not available") : row.createdAtISO)
+                                                    Text(row.createdAtISO.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.time_na", comment: "Fallback when timestamp is not available") : row.createdAtISO)
                                                         .font(.caption2.monospaced())
                                                     Spacer()
-                                                    Text(row.model.isEmpty ? NSLocalizedString("provider: unknown", comment: "Fallback when AI provider is unknown") : row.model)
+                                                    Text(row.model.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.provider_unknown", comment: "Fallback when AI provider is unknown") : row.model)
                                                         .font(.caption2)
                                                         .foregroundStyle(.secondary)
                                                 }
-                                                Text(row.responsePreview.isEmpty ? NSLocalizedString("(no response stored)", comment: "Fallback when no AI response is stored") : row.responsePreview)
+                                                Text(row.responsePreview.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.no_response_stored", comment: "Fallback when no AI response is stored") : row.responsePreview)
                                                     .font(.caption)
                                                     .lineLimit(2)
                                             }
@@ -563,10 +563,10 @@ struct SickEpisodeForm: View {
                                     if let selectedID = selectedAIHistoryID,
                                        let selectedRow = appState.aiInputsForActiveEpisode.first(where: { $0.id == selectedID }) {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text(NSLocalizedString("Selected AI response", comment: "Header for selected AI response viewer"))
+                                            Text(NSLocalizedString("sick_episode_form.ai_assistance.history.selected_response.header", comment: "Header for selected AI response viewer"))
                                                 .font(.subheadline.bold())
                                             ScrollView {
-                                                Text(selectedRow.fullResponse.isEmpty ? NSLocalizedString("(no response stored)", comment: "Fallback when no AI response is stored") : selectedRow.fullResponse)
+                                                Text(selectedRow.fullResponse.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.no_response_stored", comment: "Fallback when no AI response is stored") : selectedRow.fullResponse)
                                                     .font(.caption)
                                                     .textSelection(.enabled)
                                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -584,7 +584,7 @@ struct SickEpisodeForm: View {
                                                 Button(role: .destructive) {
                                                     deleteSelectedAIHistory()
                                                 } label: {
-                                                    Label(NSLocalizedString("Delete this AI entry", comment: "Button to delete selected AI history entry"), systemImage: "trash")
+                                                    Label(NSLocalizedString("sick_episode_form.ai_assistance.history.delete_entry.button", comment: "Button to delete selected AI history entry"), systemImage: "trash")
                                                 }
                                             }
                                             .padding(.top, 4)
@@ -593,7 +593,7 @@ struct SickEpisodeForm: View {
                                 }
                                 .padding(.top, 4)
                             } label: {
-                                Text(NSLocalizedString("AI history for this episode", comment: "Header for AI history list"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.history.header", comment: "Header for AI history list"))
                                     .font(.subheadline.bold())
                             }
                             .padding(8)
@@ -603,7 +603,7 @@ struct SickEpisodeForm: View {
 
                         if !aiPromptPreview.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(NSLocalizedString("Structured episode JSON (debug)", comment: "Header for structured episode JSON debug view"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.structured_json_debug.header", comment: "Header for structured episode JSON debug view"))
                                     .font(.subheadline.bold())
                                 ScrollView {
                                     Text(aiPromptPreview)
@@ -624,7 +624,7 @@ struct SickEpisodeForm: View {
                     // Inline Done button so the user can close the form after saving without relying on the toolbar
                     HStack {
                         Spacer()
-                        Button(NSLocalizedString("Done", comment: "Button to close the form")) {
+                        Button(NSLocalizedString("common.done", comment: "Button to close the form")) {
                             dismiss()
                         }
                         .buttonStyle(.borderedProminent)
@@ -637,14 +637,14 @@ struct SickEpisodeForm: View {
                    minHeight: 580, idealHeight: 720, maxHeight: .infinity)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("Cancel", comment: "Toolbar cancel button")) { dismiss() }
+                    Button(NSLocalizedString("common.cancel", comment: "Toolbar cancel button")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(NSLocalizedString("Save", comment: "Toolbar save button")) { saveTapped() }
+                    Button(NSLocalizedString("common.save", comment: "Toolbar save button")) { saveTapped() }
                         .keyboardShortcut(.defaultAction)
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button(NSLocalizedString("Done", comment: "Toolbar done button")) { dismiss() }
+                    Button(NSLocalizedString("common.done", comment: "Toolbar done button")) { dismiss() }
                 }
             }
             .onAppear {
@@ -665,14 +665,14 @@ struct SickEpisodeForm: View {
 
     private var complaintBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(NSLocalizedString("Select common complaints", comment: "Instruction to select common complaints"))
+            Text(NSLocalizedString("sick_episode_form.complaint.select_common_hint", comment: "Instruction to select common complaints"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             // Simple chip-like toggles in rows of 4 for predictable wrapping
             WrappingChips(strings: complaintOptions, selection: $presetComplaints)
 
-            TextField(NSLocalizedString("Other complaints (comma-separated)", comment: "Text field for other complaints, comma-separated"), text: $otherComplaints)
+            TextField(NSLocalizedString("sick_episode_form.complaint.other_complaints.placeholder", comment: "Text field for other complaints, comma-separated"), text: $otherComplaints)
                 .textFieldStyle(.roundedBorder)
         }
     }
@@ -2016,32 +2016,113 @@ private struct SectionHeader: View {
     }
 }
 
-/// Minimal wrapping chips component backed by a Set of strings.
+/// Simple flow layout that wraps subviews onto new lines based on available width.
+/// (Much more resilient for localization where labels can become longer.)
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    init(spacing: CGFloat = 8) {
+        self.spacing = spacing
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+
+            // Wrap to next line if needed.
+            if x > 0, x + s.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+
+            x += (x == 0 ? 0 : spacing) + s.width
+            rowHeight = max(rowHeight, s.height)
+            usedWidth = max(usedWidth, x)
+        }
+
+        return CGSize(width: min(usedWidth, maxWidth), height: y + rowHeight)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+
+            // Wrap to next line if needed.
+            if x > bounds.minX, (x + s.width) > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+
+            v.place(
+                at: CGPoint(x: x, y: y),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: s.width, height: s.height)
+            )
+
+            x += s.width + spacing
+            rowHeight = max(rowHeight, s.height)
+        }
+    }
+}
+
+/// Wrapping chips component backed by a Set of raw (stored) strings.
+///
+/// - Important: `strings` values are treated as stable *stored* values (DB-safe).
+///   Only the *display* label is localized via `labelFor`.
 private struct WrappingChips: View {
     let strings: [String]
     @Binding var selection: Set<String>
+    let labelFor: (String) -> String
+
+    init(
+        strings: [String],
+        selection: Binding<Set<String>>,
+        labelFor: @escaping (String) -> String = sickChoiceText
+    ) {
+        self.strings = strings
+        self._selection = selection
+        self.labelFor = labelFor
+    }
 
     var body: some View {
-        // Use simple flexible rows to avoid heavy layout logic.
-        VStack(alignment: .leading, spacing: 8) {
-            let rows = stride(from: 0, to: strings.count, by: 4).map {
-                Array(strings[$0 ..< min($0 + 4, strings.count)])
-            }
-            ForEach(rows.indices, id: \.self) { idx in
-                HStack(spacing: 8) {
-                    ForEach(rows[idx], id: \.self) { s in
-                        Toggle(isOn: Binding(
-                            get: { selection.contains(s) },
-                            set: { on in
-                                if on { selection.insert(s) } else { selection.remove(s) }
-                            })
-                        ) {
-                            Text(sickChoiceText(s))
+        FlowLayout(spacing: 8) {
+            ForEach(strings, id: \.self) { s in
+                Toggle(
+                    isOn: Binding(
+                        get: { selection.contains(s) },
+                        set: { on in
+                            if on { selection.insert(s) } else { selection.remove(s) }
                         }
-                        .toggleStyle(.button)
-                        .buttonStyle(.bordered)
-                    }
+                    )
+                ) {
+                    Text(labelFor(s))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
+                .toggleStyle(.button)
+                .buttonStyle(.bordered)
             }
         }
     }

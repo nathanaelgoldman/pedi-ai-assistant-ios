@@ -2346,3 +2346,197 @@
 "ai.gemini.error.invalid_response" = "Invalid response from Gemini.";
 "ai.gemini.error.http_status" = "Gemini request failed (HTTP %d).";
 "ai.gemini.error.empty_content" = "Gemini returned an empty response.";
+
+/* Extra Keys not done originally */
+/* WellVisitForm — Milestones */
+"well_visit_form.milestone.regards_face" = "Regards face";
+"well_visit_form.milestone.follows_to_midline" = "Follows to midline";
+"well_visit_form.milestone.alerts_to_sound_voice" = "Alerts to sound/voice";
+"well_visit_form.milestone.calms_to_caregiver_voice" = "Calms to caregiver voice";
+"well_visit_form.milestone.lifts_chin_chest_prone" = "Lifts chin/chest in prone";
+"well_visit_form.milestone.symmetric_movements" = "Symmetric movements";
+
+"well_visit_form.milestone.lifts_chin_briefly_prone" = "Lifts chin briefly in prone";
+
+"well_visit_form.milestone.social_smile" = "Social smile";
+"well_visit_form.milestone.coos_vowel_sounds" = "Coos / vowel sounds";
+"well_visit_form.milestone.follows_past_midline" = "Follows past midline";
+"well_visit_form.milestone.lifts_head_45_prone" = "Lifts head ~45° in prone";
+"well_visit_form.milestone.hands_to_mouth_opens_hands" = "Hands to mouth / opens hands";
+"well_visit_form.milestone.alerts_quiets_to_sound_voice" = "Alerts/quiets to sound/voice";
+
+"well_visit_form.milestone.babbles_coos" = "Babbles / coos";
+"well_visit_form.milestone.hands_midline_together" = "Hands to midline / together";
+"well_visit_form.milestone.reaches_for_toys" = "Reaches for toys";
+"well_visit_form.milestone.good_head_control" = "Good head control";
+"well_visit_form.milestone.rolls_prone_to_supine" = "Rolls prone→supine";
+
+"well_visit_form.milestone.responds_to_name" = "Responds to name";
+"well_visit_form.milestone.consonant_babble" = "Consonant babble";
+"well_visit_form.milestone.transfers_hand_to_hand" = "Transfers objects hand-to-hand";
+"well_visit_form.milestone.sits_minimal_support" = "Sits with minimal support";
+"well_visit_form.milestone.rolls_both_ways" = "Rolls both ways";
+"well_visit_form.milestone.stranger_awareness" = "Stranger awareness";
+
+"well_visit_form.milestone.plays_peekaboo" = "Plays peek-a-boo";
+"well_visit_form.milestone.mam_bab_dad_nonspecific" = "Mam/bab/dad (nonspecific)";
+"well_visit_form.milestone.inferior_pincer_grasp" = "Inferior pincer grasp";
+"well_visit_form.milestone.sits_without_support" = "Sits without support";
+"well_visit_form.milestone.pulls_to_stand" = "Pulls to stand";
+"well_visit_form.milestone.waves_byebye" = "Waves bye-bye";
+
+"well_visit_form.milestone.mama_dada_specific" = "Mama/Dada specific";
+"well_visit_form.milestone.at_least_one_word" = "At least one word";
+"well_visit_form.milestone.fine_pincer_grasp" = "Fine pincer grasp";
+"well_visit_form.milestone.stands_alone" = "Stands alone";
+"well_visit_form.milestone.takes_a_few_steps" = "Takes a few steps";
+"well_visit_form.milestone.points_proto_declarative" = "Points/Proto-declarative";
+
+"well_visit_form.milestone.walks_independently" = "Walks independently";
+"well_visit_form.milestone.scribbles" = "Scribbles";
+"well_visit_form.milestone.uses_3_words" = "Uses ≥3 words";
+"well_visit_form.milestone.points_to_request_objects" = "Points to request objects";
+"well_visit_form.milestone.drinks_from_cup" = "Drinks from cup";
+"well_visit_form.milestone.imitates_simple_actions" = "Imitates simple actions";
+
+"well_visit_form.milestone.runs" = "Runs";
+"well_visit_form.milestone.walks_up_steps_with_help" = "Walks up steps with help";
+"well_visit_form.milestone.uses_10_to_25_words" = "Uses ~10–25 words";
+"well_visit_form.milestone.begins_pretend_play" = "Begins pretend play";
+"well_visit_form.milestone.points_to_3_body_parts" = "Points to ≥3 body parts";
+"well_visit_form.milestone.feeds_self_with_spoon" = "Feeds self with spoon";
+
+"well_visit_form.milestone.two_word_phrases" = "Two-word phrases";
+"well_visit_form.milestone.follows_2_step_command" = "Follows 2-step command";
+"well_visit_form.milestone.jumps_with_both_feet" = "Jumps with both feet";
+"well_visit_form.milestone.stacks_5_to_6_blocks" = "Stacks 5–6 blocks";
+"well_visit_form.milestone.parallel_play" = "Parallel play";
+"well_visit_form.milestone.removes_some_clothing" = "Removes some clothing";
+
+"well_visit_form.milestone.understands_prepositions" = "Understands prepositions";
+"well_visit_form.milestone.throws_ball_overhand" = "Throws ball overhand";
+"well_visit_form.milestone.imitates_vertical_line" = "Imitates vertical line";
+"well_visit_form.milestone.toilet_awareness" = "Toilet awareness";
+"well_visit_form.milestone.vocabulary_50_words" = "Vocabulary ~50 words";
+"well_visit_form.milestone.shares_interest_with_adult" = "Shares interest with adult";
+
+"well_visit_form.milestone.pedals_tricycle" = "Pedals tricycle";
+"well_visit_form.milestone.balances_one_foot_momentarily" = "Balances on one foot momentarily";
+"well_visit_form.milestone.draws_circle" = "Draws circle";
+"well_visit_form.milestone.uses_3_word_sentences" = "Uses 3-word sentences";
+"well_visit_form.milestone.names_colors_pictures" = "Names colors/pictures";
+"well_visit_form.milestone.engages_interactive_play" = "Engages in interactive play";
+
+/* WellVisitForm — Visit type picker titles */
+"well_visit_form.visit_type.newborn_first" = "Newborn – first visit";
+"well_visit_form.visit_type.one_month" = "1-month visit";
+"well_visit_form.visit_type.two_month" = "2-month visit";
+"well_visit_form.visit_type.four_month" = "4-month visit";
+"well_visit_form.visit_type.six_month" = "6-month visit";
+"well_visit_form.visit_type.nine_month" = "9-month visit";
+"well_visit_form.visit_type.twelve_month" = "12-month visit";
+"well_visit_form.visit_type.fifteen_month" = "15-month visit";
+"well_visit_form.visit_type.eighteen_month" = "18-month visit";
+"well_visit_form.visit_type.twentyfour_month" = "24-month visit";
+"well_visit_form.visit_type.thirty_month" = "30-month visit";
+"well_visit_form.visit_type.thirtysix_month" = "36-month visit";
+
+/* SickEpisodeForm — Vitals */
+"sick_episode_form.vitals.section_title" = "Vitals";
+"sick_episode_form.vitals.save_episode_first_hint" = "Save the episode first to enable vitals entry.";
+
+"sick_episode_form.vitals.weight_kg.placeholder" = "Weight (kg)";
+"sick_episode_form.vitals.height_cm.placeholder" = "Height (cm)";
+"sick_episode_form.vitals.head_circ_cm.placeholder" = "Head circ (cm)";
+"sick_episode_form.vitals.temperature_c.placeholder" = "Temperature (°C)";
+
+"sick_episode_form.vitals.hr_bpm.placeholder" = "HR (bpm)";
+"sick_episode_form.vitals.rr_per_min.placeholder" = "RR (/min)";
+"sick_episode_form.vitals.spo2_percent.placeholder" = "SpO₂ (%)";
+"sick_episode_form.vitals.bp_systolic.placeholder" = "BP systolic";
+"sick_episode_form.vitals.bp_diastolic.placeholder" = "BP diastolic";
+
+"sick_episode_form.vitals.recorded_at_iso8601.placeholder" = "Recorded at (ISO8601)";
+"sick_episode_form.vitals.recorded_at_iso8601.help" = "Leave blank for current time.";
+"sick_episode_form.vitals.replace_previous_toggle" = "Replace previous vitals for this episode";
+
+"sick_episode_form.vitals.save_button" = "Save vitals";
+"sick_episode_form.vitals.history_title" = "Vitals history (oldest → newest)";
+"sick_episode_form.vitals.none_message" = "No vitals recorded for this episode yet.";
+"sick_episode_form.section.main_complaint" = "Main Complaint";
+"sick_episode_form.section.hpi" = "History of Present Illness";
+
+"sick_episode_form.hpi.appearance.label" = "Appearance";
+"sick_episode_form.hpi.feeding.label" = "Feeding";
+"sick_episode_form.hpi.breathing.label" = "Breathing";
+"sick_episode_form.hpi.urination.label" = "Urination";
+"sick_episode_form.hpi.pain.label" = "Pain";
+"sick_episode_form.hpi.stools.label" = "Stools";
+"sick_episode_form.hpi.context.label" = "Context";
+"sick_episode_form.hpi.summary.placeholder" = "HPI summary";
+"sick_episode_form.hpi.duration_hours.placeholder" = "Duration (hours)";
+
+"sick_episode_form.section.physical_exam" = "Physical Examination";
+"sick_episode_form.pe.general_appearance.label" = "General appearance";
+"sick_episode_form.pe.hydration.label" = "Hydration";
+"sick_episode_form.pe.color_hemodynamics.label" = "Color / Hemodynamics";
+"sick_episode_form.pe.skin.label" = "Skin";
+"sick_episode_form.pe.ent.label" = "ENT";
+"sick_episode_form.pe.right_ear.label" = "Right ear";
+"sick_episode_form.pe.left_ear.label" = "Left ear";
+"sick_episode_form.pe.right_eye.label" = "Right eye";
+"sick_episode_form.pe.left_eye.label" = "Left eye";
+"sick_episode_form.pe.heart.label" = "Heart";
+"sick_episode_form.pe.lungs.label" = "Lungs";
+"sick_episode_form.pe.abdomen.label" = "Abdomen";
+"sick_episode_form.pe.peristalsis.label" = "Peristalsis";
+"sick_episode_form.pe.genitalia.label" = "Genitalia";
+"sick_episode_form.pe.neurological.label" = "Neurological";
+"sick_episode_form.pe.musculoskeletal.label" = "Musculoskeletal";
+"sick_episode_form.pe.lymph_nodes.label" = "Lymph nodes";
+
+"sick_episode_form.section.problem_listing" = "Problem Listing";
+"sick_episode_form.problem_listing.generate_button" = "Generate Problem List";
+"sick_episode_form.problem_listing.generate_help" = "Build an aggregated problem listing from patient age/sex, complaint, duration, and abnormal findings.";
+"sick_episode_form.problem_listing.complementary_investigations.placeholder" = "Complementary investigations";
+"sick_episode_form.problem_listing.working_diagnosis.placeholder" = "Working diagnosis";
+"sick_episode_form.problem_listing.icd10.placeholder" = "ICD-10";
+
+"sick_episode_form.section.plan" = "Plan";
+"sick_episode_form.plan.anticipatory_guidance.label" = "Anticipatory guidance";
+"sick_episode_form.plan.comments.placeholder" = "Comments";
+
+"sick_episode_form.section.ai_assistance" = "AI Assistance";
+"sick_episode_form.ai_assistance.description" = "JSON guideline flags run locally and do not change the record; AI queries will later be configured in the clinician profile.";
+"sick_episode_form.ai_assistance.check_guideline_flags.button" = "Check guideline flags";
+"sick_episode_form.ai_assistance.ask_ai.button" = "Ask AI";
+"sick_episode_form.ai_assistance.asking_ai.status" = "Asking AI…";
+"sick_episode_form.ai_assistance.preview_ai_json.button" = "Preview AI JSON";
+
+"sick_episode_form.ai_assistance.suggested_icd10.header" = "Suggested ICD-10";
+"sick_episode_form.ai_assistance.apply_to_icd10.button" = "Apply to ICD-10 field";
+"sick_episode_form.ai_assistance.icd10_replace_warning" = "Current ICD-10 will be replaced.";
+
+"sick_episode_form.ai_assistance.icd10_candidates.header" = "ICD-10 codes found in AI note";
+"sick_episode_form.ai_assistance.icd10_candidates.instruction" = "Tap a code to append it to the ICD-10 field. Duplicates are ignored.";
+
+"sick_episode_form.ai_assistance.guideline_flags.header" = "Guideline flags (local JSON)";
+
+"sick_episode_form.ai_assistance.ai_notes.header" = "AI notes (per provider)";
+"sick_episode_form.ai_assistance.ai_stub.label" = "AI (stub)";
+
+"sick_episode_form.ai_assistance.history.header" = "AI history for this episode";
+"sick_episode_form.ai_assistance.history.time_na" = "Time: n/a";
+"sick_episode_form.ai_assistance.history.provider_unknown" = "provider: unknown";
+"sick_episode_form.ai_assistance.history.no_response_stored" = "(no response stored)";
+"sick_episode_form.ai_assistance.history.selected_response.header" = "Selected AI response";
+"sick_episode_form.ai_assistance.history.delete_entry.button" = "Delete this AI entry";
+
+"sick_episode_form.ai_assistance.structured_json_debug.header" = "Structured episode JSON (debug)";
+
+"sick_episode_form.complaint.select_common_hint" = "Select common complaints";
+"sick_episode_form.complaint.other_complaints.placeholder" = "Other complaints (comma-separated)";
+
+"common.done" = "Done";
+"common.cancel" = "Cancel";
+"common.save" = "Save";

@@ -25,7 +25,11 @@ private enum L10nWVF {
 private struct MilestoneDescriptor: Identifiable, Hashable {
     let id = UUID()
     let code: String
-    let label: String
+    let labelKey: String
+
+    var label: String {
+        L10nWVF.s(labelKey)
+    }
 }
 
 private enum MilestoneStatus: String, CaseIterable, Identifiable {
@@ -47,122 +51,126 @@ private enum MilestoneStatus: String, CaseIterable, Identifiable {
 // Milestone sets, ported from the Python MILESTONE_SETS
 private let WELL_VISIT_MILESTONES: [String: [MilestoneDescriptor]] = [
     "newborn_first": [
-        .init(code: "regards_face",       label: "Regards face"),
-        .init(code: "follows_to_midline", label: "Follows to midline"),
-        .init(code: "alerts_to_sound",    label: "Alerts to sound/voice"),
-        .init(code: "calms_to_voice",     label: "Calms to caregiver voice"),
-        .init(code: "lifts_chin",         label: "Lifts chin/chest in prone"),
-        .init(code: "symmetric_moves",    label: "Symmetric movements"),
+        .init(code: "regards_face",       labelKey: "well_visit_form.milestone.regards_face"),
+        .init(code: "follows_to_midline", labelKey: "well_visit_form.milestone.follows_to_midline"),
+        .init(code: "alerts_to_sound",    labelKey: "well_visit_form.milestone.alerts_to_sound_voice"),
+        .init(code: "calms_to_voice",     labelKey: "well_visit_form.milestone.calms_to_caregiver_voice"),
+        .init(code: "lifts_chin",         labelKey: "well_visit_form.milestone.lifts_chin_chest_prone"),
+        .init(code: "symmetric_moves",    labelKey: "well_visit_form.milestone.symmetric_movements"),
     ],
     "one_month": [
-        .init(code: "regards_face",       label: "Regards face"),
-        .init(code: "follows_to_midline", label: "Follows to midline"),
-        .init(code: "alerts_to_sound",    label: "Alerts to sound/voice"),
-        .init(code: "calms_to_voice",     label: "Calms to caregiver voice"),
-        .init(code: "lifts_chin",         label: "Lifts chin briefly in prone"),
-        .init(code: "symmetric_moves",    label: "Symmetric movements"),
+        .init(code: "regards_face",       labelKey: "well_visit_form.milestone.regards_face"),
+        .init(code: "follows_to_midline", labelKey: "well_visit_form.milestone.follows_to_midline"),
+        .init(code: "alerts_to_sound",    labelKey: "well_visit_form.milestone.alerts_to_sound_voice"),
+        .init(code: "calms_to_voice",     labelKey: "well_visit_form.milestone.calms_to_caregiver_voice"),
+        .init(code: "lifts_chin",         labelKey: "well_visit_form.milestone.lifts_chin_briefly_prone"),
+        .init(code: "symmetric_moves",    labelKey: "well_visit_form.milestone.symmetric_movements"),
     ],
     "two_month": [
-        .init(code: "social_smile",        label: "Social smile"),
-        .init(code: "coos",                label: "Coos / vowel sounds"),
-        .init(code: "follows_past_midline",label: "Follows past midline"),
-        .init(code: "lifts_head_prone",    label: "Lifts head ~45° in prone"),
-        .init(code: "hands_to_mouth",      label: "Hands to mouth / opens hands"),
-        .init(code: "alerts_to_sound",     label: "Alerts/quiets to sound/voice"),
+        .init(code: "social_smile",         labelKey: "well_visit_form.milestone.social_smile"),
+        .init(code: "coos",                 labelKey: "well_visit_form.milestone.coos_vowel_sounds"),
+        .init(code: "follows_past_midline", labelKey: "well_visit_form.milestone.follows_past_midline"),
+        .init(code: "lifts_head_prone",     labelKey: "well_visit_form.milestone.lifts_head_45_prone"),
+        .init(code: "hands_to_mouth",       labelKey: "well_visit_form.milestone.hands_to_mouth_opens_hands"),
+        .init(code: "alerts_to_sound",      labelKey: "well_visit_form.milestone.alerts_quiets_to_sound_voice"),
     ],
     "four_month": [
-        .init(code: "social_smile",       label: "Social smile"),
-        .init(code: "babbles",            label: "Babbles / coos"),
-        .init(code: "hands_together",     label: "Hands to midline / together"),
-        .init(code: "reaches_toys",       label: "Reaches for toys"),
-        .init(code: "supports_head",      label: "Good head control"),
-        .init(code: "rolls_prone_supine", label: "Rolls prone→supine"),
+        .init(code: "social_smile",        labelKey: "well_visit_form.milestone.social_smile"),
+        .init(code: "babbles",             labelKey: "well_visit_form.milestone.babbles_coos"),
+        .init(code: "hands_together",      labelKey: "well_visit_form.milestone.hands_midline_together"),
+        .init(code: "reaches_toys",        labelKey: "well_visit_form.milestone.reaches_for_toys"),
+        .init(code: "supports_head",       labelKey: "well_visit_form.milestone.good_head_control"),
+        .init(code: "rolls_prone_supine",  labelKey: "well_visit_form.milestone.rolls_prone_to_supine"),
     ],
     "six_month": [
-        .init(code: "responds_name",      label: "Responds to name"),
-        .init(code: "babbles_consonants", label: "Consonant babble"),
-        .init(code: "transfers",          label: "Transfers objects hand-to-hand"),
-        .init(code: "sits_support",       label: "Sits with minimal support"),
-        .init(code: "rolls_both",         label: "Rolls both ways"),
-        .init(code: "stranger_awareness", label: "Stranger awareness"),
+        .init(code: "responds_name",       labelKey: "well_visit_form.milestone.responds_to_name"),
+        .init(code: "babbles_consonants",  labelKey: "well_visit_form.milestone.consonant_babble"),
+        .init(code: "transfers",           labelKey: "well_visit_form.milestone.transfers_hand_to_hand"),
+        .init(code: "sits_support",        labelKey: "well_visit_form.milestone.sits_minimal_support"),
+        .init(code: "rolls_both",          labelKey: "well_visit_form.milestone.rolls_both_ways"),
+        .init(code: "stranger_awareness",  labelKey: "well_visit_form.milestone.stranger_awareness"),
     ],
     "nine_month": [
-        .init(code: "peekaboo",           label: "Plays peek-a-boo"),
-        .init(code: "mam_bab_dad",        label: "Mam/bab/dad (nonspecific)"),
-        .init(code: "pincer",             label: "Inferior pincer grasp"),
-        .init(code: "sits_no_support",    label: "Sits without support"),
-        .init(code: "pulls_to_stand",     label: "Pulls to stand"),
-        .init(code: "waves_bye",          label: "Waves bye-bye"),
+        .init(code: "peekaboo",            labelKey: "well_visit_form.milestone.plays_peekaboo"),
+        .init(code: "mam_bab_dad",         labelKey: "well_visit_form.milestone.mam_bab_dad_nonspecific"),
+        .init(code: "pincer",              labelKey: "well_visit_form.milestone.inferior_pincer_grasp"),
+        .init(code: "sits_no_support",     labelKey: "well_visit_form.milestone.sits_without_support"),
+        .init(code: "pulls_to_stand",      labelKey: "well_visit_form.milestone.pulls_to_stand"),
+        .init(code: "waves_bye",           labelKey: "well_visit_form.milestone.waves_byebye"),
     ],
     "twelve_month": [
-        .init(code: "specific_mama_dada", label: "Mama/Dada specific"),
-        .init(code: "one_word",           label: "At least one word"),
-        .init(code: "fine_pincer",        label: "Fine pincer grasp"),
-        .init(code: "stands_alone",       label: "Stands alone"),
-        .init(code: "walks",              label: "Takes a few steps"),
-        .init(code: "points",             label: "Points/Proto-declarative"),
+        .init(code: "specific_mama_dada",  labelKey: "well_visit_form.milestone.mama_dada_specific"),
+        .init(code: "one_word",            labelKey: "well_visit_form.milestone.at_least_one_word"),
+        .init(code: "fine_pincer",         labelKey: "well_visit_form.milestone.fine_pincer_grasp"),
+        .init(code: "stands_alone",        labelKey: "well_visit_form.milestone.stands_alone"),
+        .init(code: "walks",               labelKey: "well_visit_form.milestone.takes_a_few_steps"),
+        .init(code: "points",              labelKey: "well_visit_form.milestone.points_proto_declarative"),
     ],
     "fifteen_month": [
-        .init(code: "walks_independent",  label: "Walks independently"),
-        .init(code: "scribbles",          label: "Scribbles"),
-        .init(code: "uses_3_words",       label: "Uses ≥3 words"),
-        .init(code: "points_request",     label: "Points to request objects"),
-        .init(code: "drink_cup",          label: "Drinks from cup"),
-        .init(code: "imitates",           label: "Imitates simple actions"),
+        .init(code: "walks_independent",   labelKey: "well_visit_form.milestone.walks_independently"),
+        .init(code: "scribbles",           labelKey: "well_visit_form.milestone.scribbles"),
+        .init(code: "uses_3_words",        labelKey: "well_visit_form.milestone.uses_3_words"),
+        .init(code: "points_request",      labelKey: "well_visit_form.milestone.points_to_request_objects"),
+        .init(code: "drink_cup",           labelKey: "well_visit_form.milestone.drinks_from_cup"),
+        .init(code: "imitates",            labelKey: "well_visit_form.milestone.imitates_simple_actions"),
     ],
     "eighteen_month": [
-        .init(code: "runs",               label: "Runs"),
-        .init(code: "stair_help",         label: "Walks up steps with help"),
-        .init(code: "uses_10_words",      label: "Uses ~10–25 words"),
-        .init(code: "pretend_play",       label: "Begins pretend play"),
-        .init(code: "points_body_parts",  label: "Points to ≥3 body parts"),
-        .init(code: "feeds_spoon",        label: "Feeds self with spoon"),
+        .init(code: "runs",                labelKey: "well_visit_form.milestone.runs"),
+        .init(code: "stair_help",          labelKey: "well_visit_form.milestone.walks_up_steps_with_help"),
+        .init(code: "uses_10_words",       labelKey: "well_visit_form.milestone.uses_10_to_25_words"),
+        .init(code: "pretend_play",        labelKey: "well_visit_form.milestone.begins_pretend_play"),
+        .init(code: "points_body_parts",   labelKey: "well_visit_form.milestone.points_to_3_body_parts"),
+        .init(code: "feeds_spoon",         labelKey: "well_visit_form.milestone.feeds_self_with_spoon"),
     ],
     "twentyfour_month": [
-        .init(code: "two_word_phrases",   label: "Two-word phrases"),
-        .init(code: "follows_2step",      label: "Follows 2-step command"),
-        .init(code: "jumps",              label: "Jumps with both feet"),
-        .init(code: "stacks_blocks",      label: "Stacks 5–6 blocks"),
-        .init(code: "parallel_play",      label: "Parallel play"),
-        .init(code: "removes_clothing",   label: "Removes some clothing"),
+        .init(code: "two_word_phrases",    labelKey: "well_visit_form.milestone.two_word_phrases"),
+        .init(code: "follows_2step",       labelKey: "well_visit_form.milestone.follows_2_step_command"),
+        .init(code: "jumps",               labelKey: "well_visit_form.milestone.jumps_with_both_feet"),
+        .init(code: "stacks_blocks",       labelKey: "well_visit_form.milestone.stacks_5_to_6_blocks"),
+        .init(code: "parallel_play",       labelKey: "well_visit_form.milestone.parallel_play"),
+        .init(code: "removes_clothing",    labelKey: "well_visit_form.milestone.removes_some_clothing"),
     ],
     "thirty_month": [
-        .init(code: "understands_prepositions", label: "Understands prepositions"),
-        .init(code: "throws_overhand",          label: "Throws ball overhand"),
-        .init(code: "imitates_lines",           label: "Imitates vertical line"),
-        .init(code: "toilet_awareness",         label: "Toilet awareness"),
-        .init(code: "speaks_50_words",          label: "Vocabulary ~50 words"),
-        .init(code: "shares_interest",          label: "Shares interest with adult"),
+        .init(code: "understands_prepositions", labelKey: "well_visit_form.milestone.understands_prepositions"),
+        .init(code: "throws_overhand",          labelKey: "well_visit_form.milestone.throws_ball_overhand"),
+        .init(code: "imitates_lines",           labelKey: "well_visit_form.milestone.imitates_vertical_line"),
+        .init(code: "toilet_awareness",         labelKey: "well_visit_form.milestone.toilet_awareness"),
+        .init(code: "speaks_50_words",          labelKey: "well_visit_form.milestone.vocabulary_50_words"),
+        .init(code: "shares_interest",          labelKey: "well_visit_form.milestone.shares_interest_with_adult"),
     ],
     "thirtysix_month": [
-        .init(code: "pedals_tricycle",          label: "Pedals tricycle"),
-        .init(code: "balances_moment",          label: "Balances on one foot momentarily"),
-        .init(code: "draws_circle",             label: "Draws circle"),
-        .init(code: "speaks_sentences",         label: "Uses 3-word sentences"),
-        .init(code: "colors_names",             label: "Names colors/pictures"),
-        .init(code: "interactive_play",         label: "Engages in interactive play"),
+        .init(code: "pedals_tricycle",          labelKey: "well_visit_form.milestone.pedals_tricycle"),
+        .init(code: "balances_moment",          labelKey: "well_visit_form.milestone.balances_one_foot_momentarily"),
+        .init(code: "draws_circle",             labelKey: "well_visit_form.milestone.draws_circle"),
+        .init(code: "speaks_sentences",         labelKey: "well_visit_form.milestone.uses_3_word_sentences"),
+        .init(code: "colors_names",             labelKey: "well_visit_form.milestone.names_colors_pictures"),
+        .init(code: "interactive_play",         labelKey: "well_visit_form.milestone.engages_interactive_play"),
     ]
 ]
 
 // Visit type list for the picker
 private struct WellVisitType: Identifiable {
     let id: String
-    let title: String
+    let titleKey: String
+
+    var title: String {
+        L10nWVF.s(titleKey)
+    }
 }
 
 private let WELL_VISIT_TYPES: [WellVisitType] = [
-    .init(id: "newborn_first",  title: "Newborn – first visit"),
-    .init(id: "one_month",      title: "1-month visit"),
-    .init(id: "two_month",      title: "2-month visit"),
-    .init(id: "four_month",     title: "4-month visit"),
-    .init(id: "six_month",      title: "6-month visit"),
-    .init(id: "nine_month",     title: "9-month visit"),
-    .init(id: "twelve_month",   title: "12-month visit"),
-    .init(id: "fifteen_month",  title: "15-month visit"),
-    .init(id: "eighteen_month", title: "18-month visit"),
-    .init(id: "twentyfour_month", title: "24-month visit"),
-    .init(id: "thirty_month",   title: "30-month visit"),
-    .init(id: "thirtysix_month",title: "36-month visit"),
+    .init(id: "newborn_first",    titleKey: "well_visit_form.visit_type.newborn_first"),
+    .init(id: "one_month",        titleKey: "well_visit_form.visit_type.one_month"),
+    .init(id: "two_month",        titleKey: "well_visit_form.visit_type.two_month"),
+    .init(id: "four_month",       titleKey: "well_visit_form.visit_type.four_month"),
+    .init(id: "six_month",        titleKey: "well_visit_form.visit_type.six_month"),
+    .init(id: "nine_month",       titleKey: "well_visit_form.visit_type.nine_month"),
+    .init(id: "twelve_month",     titleKey: "well_visit_form.visit_type.twelve_month"),
+    .init(id: "fifteen_month",    titleKey: "well_visit_form.visit_type.fifteen_month"),
+    .init(id: "eighteen_month",   titleKey: "well_visit_form.visit_type.eighteen_month"),
+    .init(id: "twentyfour_month", titleKey: "well_visit_form.visit_type.twentyfour_month"),
+    .init(id: "thirty_month",     titleKey: "well_visit_form.visit_type.thirty_month"),
+    .init(id: "thirtysix_month",  titleKey: "well_visit_form.visit_type.thirtysix_month"),
 ]
 
 // Logical age groups for visit-type–specific layouts and reporting.
