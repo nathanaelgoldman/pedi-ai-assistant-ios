@@ -861,103 +861,7 @@
 "well_visit_form.problem_listing.mchat.line_format" = "M-CHAT : score %@ – %@";
 "well_visit_form.problem_listing.dev_test.line_format" = "Test de développement : score %@ – %@";
 
-/* SickEpisodeForm 2nd part */
-"sick_episode.choice.abdominal" = "Abdominal";
-"sick_episode.choice.abdominal_pain" = "Douleur abdominale";
-"sick_episode.choice.abnormal_tone" = "Tonus anormal";
-"sick_episode.choice.age" = "ÂGE";
-"sick_episode.choice.alert" = "Alerte";
-"sick_episode.choice.bloody_diarrhea" = "Diarrhée sanglante";
-"sick_episode.choice.bradycardia" = "Bradycardie";
-"sick_episode.choice.cervical" = "Cervical";
-"sick_episode.choice.congested_nose" = "Nez bouché";
-"sick_episode.choice.cough" = "Toux";
-"sick_episode.choice.crackles" = "Crépitants";
-"sick_episode.choice.crackles_l" = "Crépitants (G)";
-"sick_episode.choice.crackles_r" = "Crépitants (D)";
-"sick_episode.choice.crusty" = "Croûteux";
-"sick_episode.choice.daycare" = "Crèche";
-"sick_episode.choice.decreased" = "Diminué";
-"sick_episode.choice.decreased_sounds" = "Murmure vésiculaire diminué";
-"sick_episode.choice.decreased_sounds_l" = "Murmure vésiculaire diminué (G)";
-"sick_episode.choice.decreased_sounds_r" = "Murmure vésiculaire diminué (D)";
-"sick_episode.choice.diarrhea" = "Diarrhée";
-"sick_episode.choice.discharge" = "Écoulement";
-"sick_episode.choice.distended" = "Distendu";
-"sick_episode.choice.dry_scaly_rash" = "Éruption sèche et squameuse";
-"sick_episode.choice.ear" = "Oreille";
-"sick_episode.choice.ear_discharge" = "Otorrhée";
-"sick_episode.choice.elevated" = "Élevé";
-"sick_episode.choice.epigastric_pain" = "Douleur épigastrique";
-"sick_episode.choice.eyelid_swelling" = "Œdème des paupières";
-"sick_episode.choice.fast" = "Rapide";
-"sick_episode.choice.fever" = "Fièvre";
-"sick_episode.choice.foul_smelling" = "Malodorant";
-"sick_episode.choice.generalized" = "Généralisé";
-"sick_episode.choice.guarding" = "Défense";
-"sick_episode.choice.hard" = "Dur";
-"sick_episode.choice.head" = "Tête";
-"sick_episode.choice.headache" = "Céphalée";
-"sick_episode.choice.hypogastric_pain" = "Douleur hypogastrique";
-"sick_episode.choice.increased" = "Augmenté";
-"sick_episode.choice.irritable" = "Irritable";
-"sick_episode.choice.labored" = "Laborieuse";
-"sick_episode.choice.lethargic" = "Léthargique";
-"sick_episode.choice.limb" = "Membre";
-"sick_episode.choice.limping" = "Boiterie";
-"sick_episode.choice.liquid" = "Liquide";
-"sick_episode.choice.llq_pain" = "Douleur FIG";
-"sick_episode.choice.mac_papular_rash" = "Éruption maculo-papuleuse";
-"sick_episode.choice.macular_rash" = "Éruption maculeuse";
-"sick_episode.choice.murmur" = "Souffle";
-"sick_episode.choice.neck" = "Cou";
-"sick_episode.choice.noisy" = "Bruyante";
-"sick_episode.choice.none" = "Aucun";
-"sick_episode.choice.normal" = "Normal";
-"sick_episode.choice.not_seen_wax" = "Non vu (cérumen)";
-"sick_episode.choice.nodes" = "Adénopathies";
-"sick_episode.choice.otitis" = "Otite";
-"sick_episode.choice.pain" = "Douleur";
-"sick_episode.choice.pale" = "Pâle";
-"sick_episode.choice.papular_rash" = "Éruption papuleuse";
-"sick_episode.choice.periumbilical_pain" = "Douleur péri-ombilicale";
-"sick_episode.choice.petechiae" = "Pétéchies";
-"sick_episode.choice.pur_pura" = "Purpura";
-"sick_episode.choice.pus_in_canal" = "Pus dans le conduit";
-"sick_episode.choice.rash" = "Éruption";
-"sick_episode.choice.rebound" = "Rebond";
-"sick_episode.choice.red" = "Rouge";
-"sick_episode.choice.red_canal" = "Conduit rouge";
-"sick_episode.choice.red_throat" = "Gorge rouge";
-"sick_episode.choice.red_tm" = "TM rouge";
-"sick_episode.choice.red_bulging_with_pus" = "Rouge & bombée avec pus";
-"sick_episode.choice.refuses" = "Refuse";
-"sick_episode.choice.rh_onchi" = "Rhonchi";
-"sick_episode.choice.rh_onchi_l" = "Rhonchi (G)";
-"sick_episode.choice.rh_onchi_r" = "Rhonchi (D)";
-"sick_episode.choice.rlq_pain" = "Douleur FID";
-"sick_episode.choice.runny_nose" = "Nez qui coule";
-"sick_episode.choice.school_age" = "Âge scolaire";
-"sick_episode.choice.see_plan" = "Voir plan";
-"sick_episode.choice.sick_contact" = "Contact malade";
-"sick_episode.choice.sleepy" = "Somnolent";
-"sick_episode.choice.soft" = "Souple";
-"sick_episode.choice.submandibular" = "Sous-mandibulaire";
-"sick_episode.choice.swelling" = "Gonflement";
-"sick_episode.choice.swollen_joint" = "Articulation enflée";
-"sick_episode.choice.tachycardia" = "Tachycardie";
-"sick_episode.choice.tender" = "Douloureux";
-"sick_episode.choice.throat" = "Gorge";
-"sick_episode.choice.tonsil_deposits" = "Dépôts amygdaliens";
-"sick_episode.choice.travel" = "Voyage";
-"sick_episode.choice.uri" = "IVRS";
-"sick_episode.choice.uti" = "IVU";
-"sick_episode.choice.vomiting" = "Vomissements";
-"sick_episode.choice.well" = "Bon état";
-"sick_episode.choice.wheeze" = "Sibilants";
-"sick_episode.choice.wheeze_l" = "Sibilants (G)";
-"sick_episode.choice.wheeze_r" = "Sibilants (D)";
-"sick_episode.choice.yellow" = "Jaune";
+
 
 "sick_episode_form.vitals.delete_picker.title" = "Supprimer une ligne…";
 "sick_episode_form.vitals.delete_picker.none" = "—";
@@ -2582,8 +2486,8 @@
 "sick_episode_form.choice.congested_nose" = "Nez congestionné";
 "sick_episode_form.choice.tonsil_deposits" = "Dépôts amygdaliens";
 
-"sick_episode_form.choice.red_tm" = "TM rouge";
-"sick_episode_form.choice.red_bulging_with_pus" = "Rouge et bombé avec pus";
+"sick_episode_form.choice.red_tm" = "Tympan rouge";
+"sick_episode_form.choice.red_bulging_with_pus" = "Tympan rouge, bombé avec pus";
 "sick_episode_form.choice.pus_in_canal" = "Pus dans le conduit";
 "sick_episode_form.choice.not_seen_wax" = "Non vu (cérumen)";
 "sick_episode_form.choice.red_canal" = "Conduit rouge";
@@ -2645,3 +2549,108 @@
 "sick_episode_form.choice.age" = "GEA";
 "sick_episode_form.choice.uti" = "IVU";
 "sick_episode_form.choice.otitis" = "Otite";
+
+/* NewPatientSheet */
+"new_patient_sheet.title" = "Créer un nouveau patient";
+
+"new_patient_sheet.field.first_name" = "Prénom";
+"new_patient_sheet.placeholder.first_name_example" = "p. ex. Alice";
+
+"new_patient_sheet.field.last_name" = "Nom";
+"new_patient_sheet.placeholder.last_name_example" = "p. ex. Dupont";
+
+"new_patient_sheet.field.alias" = "Alias";
+"new_patient_sheet.alias.regenerate_help" = "Générer un nouvel alias aléatoire";
+
+"new_patient_sheet.field.alias_id" = "ID d’alias";
+"new_patient_sheet.field.mrn" = "MRN";
+
+"new_patient_sheet.field.dob" = "Date de naissance";
+"new_patient_sheet.field.sex" = "Sexe";
+
+"new_patient_sheet.field.save_to" = "Enregistrer dans";
+"new_patient_sheet.button.choose_folder" = "Choisir un dossier…";
+
+"new_patient_sheet.button.cancel" = "Annuler";
+"new_patient_sheet.button.create" = "Créer";
+
+/* ReportBuilder — Sick Visit (assembleAttributedSick) */
+
+"report.sick.title" = "Rapport de consultation maladie";
+
+/* Header meta formats */
+"report.sick.meta.triad_format" = "Créé : %@   •   Mis à jour : %@   •   Généré : %@";
+"report.sick.meta.alias_mrn_format" = "Alias : %@   •   MRN : %@";
+"report.sick.meta.name_format" = "Nom : %@";
+"report.sick.meta.dob_sex_age_format" = "Date de naissance : %@   •   Sexe : %@   •   Âge : %@";
+"report.sick.meta.visit_date_format" = "Date de visite : %@";
+"report.sick.meta.clinician_format" = "Clinicien : %@";
+
+/* Section titles */
+"report.sick.section.main_complaint" = "Motif principal";
+"report.sick.section.hpi" = "Histoire de la maladie actuelle";
+"report.sick.section.duration" = "Durée";
+"report.sick.section.basics" = "Éléments de base";
+"report.sick.section.pmh" = "Antécédents médicaux";
+"report.sick.section.perinatal_history" = "Antécédents périnataux";
+"report.sick.section.other_pmh" = "Autres antécédents";
+"report.sick.section.vaccination" = "Vaccination";
+"report.sick.section.vitals" = "Constantes";
+"report.sick.section.physical_exam" = "Examen clinique";
+"report.sick.section.problem_listing" = "Liste de problèmes";
+"report.sick.section.investigations" = "Examens complémentaires";
+"report.sick.section.working_diagnosis" = "Diagnostic de travail";
+"report.sick.section.icd10" = "CIM-10";
+"report.sick.section.plan_guidance" = "Plan & conseils anticipatoires";
+"report.sick.section.medications" = "Médicaments";
+"report.sick.section.clinician_comments" = "Commentaires du clinicien";
+"report.sick.section.follow_up" = "Suivi / Prochaine visite";
+
+/* Basics labels */
+"report.sick.basics.feeding" = "Alimentation";
+"report.sick.basics.urination" = "Mictions";
+"report.sick.basics.breathing" = "Respiration";
+"report.sick.basics.pain" = "Douleur";
+"report.sick.basics.context" = "Contexte";
+
+/* Liste de problèmes (libellés) */
+"report.problem.age" = "Âge";
+"report.problem.sex" = "Sexe";
+"report.problem.main_complaint" = "Motif principal";
+"report.problem.duration" = "Durée";
+"report.problem.hpi_summary" = "Résumé HPI";
+"report.problem.appearance" = "Apparence";
+"report.problem.breathing" = "Respiration";
+"report.problem.context" = "Contexte";
+
+/* Liste de problèmes (échos de l’examen physique) */
+"report.problem.pe.general_appearance" = "Aspect général";
+"report.problem.pe.color" = "Couleur";
+"report.problem.pe.skin" = "Peau";
+"report.problem.pe.lungs" = "Poumons";
+"report.problem.pe.heart" = "Cœur";
+
+/* Visite de suivi — Liste de problèmes */
+"well_visit_form.problem_listing.parents_concerns" = "Préoccupations des parents : %@";
+
+/* Alimentation */
+"well_visit_form.problem_listing.feeding.regurgitation" = "Régurgitations rapportées.";
+"well_visit_form.problem_listing.feeding.difficulty" = "Difficultés d’alimentation : %@";
+"well_visit_form.problem_listing.feeding.diet" = "Alimentation : %@";
+"well_visit_form.problem_listing.feeding.solids_started" = "Diversification débutée.";
+"well_visit_form.problem_listing.feeding.solids_quality" = "Qualité des solides : %@";
+"well_visit_form.problem_listing.feeding.solids_comment" = "Commentaires sur les solides : %@";
+"well_visit_form.problem_listing.feeding.food_variety" = "Variété alimentaire : %@";
+"well_visit_form.problem_listing.feeding.dairy_gt_3" = "Produits laitiers > 3 tasses/jour.";
+
+/* Selles */
+"well_visit_form.problem_listing.stools.abnormal" = "Selles anormales rapportées.";
+"well_visit_form.problem_listing.stools.hard" = "Selles dures rapportées.";
+"well_visit_form.problem_listing.stools.comment" = "Selles : %@";
+
+/* Sommeil */
+"well_visit_form.problem_listing.sleep.wakes_per_night" = "Réveils pour s’alimenter la nuit : %@ fois/nuit.";
+"well_visit_form.problem_listing.sleep.duration" = "Durée de sommeil probablement insuffisante : %@";
+"well_visit_form.problem_listing.sleep.regularity" = "Régularité du sommeil : %@";
+"well_visit_form.problem_listing.sleep.snoring" = "Ronflements rapportés.";
+"well_visit_form.problem_listing.sleep.issue" = "Problème de sommeil : %@";

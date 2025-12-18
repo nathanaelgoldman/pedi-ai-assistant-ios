@@ -42,24 +42,25 @@ struct NewPatientSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Create New Patient").font(.title2).bold()
+            Text(NSLocalizedString("new_patient_sheet.title", comment: "Title for the create new patient sheet")).font(.title2).bold()
 
             Group {
                 HStack {
-                    Text("First name").frame(width: 120, alignment: .trailing)
-                    TextField("e.g. Alice", text: $firstName)
+                    Text(NSLocalizedString("new_patient_sheet.field.first_name", comment: "Label for first name field")).frame(width: 120, alignment: .trailing)
+                    TextField(NSLocalizedString("new_patient_sheet.placeholder.first_name_example", comment: "Placeholder example for first name"), text: $firstName)
                         .textFieldStyle(.roundedBorder)
                 }
                 HStack {
-                    Text("Last name").frame(width: 120, alignment: .trailing)
-                    TextField("e.g. Chen", text: $lastName)
+                    Text(NSLocalizedString("new_patient_sheet.field.last_name", comment: "Label for last name field")).frame(width: 120, alignment: .trailing)
+                    TextField(NSLocalizedString("new_patient_sheet.placeholder.last_name_example", comment: "Placeholder example for last name"), text: $lastName)
                         .textFieldStyle(.roundedBorder)
                 }
             }
 
             Group {
                 HStack {
-                    Text("Alias").frame(width: 120, alignment: .trailing)
+                    Text(NSLocalizedString("new_patient_sheet.field.alias", comment: "Label for alias field"))
+                        .frame(width: 120, alignment: .trailing)
                     TextField("", text: $aliasLabel)
                         .textFieldStyle(.roundedBorder)
                         .disabled(true)
@@ -68,18 +69,20 @@ struct NewPatientSheet: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .help("Generate a new random alias")
+                    .help(NSLocalizedString("new_patient_sheet.alias.regenerate_help", comment: "Help text for regenerate alias button"))
                 }
 
                 HStack {
-                    Text("Alias ID").frame(width: 120, alignment: .trailing)
+                    Text(NSLocalizedString("new_patient_sheet.field.alias_id", comment: "Label for alias ID field"))
+                        .frame(width: 120, alignment: .trailing)
                     TextField("", text: $aliasID)
                         .textFieldStyle(.roundedBorder)
                         .disabled(true)
                 }
 
                 HStack {
-                    Text("MRN").frame(width: 120, alignment: .trailing)
+                    Text(NSLocalizedString("new_patient_sheet.field.mrn", comment: "Label for MRN field"))
+                        .frame(width: 120, alignment: .trailing)
                     TextField("", text: $mrnPreview)
                         .textFieldStyle(.roundedBorder)
                         .disabled(true)
@@ -87,13 +90,15 @@ struct NewPatientSheet: View {
             }
 
             HStack {
-                Text("Date of birth").frame(width: 120, alignment: .trailing)
+                Text(NSLocalizedString("new_patient_sheet.field.dob", comment: "Label for date of birth field"))
+                    .frame(width: 120, alignment: .trailing)
                 DatePicker("", selection: $dob, displayedComponents: .date)
                     .labelsHidden()
             }
 
             HStack {
-                Text("Sex").frame(width: 120, alignment: .trailing)
+                Text(NSLocalizedString("new_patient_sheet.field.sex", comment: "Label for sex picker"))
+                    .frame(width: 120, alignment: .trailing)
                 Picker("", selection: $sex) {
                     Text("M").tag("M")
                     Text("F").tag("F")
@@ -106,12 +111,13 @@ struct NewPatientSheet: View {
             Divider().padding(.vertical, 4)
 
             HStack(alignment: .center) {
-                Text("Save to").frame(width: 120, alignment: .trailing)
+                Text(NSLocalizedString("new_patient_sheet.field.save_to", comment: "Label for save-to folder row"))
+                    .frame(width: 120, alignment: .trailing)
                 Text(parentDir.path)
                     .font(.callout).foregroundColor(.secondary)
                     .lineLimit(2)
                 Spacer()
-                Button("Choose Folder…") {
+                Button(NSLocalizedString("new_patient_sheet.button.choose_folder", comment: "Button to choose the parent folder for saving")) {
                     if let url = PediaBundlePicker.selectBundleDirectory() {
                         parentDir = url
                     }
@@ -124,8 +130,8 @@ struct NewPatientSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
-                Button("Create") {
+                Button(NSLocalizedString("new_patient_sheet.button.cancel", comment: "Cancel button to dismiss the new patient sheet")) { dismiss() }
+                Button(NSLocalizedString("new_patient_sheet.button.create", comment: "Create button to create the new patient")) {
                     create()
                 }
                 .keyboardShortcut(.defaultAction)

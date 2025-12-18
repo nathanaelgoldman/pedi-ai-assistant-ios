@@ -156,7 +156,9 @@ final class ReportDataLoader {
         let milestoneFlags = devPack.flags
         let measurements = measurementsRaw
         let physicalExamGroups = pePack.groups
-        let problemListing = pePack.problem
+        let problemListing = repairWellProblemListing(visitID: visitID,
+                                                      rawProblemListing: pePack.problem,
+                                                      ageMonths: ageMonthsDouble) ?? pePack.problem
         let conclusions = pePack.conclusions
         let anticipatoryGuidance = pePack.anticipatory
         let clinicianComments = pePack.comments
@@ -187,6 +189,470 @@ final class ReportDataLoader {
             growthCharts: [],
             visibility: visibility
         )
+    }
+
+    // MARK: - Well Problem Listing: full recovery (repair stored-key lines)
+    //
+    // Some older well visits stored localization KEYS (e.g. "well_visit_form.problem_listing.parents_concerns")
+    // instead of localized, formatted text. This repairs those lines at report-time by re-reading the
+    // underlying DB fields and formatting them with the current language.
+
+    private func repairWellProblemListing(visitID: Int, rawProblemListing: String?, ageMonths: Double?) -> String? {
+        guard let raw = rawProblemListing?.replacingOccurrences(of: "\r", with: "\n") else { return nil }
+        let trimmedAll = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAll.isEmpty else { return nil }
+
+        // Only do work if the block contains any of our known broken keys
+        if !trimmedAll.contains("well_visit_form.problem_listing.") { return rawProblemListing }
+
+        let row = fetchWellVisitRowMap(visitID: visitID)
+
+        func nonEmpty(_ s: String?) -> String? {
+            guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+            return s
+        }
+
+        func formatKey(_ key: String, value: String?) -> String? {
+            let fmt = NSLocalizedString(key, comment: "")
+            // If the localized string expects a value, format it; otherwise just return the localized label.
+            if let v = nonEmpty(value), (fmt.contains("%@") || fmt.contains("%1$@")) {
+                return String(format: fmt, locale: .current, v)
+            }
+            // If there is no value, return the localized string only if it is not the key itself.
+            return (fmt == key) ? nil : fmt
+        }
+
+        // Pull values from the DB row (use multiple candidate column names to be robust)
+        let parentsConcerns = nonEmpty(stringFromRow(row, keys: ["parents_concerns","parent_concerns"]))
+        let feedingIssue    = nonEmpty(stringFromRow(row, keys: ["feeding_issue","feeding_difficulty","feeding_problem"]))
+        let foodVariety     = nonEmpty(stringFromRow(row, keys: ["food_variety_quality","food_variety","foodVarietyQuality"]))
+        let poopStatus      = nonEmpty(stringFromRow(row, keys: ["poop_status","stool_status","stools_status"]))
+        let poopComment     = nonEmpty(stringFromRow(row, keys: ["poop_comment","stool_comment","stools_comment"]))
+        let wakesPerNight   = nonEmpty(stringFromRow(row, keys: ["wakes_for_feeds_per_night","wakesForFeedsPerNight","wakes_per_night"]))
+        let sleepHoursText  = nonEmpty(stringFromRow(row, keys: ["sleep_hours_text","sleep_hours","sleepHoursText"]))
+        let sleepRegular    = nonEmpty(stringFromRow(row, keys: ["sleep_regular","sleep_regularity","sleepRegular"]))
+        let sleepIssueText  = nonEmpty(stringFromRow(row, keys: ["sleep"]))
+        let solidQuality    = nonEmpty(stringFromRow(row, keys: ["solid_food_quality","solids_quality","solidFoodQuality"]))
+        let solidComment    = nonEmpty(stringFromRow(row, keys: ["solid_food_comment","solids_comment","solidFoodComment"]))
+        let feedingDiet     = nonEmpty(stringFromRow(row, keys: ["feeding"]))
+        let dairyCode       = nonEmpty(stringFromRow(row, keys: ["dairy_amount_code","dairyAmountCode","dairy_amount"]))
+        let regurgPresent   = boolFromRow(row, keys: ["regurgitation_present","regurgitationPresent","regurgitation"])
+        let solidStarted    = boolFromRow(row, keys: ["solid_food_started","solidFoodStarted","solids_started"])
+        let snoring         = boolFromRow(row, keys: ["sleep_snoring","sleepSnoring","snoring"])
+
+        let isPostTwelveMonths = (ageMonths ?? 0.0) >= 12.0
+
+        func shouldFlagSleepDuration(_ raw: String) -> Bool {
+            let lower = raw.lowercased()
+            if lower.contains("<10") || lower.contains("less than 10") { return true }
+            let digits = raw.filter { "0123456789.".contains($0) }
+            if let v = Double(digits), v < 10 { return true }
+            return false
+        }
+
+        func replacementForKey(_ key: String) -> String? {
+            switch key {
+            case "well_visit_form.problem_listing.parents_concerns":
+                return formatKey(key, value: parentsConcerns)
+
+            case "well_visit_form.problem_listing.feeding.regurgitation":
+                return regurgPresent ? formatKey(key, value: nil) : nil
+
+            case "well_visit_form.problem_listing.feeding.difficulty":
+                return formatKey(key, value: feedingIssue)
+
+            case "well_visit_form.problem_listing.feeding.diet":
+                return formatKey(key, value: feedingDiet)
+
+            case "well_visit_form.problem_listing.feeding.solids_started":
+                return solidStarted ? formatKey(key, value: nil) : nil
+
+            case "well_visit_form.problem_listing.feeding.solids_quality":
+                return formatKey(key, value: solidQuality)
+
+            case "well_visit_form.problem_listing.feeding.solids_comment":
+                return formatKey(key, value: solidComment)
+
+            case "well_visit_form.problem_listing.feeding.food_variety":
+                if let fv = foodVariety, !fv.isEmpty, fv.lowercased() != "appears good" {
+                    return formatKey(key, value: fv)
+                }
+                return nil
+
+            case "well_visit_form.problem_listing.feeding.dairy_gt_3":
+                return (dairyCode == "4") ? formatKey(key, value: nil) : nil
+
+            case "well_visit_form.problem_listing.stools.abnormal":
+                return (poopStatus == "abnormal") ? formatKey(key, value: nil) : nil
+
+            case "well_visit_form.problem_listing.stools.hard":
+                return (poopStatus == "hard") ? formatKey(key, value: nil) : nil
+
+            case "well_visit_form.problem_listing.stools.comment":
+                return formatKey(key, value: poopComment)
+
+            case "well_visit_form.problem_listing.sleep.wakes_per_night":
+                return (isPostTwelveMonths ? formatKey(key, value: wakesPerNight) : nil)
+
+            case "well_visit_form.problem_listing.sleep.duration":
+                if let sh = sleepHoursText, shouldFlagSleepDuration(sh) {
+                    return formatKey(key, value: sh)
+                }
+                return nil
+
+            case "well_visit_form.problem_listing.sleep.regularity":
+                return formatKey(key, value: sleepRegular)
+
+            case "well_visit_form.problem_listing.sleep.snoring":
+                return snoring ? formatKey(key, value: nil) : nil
+
+            case "well_visit_form.problem_listing.sleep.issue":
+                return formatKey(key, value: sleepIssueText)
+
+            default:
+                return nil
+            }
+        }
+
+        let lines = raw.components(separatedBy: .newlines)
+        var out: [String] = []
+        out.reserveCapacity(lines.count)
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                out.append(line)
+                continue
+            }
+
+            let hasBullet = trimmed.hasPrefix("• ")
+            let core = hasBullet ? String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines) : trimmed
+
+            if core.hasPrefix("well_visit_form.problem_listing.") {
+                if let repl = replacementForKey(core) {
+                    out.append(hasBullet ? "• \(repl)" : repl)
+                } else {
+                    // If we can't rebuild it, drop the broken key line.
+                    continue
+                }
+            } else {
+                out.append(line)
+            }
+        }
+
+        let repaired = out.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return repaired.isEmpty ? nil : repaired
+    }
+
+    // MARK: - Well choice + milestone localization helpers (used for previous visits recompute)
+
+    private func localizedStringIfExists(_ key: String) -> String? {
+        let v = NSLocalizedString(key, comment: "")
+        return (v == key) ? nil : v
+    }
+
+    private func slugifyToken(_ s: String) -> String {
+        var t = s.lowercased()
+        t = t.replacingOccurrences(of: "(", with: "")
+        t = t.replacingOccurrences(of: ")", with: "")
+        t = t.replacingOccurrences(of: "-", with: " ")
+        t = t.replacingOccurrences(of: "/", with: " ")
+
+        let allowed = CharacterSet.alphanumerics
+        var out = ""
+        var lastUnderscore = false
+        for scalar in t.unicodeScalars {
+            if allowed.contains(scalar) {
+                out.unicodeScalars.append(scalar)
+                lastUnderscore = false
+            } else {
+                if !lastUnderscore {
+                    out.append("_")
+                    lastUnderscore = true
+                }
+            }
+        }
+        while out.contains("__") { out = out.replacingOccurrences(of: "__", with: "_") }
+        out = out.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return out
+    }
+
+    private func reportLocalizedWellChoiceToken(_ rawToken: String) -> String {
+        let token = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return rawToken }
+
+        let slug = slugifyToken(token)
+
+        // Try well-visit specific choice keys first, then fall back to common, then keep raw.
+        let candidates: [String] = [
+            "well_visit_form.choice.\(slug)",
+            "well_visit_form.choice_\(slug)",
+            "well_visit_form.choice.feeding.\(slug)",
+            "well_visit_form.choice.sleep.\(slug)",
+            "well_visit_form.choice.stools.\(slug)",
+            "common.choice.\(slug)",
+            "common.choice_\(slug)"
+        ]
+
+        for k in candidates {
+            if let v = localizedStringIfExists(k) { return v }
+        }
+
+        // As a last-resort, humanize snake_case codes.
+        if token.contains("_") {
+            let pretty = token.replacingOccurrences(of: "_", with: " ")
+            return pretty.prefix(1).uppercased() + pretty.dropFirst()
+        }
+
+        return token
+    }
+
+    private func reportLocalizedWellChoiceTokenList(_ rawList: String?) -> String? {
+        guard let rawList = rawList else { return nil }
+        let trimmed = rawList.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let tokens = trimmed
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if tokens.count <= 1 {
+            return reportLocalizedWellChoiceToken(trimmed)
+        }
+        return tokens.map { reportLocalizedWellChoiceToken($0) }.joined(separator: ", ")
+    }
+
+    private func localizedMilestoneTitle(code: String, label: String) -> String {
+        let c = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let l = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !c.isEmpty {
+            let slug = slugifyToken(c)
+            let candidates: [String] = [
+                "milestone.\(slug)",
+                "milestones.\(slug)",
+                "well_visit.milestone.\(slug)",
+                "well_visit_form.milestone.\(slug)"
+            ]
+            for k in candidates {
+                if let v = localizedStringIfExists(k) { return v }
+            }
+        }
+        return !l.isEmpty ? l : (!c.isEmpty ? c : L("report.milestone.default_title"))
+    }
+
+    private func localizedMilestoneStatus(_ status: String) -> String {
+        let s = status.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return "" }
+
+        let slug = slugifyToken(s)
+        let candidates: [String] = [
+            "milestone.status.\(slug)",
+            "milestones.status.\(slug)",
+            "well_visit.milestone.status.\(slug)",
+            "well_visit_form.milestone.status.\(slug)"
+        ]
+        for k in candidates {
+            if let v = localizedStringIfExists(k) { return v }
+        }
+        return s
+    }
+
+    private func computeAgeMonths(dobISO: String, visitISO: String) -> Double? {
+        guard let dob = parseDateFlexible(dobISO),
+              let v = parseDateFlexible(visitISO),
+              v >= dob else { return nil }
+        let seconds = v.timeIntervalSince(dob)
+        let days = seconds / 86400.0
+        return max(0.0, days / 30.4375)
+    }
+
+    private func computedWellProblemItemsFromRow(_ row: [String:String], ageMonths: Double?) -> [String] {
+        var items: [String] = []
+
+        func nonEmpty(_ s: String?) -> String? {
+            guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+            return s
+        }
+
+        // --- Parents' concerns ---
+        if let pc = nonEmpty(stringFromRow(row, keys: ["parents_concerns","parent_concerns"])) {
+            let fmt = L("well_visit_form.problem_listing.parents_concerns")
+            items.append(String(format: fmt, locale: .current, pc))
+        }
+
+        // --- Feeding / diet ---
+        let regurgPresent = boolFromRow(row, keys: ["regurgitation_present","regurgitationPresent","regurgitation"])
+        if regurgPresent {
+            items.append(L("well_visit_form.problem_listing.feeding.regurgitation"))
+        }
+
+        if let feedingIssue = nonEmpty(stringFromRow(row, keys: ["feeding_issue","feeding_difficulty","feeding_problem"])) {
+            let fmt = L("well_visit_form.problem_listing.feeding.difficulty")
+            items.append(String(format: fmt, locale: .current, feedingIssue))
+        }
+
+        if let feedingDiet = nonEmpty(stringFromRow(row, keys: ["feeding"])) {
+            // feeding is usually free text; keep as-is
+            let fmt = L("well_visit_form.problem_listing.feeding.diet")
+            items.append(String(format: fmt, locale: .current, feedingDiet))
+        }
+
+        let solidStarted = boolFromRow(row, keys: ["solid_food_started","solidFoodStarted","solids_started"])
+        if solidStarted {
+            items.append(L("well_visit_form.problem_listing.feeding.solids_started"))
+        }
+
+        if let solidQuality = nonEmpty(stringFromRow(row, keys: ["solid_food_quality","solids_quality","solidFoodQuality"])) {
+            let fmt = L("well_visit_form.problem_listing.feeding.solids_quality")
+            items.append(String(format: fmt, locale: .current, solidQuality))
+        }
+
+        if let solidComment = nonEmpty(stringFromRow(row, keys: ["solid_food_comment","solids_comment","solidFoodComment"])) {
+            let fmt = L("well_visit_form.problem_listing.feeding.solids_comment")
+            items.append(String(format: fmt, locale: .current, solidComment))
+        }
+
+        // Food variety: only if NOT "appears good" (also treat "appears_good" as good)
+        if let fvRaw = nonEmpty(stringFromRow(row, keys: ["food_variety_quality","food_variety","foodVarietyQuality"])) {
+            let fvNorm = fvRaw.lowercased().replacingOccurrences(of: "_", with: " ")
+            if fvNorm != "appears good" {
+                let fv = reportLocalizedWellChoiceToken(fvRaw)
+                let fmt = L("well_visit_form.problem_listing.feeding.food_variety")
+                items.append(String(format: fmt, locale: .current, fv))
+            }
+        }
+
+        // Dairy intake: only if more than 3 cups (code "4")
+        if let dairyCode = nonEmpty(stringFromRow(row, keys: ["dairy_amount_code","dairyAmountCode","dairy_amount"])) {
+            if dairyCode == "4" {
+                items.append(L("well_visit_form.problem_listing.feeding.dairy_gt_3"))
+            }
+        }
+
+        // --- Stools ---
+        if let poopStatus = nonEmpty(stringFromRow(row, keys: ["poop_status","stool_status","stools_status"])) {
+            let ps = poopStatus.lowercased()
+            if ps == "abnormal" {
+                items.append(L("well_visit_form.problem_listing.stools.abnormal"))
+            } else if ps == "hard" {
+                items.append(L("well_visit_form.problem_listing.stools.hard"))
+            }
+        }
+
+        if let poopComment = nonEmpty(stringFromRow(row, keys: ["poop_comment","stool_comment","stools_comment"])) {
+            let fmt = L("well_visit_form.problem_listing.stools.comment")
+            items.append(String(format: fmt, locale: .current, poopComment))
+        }
+
+        // --- Sleep ---
+        let sleepSnoring = boolFromRow(row, keys: ["sleep_snoring","sleepSnoring","snoring"])
+        if sleepSnoring {
+            items.append(L("well_visit_form.problem_listing.sleep.snoring"))
+        }
+
+        if let wakes = nonEmpty(stringFromRow(row, keys: ["wakes_for_feeds_per_night","wakesForFeedsPerNight","wakes_per_night"])) {
+            let isPost12 = (ageMonths ?? 0.0) >= 12.0
+            if isPost12 {
+                let fmt = L("well_visit_form.problem_listing.sleep.wakes_per_night")
+                items.append(String(format: fmt, locale: .current, wakes))
+            }
+        }
+
+        if let sleepHoursText = nonEmpty(stringFromRow(row, keys: ["sleep_hours_text","sleep_hours","sleepHoursText"])) {
+            // only flag if < 10h (same heuristic as the form)
+            let lower = sleepHoursText.lowercased()
+            var shouldFlag = false
+            if lower.contains("<10") || lower.contains("less than 10") {
+                shouldFlag = true
+            } else {
+                let digits = sleepHoursText.filter { "0123456789.".contains($0) }
+                if let v = Double(digits), v < 10 { shouldFlag = true }
+            }
+            if shouldFlag {
+                let fmt = L("well_visit_form.problem_listing.sleep.duration")
+                items.append(String(format: fmt, locale: .current, sleepHoursText))
+            }
+        }
+
+        if let sleepRegularRaw = nonEmpty(stringFromRow(row, keys: ["sleep_regular","sleep_regularity","sleepRegular"])) {
+            // keep only if NOT "regular" (also treat codes)
+            let norm = sleepRegularRaw.lowercased().replacingOccurrences(of: "_", with: " ")
+            if norm != "regular" {
+                let v = reportLocalizedWellChoiceToken(sleepRegularRaw)
+                let fmt = L("well_visit_form.problem_listing.sleep.regularity")
+                items.append(String(format: fmt, locale: .current, v))
+            }
+        }
+
+        if let sleepIssue = nonEmpty(stringFromRow(row, keys: ["sleep"])) {
+            let fmt = L("well_visit_form.problem_listing.sleep.issue")
+            items.append(String(format: fmt, locale: .current, sleepIssue))
+        }
+
+        return items
+    }
+
+    private func fetchWellVisitRowMap(visitID: Int) -> [String:String] {
+        var row: [String:String] = [:]
+        do {
+            let dbPath = try bundleDBPathWithDebug()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
+
+                func columns(in table: String) -> Set<String> {
+                    var cols = Set<String>()
+                    var stmtCols: OpaquePointer?
+                    if sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
+                        defer { sqlite3_finalize(s) }
+                        while sqlite3_step(s) == SQLITE_ROW {
+                            if let c = sqlite3_column_text(s, 1) { cols.insert(String(cString: c)) }
+                        }
+                    }
+                    return cols
+                }
+
+                let wellTable = ["well_visits","visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, "SELECT * FROM \(wellTable) WHERE id = ? LIMIT 1;", -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(visitID))
+                    if sqlite3_step(st) == SQLITE_ROW {
+                        let n = sqlite3_column_count(st)
+                        for i in 0..<n {
+                            guard let cname = sqlite3_column_name(st, i) else { continue }
+                            let key = String(cString: cname)
+                            if sqlite3_column_type(st, i) != SQLITE_NULL, let cval = sqlite3_column_text(st, i) {
+                                let val = String(cString: cval).trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !val.isEmpty { row[key] = val }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return row
+    }
+
+    private func stringFromRow(_ row: [String:String], keys: [String]) -> String? {
+        for k in keys {
+            if let v = row[k] { return v }
+        }
+        return nil
+    }
+
+    private func boolFromRow(_ row: [String:String], keys: [String]) -> Bool {
+        guard let raw = stringFromRow(row, keys: keys)?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return false
+        }
+        let lower = raw.lowercased()
+        if ["1","true","yes","y","oui"].contains(lower) { return true }
+        if ["0","false","no","n","non"].contains(lower) { return false }
+        // If stored as any non-empty string, treat as true (last-resort)
+        return true
     }
 
     // Resolve patient_id for a WELL visit by introspecting the well table and FK column.
@@ -471,14 +937,35 @@ final class ReportDataLoader {
 
                         // Lines (short, prioritized)
                         var lines: [String] = []
-                        if !issues.isEmpty { lines.append(LF("report.previous.issues_since_last", issues)) }
-                        if !problems.isEmpty { lines.append(LF("report.previous.problems", problems)) }
-                        if !conclusions.isEmpty { lines.append(LF("report.previous.conclusions", conclusions)) }
-                        if !parents.isEmpty { lines.append(LF("report.previous.parents_concerns", parents)) }
-                        if !comments.isEmpty { lines.append(LF("report.previous.comments", comments)) }
+
+                        if !issues.isEmpty {
+                            lines.append(LF("report.previous.issues_since_last", issues))
+                        }
+
+                        // Localize the previous visit's stored problem_listing lines (legacy EN or legacy keys)
+                        let ageMonthsPrev = (!effectiveDobISO.isEmpty && !visitDateISO.isEmpty) ? computeAgeMonths(dobISO: effectiveDobISO, visitISO: visitDateISO) : nil
+                        let localizedProblemsLines = localizePreviousWellProblemListingLines(visitID: Int(sqlite3_column_int64(st, 0)), rawProblemListing: problems, ageMonths: ageMonthsPrev)
+
+                        if !localizedProblemsLines.isEmpty {
+                            // Add each problem as its own bullet line later in ReportBuilder
+                            lines.append(contentsOf: localizedProblemsLines)
+                        } else if !problems.isEmpty {
+                            // Fallback: keep the raw block
+                            lines.append(LF("report.previous.problems", problems))
+                        }
+
+                        if !conclusions.isEmpty {
+                            lines.append(LF("report.previous.conclusions", conclusions))
+                        }
+                        if !parents.isEmpty {
+                            lines.append(LF("report.previous.parents_concerns", parents))
+                        }
+                        if !comments.isEmpty {
+                            lines.append(LF("report.previous.comments", comments))
+                        }
 
                         // Keep it concise
-                        if lines.count > 3 { lines = Array(lines.prefix(3)) }
+                        if lines.count > 6 { lines = Array(lines.prefix(6)) }
 
                         let dateOut = visitDateISO.isEmpty ? "—" : visitDateISO
                         let findingsStr: String? = lines.isEmpty ? nil : lines.joined(separator: " • ")
@@ -493,6 +980,99 @@ final class ReportDataLoader {
         }
         print("[ReportDataLoader] previousWell: \(results.count) items for visit \(currentVisitID)")
         return results
+    }
+
+    // Localize a previous visit's stored problem_listing (either legacy keys or legacy EN labels)
+    // into a list of clean lines (without leading bullets).
+    private func localizePreviousWellProblemListingLines(visitID: Int, rawProblemListing: String, ageMonths: Double?) -> [String] {
+        let normalized = rawProblemListing
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let trimmedAll = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAll.isEmpty else { return [] }
+
+        // 1) If the block contains legacy localization keys, reuse the existing repair.
+        if trimmedAll.contains("well_visit_form.problem_listing.") {
+            let repaired = repairWellProblemListing(visitID: visitID, rawProblemListing: trimmedAll, ageMonths: ageMonths) ?? trimmedAll
+            return repaired
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map { line in
+                    if line.hasPrefix("• ") { return String(line.dropFirst(2)) }
+                    return line
+                }
+        }
+
+        // 2) Otherwise, attempt to localize common legacy EN labels.
+        func stripBullet(_ s: String) -> String {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.hasPrefix("• ") { return String(t.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines) }
+            return t
+        }
+
+        func afterColon(_ s: String) -> String {
+            guard let idx = s.firstIndex(of: ":") else { return "" }
+            return String(s[s.index(after: idx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var out: [String] = []
+        let lines = normalized.components(separatedBy: .newlines)
+
+        for rawLine in lines {
+            let line = stripBullet(rawLine)
+            guard !line.isEmpty else { continue }
+
+            // Parents' concerns
+            if line.lowercased().hasPrefix("parents'") || line.lowercased().hasPrefix("parents concerns") {
+                let v = afterColon(line)
+                if !v.isEmpty {
+                    out.append(LF("well_visit_form.problem_listing.parents_concerns", v))
+                }
+                continue
+            }
+
+            // Food variety
+            if line.lowercased().hasPrefix("food variety") {
+                let vRaw = afterColon(line)
+                if !vRaw.isEmpty {
+                    let v = reportLocalizedWellChoiceToken(vRaw)
+                    out.append(LF("well_visit_form.problem_listing.feeding.food_variety", v))
+                }
+                continue
+            }
+
+            // Sleep regularity
+            if line.lowercased().hasPrefix("sleep regularity") {
+                let vRaw = afterColon(line)
+                if !vRaw.isEmpty {
+                    let v = reportLocalizedWellChoiceToken(vRaw)
+                    out.append(LF("well_visit_form.problem_listing.sleep.regularity", v))
+                }
+                continue
+            }
+
+            // Snoring
+            if line.lowercased().contains("snoring") {
+                // Prefer the canonical localized sentence
+                out.append(L("well_visit_form.problem_listing.sleep.snoring"))
+                continue
+            }
+
+            // Sleep issue
+            if line.lowercased().hasPrefix("sleep issue") {
+                let v = afterColon(line)
+                if !v.isEmpty {
+                    out.append(LF("well_visit_form.problem_listing.sleep.issue", v))
+                }
+                continue
+            }
+
+            // Anything else: keep as-is (free text, milestone lines, teeth lines, etc.)
+            out.append(line)
+        }
+
+        return out
     }
 
     // Fetch patient's DOB (ISO-like string) from patients table, trying common column names.
@@ -720,6 +1300,244 @@ final class ReportDataLoader {
         var nextVisitDate: String?
         var perinatalSummary: String?
 
+        // Localize DB-stored choice tokens (often stored in EN) into the current UI language.
+        // Safe for multi-select strings like "Wheeze, Crackles (L)".
+        
+        
+        // MARK: - Choice localization for report rendering
+        // DB stores choice tokens in base language (often EN). Reports must localize at render time.
+        func reportLocalizedChoiceToken(_ rawToken: String) -> String {
+            let token = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !token.isEmpty else { return rawToken }
+
+            func slugify(_ s: String) -> String {
+                var t = s.lowercased()
+                t = t.replacingOccurrences(of: "(", with: "")
+                t = t.replacingOccurrences(of: ")", with: "")
+                t = t.replacingOccurrences(of: "-", with: " ")
+                t = t.replacingOccurrences(of: "/", with: " ")
+
+                let allowed = CharacterSet.alphanumerics
+                var out = ""
+                var lastWasUnderscore = false
+
+                for scalar in t.unicodeScalars {
+                    if allowed.contains(scalar) {
+                        out.unicodeScalars.append(scalar)
+                        lastWasUnderscore = false
+                    } else {
+                        if !lastWasUnderscore {
+                            out.append("_")
+                            lastWasUnderscore = true
+                        }
+                    }
+                }
+
+                while out.contains("__") { out = out.replacingOccurrences(of: "__", with: "_") }
+                out = out.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+                return out
+            }
+
+            func localizedIfExists(_ key: String) -> String? {
+                let v = NSLocalizedString(key, tableName: nil, bundle: .main, value: key, comment: "")
+                return (v == key) ? nil : v
+            }
+
+            let slug = slugify(token)
+
+            let candidates: [String] = [
+                "sick_episode_form.choice.\(slug)",
+                "sick_episode_form.choice_\(slug)",
+                "sick_episode_form.choice.main_complaint.\(slug)",
+                "sick_episode_form.choice.main_complaint_\(slug)",
+
+                // legacy fallbacks (keep while migrating)
+                "sick_episode.choice.\(slug)",
+                "sick_episode.choice_\(slug)"
+            ]
+
+            for k in candidates {
+                if let v = localizedIfExists(k) { return v }
+            }
+
+            return token
+        }
+
+        func reportLocalizedChoiceTokenList(_ rawList: String?) -> String? {
+            guard let rawList = rawList else { return nil }
+            let trimmed = rawList.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            let tokens = trimmed
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            if tokens.count <= 1 {
+                return reportLocalizedChoiceToken(trimmed)
+            }
+
+            return tokens.map { reportLocalizedChoiceToken($0) }.joined(separator: ", ")
+        }
+
+        func reportLocalizedProblemListing(_ raw: String?) -> String? {
+            guard let raw = raw else { return nil }
+            let normalized = raw
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+            let trimmedAll = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedAll.isEmpty else { return nil }
+
+            func splitLeadingWhitespace(_ s: String) -> (lead: String, rest: String) {
+                var idx = s.startIndex
+                while idx < s.endIndex {
+                    let ch = s[idx]
+                    if ch == " " || ch == "\t" {
+                        idx = s.index(after: idx)
+                    } else {
+                        break
+                    }
+                }
+                return (String(s[..<idx]), String(s[idx...]))
+            }
+
+            let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            var out: [String] = []
+            out.reserveCapacity(lines.count)
+
+            for line in lines {
+                let (lead, rest0) = splitLeadingWhitespace(line)
+                let rest = rest0.trimmingCharacters(in: .whitespaces)
+                guard !rest.isEmpty else {
+                    out.append(line) // preserve blank/spacing lines
+                    continue
+                }
+
+                // Preserve common bullet prefixes (e.g., "• ")
+                var bulletPrefix = ""
+                var body = rest
+                if body.hasPrefix("• ") {
+                    bulletPrefix = "• "
+                    body = String(body.dropFirst(2))
+                } else if body.hasPrefix("- ") {
+                    bulletPrefix = "- "
+                    body = String(body.dropFirst(2))
+                } else if body.hasPrefix("– ") {
+                    bulletPrefix = "– "
+                    body = String(body.dropFirst(2))
+                } else if body.hasPrefix("— ") {
+                    bulletPrefix = "— "
+                    body = String(body.dropFirst(2))
+                }
+
+                // If the line has a colon, localize only the RHS (often a comma-separated choice list)
+                if let cIdx = body.firstIndex(of: ":") {
+                    let lhs = String(body[...cIdx])
+                    let rhs = String(body[body.index(after: cIdx)...]).trimmingCharacters(in: .whitespaces)
+                    let localizedRhs = reportLocalizedChoiceTokenList(rhs) ?? rhs
+                    out.append(lead + bulletPrefix + lhs + " " + localizedRhs)
+                } else {
+                    // Otherwise, if it's a raw comma-separated choice list line, localize the whole thing.
+                    let localized = reportLocalizedChoiceTokenList(body) ?? body
+                    out.append(lead + bulletPrefix + localized)
+                }
+            }
+
+            return out.joined(separator: "\n")
+        }
+        
+        /// Localize a previously-saved Problem Listing block (labels + known choice tokens).
+        func localizeProblemListingBlock(_ raw: String?) -> String? {
+            guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+                return nil
+            }
+
+            let labelKeyMap: [String: String] = [
+                "Age": "report.problem.age",
+                "Sex": "report.problem.sex",
+                "Main complaint": "report.problem.main_complaint",
+                "Duration": "report.problem.duration",
+                "HPI summary": "report.problem.hpi_summary",
+                "Appearance": "report.problem.appearance",
+                "Breathing": "report.problem.breathing",
+                "Context": "report.problem.context",
+
+                // PE echoes commonly present in Problem Listing
+                "General Appearance": "report.problem.pe.general_appearance",
+                "Color": "report.problem.pe.color",
+                "Skin": "report.problem.pe.skin",
+                "Lungs": "report.problem.pe.lungs",
+                "Heart": "report.problem.pe.heart"
+            ]
+
+            // Only these labels try to localize comma-separated RHS tokens.
+            let rhsTokenLabels: Set<String> = [
+                "Main complaint", "Appearance", "Breathing", "Context",
+                "General Appearance", "Color", "Skin", "Lungs", "Heart"
+            ]
+
+            func localizeRHS(label: String, rhs: String) -> String {
+                var out = rhs.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Fix legacy artifact like: "24h hours"
+                if label == "Duration" {
+                    out = out.replacingOccurrences(of: " hours", with: "")
+                    out = out.replacingOccurrences(of: " hour", with: "")
+                }
+
+                if rhsTokenLabels.contains(label) {
+                    out = reportLocalizedChoiceTokenList(out) ?? out // your existing token localizer
+                }
+
+                return out
+            }
+
+            let normalized = raw.replacingOccurrences(of: "\r", with: "\n")
+            let lines = normalized.components(separatedBy: .newlines)
+
+            let localizedLines = lines.map { line -> String in
+                let prefixWhitespace = line.prefix { $0 == " " || $0 == "\t" }
+                let core = line.dropFirst(prefixWhitespace.count)
+
+                guard let colon = core.firstIndex(of: ":") else { return line }
+
+                let labelRaw = core[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
+                let rhsRaw = core[core.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let localizedLabel: String = {
+                    if let k = labelKeyMap[String(labelRaw)] {
+                        return L(k)
+                    }
+                    return String(labelRaw)
+                }()
+
+                let localizedRhs = localizeRHS(label: String(labelRaw), rhs: String(rhsRaw))
+                return "\(prefixWhitespace)\(localizedLabel): \(localizedRhs)"
+            }
+
+            return localizedLines.joined(separator: "\n")
+        }
+
+        // Vaccination status localization (DB typically stores base-language tokens)
+        func reportLocalizedVaccinationStatus(_ raw: String) -> String {
+            let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return raw }
+
+            switch t {
+            case "Up to date":
+                return NSLocalizedString("vax.status.up_to_date", comment: "Vaccination status: up to date")
+            case "Delayed":
+                return NSLocalizedString("vax.status.delayed", comment: "Vaccination status: delayed")
+            case "Not vaccinated":
+                return NSLocalizedString("vax.status.not_vaccinated", comment: "Vaccination status: not vaccinated")
+            case "Unknown":
+                return NSLocalizedString("vax.status.unknown", comment: "Vaccination status: unknown")
+            default:
+                // If the DB already contains a localized string (or an unexpected code), keep it.
+                return t
+            }
+        }
+
         do {
             let dbPath = try currentBundleDBPath()
             var db: OpaquePointer?
@@ -757,8 +1575,13 @@ final class ReportDataLoader {
                         var i: Int32 = 0
                         patientID      = sqlite3_column_int64(stmt, i); i += 1
                         mainComplaint  = col(i); i += 1
+                        // Localize multi-select complaint tokens for the report
+                        mainComplaint = reportLocalizedChoiceTokenList(mainComplaint)
                         hpi            = col(i); i += 1
                         duration       = col(i); i += 1
+                        // DEBUG: now-localized mainComplaint
+                        print("[ReportDataLoader] loadSick(\(episodeID)) mainComplaint=\(mainComplaint ?? "nil")")
+                        print("[ReportDataLoader] loadSick(\(episodeID)) raw duration=\(duration ?? "nil")")
                         if let v = col(i) { basics[L("report.sick.basics.feeding")] = v }; i += 1
                         if let v = col(i) { basics[L("report.sick.basics.urination")] = v }; i += 1
                         if let v = col(i) { basics[L("report.sick.basics.breathing")] = v }; i += 1
@@ -766,6 +1589,7 @@ final class ReportDataLoader {
                         if let v = col(i) { basics[L("report.sick.basics.context")] = v }; i += 1
 
                         problemListing = col(i); i += 1
+                        problemListing = localizeProblemListingBlock(problemListing)
                         let investigationsRaw = col(i); i += 1
                         workingDx      = col(i); i += 1
                         let icdRaw     = col(i); i += 1
@@ -802,9 +1626,15 @@ final class ReportDataLoader {
                         ]
                         var valuesByName: [String:String] = [:]
                         for name in peNames {
-                            if let v = col(i), !v.isEmpty { valuesByName[name] = v }
+                            if let v = col(i), !v.isEmpty {
+                                valuesByName[name] = reportLocalizedChoiceTokenList(v) ?? v
+                            }
                             i += 1
                         }
+                        // DEBUG: selected PE values (now localized)
+                        print("[ReportDataLoader] loadSick(\(episodeID)) PE lungs=\(valuesByName[peLungs] ?? "nil")")
+                        print("[ReportDataLoader] loadSick(\(episodeID)) PE skin=\(valuesByName[peSkin] ?? "nil")")
+                        print("[ReportDataLoader] loadSick(\(episodeID)) PE heart=\(valuesByName[peHeart] ?? "nil")")
                         let groupMap: [(String,[String])] = [
                             (L("report.sick.pe.group.general"), [peGeneralAppearance, peHydration, peColor, peSkin]),
                             (L("report.sick.pe.group.ent"), [peENT, peRightEar, peLeftEar, peRightEye, peLeftEye]),
@@ -859,7 +1689,7 @@ final class ReportDataLoader {
                         sqlite3_bind_int64(stmt, 1, patientID)
                         if sqlite3_step(stmt) == SQLITE_ROW, let cstr = sqlite3_column_text(stmt, 0) {
                             let s = String(cString: cstr).trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !s.isEmpty { vaccinationText = s }
+                            if !s.isEmpty { vaccinationText = reportLocalizedVaccinationStatus(s) }
                         }
                     }
                 }
@@ -1627,7 +2457,148 @@ final class ReportDataLoader {
         return nil
     }
     
-    // MARK: - Helpers
+// MARK: - Helpers
+
+    /// Previous-well rows often store multi-line bullet lists (and sometimes legacy EN labels).
+    /// For report rendering we want a single-line, bullet-separated string.
+    private func flattenBulletsForReport(_ text: String) -> String {
+        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return "" }
+
+        let parts: [String] = raw
+            .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { line in
+                var s = line
+                if s.hasPrefix("•") {
+                    s = String(s.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                if s.hasPrefix("-") {
+                    s = String(s.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                return s
+            }
+            .filter { !$0.isEmpty }
+
+        return parts.joined(separator: " • ")
+    }
+
+    /// Localize legacy EN problem-listing lines that were stored as human text (not keys).
+    /// This is used mainly for *previous* well visits, where the DB may contain EN labels.
+    private func localizeLegacyWellProblemListingLine(_ line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // Normalize bullet prefixes
+        var s = trimmed
+        if s.hasPrefix("•") {
+            s = String(s.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if s.hasPrefix("-") {
+            s = String(s.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !s.isEmpty else { return nil }
+
+        // If it looks like "Label: value" try to map the label to an existing localized format string.
+        if let colon = s.firstIndex(of: ":") {
+            let labelPart = String(s[..<colon]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let valuePart = String(s[s.index(after: colon)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = labelPart.lowercased()
+
+            // 1) Parents' concerns
+            if label == "parents' concerns" || label == "parents concerns" || label == "parent concerns" {
+                if !valuePart.isEmpty {
+                    return String(format: L("well_visit_form.problem_listing.parents_concerns"), valuePart)
+                }
+                return s
+            }
+
+            // 2) Food variety (skip if it's the benign code/value)
+            if label == "food variety" {
+                let v = valuePart.lowercased()
+                if v == "appears good" || v == "appears_good" || v == "appears-good" {
+                    return nil
+                }
+                if !valuePart.isEmpty {
+                    return String(format: L("well_visit_form.problem_listing.feeding.food_variety"), valuePart)
+                }
+                return s
+            }
+
+            // 3) Sleep regularity
+            if label == "sleep regularity" {
+                if !valuePart.isEmpty {
+                    return String(format: L("well_visit_form.problem_listing.sleep.regularity"), valuePart)
+                }
+                return s
+            }
+
+            // 4) Sleep issue
+            if label == "sleep issue" {
+                if !valuePart.isEmpty {
+                    return String(format: L("well_visit_form.problem_listing.sleep.issue"), valuePart)
+                }
+                return s
+            }
+
+            // 5) Snoring line is often stored as "Sleep: snoring / noisy breathing reported."
+            if label == "sleep" {
+                if valuePart.lowercased().contains("snoring") {
+                    return L("well_visit_form.problem_listing.sleep.snoring")
+                }
+                return s
+            }
+        }
+
+        // Default: keep as-is
+        return s
+    }
+
+    /// Apply lightweight legacy-label localization line-by-line.
+    /// Returns a multi-line string (so downstream repair rules can still operate),
+    /// and the final renderer will later flatten it.
+    private func localizeLegacyWellProblemListingText(_ text: String) -> String {
+        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return "" }
+
+        let parts: [String] = raw
+            .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        var out: [String] = []
+        out.reserveCapacity(parts.count)
+
+        for p in parts {
+            if let mapped = localizeLegacyWellProblemListingLine(p) {
+                let t = mapped.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { out.append(t) }
+            }
+        }
+
+        return out.joined(separator: "\n")
+    }
+
+    /// Apply the same localization repair used for the *current* well visit problem listing,
+    /// then normalize to a single-line bullet-separated string for the Previous Visits section.
+    private func localizeAndFlattenPreviousWellText(visitID: Int, text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        // For previous visits, the DB can contain legacy EN human labels.
+        // First, translate the obvious label+value lines.
+        let legacyLocalized = localizeLegacyWellProblemListingText(trimmed)
+
+        // Reuse the same repair/localization logic as the current well visit.
+        // For previous visits we also pass visitID (for rules) and ageMonths (for age-gating).
+        let ageMonths = wellVisitAgeMonths(visitID: visitID) ?? 0.0
+        let repaired = repairWellProblemListing(
+            visitID: visitID,
+            rawProblemListing: legacyLocalized,
+            ageMonths: ageMonths
+        ) ?? legacyLocalized
+
+        return flattenBulletsForReport(repaired)
+    }
 
     // Returns a list of previous well visits for the same patient (excluding the current visit),
     // with robust date/age handling and patient DOB from DB if available.
@@ -1730,15 +2701,19 @@ final class ReportDataLoader {
                             return String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
                         }
 
-                        let _ = sqlite3_column_int64(st, idx); idx += 1 // id (unused in title)
+                        let prevVisitID = Int(sqlite3_column_int64(st, idx)); idx += 1 // id
                         let visitDateRaw      = col(idx); idx += 1      // visit_date_raw
                         let visitDateForAge   = col(idx); idx += 1      // visit_date_for_age
                         let visitTypeRaw      = col(idx); idx += 1
-                        let problems          = col(idx); idx += 1
-                        let conclusions       = col(idx); idx += 1
+                        let problemsRaw       = col(idx); idx += 1
+                        let conclusionsRaw    = col(idx); idx += 1
                         let parents           = col(idx); idx += 1
                         let issues            = col(idx); idx += 1
                         let comments          = col(idx); idx += 1
+
+                        // Localize + normalize legacy stored text (often saved in EN) for report display.
+                        let problems          = localizeAndFlattenPreviousWellText(visitID: prevVisitID, text: problemsRaw)
+                        let conclusions       = localizeAndFlattenPreviousWellText(visitID: prevVisitID, text: conclusionsRaw)
 
                         // Title: Date · Visit Type · Age
                         let visitLabel = visitTypeRaw.isEmpty ? L("report.previousWell.visitLabel.default") : (readableVisitType(visitTypeRaw) ?? visitTypeRaw)

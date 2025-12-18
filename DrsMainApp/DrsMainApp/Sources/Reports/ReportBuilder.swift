@@ -1563,6 +1563,59 @@ extension ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         // 15) Physical Examination (grouped)
+        // Localize PE value strings when they come from choice-based pickers.
+        // The DB often stores the base (English) choice text; for reports we want to render
+        // the localized display string when a matching Localizable.strings key exists.
+        func slugifyChoice(_ s: String) -> String {
+            let lower = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            var out = ""
+            out.reserveCapacity(lower.count)
+            var lastWasUnderscore = false
+            for ch in lower {
+                if ch.isLetter || ch.isNumber {
+                    out.append(ch)
+                    lastWasUnderscore = false
+                } else {
+                    if !lastWasUnderscore {
+                        out.append("_")
+                        lastWasUnderscore = true
+                    }
+                }
+            }
+            // trim leading/trailing underscores
+            while out.hasPrefix("_") { out.removeFirst() }
+            while out.hasSuffix("_") { out.removeLast() }
+            return out
+        }
+
+        func localizeChoiceIfPossible(_ raw: String) -> String {
+            let slug = slugifyChoice(raw)
+            if slug.isEmpty { return raw }
+
+            // Try known choice namespaces. Return the first that resolves to a non-key string.
+            let prefixes: [String] = [
+                "sick_episode_form.choice.",
+                "well_visit_form.choice.",
+                "well_visit.choice.",
+                "report.choice."
+            ]
+            for p in prefixes {
+                let k = p + slug
+                let v = NSLocalizedString(k, comment: "")
+                if v != k { return v }
+            }
+            return raw
+        }
+
+        func localizePELine(_ line: String) -> String {
+            // Expect "Label: Value". Only localize the Value part.
+            guard let r = line.range(of: ":") else { return line }
+            let label = String(line[..<r.lowerBound])
+            let value = String(line[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if value.isEmpty { return line }
+            let localizedValue = localizeChoiceIfPossible(value)
+            return "\(label): \(localizedValue)"
+        }
         para(L("report.sick.section.physical_exam", comment: "Sick section title: physical examination"), font: headerFont)
         if data.physicalExamGroups.isEmpty {
             para("—", font: bodyFont)
@@ -1570,7 +1623,7 @@ extension ReportBuilder {
             for group in data.physicalExamGroups {
                 para(group.group, font: NSFont.systemFont(ofSize: 13, weight: .semibold))
                 for line in group.lines {
-                    para("• \(line)", font: bodyFont)
+                    para("• \(localizePELine(line))", font: bodyFont)
                 }
             }
         }
