@@ -918,7 +918,7 @@ final class ReportDataLoader {
                         }
 
                         var idx: Int32 = 0
-                        let _ = sqlite3_column_int64(st, idx); idx += 1 // id (unused in title)
+                        let prevID = sqlite3_column_int64(st, idx); idx += 1 // id (unused in title)
                         let visitDateISO = col(idx); idx += 1
                         let visitTypeRaw = col(idx); idx += 1
                         let problems = col(idx); idx += 1
@@ -1259,9 +1259,10 @@ final class ReportDataLoader {
                             if isAchieved {
                                 achieved += 1
                             } else {
-                                let title = !label.isEmpty ? label : (!code.isEmpty ? code : L("report.milestone.default_title"))
+                                let title = localizedMilestoneTitle(code: code, label: label)
+                                let statusPretty = localizedMilestoneStatus(status)
                                 var line = title
-                                if !status.isEmpty { line += " (\(status))" }
+                                if !statusPretty.isEmpty { line += " (\(statusPretty))" }
                                 if !note.isEmpty { line += " — \(note)" }
                                 flags.append(line)
                             }
