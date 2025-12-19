@@ -2654,3 +2654,7 @@
 "well_visit_form.problem_listing.sleep.regularity" = "Régularité du sommeil : %@";
 "well_visit_form.problem_listing.sleep.snoring" = "Ronflements rapportés.";
 "well_visit_form.problem_listing.sleep.issue" = "Problème de sommeil : %@";
+
+"well_visit_form.milestones.status.achieved" = "Achieved";
+"well_visit_form.milestones.status.uncertain" = "Uncertain";
+"well_visit_form.milestones.status.not_yet" = "Not yet";

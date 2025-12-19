@@ -20,6 +20,18 @@ private enum L10nWVF {
     static func s(_ key: String) -> String { NSLocalizedString(key, comment: "") }
 }
 
+// MARK: - Problem listing tokens (step 1)
+
+private struct ProblemToken: Codable, Hashable {
+    let key: String
+    let args: [String]
+
+    init(_ key: String, _ args: [String] = []) {
+        self.key = key
+        self.args = args
+    }
+}
+
 // MARK: - Milestone model & catalog
 
 private struct MilestoneDescriptor: Identifiable, Hashable {
@@ -33,19 +45,39 @@ private struct MilestoneDescriptor: Identifiable, Hashable {
 }
 
 private enum MilestoneStatus: String, CaseIterable, Identifiable {
-    case achieved    = "achieved"
-    case notYet      = "not yet"
-    case uncertain   = "uncertain"
+    case achieved = "achieved"
+        case uncertain = "uncertain"
+        case notYet = "not_yet"
 
-    var id: String { rawValue }
+        var id: String { rawValue }
 
-    var displayName: String {
-        switch self {
-        case .achieved:  return L10nWVF.s("well_visit_form.milestone_status.achieved")
-        case .notYet:    return L10nWVF.s("well_visit_form.milestone_status.not_yet")
-        case .uncertain: return L10nWVF.s("well_visit_form.milestone_status.uncertain")
+        /// Localized label for UI.
+        var localizedDisplayName: String {
+            let key = "well_visit_form.milestones.status.\(rawValue)"
+            let s = NSLocalizedString(key, comment: "")
+            return (s == key) ? rawValue : s
         }
-    }
+
+        /// Backwards-compatible parser for older DB rows (e.g. "not yet").
+        static func parseStored(_ raw: String) -> MilestoneStatus? {
+            let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.isEmpty { return nil }
+
+            if let exact = MilestoneStatus(rawValue: t) { return exact }
+
+            let c = t.lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+
+            switch c {
+            case "achieved": return .achieved
+            case "uncertain": return .uncertain
+            case "not_yet", "notyet", "notdone", "not_done", "not_achieved":
+                return .notYet
+            default:
+                return nil
+            }
+        }
 }
 
 // Milestone sets, ported from the Python MILESTONE_SETS
@@ -410,6 +442,7 @@ struct WellVisitForm: View {
 
     // Summary / plan
     @State private var problemListing: String = ""
+    @State private var problemListingTokens: [ProblemToken] = []
     @State private var conclusions: String = ""
     @State private var plan: String = ""
     @State private var clinicianComment: String = ""
@@ -609,6 +642,12 @@ struct WellVisitForm: View {
                         Text(L10nWVF.k("well_visit_form.shared.probably_limited")).tag("probably_limited")
                     }
                     .pickerStyle(.segmented)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10nWVF.k("well_visit_form.solids.comment.label"))
+                            .font(.subheadline)
+                        TextEditor(text: $solidFoodComment)
+                            .frame(minHeight: 80)
+                    }
                 }
             }
         }
@@ -709,6 +748,24 @@ struct WellVisitForm: View {
         }
         let total = volume * freq
         return String(format: "%.0f ml / 24h", total)
+    }
+    
+    /// Normalize any legacy stored values to the canonical codes used by the Picker tags.
+    private func normalizeQualityCode(_ raw: String) -> String {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { return "" }
+
+        let lower = t.lowercased()
+        switch lower {
+        case "appears_good", "appears good", "appears-good":
+            return "appears_good"
+        case "uncertain":
+            return "uncertain"
+        case "probably_limited", "probably limited", "probably-limited":
+            return "probably_limited"
+        default:
+            return lower.replacingOccurrences(of: " ", with: "_")
+        }
     }
 
     init(editingVisitID: Int? = nil) {
@@ -1360,7 +1417,7 @@ struct WellVisitForm: View {
                                             set: { milestoneStatuses[m.code] = $0 }
                                         )) {
                                             ForEach(MilestoneStatus.allCases) { status in
-                                                Text(status.displayName).tag(status)
+                                                Text(status.localizedDisplayName).tag(status)
                                             }
                                         }
                                         .pickerStyle(.segmented)
@@ -1768,7 +1825,9 @@ struct WellVisitForm: View {
         deltaWeightIsNormal = roundedPerDay >= 20
     }
 
-    // MARK: - Load existing visit (edit mode)
+// MARK: - Load existing visit (edit mode)
+
+
 
     private func loadIfEditing() {
         guard let visitID = editingVisitID,
@@ -1914,6 +1973,27 @@ struct WellVisitForm: View {
                 }
 
                 problemListing   = problems
+        // Load problem listing tokens (if present) for localization-safe rendering.
+        tokenLoad: do {
+            let sql = "SELECT COALESCE(problem_listing_tokens,'') FROM well_visits WHERE id = ? LIMIT 1;"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { break tokenLoad }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(visitID))
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                let raw: String = {
+                    if let c = sqlite3_column_text(stmt, 0) { return String(cString: c) }
+                    return ""
+                }()
+
+                if let decoded = decodeProblemTokensFromDB(raw) {
+                    problemListingTokens = decoded
+                } else {
+                    problemListingTokens = []
+                }
+            }
+        }
                 conclusions      = conclText
                 plan             = planText
                 clinicianComment = clinicianText
@@ -1933,17 +2013,17 @@ struct WellVisitForm: View {
                 } else {
                     mchatScore = ""
                 }
-                mchatResult = mchatResultText
+                mchatResult = normalizeMchatResultCode(mchatResultText)
 
                 if devTestScoreInt > 0 {
                     devTestScore = String(devTestScoreInt)
                 } else {
                     devTestScore = ""
                 }
-                devTestResult = devTestResultText
+                devTestResult = normalizeDevTestResultCode(devTestResultText)
 
                 // Structured feeding fields
-                poopStatus  = poopStatusText
+                poopStatus = normalizePoopStatusCode(poopStatusText)
                 poopComment = poopCommentText
 
                 // Decode milk_types → toggles
@@ -1985,13 +2065,13 @@ struct WellVisitForm: View {
                     solidFoodStartDate = solidsDate
                 }
 
-                solidFoodQuality = solidQualityText
+                solidFoodQuality = normalizeQualityCode(solidQualityText)
                 solidFoodComment = solidCommentText
-                foodVarietyQuality = foodVarietyText
+                foodVarietyQuality = normalizeQualityCode(foodVarietyText)
 
                 // Structured sleep fields
                 sleepHoursText = sleepHoursTextDB
-                sleepRegular   = sleepRegularText
+                sleepRegular = normalizeSleepRegularCode(sleepRegularText)
                 sleepSnoring   = (sleepSnoringVal != 0)
                 longerSleepAtNight = (longerSleepNightVal != 0)
 
@@ -2203,7 +2283,7 @@ struct WellVisitForm: View {
                 let status = String(cString: statusC)
                 let note   = (sqlite3_column_text(stmt, 2).flatMap { String(cString: $0) }) ?? ""
 
-                if let parsed = MilestoneStatus(rawValue: status) {
+                if let parsed = MilestoneStatus.parseStored(status) {
                     statuses[code] = parsed
                 }
                 if !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2221,12 +2301,162 @@ struct WellVisitForm: View {
     
     // MARK: - Localization helpers (WellVisitForm)
 
+    // MARK: - Problem listing token persistence (WellVisitForm)
+
+    /// Ensure the optional `problem_listing_tokens` column exists (backwards compatible).
+    /// Safe to call repeatedly; we ignore the "duplicate column" error.
+    private func ensureProblemListingTokensColumn(db: OpaquePointer) {
+        let sql = "ALTER TABLE well_visits ADD COLUMN problem_listing_tokens TEXT;"
+        _ = sqlite3_exec(db, sql, nil, nil, nil)
+    }
+
+    private func encodeProblemTokensForDB(_ tokens: [ProblemToken]) -> String {
+        guard !tokens.isEmpty else { return "" }
+        let enc = JSONEncoder()
+        guard let data = try? enc.encode(tokens) else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private func decodeProblemTokensFromDB(_ raw: String) -> [ProblemToken]? {
+        let t = trimmed(raw)
+        guard !t.isEmpty else { return nil }
+        guard let data = t.data(using: .utf8) else { return nil }
+        let dec = JSONDecoder()
+        return try? dec.decode([ProblemToken].self, from: data)
+    }
+
+
     private func L(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
 
     private func trimmed(_ s: String) -> String {
         s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Returns true if a localized string exists for this key (i.e., lookup doesn't just echo the key back).
+    private func hasLocalization(_ key: String) -> Bool {
+        let v = L(key)
+        return v != key
+    }
+
+    /// Try to resolve a localized label for a stable `code` using a list of key prefixes.
+    /// Example: prefixes ["well_visit_form.shared", "well_visit_form.sleep.regularity"] with code "regular".
+    private func localizedLabel(for code: String, prefixes: [String]) -> String {
+        let c = trimmed(code)
+        if c.isEmpty { return "" }
+        for p in prefixes {
+            let k = "\(p).\(c)"
+            if hasLocalization(k) {
+                return L(k)
+            }
+        }
+        return c
+    }
+    
+    private func localizedIfExists(_ key: String) -> String? {
+        let s = NSLocalizedString(key, comment: "")
+        return (s == key) ? nil : s
+    }
+
+    private func normalizeSimpleCode(_ raw: String) -> String {
+        trimmed(raw)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    private func normalizePoopStatusCode(_ raw: String) -> String {
+        let c = normalizeSimpleCode(raw)
+        switch c {
+        case "normal", "abnormal", "hard":
+            return c
+        default:
+            return trimmed(raw)   // keep legacy/free-text
+        }
+    }
+
+    private func normalizeSleepRegularCode(_ raw: String) -> String {
+        let c = normalizeSimpleCode(raw)
+        switch c {
+        case "regular", "irregular", "uncertain":
+            return c
+        default:
+            return trimmed(raw)
+        }
+    }
+
+    private func normalizeMchatResultCode(_ raw: String) -> String {
+        let c = normalizeSimpleCode(raw)
+        switch c {
+        case "low_risk", "medium_risk", "high_risk", "negative", "positive", "pass", "fail", "normal", "abnormal":
+            return c
+        default:
+            return trimmed(raw)
+        }
+    }
+
+    private func normalizeDevTestResultCode(_ raw: String) -> String {
+        let c = normalizeSimpleCode(raw)
+        switch c {
+        case "normal", "borderline", "abnormal", "pass", "fail", "suspect", "concerning":
+            return c
+        default:
+            return trimmed(raw)
+        }
+    }
+
+    /// If the value looks like an English label (e.g. "Low risk"), normalize it into a snake_case code.
+    /// We only use this for matching known codes; otherwise we keep the original string.
+    private func englishLabelToCodeCandidate(_ s: String) -> String {
+        let t = trimmed(s)
+        if t.isEmpty { return "" }
+        // Only attempt if all scalars are ASCII letters/digits/spaces/underscores/hyphens.
+        for u in t.unicodeScalars {
+            if u.value > 127 { return t }
+            let ch = Character(u)
+            if !(ch.isLetter || ch.isNumber || ch == " " || ch == "_" || ch == "-") {
+                return t
+            }
+        }
+        return t
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    private func isKnownSleepRegularityCode(_ code: String) -> Bool {
+        switch code {
+        case "regular", "irregular", "uncertain":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func isKnownMCHATResultCode(_ code: String) -> Bool {
+        switch code {
+        case "low_risk", "medium_risk", "high_risk",
+             "low", "medium", "high",
+             "negative", "positive",
+             "pass", "fail",
+             "normal", "abnormal":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func isKnownDevTestResultCode(_ code: String) -> Bool {
+        switch code {
+        case "normal", "borderline", "abnormal",
+             "pass", "fail",
+             "suspect", "concerning",
+             // legacy/alt codes we may see in older rows
+             "at_risk", "delayed", "uncertain":
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - PE problem-listing line helpers
@@ -2261,10 +2491,145 @@ struct WellVisitForm: View {
         return peField(labelKey, t)
     }
 
+    // MARK: - PE token helpers (for localization-safe problem listing)
+    private func peTextFieldToken(_ labelKey: String, text: String) -> (line: String, token: ProblemToken)? {
+        let t = trimmed(text)
+        if t.isEmpty { return nil }
+        let line = peField(labelKey, t)
+        let token = peFieldToken(labelKey, value: t, valueIsKey: false)
+        return (line, token)
+    }
+
+    // Teeth: keep tokenization stable by storing the base value key + optional count + optional comment.
+    // args[0] = labelKey
+    // args[1] = baseValueKey (present/absent)
+    // args[2] = count ("" if none)
+    // args[3] = comment ("" if none)
+    private func peTeethToken(countText: String, present: Bool, comment: String) -> (line: String, token: ProblemToken) {
+        let baseKey = present
+            ? "well_visit_form.problem_listing.pe.teeth.present"
+            : "well_visit_form.problem_listing.pe.teeth.absent"
+
+        var value = L(baseKey)
+        let cntTrim = trimmed(countText)
+        var countArg = ""
+        if let cnt = Int(cntTrim), cnt > 0 {
+            countArg = String(cnt)
+            value += " " + String(format: L("well_visit_form.problem_listing.pe.teeth.count_format"), cnt)
+        }
+
+        let c = trimmed(comment)
+        let line = peFieldWithDetail(
+            "well_visit_form.problem_listing.pe.label.teeth",
+            value,
+            detail: c.isEmpty ? nil : c
+        )
+
+        let token = ProblemToken(
+            "well_visit_form.problem_listing.token.pe_teeth_v1",
+            [
+                "well_visit_form.problem_listing.pe.label.teeth",
+                baseKey,
+                countArg,
+                c
+            ]
+        )
+
+        return (line, token)
+    }
+
+    /// Token format (v1):
+    /// args[0] = labelKey
+    /// args[1] = value (either text or a localization key)
+    /// args[2] = valueIsKey ("1"/"0")
+    /// args[3] = detail (either text or a localization key; may be empty)
+    /// args[4] = detailIsKey ("1"/"0")
+    private func peFieldToken(
+        _ labelKey: String,
+        value: String,
+        valueIsKey: Bool,
+        detail: String? = nil,
+        detailIsKey: Bool = false
+    ) -> ProblemToken {
+        ProblemToken(
+            "well_visit_form.problem_listing.token.pe_field_v1",
+            [
+                labelKey,
+                value,
+                valueIsKey ? "1" : "0",
+                trimmed(detail ?? ""),
+                detailIsKey ? "1" : "0"
+            ]
+        )
+    }
+
+    private func peAbnormalFieldToken(
+        _ labelKey: String,
+        normal: Bool,
+        comment: String,
+        defaultKey: String
+    ) -> (line: String, token: ProblemToken)? {
+        let c = trimmed(comment)
+        if normal && c.isEmpty { return nil }
+
+        let valueTextOrKey: String
+        let valueIsKey: Bool
+        if c.isEmpty {
+            valueTextOrKey = defaultKey
+            valueIsKey = true
+        } else {
+            valueTextOrKey = c
+            valueIsKey = false
+        }
+
+        let line: String
+        if valueIsKey {
+            line = peField(labelKey, L(valueTextOrKey))
+        } else {
+            line = peField(labelKey, valueTextOrKey)
+        }
+
+        let token = peFieldToken(
+            labelKey,
+            value: valueTextOrKey,
+            valueIsKey: valueIsKey
+        )
+        return (line, token)
+    }
+
+    private func peFieldWithDetailToken(
+        _ labelKey: String,
+        value: String,
+        valueIsKey: Bool,
+        detail: String?
+    ) -> (line: String, token: ProblemToken) {
+        let d = trimmed(detail ?? "")
+        let valueRendered = valueIsKey ? L(value) : value
+
+        let line: String
+        if d.isEmpty {
+            line = peField(labelKey, valueRendered)
+        } else {
+            line = String(format: L("well_visit_form.problem_listing.pe.field_with_detail_format"), L(labelKey), valueRendered, d)
+        }
+
+        let token = peFieldToken(
+            labelKey,
+            value: value,
+            valueIsKey: valueIsKey,
+            detail: d,
+            detailIsKey: false
+        )
+        return (line, token)
+    }
+
+    /// Rebuilds the problem listing from abnormal fields / comments.
+    /// This does NOT touch the database – it only updates the TextEditor content.
     /// Rebuilds the problem listing from abnormal fields / comments.
     /// This does NOT touch the database – it only updates the TextEditor content.
     private func regenerateProblemListingFromFindings() {
         var lines: [String] = []
+        var tokens: [ProblemToken] = []
 
         func add(_ text: String) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2273,328 +2638,447 @@ struct WellVisitForm: View {
             }
         }
 
+        func addKey(_ key: String) {
+            tokens.append(ProblemToken(key))
+            add(NSLocalizedString(key, comment: ""))
+        }
+
+        func addKey(_ key: String, tokenArgs: [String], formatArgs: [CVarArg]) {
+            tokens.append(ProblemToken(key, tokenArgs))
+            let fmt = NSLocalizedString(key, comment: "")
+            add(String(format: fmt, arguments: formatArgs))
+        }
+
+
         // 1) Parents' concerns
-        if !parentsConcerns.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            add(String(format: NSLocalizedString("well_visit_form.problem_listing.parents_concerns", comment: ""), parentsConcerns))
+        let parentsTrim = parentsConcerns.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !parentsTrim.isEmpty {
+            addKey(
+                "well_visit_form.problem_listing.parents_concerns",
+                tokenArgs: [parentsTrim],
+                formatArgs: [parentsTrim]
+            )
         }
 
         // 2) Feeding
         if isEarlyMilkOnlyVisit {
             if regurgitationPresent {
-                add(NSLocalizedString("well_visit_form.problem_listing.feeding.regurgitation", comment: ""))
+                addKey("well_visit_form.problem_listing.feeding.regurgitation")
             }
-            if !feedingIssue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.difficulty", comment: ""), feedingIssue))
+            let feedingIssueTrim = feedingIssue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !feedingIssueTrim.isEmpty {
+                addKey(
+                    "well_visit_form.problem_listing.feeding.difficulty",
+                    tokenArgs: [feedingIssueTrim],
+                    formatArgs: [feedingIssueTrim]
+                )
             }
         } else {
-            if !feeding.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.diet", comment: ""), feeding))
-            }
-            if solidFoodStarted {
-                add(NSLocalizedString("well_visit_form.problem_listing.feeding.solids_started", comment: ""))
-            }
-            if !solidFoodQuality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.solids_quality", comment: ""), solidFoodQuality))
-            }
-            if !solidFoodComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.solids_comment", comment: ""), solidFoodComment))
+            let feedingTrim = feeding.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !feedingTrim.isEmpty {
+                addKey(
+                    "well_visit_form.problem_listing.feeding.diet",
+                    tokenArgs: [feedingTrim],
+                    formatArgs: [feedingTrim]
+                )
             }
 
-            // Food variety: only if NOT "appears good"
-            let foodVarietyTrim = foodVarietyQuality.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !foodVarietyTrim.isEmpty && foodVarietyTrim.lowercased() != "appears good" {
-                add(String(format: NSLocalizedString("well_visit_form.problem_listing.feeding.food_variety", comment: ""), foodVarietyTrim))
+            if solidFoodStarted {
+                addKey("well_visit_form.problem_listing.feeding.solids_started")
+
+                let solidsQualityRaw = solidFoodQuality.trimmingCharacters(in: .whitespacesAndNewlines)
+                let solidsQualityCode = normalizeQualityCode(solidsQualityRaw)
+                if !solidsQualityCode.isEmpty {
+                    // Store the stable code in the token; render as a localized label.
+                    let labelKey = "well_visit_form.shared.\(solidsQualityCode)"
+                    let label = L(labelKey)
+                    addKey(
+                        "well_visit_form.problem_listing.feeding.solids_quality",
+                        tokenArgs: [solidsQualityCode],
+                        formatArgs: [label]
+                    )
+                }
+
+                let solidsCommentTrim = solidFoodComment.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !solidsCommentTrim.isEmpty {
+                    addKey(
+                        "well_visit_form.problem_listing.feeding.solids_comment",
+                        tokenArgs: [solidsCommentTrim],
+                        formatArgs: [solidsCommentTrim]
+                    )
+                }
+            }
+
+            // Food variety: only if NOT "appears_good" (stored tags are appears_good/uncertain/probably_limited)
+            let foodVarietyCode = normalizeQualityCode(foodVarietyQuality)
+            if !foodVarietyCode.isEmpty && foodVarietyCode != "appears_good" {
+                // Store the stable code in the token; render as a localized label.
+                let labelKey = "well_visit_form.shared.\(foodVarietyCode)"
+                let label = L(labelKey)
+                addKey(
+                    "well_visit_form.problem_listing.feeding.food_variety",
+                    tokenArgs: [foodVarietyCode],
+                    formatArgs: [label]
+                )
             }
 
             // Dairy intake: only if more than 3 cups (code "4")
             let dairyTrim = dairyAmountCode.trimmingCharacters(in: .whitespacesAndNewlines)
             if dairyTrim == "4" {
-                add(NSLocalizedString("well_visit_form.problem_listing.feeding.dairy_gt_3", comment: ""))
+                addKey("well_visit_form.problem_listing.feeding.dairy_gt_3")
             }
         }
 
-        // 2b) Stools – added for any visit when abnormal
+        // 2b) Stools
         let poopStatusTrim = poopStatus.trimmingCharacters(in: .whitespacesAndNewlines)
         if poopStatusTrim == "abnormal" {
-            add(NSLocalizedString("well_visit_form.problem_listing.stools.abnormal", comment: ""))
+            addKey("well_visit_form.problem_listing.stools.abnormal")
         } else if poopStatusTrim == "hard" {
-            add(NSLocalizedString("well_visit_form.problem_listing.stools.hard", comment: ""))
+            addKey("well_visit_form.problem_listing.stools.hard")
         }
         let poopCommentTrim = poopComment.trimmingCharacters(in: .whitespacesAndNewlines)
         if !poopCommentTrim.isEmpty {
-            add(String(format: NSLocalizedString("well_visit_form.problem_listing.stools.comment", comment: ""), poopCommentTrim))
+            addKey(
+                "well_visit_form.problem_listing.stools.comment",
+                tokenArgs: [poopCommentTrim],
+                formatArgs: [poopCommentTrim]
+            )
         }
 
         // 3) Sleep
-        // 3) Sleep
         if sleepIssueReported || !sleep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let wakesTrim = wakesForFeedsPerNight.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Waking to feed is only a problem after 12 months
             if !wakesTrim.isEmpty && isPostTwelveMonthVisit {
-                add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.wakes_per_night", comment: ""), wakesTrim))
+                addKey(
+                    "well_visit_form.problem_listing.sleep.wakes_per_night",
+                    tokenArgs: [wakesTrim],
+                    formatArgs: [wakesTrim]
+                )
             }
 
             if isOlderSleepVisit {
                 let sleepHoursTrim = sleepHoursText.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !sleepHoursTrim.isEmpty {
                     var shouldAddSleepDuration = false
-
                     let lower = sleepHoursTrim.lowercased()
-                    // Heuristic: either explicitly "<10" or parses as a numeric value < 10
                     if lower.contains("<10") || lower.contains("less than 10") {
                         shouldAddSleepDuration = true
                     } else {
                         let digits = sleepHoursTrim.filter { "0123456789.".contains($0) }
-                        if let v = Double(digits), v < 10 {
-                            shouldAddSleepDuration = true
-                        }
+                        if let v = Double(digits), v < 10 { shouldAddSleepDuration = true }
                     }
 
                     if shouldAddSleepDuration {
-                        add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.duration", comment: ""), sleepHoursTrim))
+                        addKey(
+                            "well_visit_form.problem_listing.sleep.duration",
+                            tokenArgs: [sleepHoursTrim],
+                            formatArgs: [sleepHoursTrim]
+                        )
                     }
                 }
 
-                if !sleepRegular.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.regularity", comment: ""), sleepRegular))
+                let sleepRegularTrim = trimmed(sleepRegular)
+                if !sleepRegularTrim.isEmpty {
+                    let code = normalizeSleepRegularCode(sleepRegularTrim)
+                    if isKnownSleepRegularityCode(code) {
+                        // Store stable code; render localized label if available.
+                        let label = localizedLabel(for: code, prefixes: [
+                            "well_visit_form.sleep.regularity",
+                            "well_visit_form.shared"
+                        ])
+                        addKey(
+                            "well_visit_form.problem_listing.sleep.regularity",
+                            tokenArgs: [code],
+                            formatArgs: [label]
+                        )
+                    } else {
+                        // Free-text / legacy value: keep literal text.
+                        addKey(
+                            "well_visit_form.problem_listing.sleep.regularity",
+                            tokenArgs: [sleepRegularTrim],
+                            formatArgs: [sleepRegularTrim]
+                        )
+                    }
                 }
+
                 if sleepSnoring {
-                    add(NSLocalizedString("well_visit_form.problem_listing.sleep.snoring", comment: ""))
+                    addKey("well_visit_form.problem_listing.sleep.snoring")
                 }
             }
 
-            if !sleep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add(String(format: NSLocalizedString("well_visit_form.problem_listing.sleep.issue", comment: ""), sleep))
+            let sleepTrim = sleep.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !sleepTrim.isEmpty {
+                addKey(
+                    "well_visit_form.problem_listing.sleep.issue",
+                    tokenArgs: [sleepTrim],
+                    formatArgs: [sleepTrim]
+                )
             }
         }
 
-        // 4) Physical exam – only add when not normal or when there is a comment
-        if let line = peAbnormalField(
+        // 4) Physical exam – start migrating away from raw lines by emitting PE tokens
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.trophic_state",
             normal: peTrophicNormal,
             comment: peTrophicComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal_impression"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
-        if let line = peAbnormalField(
+
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.hydration",
             normal: peHydrationNormal,
             comment: peHydrationComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal_impression"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        // Color (uses a value + optional detail)
         if peColor != "normal" || !trimmed(peColorComment).isEmpty {
-            add(peFieldWithDetail(
+            let detail = trimmed(peColorComment).isEmpty ? nil : peColorComment
+            let item = peFieldWithDetailToken(
                 "well_visit_form.problem_listing.pe.label.color",
-                peColor,
-                detail: trimmed(peColorComment).isEmpty ? nil : peColorComment
-            ))
+                value: peColor,
+                valueIsKey: false,
+                detail: detail
+            )
+            tokens.append(item.token)
+            add(item.line)
         }
 
         if isFontanelleVisit,
-           let line = peAbnormalField(
+           let item = peAbnormalFieldToken(
                 "well_visit_form.problem_listing.pe.label.fontanelle",
                 normal: peFontanelleNormal,
                 comment: peFontanelleComment,
                 defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
            ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.pupils",
             normal: pePupilsRRNormal,
             comment: pePupilsRRComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.ocular_motility",
             normal: peOcularMotilityNormal,
             comment: peOcularMotilityComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.tone",
             normal: peToneNormal,
             comment: peToneComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
         if isPrimitiveNeuroVisit {
-            if let line = peAbnormalField(
+            if let item = peAbnormalFieldToken(
                 "well_visit_form.problem_listing.pe.label.wakefulness",
                 normal: peWakefulnessNormal,
                 comment: peWakefulnessComment,
                 defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
             ) {
-                add(line)
+                tokens.append(item.token)
+                add(item.line)
             }
-            if let line = peAbnormalField(
+            if let item = peAbnormalFieldToken(
                 "well_visit_form.problem_listing.pe.label.hands_opening",
                 normal: peHandsFistNormal,
                 comment: peHandsFistComment,
                 defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
             ) {
-                add(line)
+                tokens.append(item.token)
+                add(item.line)
             }
-            if let line = peAbnormalField(
+            if let item = peAbnormalFieldToken(
                 "well_visit_form.problem_listing.pe.label.symmetry_movements",
                 normal: peSymmetryNormal,
                 comment: peSymmetryComment,
                 defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
             ) {
-                add(line)
+                tokens.append(item.token)
+                add(item.line)
             }
-            if let line = peAbnormalField(
+            if let item = peAbnormalFieldToken(
                 "well_visit_form.problem_listing.pe.label.follows_midline",
                 normal: peFollowsMidlineNormal,
                 comment: peFollowsMidlineComment,
                 defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
             ) {
-                add(line)
+                tokens.append(item.token)
+                add(item.line)
             }
         }
 
         if isMoroVisit,
-           let line = peAbnormalField(
+           let item = peAbnormalFieldToken(
                 "well_visit_form.problem_listing.pe.label.moro_reflex",
                 normal: peMoroNormal,
                 comment: peMoroComment,
                 defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
            ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.respiratory",
             normal: peBreathingNormal,
             comment: peBreathingComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.cardiac",
             normal: peHeartNormal,
             comment: peHeartComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.abdomen",
             normal: peAbdomenNormal,
             comment: peAbdomenComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
-        }
-        if peAbdMassPresent {
-            add(peField(
-                "well_visit_form.problem_listing.pe.label.abdomen",
-                L("well_visit_form.problem_listing.pe.abdomen.mass_palpable")
-            ))
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if peAbdMassPresent {
+            let item = peFieldWithDetailToken(
+                "well_visit_form.problem_listing.pe.label.abdomen",
+                value: "well_visit_form.problem_listing.pe.abdomen.mass_palpable",
+                valueIsKey: true,
+                detail: nil
+            )
+            tokens.append(item.token)
+            add(item.line)
+        }
+
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.liver_spleen",
             normal: peLiverSpleenNormal,
             comment: peLiverSpleenComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.umbilicus",
             normal: peUmbilicNormal,
             comment: peUmbilicComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peTextField(
+        if let item = peTextFieldToken(
             "well_visit_form.problem_listing.pe.label.genitalia",
             text: peGenitalia
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
         if !peTesticlesDescended {
-            add(peField(
+            let item = peFieldWithDetailToken(
                 "well_visit_form.problem_listing.pe.label.testicles",
-                L("well_visit_form.problem_listing.pe.testicles.not_fully_descended")
-            ))
+                value: "well_visit_form.problem_listing.pe.testicles.not_fully_descended",
+                valueIsKey: true,
+                detail: nil
+            )
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.femoral_pulses",
             normal: peFemoralPulsesNormal,
             comment: peFemoralPulsesComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.spine_posture",
             normal: peSpineNormal,
             comment: peSpineComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
         if isHipsVisit,
-           let line = peAbnormalField(
+           let item = peAbnormalFieldToken(
                 "well_visit_form.problem_listing.pe.label.hips_limbs",
                 normal: peHipsLimbsNormal,
                 comment: peHipsLimbsComment,
                 defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
            ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.skin_marks",
             normal: peSkinMarksNormal,
             comment: peSkinMarksComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.skin_integrity",
             normal: peSkinIntegrityNormal,
             comment: peSkinIntegrityComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        if let line = peAbnormalField(
+        if let item = peAbnormalFieldToken(
             "well_visit_form.problem_listing.pe.label.rash_lesions",
             normal: peSkinRashNormal,
             comment: peSkinRashComment,
             defaultKey: "well_visit_form.problem_listing.pe.default_abnormal"
         ) {
-            add(line)
+            tokens.append(item.token)
+            add(item.line)
         }
 
         if isTeethVisit,
@@ -2602,94 +3086,136 @@ struct WellVisitForm: View {
             || !trimmed(peTeethCount).isEmpty
             || !trimmed(peTeethComment).isEmpty) {
 
-            var value = peTeethPresent
-                ? L("well_visit_form.problem_listing.pe.teeth.present")
-                : L("well_visit_form.problem_listing.pe.teeth.absent")
-
-            if let cnt = Int(trimmed(peTeethCount)), cnt > 0 {
-                value += " " + String(format: L("well_visit_form.problem_listing.pe.teeth.count_format"), cnt)
-            }
-
-            add(peFieldWithDetail(
-                "well_visit_form.problem_listing.pe.label.teeth",
-                value,
-                detail: trimmed(peTeethComment).isEmpty ? nil : peTeethComment
-            ))
+            let item = peTeethToken(
+                countText: peTeethCount,
+                present: peTeethPresent,
+                comment: peTeethComment
+            )
+            tokens.append(item.token)
+            add(item.line)
         }
 
         // 5) Milestones (only if some are not achieved / uncertain)
         if !currentMilestoneDescriptors.isEmpty {
-            var milestoneLines: [String] = []
+            var hadAny = false
+
             for descriptor in currentMilestoneDescriptors {
                 let code = descriptor.code
                 let status = milestoneStatuses[code] ?? .uncertain
                 if status == .achieved { continue }
 
+                let noteTrim = milestoneNotes[code]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                // Stable token: (code, status rawValue, optional note)
+                tokens.append(
+                    ProblemToken(
+                        "well_visit_form.problem_listing.token.milestone_item_v1",
+                        [code, status.rawValue, noteTrim]
+                    )
+                )
+
+                // Render exactly as before
                 var line = String(
                     format: L("well_visit_form.problem_listing.milestones.line_format"),
                     descriptor.label,
-                    status.displayName
+                    status.localizedDisplayName
                 )
 
-                if let note = milestoneNotes[code],
-                   !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !noteTrim.isEmpty {
                     line = String(
                         format: L("well_visit_form.problem_listing.milestones.line_with_note_format"),
                         line,
-                        note
+                        noteTrim
                     )
                 }
 
-                milestoneLines.append(line)
-            }
-            if !milestoneLines.isEmpty {
-                add(L("well_visit_form.problem_listing.milestones.header"))
-                for l in milestoneLines {
-                    add(String(format: L("well_visit_form.problem_listing.milestones.item_prefix_format"), l))
+                // Insert the header once, right before the first flagged milestone
+                if !hadAny {
+                    addKey("well_visit_form.problem_listing.milestones.header")
+                    hadAny = true
                 }
+
+                let prefixed = String(
+                    format: L("well_visit_form.problem_listing.milestones.item_prefix_format"),
+                    line
+                )
+                add(prefixed)
             }
         }
 
         // 6) Neurodevelopment tests
         if isMCHATVisit {
-            if !mchatScore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !mchatResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add(String(
-                    format: L("well_visit_form.problem_listing.mchat.line_format"),
-                    mchatScore,
-                    mchatResult
-                ))
+            let scoreTrim = trimmed(mchatScore)
+            let resultRaw = trimmed(mchatResult)
+            if !scoreTrim.isEmpty || !resultRaw.isEmpty {
+                // Prefer stable codes; fall back to legacy/free-text.
+                let code = normalizeMchatResultCode(resultRaw)
+                if !code.isEmpty, isKnownMCHATResultCode(code) {
+                    let label = localizedLabel(for: code, prefixes: [
+                        "well_visit_form.mchat.result",
+                        "well_visit_form.shared"
+                    ])
+                    addKey(
+                        "well_visit_form.problem_listing.mchat.line_format",
+                        tokenArgs: [scoreTrim, code],
+                        formatArgs: [scoreTrim, label]
+                    )
+                } else {
+                    addKey(
+                        "well_visit_form.problem_listing.mchat.line_format",
+                        tokenArgs: [scoreTrim, resultRaw],
+                        formatArgs: [scoreTrim, resultRaw]
+                    )
+                }
             }
         }
+
         if isDevTestScoreVisit || isDevTestResultVisit {
-            if !devTestScore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !devTestResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                add(String(
-                    format: L("well_visit_form.problem_listing.dev_test.line_format"),
-                    devTestScore,
-                    devTestResult
-                ))
+            let scoreTrim = trimmed(devTestScore)
+            let resultRaw = trimmed(devTestResult)
+            if !scoreTrim.isEmpty || !resultRaw.isEmpty {
+                // Prefer stable codes; fall back to legacy/free-text.
+                let code = normalizeDevTestResultCode(resultRaw)
+                if !code.isEmpty, isKnownDevTestResultCode(code) {
+                    let label = localizedLabel(for: code, prefixes: [
+                        "well_visit_form.dev_test.result",
+                        "well_visit_form.shared"
+                    ])
+                    addKey(
+                        "well_visit_form.problem_listing.dev_test.line_format",
+                        tokenArgs: [scoreTrim, code],
+                        formatArgs: [scoreTrim, label]
+                    )
+                } else {
+                    addKey(
+                        "well_visit_form.problem_listing.dev_test.line_format",
+                        tokenArgs: [scoreTrim, resultRaw],
+                        formatArgs: [scoreTrim, resultRaw]
+                    )
+                }
             }
         }
 
         // 7) Free PE notes block
-        if let line = peTextField(
+        if let item = peTextFieldToken(
             "well_visit_form.problem_listing.pe.label.additional_pe_notes",
             text: physicalExam
         ) {
-            add(line)
-        }
-        
-        // 1) Weight gain – only flag if < 20 g/day
-        if isWeightDeltaVisit,
-           let delta = deltaWeightPerDayValue {
-            if delta < 20 {
-                lines.append(String(format: L("well_visit_form.problem_listing.weight_gain.suboptimal"), Int(delta)))
-            }
-            // If delta >= 20 g/day, we do NOT add anything to problem listing.
+            tokens.append(item.token)
+            add(item.line)
         }
 
-        // Finally, replace the problem listing with the auto-generated content
+        // Weight gain – only flag if < 20 g/day (also keep token)
+        if isWeightDeltaVisit, let delta = deltaWeightPerDayValue, delta < 20 {
+            addKey(
+                "well_visit_form.problem_listing.weight_gain.suboptimal",
+                tokenArgs: ["\(Int(delta))"],
+                formatArgs: [Int(delta)]
+            )
+        }
+
+        // Save both outputs
+        problemListingTokens = tokens
         problemListing = lines.joined(separator: "\n")
     }
     
@@ -2765,6 +3291,7 @@ struct WellVisitForm: View {
             return
         }
         defer { sqlite3_close(db) }
+        ensureProblemListingTokensColumn(db: db)
 
         let dateISO        = Self.isoDateOnly.string(from: visitDate)
         let type           = visitTypeID
@@ -2788,6 +3315,7 @@ struct WellVisitForm: View {
         }()
 
         let probs          = problemListing
+        let probsTokens    = encodeProblemTokensForDB(problemListingTokens)
         let concl          = conclusions
         let planText       = plan
         let clinicianText  = clinicianComment
@@ -2799,21 +3327,21 @@ struct WellVisitForm: View {
 
         let trimmedMchatScore = mchatScore.trimmingCharacters(in: .whitespacesAndNewlines)
         let mchatScoreInt = Int32(trimmedMchatScore.isEmpty ? "0" : trimmedMchatScore) ?? 0
-        let mchatResultText = mchatResult
+        let mchatResultText = normalizeMchatResultCode(mchatResult)
 
         let trimmedDevScore = devTestScore.trimmingCharacters(in: .whitespacesAndNewlines)
         let devTestScoreInt = Int32(trimmedDevScore.isEmpty ? "0" : trimmedDevScore) ?? 0
-        let devTestResultText = devTestResult
+        let devTestResultText = normalizeDevTestResultCode(devTestResult)
         let deltaWeightDB: Int32? = deltaWeightPerDayValue
 
         let sleepHoursDB = sleepHoursText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sleepRegularDB = sleepRegular.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sleepRegularDB = normalizeSleepRegularCode(sleepRegular)
         let sleepSnoringDB: Int32 = sleepSnoring ? 1 : 0
         let longerSleepNightDB: Int32 = longerSleepAtNight ? 1 : 0
         let sleepIssueReportedDB: Int32 = sleepIssueReported ? 1 : 0
 
         // Feeding-related DB fields
-        let poopStatusDB  = poopStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+        let poopStatusDB  = normalizePoopStatusCode(poopStatus)
         let poopCommentDB = poopComment.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let milkTypesDB: String = {
@@ -2848,9 +3376,9 @@ struct WellVisitForm: View {
         let solidStartDateISO: String? = solidFoodStarted
             ? Self.isoDateOnly.string(from: solidFoodStartDate)
             : nil
-        let solidQualityDB  = solidFoodQuality.trimmingCharacters(in: .whitespacesAndNewlines)
+        let solidQualityDB  = normalizeQualityCode(solidFoodQuality)
         let solidCommentDB  = solidFoodComment.trimmingCharacters(in: .whitespacesAndNewlines)
-        let foodVarietyDB   = foodVarietyQuality.trimmingCharacters(in: .whitespacesAndNewlines)
+        let foodVarietyDB   = normalizeQualityCode(foodVarietyQuality)
 
         // Overloaded dairy_amount_text column:
         // if a structured dairy code is set (1–4), store that;
@@ -2878,6 +3406,7 @@ struct WellVisitForm: View {
                 feeding_comment,
                 sleep_issue_text,
                 problem_listing,
+                problem_listing_tokens,
                 conclusions,
                 anticipatory_guidance,
                 next_visit_date,
@@ -2914,7 +3443,7 @@ struct WellVisitForm: View {
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?,
                 CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
             );
             """
@@ -2938,71 +3467,72 @@ struct WellVisitForm: View {
             _ = feedingText.withCString     { sqlite3_bind_text(stmt, 5,  $0, -1, SQLITE_TRANSIENT) }
             _ = sleepText.withCString       { sqlite3_bind_text(stmt, 6,  $0, -1, SQLITE_TRANSIENT) }
             _ = probs.withCString           { sqlite3_bind_text(stmt, 7,  $0, -1, SQLITE_TRANSIENT) }
-            _ = concl.withCString           { sqlite3_bind_text(stmt, 8,  $0, -1, SQLITE_TRANSIENT) }
-            _ = planText.withCString        { sqlite3_bind_text(stmt, 9,  $0, -1, SQLITE_TRANSIENT) }
+            _ = probsTokens.withCString     { sqlite3_bind_text(stmt, 8,  $0, -1, SQLITE_TRANSIENT) }
+            _ = concl.withCString           { sqlite3_bind_text(stmt, 9,  $0, -1, SQLITE_TRANSIENT) }
+            _ = planText.withCString        { sqlite3_bind_text(stmt, 10,  $0, -1, SQLITE_TRANSIENT) }
             if let nv = nextVisitISO {
-                _ = nv.withCString          { sqlite3_bind_text(stmt, 10, $0, -1, SQLITE_TRANSIENT) }
+                _ = nv.withCString          { sqlite3_bind_text(stmt, 11, $0, -1, SQLITE_TRANSIENT) }
             } else {
-                sqlite3_bind_null(stmt, 10)
+                sqlite3_bind_null(stmt, 11)
             }
-            _ = clinicianText.withCString   { sqlite3_bind_text(stmt, 11, $0, -1, SQLITE_TRANSIENT) }
-            _ = peText.withCString          { sqlite3_bind_text(stmt, 12, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 13, Int32(vitInt))
-            _ = dairyAmountDB.withCString   { sqlite3_bind_text(stmt, 14, $0, -1, SQLITE_TRANSIENT) }
-            _ = poopStatusDB.withCString    { sqlite3_bind_text(stmt, 15, $0, -1, SQLITE_TRANSIENT) }
-            _ = poopCommentDB.withCString   { sqlite3_bind_text(stmt, 16, $0, -1, SQLITE_TRANSIENT) }
-            _ = milkTypesDB.withCString     { sqlite3_bind_text(stmt, 17, $0, -1, SQLITE_TRANSIENT) }
+            _ = clinicianText.withCString   { sqlite3_bind_text(stmt, 12, $0, -1, SQLITE_TRANSIENT) }
+            _ = peText.withCString          { sqlite3_bind_text(stmt, 13, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 14, Int32(vitInt))
+            _ = dairyAmountDB.withCString   { sqlite3_bind_text(stmt, 15, $0, -1, SQLITE_TRANSIENT) }
+            _ = poopStatusDB.withCString    { sqlite3_bind_text(stmt, 16, $0, -1, SQLITE_TRANSIENT) }
+            _ = poopCommentDB.withCString   { sqlite3_bind_text(stmt, 17, $0, -1, SQLITE_TRANSIENT) }
+            _ = milkTypesDB.withCString     { sqlite3_bind_text(stmt, 18, $0, -1, SQLITE_TRANSIENT) }
 
             if let vol = feedVolumeDB {
-                sqlite3_bind_double(stmt, 18, vol)
-            } else {
-                sqlite3_bind_null(stmt, 18)
-            }
-
-            if let freq = feedFreqDB {
-                sqlite3_bind_int(stmt, 19, freq)
+                sqlite3_bind_double(stmt, 19, vol)
             } else {
                 sqlite3_bind_null(stmt, 19)
             }
 
-            sqlite3_bind_int(stmt, 20, regurgitationDB)
-            _ = feedingIssueDB.withCString  { sqlite3_bind_text(stmt, 21, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 22, solidStartedDB)
-
-            if let solidsISO = solidStartDateISO {
-                _ = solidsISO.withCString   { sqlite3_bind_text(stmt, 23, $0, -1, SQLITE_TRANSIENT) }
+            if let freq = feedFreqDB {
+                sqlite3_bind_int(stmt, 20, freq)
             } else {
-                sqlite3_bind_null(stmt, 23)
+                sqlite3_bind_null(stmt, 20)
             }
 
-            _ = solidQualityDB.withCString  { sqlite3_bind_text(stmt, 24, $0, -1, SQLITE_TRANSIENT) }
-            _ = solidCommentDB.withCString  { sqlite3_bind_text(stmt, 25, $0, -1, SQLITE_TRANSIENT) }
-            _ = foodVarietyDB.withCString   { sqlite3_bind_text(stmt, 26, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 21, regurgitationDB)
+            _ = feedingIssueDB.withCString  { sqlite3_bind_text(stmt, 22, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 23, solidStartedDB)
 
-            _ = sleepHoursDB.withCString    { sqlite3_bind_text(stmt, 27, $0, -1, SQLITE_TRANSIENT) }
-            _ = sleepRegularDB.withCString  { sqlite3_bind_text(stmt, 28, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 29, longerSleepNightDB)
-            sqlite3_bind_int(stmt, 30, sleepSnoringDB)
-            sqlite3_bind_int(stmt, 31, sleepIssueReportedDB)
+            if let solidsISO = solidStartDateISO {
+                _ = solidsISO.withCString   { sqlite3_bind_text(stmt, 24, $0, -1, SQLITE_TRANSIENT) }
+            } else {
+                sqlite3_bind_null(stmt, 24)
+            }
 
-            sqlite3_bind_int(stmt, 32, mchatScoreInt)
-            _ = mchatResultText.withCString { sqlite3_bind_text(stmt, 33, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 34, devTestScoreInt)
+            _ = solidQualityDB.withCString  { sqlite3_bind_text(stmt, 25, $0, -1, SQLITE_TRANSIENT) }
+            _ = solidCommentDB.withCString  { sqlite3_bind_text(stmt, 26, $0, -1, SQLITE_TRANSIENT) }
+            _ = foodVarietyDB.withCString   { sqlite3_bind_text(stmt, 27, $0, -1, SQLITE_TRANSIENT) }
+
+            _ = sleepHoursDB.withCString    { sqlite3_bind_text(stmt, 28, $0, -1, SQLITE_TRANSIENT) }
+            _ = sleepRegularDB.withCString  { sqlite3_bind_text(stmt, 29, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 30, longerSleepNightDB)
+            sqlite3_bind_int(stmt, 31, sleepSnoringDB)
+            sqlite3_bind_int(stmt, 32, sleepIssueReportedDB)
+
+            sqlite3_bind_int(stmt, 33, mchatScoreInt)
+            _ = mchatResultText.withCString { sqlite3_bind_text(stmt, 34, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 35, devTestScoreInt)
             _ = devTestResultText.withCString {
-                sqlite3_bind_text(stmt, 35, $0, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 36, $0, -1, SQLITE_TRANSIENT)
             }
             
             if let delta = deltaWeightDB {
-                sqlite3_bind_int(stmt, 36, delta)
-            } else {
-                sqlite3_bind_null(stmt, 36)
-            }
-
-            // Bind user_id at index 37
-            if let uid = appState.activeUserID {
-                sqlite3_bind_int64(stmt, 37, sqlite3_int64(uid))
+                sqlite3_bind_int(stmt, 37, delta)
             } else {
                 sqlite3_bind_null(stmt, 37)
+            }
+
+            // Bind user_id at index 38
+            if let uid = appState.activeUserID {
+                sqlite3_bind_int64(stmt, 38, sqlite3_int64(uid))
+            } else {
+                sqlite3_bind_null(stmt, 38)
             }
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {
@@ -3022,6 +3552,7 @@ struct WellVisitForm: View {
                 feeding_comment = ?,
                 sleep_issue_text = ?,
                 problem_listing = ?,
+                problem_listing_tokens = ?,
                 conclusions = ?,
                 anticipatory_guidance = ?,
                 next_visit_date = ?,
@@ -3073,66 +3604,67 @@ struct WellVisitForm: View {
             _ = feedingText.withCString     { sqlite3_bind_text(stmt, 4,  $0, -1, SQLITE_TRANSIENT) }
             _ = sleepText.withCString       { sqlite3_bind_text(stmt, 5,  $0, -1, SQLITE_TRANSIENT) }
             _ = probs.withCString           { sqlite3_bind_text(stmt, 6,  $0, -1, SQLITE_TRANSIENT) }
-            _ = concl.withCString           { sqlite3_bind_text(stmt, 7,  $0, -1, SQLITE_TRANSIENT) }
-            _ = planText.withCString        { sqlite3_bind_text(stmt, 8,  $0, -1, SQLITE_TRANSIENT) }
+            _ = probsTokens.withCString     { sqlite3_bind_text(stmt, 7,  $0, -1, SQLITE_TRANSIENT) }
+            _ = concl.withCString           { sqlite3_bind_text(stmt, 8,  $0, -1, SQLITE_TRANSIENT) }
+            _ = planText.withCString        { sqlite3_bind_text(stmt, 9,  $0, -1, SQLITE_TRANSIENT) }
             if let nv = nextVisitISO {
-                _ = nv.withCString          { sqlite3_bind_text(stmt, 9,  $0, -1, SQLITE_TRANSIENT) }
+                _ = nv.withCString          { sqlite3_bind_text(stmt, 10,  $0, -1, SQLITE_TRANSIENT) }
             } else {
-                sqlite3_bind_null(stmt, 9)
+                sqlite3_bind_null(stmt, 10)
             }
-            _ = clinicianText.withCString   { sqlite3_bind_text(stmt, 10, $0, -1, SQLITE_TRANSIENT) }
-            _ = peText.withCString          { sqlite3_bind_text(stmt, 11, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 12, Int32(vitInt))
-            _ = dairyAmountDB.withCString   { sqlite3_bind_text(stmt, 13, $0, -1, SQLITE_TRANSIENT) }
-            _ = poopStatusDB.withCString    { sqlite3_bind_text(stmt, 14, $0, -1, SQLITE_TRANSIENT) }
-            _ = poopCommentDB.withCString   { sqlite3_bind_text(stmt, 15, $0, -1, SQLITE_TRANSIENT) }
-            _ = milkTypesDB.withCString     { sqlite3_bind_text(stmt, 16, $0, -1, SQLITE_TRANSIENT) }
+            _ = clinicianText.withCString   { sqlite3_bind_text(stmt, 11, $0, -1, SQLITE_TRANSIENT) }
+            _ = peText.withCString          { sqlite3_bind_text(stmt, 12, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 13, Int32(vitInt))
+            _ = dairyAmountDB.withCString   { sqlite3_bind_text(stmt, 14, $0, -1, SQLITE_TRANSIENT) }
+            _ = poopStatusDB.withCString    { sqlite3_bind_text(stmt, 15, $0, -1, SQLITE_TRANSIENT) }
+            _ = poopCommentDB.withCString   { sqlite3_bind_text(stmt, 16, $0, -1, SQLITE_TRANSIENT) }
+            _ = milkTypesDB.withCString     { sqlite3_bind_text(stmt, 17, $0, -1, SQLITE_TRANSIENT) }
 
             if let vol = feedVolumeDB {
-                sqlite3_bind_double(stmt, 17, vol)
-            } else {
-                sqlite3_bind_null(stmt, 17)
-            }
-
-            if let freq = feedFreqDB {
-                sqlite3_bind_int(stmt, 18, freq)
+                sqlite3_bind_double(stmt, 18, vol)
             } else {
                 sqlite3_bind_null(stmt, 18)
             }
 
-            sqlite3_bind_int(stmt, 19, regurgitationDB)
-            _ = feedingIssueDB.withCString  { sqlite3_bind_text(stmt, 20, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 21, solidStartedDB)
+            if let freq = feedFreqDB {
+                sqlite3_bind_int(stmt, 19, freq)
+            } else {
+                sqlite3_bind_null(stmt, 19)
+            }
+
+            sqlite3_bind_int(stmt, 20, regurgitationDB)
+            _ = feedingIssueDB.withCString  { sqlite3_bind_text(stmt, 21, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 22, solidStartedDB)
 
             if let solidsISO = solidStartDateISO {
-                _ = solidsISO.withCString   { sqlite3_bind_text(stmt, 22, $0, -1, SQLITE_TRANSIENT) }
+                _ = solidsISO.withCString   { sqlite3_bind_text(stmt, 23, $0, -1, SQLITE_TRANSIENT) }
             } else {
-                sqlite3_bind_null(stmt, 22)
+                sqlite3_bind_null(stmt, 23)
             }
 
-            _ = solidQualityDB.withCString  { sqlite3_bind_text(stmt, 23, $0, -1, SQLITE_TRANSIENT) }
-            _ = solidCommentDB.withCString  { sqlite3_bind_text(stmt, 24, $0, -1, SQLITE_TRANSIENT) }
-            _ = foodVarietyDB.withCString   { sqlite3_bind_text(stmt, 25, $0, -1, SQLITE_TRANSIENT) }
+            _ = solidQualityDB.withCString  { sqlite3_bind_text(stmt, 24, $0, -1, SQLITE_TRANSIENT) }
+            _ = solidCommentDB.withCString  { sqlite3_bind_text(stmt, 25, $0, -1, SQLITE_TRANSIENT) }
+            _ = foodVarietyDB.withCString   { sqlite3_bind_text(stmt, 26, $0, -1, SQLITE_TRANSIENT) }
 
-            _ = sleepHoursDB.withCString    { sqlite3_bind_text(stmt, 26, $0, -1, SQLITE_TRANSIENT) }
-            _ = sleepRegularDB.withCString  { sqlite3_bind_text(stmt, 27, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 28, longerSleepNightDB)
-            sqlite3_bind_int(stmt, 29, sleepSnoringDB)
-            sqlite3_bind_int(stmt, 30, sleepIssueReportedDB)
+            _ = sleepHoursDB.withCString    { sqlite3_bind_text(stmt, 27, $0, -1, SQLITE_TRANSIENT) }
+            _ = sleepRegularDB.withCString  { sqlite3_bind_text(stmt, 28, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 29, longerSleepNightDB)
+            sqlite3_bind_int(stmt, 30, sleepSnoringDB)
+            sqlite3_bind_int(stmt, 31, sleepIssueReportedDB)
 
-            sqlite3_bind_int(stmt, 31, mchatScoreInt)
-            _ = mchatResultText.withCString { sqlite3_bind_text(stmt, 32, $0, -1, SQLITE_TRANSIENT) }
-            sqlite3_bind_int(stmt, 33, devTestScoreInt)
+            sqlite3_bind_int(stmt, 32, mchatScoreInt)
+            _ = mchatResultText.withCString { sqlite3_bind_text(stmt, 33, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 34, devTestScoreInt)
             _ = devTestResultText.withCString {
-                sqlite3_bind_text(stmt, 34, $0, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 35, $0, -1, SQLITE_TRANSIENT)
             }
             if let delta = deltaWeightDB {
-                sqlite3_bind_int(stmt, 35, delta)
+                sqlite3_bind_int(stmt, 36, delta)
             } else {
-                sqlite3_bind_null(stmt, 35)
+                sqlite3_bind_null(stmt, 36)
             }
 
-            sqlite3_bind_int64(stmt, 36, sqlite3_int64(visitID))
+            sqlite3_bind_int64(stmt, 37, sqlite3_int64(visitID))
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 showError(NSLocalizedString("well_visit_form.error.failed_update", comment: ""))
@@ -3423,3 +3955,4 @@ struct WellVisitForm: View {
         showErrorAlert = true
     }
 }
+

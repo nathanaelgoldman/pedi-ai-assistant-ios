@@ -2514,8 +2514,8 @@ final class ReportDataLoader {
                 return s
             }
 
-            // 2) Food variety (skip if it's the benign code/value)
-            if label == "food variety" {
+            // 2) Food variety (skip benign values like appears_good / appears good)
+            if label == "food variety" || label == "variete alimentaire" || label == "variété alimentaire" {
                 let v = valuePart.lowercased()
                 if v == "appears good" || v == "appears_good" || v == "appears-good" {
                     return nil
@@ -2524,6 +2524,48 @@ final class ReportDataLoader {
                     return String(format: L("well_visit_form.problem_listing.feeding.food_variety"), valuePart)
                 }
                 return s
+            }
+
+            // 2b) Stools (legacy lines like "Stools: hard / constipation reported.")
+            if label == "stools" || label == "stool" {
+                let v = valuePart.lowercased()
+                if v.contains("hard") || v.contains("constipation") {
+                    return L("well_visit_form.problem_listing.stools.hard")
+                }
+                if v.contains("abnormal") {
+                    return L("well_visit_form.problem_listing.stools.abnormal")
+                }
+                if !valuePart.isEmpty {
+                    return String(format: L("well_visit_form.problem_listing.stools.comment"), valuePart)
+                }
+                return s
+            }
+
+            // 2c) Skin integrity (legacy "Skin integrity: dry")
+            if label == "skin integrity" {
+                let localizedLabel = L("report.pe.item.integrity")
+                if !valuePart.isEmpty {
+                    return "\(localizedLabel): \(valuePart)"
+                }
+                return localizedLabel
+            }
+
+            // 2d) Skin marks (legacy "Skin marks: ...")
+            if label == "skin marks" || label == "skin mark" {
+                let localizedLabel = L("report.pe.item.marks")
+                if !valuePart.isEmpty {
+                    return "\(localizedLabel): \(valuePart)"
+                }
+                return localizedLabel
+            }
+
+            // 2e) Teeth / dentition (legacy "Teeth: present (18 teeth)")
+            if label == "teeth" || label == "dentition" {
+                let localizedLabel = L("report.pe.item.teethDentition")
+                if !valuePart.isEmpty {
+                    return "\(localizedLabel): \(valuePart)"
+                }
+                return localizedLabel
             }
 
             // 3) Sleep regularity
@@ -2542,10 +2584,17 @@ final class ReportDataLoader {
                 return s
             }
 
-            // 5) Snoring line is often stored as "Sleep: snoring / noisy breathing reported."
+            // 5) Sleep (legacy "Sleep: snoring..." or "Sleep: wakes 3 time(s) per night.")
             if label == "sleep" {
-                if valuePart.lowercased().contains("snoring") {
+                let v = valuePart.lowercased()
+                if v.contains("snoring") {
                     return L("well_visit_form.problem_listing.sleep.snoring")
+                }
+                if v.contains("wakes") && v.contains("per night") {
+                    let digits = String(valuePart.filter { "0123456789".contains($0) })
+                    if !digits.isEmpty {
+                        return String(format: L("well_visit_form.problem_listing.sleep.wakes_per_night"), digits)
+                    }
                 }
                 return s
             }

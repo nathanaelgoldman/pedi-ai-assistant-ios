@@ -307,6 +307,7 @@ CREATE TABLE IF NOT EXISTS well_visits (
 
   -- Snapshot for history
   problem_listing TEXT,
+  problem_listing_tokens TEXT NOT NULL DEFAULT '[]'
   conclusions TEXT,
   anticipatory_guidance TEXT,
   next_visit_date TEXT,
