@@ -159,6 +159,8 @@ final class ReportDataLoader {
         let problemListing = repairWellProblemListing(visitID: visitID,
                                                       rawProblemListing: pePack.problem,
                                                       ageMonths: ageMonthsDouble) ?? pePack.problem
+        // STEP 7b: Problem listing tokens (localization-proof)
+        let problemListingTokens = loadProblemListingTokensForWellVisit(visitID: visitID)
         let conclusions = pePack.conclusions
         let anticipatoryGuidance = pePack.anticipatory
         let clinicianComments = pePack.comments
@@ -182,6 +184,7 @@ final class ReportDataLoader {
             measurements: measurements,
             physicalExamGroups: physicalExamGroups,
             problemListing: problemListing,
+            problemListingTokens: problemListingTokens,
             conclusions: conclusions,
             anticipatoryGuidance: anticipatoryGuidance,
             clinicianComments: clinicianComments,
@@ -4472,5 +4475,89 @@ extension ReportDataLoader {
             // fall through
         }
         return nil
+    }
+}
+
+extension ReportDataLoader {
+
+    /// Fetch the full WELL visit row as a [columnName: stringValue] dictionary.
+    /// This is used for robust, schema-tolerant field extraction (including JSON token columns).
+    private func fetchWellVisitRowMapForTokens(visitID: Int) -> [String:String] {
+        var row: [String:String] = [:]
+
+        do {
+            let dbPath = try bundleDBPathWithDebug()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
+
+                func columns(in table: String) -> Set<String> {
+                    var cols = Set<String>()
+                    var stmtCols: OpaquePointer?
+                    if sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
+                        defer { sqlite3_finalize(s) }
+                        while sqlite3_step(s) == SQLITE_ROW {
+                            if let c = sqlite3_column_text(s, 1) {
+                                cols.insert(String(cString: c))
+                            }
+                        }
+                    }
+                    return cols
+                }
+
+                // Prefer canonical well_visits but fall back to legacy visits table.
+                let table = ["well_visits", "visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+
+                let sql = "SELECT * FROM \(table) WHERE id = ? LIMIT 1;"
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, Int64(visitID))
+
+                    if sqlite3_step(st) == SQLITE_ROW {
+                        let n = sqlite3_column_count(st)
+                        for i in 0..<n {
+                            guard let cname = sqlite3_column_name(st, i) else { continue }
+                            let key = String(cString: cname)
+
+                            // Convert any non-NULL value to a string representation.
+                            if sqlite3_column_type(st, i) != SQLITE_NULL, let cval = sqlite3_column_text(st, i) {
+                                let val = String(cString: cval).trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !val.isEmpty { row[key] = val }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            // Return empty map on error.
+        }
+
+        return row
+    }
+
+    // MARK: - Well Problem Listing Tokens (JSON)
+    // Stored in well_visits.problem_listing_tokens as JSON (default: []).
+    private func loadProblemListingTokensForWellVisit(visitID: Int) -> [ProblemToken] {
+        // Reuse the robust row fetcher (introspects table/columns).
+        let row = fetchWellVisitRowMapForTokens(visitID: visitID)
+
+        // Accept a few possible column spellings (defensive).
+        let raw = (row["problem_listing_tokens"] ?? row["problemListingTokens"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !raw.isEmpty else { return [] }
+
+        // Some rows might accidentally store the literal key or other junk; ignore those.
+        if raw == "[]" { return [] }
+
+        do {
+            let data = Data(raw.utf8)
+            let decoded = try JSONDecoder().decode([ProblemToken].self, from: data)
+            return decoded
+        } catch {
+            print("[ReportDataLoader] failed to decode problem_listing_tokens for visitID=\(visitID): \(error)")
+            return []
+        }
     }
 }

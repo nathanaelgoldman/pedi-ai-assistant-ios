@@ -22,7 +22,9 @@ private enum L10nWVF {
 
 // MARK: - Problem listing tokens (step 1)
 
-private struct ProblemToken: Codable, Hashable {
+/// Stable, localization-proof representation of problem-listing lines.
+/// Stored as JSON in `well_visits.problem_listing_tokens` and consumed by report generation.
+struct ProblemToken: Codable, Hashable {
     let key: String
     let args: [String]
 

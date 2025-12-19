@@ -2655,6 +2655,6 @@
 "well_visit_form.problem_listing.sleep.snoring" = "Ronflements rapportés.";
 "well_visit_form.problem_listing.sleep.issue" = "Problème de sommeil : %@";
 
-"well_visit_form.milestones.status.achieved" = "Achieved";
-"well_visit_form.milestones.status.uncertain" = "Uncertain";
-"well_visit_form.milestones.status.not_yet" = "Not yet";
+"well_visit_form.milestones.status.achieved" = "Acquis";
+"well_visit_form.milestones.status.uncertain" = "Incertain";
+"well_visit_form.milestones.status.not_yet" = "Pas encore acquis";

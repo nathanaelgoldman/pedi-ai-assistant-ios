@@ -61,6 +61,7 @@ struct WellReportData {
     let measurements: [String: String]        // today’s W/L/HC; weight-gain since discharge if available
     let physicalExamGroups: [(group: String, lines: [String])]
     let problemListing: String?
+    let problemListingTokens: [ProblemToken]
     let conclusions: String?
     let anticipatoryGuidance: String?
     let clinicianComments: String?
