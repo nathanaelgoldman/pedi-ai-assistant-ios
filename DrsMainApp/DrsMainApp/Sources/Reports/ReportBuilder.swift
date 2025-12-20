@@ -680,8 +680,12 @@ final class ReportBuilder {
 
         if visibility?.showProblemListing ?? true {
             para(L("report.well.section.problem_listing", comment: "Section title: problem listing"), font: headerFont)
-            let _problem = data.problemListing?.trimmingCharacters(in: .whitespacesAndNewlines)
-            para((_problem?.isEmpty == false ? _problem! : "—"), font: bodyFont)
+
+            let rendered = renderProblemListing(tokens: data.problemListingTokens,
+                                                fallback: data.problemListing)
+            let trimmed = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+            para(trimmed.isEmpty ? "—" : trimmed, font: bodyFont)
+
             content.append(NSAttributedString(string: "\n"))
         }
 
@@ -879,6 +883,97 @@ final class ReportBuilder {
 // MARK: - Content assembly from AppState
 
 extension ReportBuilder {
+    
+    // MARK: - Well Visit problem listing (token-rendered)
+
+    private func renderProblemListing(tokens: [ProblemToken], fallback: String?) -> String {
+        if !tokens.isEmpty {
+            let rendered = tokens.compactMap { renderProblemTokenLine($0) }
+            if !rendered.isEmpty {
+                return rendered.joined(separator: "\n")
+            }
+        }
+        return (fallback ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func renderProblemTokenLine(_ token: ProblemToken) -> String? {
+        let key = token.key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return nil }
+
+        let fmt = NSLocalizedString(key, comment: "")
+        let rawArgs = problemTokenStringArray(token, names: ["tokenArgs", "args", "arguments", "tokens"])
+        let args: [CVarArg] = rawArgs.map { localizeProblemTokenArg($0, tokenKey: key) }
+
+        let raw: String
+        if args.isEmpty {
+            raw = (fmt == key) ? key : fmt
+        } else {
+            raw = String(format: fmt, arguments: args)
+        }
+
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if trimmed.hasPrefix("•") { return trimmed }
+        return "• " + trimmed
+    }
+
+    private func problemTokenStringArray(_ token: ProblemToken, names: [String]) -> [String] {
+        let m = Mirror(reflecting: token)
+        for child in m.children {
+            guard let label = child.label, names.contains(label) else { continue }
+            if let arr = child.value as? [String] { return arr }
+            if let arr = child.value as? [Substring] { return arr.map(String.init) }
+        }
+        return []
+    }
+
+    private func localizeProblemTokenArg(_ raw: String, tokenKey: String) -> CVarArg {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { return "" as NSString }
+
+        switch tokenKey {
+        case "well_visit_form.problem_listing.sleep.regularity":
+            return localizedLabel(for: t, prefixes: [
+                "well_visit_form.sleep.regularity.option",
+                "well_visit_form.shared"
+            ]) as NSString
+
+        case "well_visit_form.problem_listing.mchat.line_format":
+            return localizedLabel(for: t, prefixes: [
+                "well_visit_form.mchat.result",
+                "well_visit_form.shared"
+            ]) as NSString
+
+        case "well_visit_form.problem_listing.dev_test.line_format":
+            return localizedLabel(for: t, prefixes: [
+                "well_visit_form.dev_test.result",
+                "well_visit_form.shared"
+            ]) as NSString
+
+        case "well_visit_form.problem_listing.milestones.line_format":
+            return localizedLabel(for: t, prefixes: [
+                "well_visit_form.milestone",
+                "well_visit_form.milestones.item",
+                "well_visit_form.shared"
+            ]) as NSString
+
+        default:
+            return t as NSString
+        }
+    }
+
+    private func localizedLabel(for code: String, prefixes: [String]) -> String {
+        let c = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !c.isEmpty else { return "" }
+
+        for p in prefixes {
+            let k = "\(p).\(c)"
+            let s = NSLocalizedString(k, comment: "")
+            if s != k { return s }
+        }
+        return c
+    }
     
     // Centered title for figure pages
     private func centeredTitle(_ text: String) -> NSAttributedString {
