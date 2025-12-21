@@ -976,40 +976,95 @@ final class ReportDataLoader {
                             lines.append(LF("report.previous.issues_since_last", issues))
                         }
 
-                        // Prefer tokens (localization-proof). Fall back to legacy text if tokens missing.
+                        // Build canonical, localization-proof problem lines.
+                        // Priority: recompute from DB fields (best) → tokens JSON → legacy stored text → raw fallback.
                         let ageMonthsPrev = (!effectiveDobISO.isEmpty && !visitDateISO.isEmpty)
                             ? computeAgeMonths(dobISO: effectiveDobISO, visitISO: visitDateISO)
                             : nil
 
-                        let tokenLines = renderPreviousWellProblemTokensJSONToLines(tokensRaw)
+                        func normalizeKey(_ s: String) -> String {
+                            var t = s
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                                .lowercased()
 
-                        // Always try to recover legacy lines too, because tokens may be partial for older visits
+                            // Strip common list prefixes/symbols and make comparison robust across stored formats.
+                            t = t.replacingOccurrences(of: "•", with: "")
+                            t = t.replacingOccurrences(of: "–", with: " ")
+                            t = t.replacingOccurrences(of: "—", with: " ")
+                            t = t.replacingOccurrences(of: "-", with: " ")
+                            t = t.replacingOccurrences(of: "_", with: " ")
+                            t = t.replacingOccurrences(of: ":", with: " ")
+
+                            while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+                            return t.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+
+                        // Exclude noisy legacy lines that tend to duplicate or degrade the previous-visit digest.
+                        // We want the SAME canonical pipeline as the live Well Problem Listing (feeding/stools/sleep/etc.).
+                        // Milestones/development belong in the Development section, not in this previous-visit digest.
+                        func isNoiseLine(_ s: String) -> Bool {
+                            let raw = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let t = normalizeKey(raw)
+
+                            // Teeth / dentition lines were a frequent source of duplication.
+                            if t.hasPrefix("teeth") || t.hasPrefix("dentition") { return true }
+
+                            // Milestone / development headers in various languages.
+                            if t.hasPrefix("jalons") { return true } // FR: "Jalons préoccupants"
+                            if t.hasPrefix("milestone") || t.hasPrefix("milestones") { return true }
+                            if t.hasPrefix("développement") || t.hasPrefix("develop") { return true }
+
+                            // Legacy milestone flag lines like:
+                            // "- speaks_50_words – not_yet" or similar (often wrapped at underscores in PDF).
+                            let lowerRaw = raw.lowercased()
+                            if raw.hasPrefix("-"),
+                               (lowerRaw.contains("–") || lowerRaw.contains("—") || lowerRaw.contains(" - ")),
+                               lowerRaw.contains("_") {
+                                return true
+                            }
+
+                            return false
+                        }
+
+                        var merged: [String] = []
+                        var seen = Set<String>()
+
+                        func addUnique(_ arr: [String]) {
+                            for raw in arr {
+                                let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !line.isEmpty else { continue }
+                                guard !isNoiseLine(line) else { continue }
+                                let k = normalizeKey(line)
+                                if !k.isEmpty && !seen.contains(k) {
+                                    merged.append(line)
+                                    seen.insert(k)
+                                }
+                            }
+                        }
+
+                        // 1) Recompute from DB fields (preferred)
+                        let rowMap = fetchWellVisitRowMap(visitID: Int(prevID))
+                        let computedLines = computedWellProblemItemsFromRow(rowMap, ageMonths: ageMonthsPrev)
+                        addUnique(computedLines)
+
+                        // 2) Tokens JSON (if present)
+                        let tokenLines = renderPreviousWellProblemTokensJSONToLines(tokensRaw)
+                        addUnique(tokenLines)
+
+                        // 3) Legacy stored text (localized/cleaned)
                         let legacyLines = localizePreviousWellProblemListingLines(
                             visitID: Int(prevID),
                             rawProblemListing: problems,
                             ageMonths: ageMonthsPrev
                         )
+                        addUnique(legacyLines)
 
-                        // Prefer tokens, but don't lose information: add any legacy lines that aren't already present.
-                        if !tokenLines.isEmpty {
-                            lines.append(contentsOf: tokenLines)
-
-                            // Deduplicate by normalized text (super simple + robust)
-                            let seen = Set(tokenLines.map {
-                                $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                            })
-
-                            let extras = legacyLines.filter { line in
-                                let k = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                                return !k.isEmpty && !seen.contains(k)
-                            }
-
-                            lines.append(contentsOf: extras)
-                        } else if !legacyLines.isEmpty {
-                            lines.append(contentsOf: legacyLines)
-                        } else if !problems.isEmpty {
-                            lines.append(LF("report.previous.problems", problems))
+                        // 4) Last resort: dump raw problem block if nothing else
+                        if merged.isEmpty && !problems.isEmpty {
+                            merged.append(LF("report.previous.problems", problems))
                         }
+
+                        lines.append(contentsOf: merged)
 
                         if !conclusions.isEmpty {
                             lines.append(LF("report.previous.conclusions", conclusions))
@@ -4616,20 +4671,25 @@ extension ReportDataLoader {
     }
 }
 
+extension ReportDataLoader {
+
+
     // Decode + render problem_listing_tokens JSON for previous well visits.
     // Returns lines WITHOUT leading bullets (ReportBuilder adds bullets).
     private func renderPreviousWellProblemTokensJSONToLines(_ raw: String) -> [String] {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 
-        // Try JSON array of objects. We intentionally parse dynamically to be resilient
-        // to future tweaks in `ProblemToken` property names.
+        // Parse JSON array of token objects in a schema-tolerant way.
         guard let data = trimmed.data(using: .utf8) else { return [] }
         guard let arr = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]] else { return [] }
 
         func strArray(_ dict: [String: Any], keys: [String]) -> [String] {
             for k in keys {
-                if let a = dict[k] as? [String] { return a }
+                if let a = dict[k] as? [String] {
+                    let s = a.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    if !s.isEmpty { return s }
+                }
                 if let a = dict[k] as? [Any] {
                     let s = a.compactMap { $0 as? String }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     if !s.isEmpty { return s }
@@ -4638,8 +4698,9 @@ extension ReportDataLoader {
             return []
         }
 
-        func fmtString(_ key: String) -> String {
-            NSLocalizedString(key, comment: "")
+        func loc(_ key: String) -> String {
+            let v = NSLocalizedString(key, comment: "")
+            return (v == key) ? key : v
         }
 
         func format(_ fmt: String, args: [String]) -> String {
@@ -4648,28 +4709,81 @@ extension ReportDataLoader {
             return String(format: fmt, locale: Locale.current, arguments: vargs)
         }
 
+        // Heuristic: if an argument is itself a localization key, localize it.
+        func localizedArgs(_ args: [String]) -> [String] {
+            args.map { a in
+                let t = a.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !t.isEmpty else { return t }
+                let v = NSLocalizedString(t, comment: "")
+                return (v == t) ? t : v
+            }
+        }
+
         var out: [String] = []
         out.reserveCapacity(arr.count)
 
         for d in arr {
-            guard let key = (d["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else { continue }
+            guard let keyRaw = d["key"] as? String else { continue }
+            let key = keyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { continue }
 
-            // Prefer already-localized render args when present; fall back to token args.
+            // Prefer already-rendered args when present; otherwise fall back to raw token args.
             let formatArgs = strArray(d, keys: ["formatArgs", "format_args", "renderArgs", "render_args"])
             let tokenArgs  = strArray(d, keys: ["args", "tokenArgs", "token_args", "tokenArguments", "token_arguments"])
             let argsToUse  = !formatArgs.isEmpty ? formatArgs : tokenArgs
 
-            let fmt = fmtString(key)
+            // Special-case a few known token types so we *don't depend* on a localized format string.
+            switch key {
+            case "well_visit_form.problem_listing.token.pe_field_v1":
+                // args: [labelKey, value, ...]
+                if argsToUse.count >= 2 {
+                    let label = loc(argsToUse[0])
+                    let value = argsToUse[1]
+                    let line = (label == argsToUse[0]) ? "\(argsToUse[0]): \(value)" : "\(label): \(value)"
+                    out.append(line.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                continue
+
+            case "well_visit_form.problem_listing.token.pe_teeth_v1":
+                // args: [labelKey, presentKey, count, ...]
+                if argsToUse.count >= 3 {
+                    let label = loc(argsToUse[0])
+                    let present = loc(argsToUse[1])
+                    let count = argsToUse[2]
+                    out.append("\(label): \(present) (\(count))".trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                continue
+
+            case "well_visit_form.problem_listing.token.milestone_item_v1":
+                // args commonly: [code, status, label?] (robust)
+                if argsToUse.count >= 2 {
+                    let code = argsToUse[0]
+                    let statusRaw = argsToUse[1]
+                    let label = (argsToUse.count >= 3) ? argsToUse[2] : ""
+                    let title = localizedMilestoneTitle(code: code, label: label)
+                    let status = localizedMilestoneStatus(statusRaw)
+                    out.append("- \(title) – \(status)".trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                continue
+
+            default:
+                break
+            }
+
+            // General path: localize format string + localize args that are themselves keys.
+            let fmt = NSLocalizedString(key, comment: "")
+            let args = localizedArgs(argsToUse)
+
             let rendered: String
             if fmt == key {
-                // Missing localization key: keep something readable instead of raw key.
-                if !argsToUse.isEmpty {
-                    rendered = key + ": " + argsToUse.joined(separator: ", ")
+                // Missing localization key for the token format. Fall back to something readable.
+                if !args.isEmpty {
+                    rendered = args.joined(separator: ", ")
                 } else {
                     rendered = key
                 }
             } else if fmt.contains("%") {
-                rendered = format(fmt, args: argsToUse)
+                rendered = format(fmt, args: args)
             } else {
                 rendered = fmt
             }
@@ -4680,3 +4794,4 @@ extension ReportDataLoader {
 
         return out
     }
+}

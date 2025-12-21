@@ -456,8 +456,24 @@ final class ReportBuilder {
                 ))
 
                 if let f = item.findings, !f.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    let lines = f.components(separatedBy: " • ")
-                    for line in lines { para("• \(line)", font: bodyFont) }
+                    let parts = splitPreviousVisitFindingLines(f)
+
+                    // Rebuild as one-bullet-per-line, then normalize milestone formatting so PDF matches
+                    // the token pipeline:
+                    // - inserts one Milestones header before the first milestone item
+                    // - removes the extra dash so we don't render "• - ..."
+                    let bulleted = parts.map { "• \($0)" }.joined(separator: "\n")
+                    let normalized = normalizePreviousWellVisitSummary(bulleted)
+
+                    for raw in normalized.components(separatedBy: .newlines) {
+                        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !t.isEmpty else { continue }
+                        if t.hasPrefix("•") {
+                            para(t, font: bodyFont)
+                        } else {
+                            para("• \(t)", font: bodyFont)
+                        }
+                    }
                 } else {
                     para("—", font: bodyFont)
                 }
@@ -619,7 +635,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showMilestones ?? true {
-            para(L("report.well.section.milestones", comment: "Section title: age-specific milestones"), font: headerFont)
+            para(NSLocalizedString("well_visit_form.problem_listing.milestones.header", comment: "Section title: age-specific milestones"), font: headerFont)
             let achieved = data.milestonesAchieved.0
             let total = data.milestonesAchieved.1
             let achievedFormat = L("report.well.milestones.achieved_format", comment: "Milestones achieved count line")
@@ -887,13 +903,128 @@ extension ReportBuilder {
     // MARK: - Well Visit problem listing (token-rendered)
 
     private func renderProblemListing(tokens: [ProblemToken], fallback: String?) -> String {
+        // Prefer token-driven rendering (keeps ordering consistent with the form).
         if !tokens.isEmpty {
-            let rendered = tokens.compactMap { renderProblemTokenLine($0) }
-            if !rendered.isEmpty {
-                return rendered.joined(separator: "\n")
+            var out: [String] = []
+            var insertedMilestonesHeader = false
+
+            for token in tokens {
+                let k = token.key.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Insert a header line once, immediately before the first milestone-related line.
+                if k == "well_visit_form.problem_listing.milestones.line_format", !insertedMilestonesHeader {
+                    let headerKey = "well_visit_form.problem_listing.milestones.header"
+                    let header = NSLocalizedString(headerKey, comment: "Problem listing subheader: milestones")
+                    // Keep the output tidy even if a localization is missing.
+                    let headerText = (header == headerKey) ? "Milestones:" : header
+                    out.append("• " + headerText)
+                    insertedMilestonesHeader = true
+                }
+
+                if let line = renderProblemTokenLine(token) {
+                    out.append(line)
+                }
+            }
+
+            let rendered = out.joined(separator: "\n")
+            if !rendered.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return rendered
             }
         }
+
         return (fallback ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Splits stored previous-visit findings into clean per-line items.
+    ///
+    /// Supports:
+    /// - legacy single-line blobs separated by " • "
+    /// - multi-line text (each item on its own line)
+    /// - already-bulleted lines ("• ...")
+    ///
+    /// Returned items are bulletless (caller may add bullets), trimmed, and non-empty.
+    private func splitPreviousVisitFindingLines(_ raw: String) -> [String] {
+        let s = raw
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        let parts: [String]
+        if s.contains(" • ") {
+            parts = s.components(separatedBy: " • ")
+        } else {
+            parts = s.components(separatedBy: .newlines)
+        }
+
+        return parts.compactMap { p in
+            var t = p.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return nil }
+
+            // Avoid double bullets if the stored text already contains bullets
+            if t.hasPrefix("•") {
+                t.removeFirst()
+                t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            return t.isEmpty ? nil : t
+        }
+    }
+
+    /// Normalizes legacy / plain-text previous-visit summaries so they match the token-rendered pipeline:
+    /// - inserts a single "Milestones" header bullet before the first milestone-like line
+    /// - removes the extra dash so we don't render "• - ..."
+    private func normalizePreviousWellVisitSummary(_ text: String) -> String {
+        let headerKey = "well_visit_form.problem_listing.milestones.header"
+        let headerLocalized = NSLocalizedString(headerKey, comment: "Problem listing subheader: milestones")
+        let headerText = (headerLocalized == headerKey) ? "Milestones:" : headerLocalized
+
+        var out: [String] = []
+        out.reserveCapacity(16)
+
+        var insertedHeader = false
+
+        // Split while preserving simple line structure
+        let lines = text.components(separatedBy: .newlines)
+        for rawLine in lines {
+            var line = rawLine
+
+            // Detect and normalize the legacy "• - ..." milestone lines.
+            // We treat any bullet line that starts with "• -", "• –", or "• —" as a milestone item.
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isMilestoneLegacyBullet: Bool =
+                trimmed.hasPrefix("• -") ||
+                trimmed.hasPrefix("• –") ||
+                trimmed.hasPrefix("• —")
+
+            if isMilestoneLegacyBullet {
+                if !insertedHeader {
+                    out.append("• " + headerText)
+                    insertedHeader = true
+                }
+
+                // Strip the extra dash variants after the bullet.
+                // Examples:
+                // "• - Throws a ball" -> "• Throws a ball"
+                // "• – Throws a ball" -> "• Throws a ball"
+                // "• — Throws a ball" -> "• Throws a ball"
+                line = trimmed
+                if line.hasPrefix("•") {
+                    // Remove the initial bullet
+                    line.removeFirst()
+                    line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                // Remove leading dash variants (and surrounding spaces)
+                while line.hasPrefix("-") || line.hasPrefix("–") || line.hasPrefix("—") {
+                    line.removeFirst()
+                    line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                out.append("• " + line)
+                continue
+            }
+
+            out.append(rawLine)
+        }
+
+        return out.joined(separator: "\n")
     }
 
     private func renderProblemTokenLine(_ token: ProblemToken) -> String? {
@@ -913,6 +1044,22 @@ extension ReportBuilder {
 
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+
+        // Milestone problem-list lines sometimes come pre-prefixed with a dash in localized strings
+        // (e.g. "- Throws a ball"), which would otherwise render as "• - ...".
+        if key == "well_visit_form.problem_listing.milestones.line_format" {
+            var t = trimmed
+
+            // If the localized string already contains a bullet, keep it as-is.
+            if t.hasPrefix("•") { return t }
+
+            // Strip leading dash variants so we only have one bullet.
+            while t.hasPrefix("-") || t.hasPrefix("–") || t.hasPrefix("—") {
+                t.removeFirst()
+                t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return "• " + t
+        }
 
         if trimmed.hasPrefix("•") { return trimmed }
         return "• " + trimmed
@@ -1418,7 +1565,17 @@ extension ReportBuilder {
 
         for s in sections {
             para(s.title, font: .systemFont(ofSize: 14, weight: .semibold))
-            para(s.body, font: .systemFont(ofSize: 12))
+            // If this is the previous well visit summary section, normalize it.
+            let isPrevWellVisitSection =
+                s.title == L("report.section.problem_listing", comment: "Generic section title: problem listing") ||
+                s.title.lowercased().contains("visites de suivi précédentes") ||
+                s.title.lowercased().contains("previous well visit")
+            if isPrevWellVisitSection {
+                let normalized = normalizePreviousWellVisitSummary(s.body)
+                para(normalized, font: .systemFont(ofSize: 12))
+            } else {
+                para(s.body, font: .systemFont(ofSize: 12))
+            }
             content.append(NSAttributedString(string: "\n"))
         }
 
@@ -3122,6 +3279,16 @@ extension ReportBuilder {
             L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit")
         ]
 
+        // Problem Listing milestone formatting (shared text pipeline step)
+        let problemListingHeading = L(
+            "report.docx.heading.problem_listing",
+            comment: "DOCX heading detection: Problem Listing"
+        )
+        let milestonesHeader = L(
+            "well_visit_form.problem_listing.milestones.header",
+            comment: "Problem listing subheader shown before milestone bullet lines"
+        )
+
         var styledParagraphs: [(text: String, style: String?)] = []
 
         // Each non-empty line becomes a paragraph; only section headings / current visit line are Heading1.
@@ -3135,6 +3302,13 @@ extension ReportBuilder {
                 styledParagraphs.append((s, nil))
             }
         }
+
+        // Normalize milestone bullet formatting (shared rule):
+        // - Converts "• - ..." to "• ..." (removes the extra dash)
+        // - Inserts a single "• <Milestones header>" line before the first milestone item in each bullet block
+        // - Resets per block when a non-bullet paragraph appears (e.g., each previous-visit header line)
+        styledParagraphs = normalizeMilestoneBullets(in: styledParagraphs,
+                                                     milestonesHeader: milestonesHeader)
 
         // Render growth charts (Well visit only). If not a Well visit, we still create a text-only docx.
         var images: [(data: Data, filename: String, sizePts: CGSize)] = []
@@ -3618,5 +3792,234 @@ private extension ReportBuilder {
 
         ctx.closePDF()
         return data as Data
+    }
+}
+
+    /// Shared milestone bullet normalization used by report renderers.
+    ///
+    /// Why:
+    /// - Some upstream sources produce milestone lines as "• - …" (a bullet that contains a dash-bullet),
+    ///   which renders as a double bullet.
+    /// - We also want a single localized "Milestones" subheader inserted once per bullet block,
+    ///   including inside each previous-visit block.
+    private func normalizeMilestoneBullets(
+        in paragraphs: [(text: String, style: String?)],
+        milestonesHeader: String
+    ) -> [(text: String, style: String?)] {
+        guard !paragraphs.isEmpty else { return paragraphs }
+
+        var out: [(text: String, style: String?)] = []
+        out.reserveCapacity(paragraphs.count + 4)
+
+        // Insert header once per bullet block (resets on headings and non-bullet paragraphs).
+        var insertedHeaderInBlock = false
+
+        func startsWithDash(_ s: Substring) -> Bool {
+            guard let first = s.first else { return false }
+            return first == "-" || first == "–" || first == "—"
+        }
+        
+
+        func stripLeadingDashesAndSpace(_ s: Substring) -> Substring {
+            var t = s
+            while let first = t.first, (first == "-" || first == "–" || first == "—") {
+                t = t.dropFirst()
+                // trim only leading whitespace after each dash removal
+                while let ws = t.first, ws == " " || ws == "\t" { t = t.dropFirst() }
+            }
+            return t
+        }
+
+        for (rawText, rawStyle) in paragraphs {
+            let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                // Keep empty lines, but do not reset state.
+                out.append((rawText, rawStyle))
+                continue
+            }
+
+            // Any Heading1 acts as a block boundary.
+            if rawStyle == "Heading1" {
+                insertedHeaderInBlock = false
+                out.append((rawText, rawStyle))
+                continue
+            }
+
+            // Non-bullet paragraph starts a new block (this is what resets per previous-visit header line).
+            if !trimmed.hasPrefix("•") {
+                insertedHeaderInBlock = false
+                out.append((rawText, rawStyle))
+                continue
+            }
+
+            // Bullet paragraph
+            var content = trimmed.dropFirst()
+            // trim spaces after the bullet
+            while let first = content.first, first == " " || first == "\t" { content = content.dropFirst() }
+
+            let contentStr = String(content).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // If the upstream already wrote the milestones header as a bullet, keep only one per block.
+            if contentStr == milestonesHeader {
+                if insertedHeaderInBlock {
+                    // Skip duplicates
+                    continue
+                } else {
+                    insertedHeaderInBlock = true
+                    out.append(("• \(milestonesHeader)", nil))
+                    continue
+                }
+            }
+
+            // Milestone items are encoded as "• - ..." (or en/em dash variants).
+            if startsWithDash(content) {
+                if !insertedHeaderInBlock {
+                    out.append(("• \(milestonesHeader)", nil))
+                    insertedHeaderInBlock = true
+                }
+                let cleaned = stripLeadingDashesAndSpace(content)
+                let cleanedLine = "• \(cleaned)"
+                out.append((cleanedLine, nil))
+                continue
+            }
+
+            // Other bullets unchanged.
+            out.append((rawText, rawStyle))
+        }
+
+        return out
+    }
+
+/// Shared milestone bullet normalization for **attributed** report bodies (PDF/RTF/RTFD).
+///
+/// - Converts "• - …" (or en/em dash variants) into "• …".
+/// - Inserts one localized milestones header bullet ("• <Milestones header>") before the
+///   first milestone item in each bullet block.
+/// - Resets per block when encountering any non-bullet paragraph.
+private func normalizeMilestoneBullets(
+    in attributed: NSAttributedString,
+    milestonesHeader: String
+) -> NSAttributedString {
+    guard attributed.length > 0 else { return attributed }
+
+    let out = NSMutableAttributedString(attributedString: attributed)
+    var insertedHeaderInBlock = false
+
+    func isDash(_ ch: Character) -> Bool {
+        ch == "-" || ch == "–" || ch == "—"
+    }
+
+    func leadingContentAfterBullet(_ trimmed: String) -> Substring {
+        var s = trimmed.dropFirst() // drop the bullet
+        while let f = s.first, f == " " || f == "\t" { s = s.dropFirst() }
+        return s
+    }
+
+    var loc = 0
+    while loc < out.length {
+        // Recompute NSString each loop because we mutate `out`
+        let ns = out.string as NSString
+        let paraRange = ns.paragraphRange(for: NSRange(location: loc, length: 0))
+
+        let paraText = ns.substring(with: paraRange)
+        let trimmed = paraText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            loc = NSMaxRange(paraRange)
+            continue
+        }
+
+        // Non-bullet paragraph starts a new block (resets per previous-visit header line).
+        if !trimmed.hasPrefix("•") {
+            insertedHeaderInBlock = false
+            loc = NSMaxRange(paraRange)
+            continue
+        }
+
+        // Bullet paragraph
+        let content = leadingContentAfterBullet(trimmed)
+        let contentStr = String(content).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // If upstream already wrote the milestones header as a bullet, keep only one per block.
+        if contentStr == milestonesHeader {
+            if insertedHeaderInBlock {
+                out.replaceCharacters(in: paraRange, with: "")
+                continue
+            } else {
+                insertedHeaderInBlock = true
+                loc = NSMaxRange(paraRange)
+                continue
+            }
+        }
+
+        // Milestone items are encoded as "• - ..." (or en/em dash variants).
+        if let first = content.first, isDash(first) {
+            // Insert header once per bullet block.
+            if !insertedHeaderInBlock {
+                let attrs = out.attributes(at: paraRange.location, effectiveRange: nil)
+                let headerLine = "• \(milestonesHeader)\n"
+                out.insert(NSAttributedString(string: headerLine, attributes: attrs),
+                           at: paraRange.location)
+                insertedHeaderInBlock = true
+                // Move `loc` to the original paragraph (now shifted down by header line)
+                loc = paraRange.location + (headerLine as NSString).length
+                continue
+            }
+
+            // Strip leading dash(es) + spaces
+            var cleaned = content
+            while let f = cleaned.first, isDash(f) {
+                cleaned = cleaned.dropFirst()
+                while let ws = cleaned.first, ws == " " || ws == "\t" { cleaned = cleaned.dropFirst() }
+            }
+
+            let attrs = out.attributes(at: paraRange.location, effectiveRange: nil)
+            let cleanedLine = "• \(cleaned)\n"
+            out.replaceCharacters(in: paraRange,
+                                  with: NSAttributedString(string: cleanedLine, attributes: attrs))
+
+            loc = paraRange.location + (cleanedLine as NSString).length
+            continue
+        }
+
+        // Other bullets unchanged.
+        loc = NSMaxRange(paraRange)
+    }
+
+    return out
+}
+/// Split the stored `previousVisitFindings` blob into clean per-line items.
+///
+/// Supports:
+/// 1) Single-line blob with " • " separators (legacy)
+/// 2) Multi-line text with each item on its own line (preferred)
+/// 3) Already-bulleted lines ("• …")
+///
+/// Returned items are *bulletless* (caller adds the leading "• "),
+/// and we preserve leading dash items ("- / – / —") so `normalizeMilestoneBullets(...)`
+/// can insert the milestones header + strip the extra dash.
+private func splitPreviousVisitFindingLines(_ raw: String) -> [String] {
+    let s = raw
+        .replacingOccurrences(of: "\r\n", with: "\n")
+        .replacingOccurrences(of: "\r", with: "\n")
+
+    let parts: [String]
+    if s.contains(" • ") {
+        parts = s.components(separatedBy: " • ")
+    } else {
+        parts = s.components(separatedBy: .newlines)
+    }
+
+    return parts.compactMap { p in
+        var t = p.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+
+        // Avoid "• • ..." when the stored text already contains bullets
+        if t.hasPrefix("•") {
+            t.removeFirst()
+            t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return t.isEmpty ? nil : t
     }
 }
