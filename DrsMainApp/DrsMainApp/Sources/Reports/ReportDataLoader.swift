@@ -16,20 +16,24 @@
 //- the contract is to filter the age appropriate current visit field to include in the report. Everything else is left unchanged.
 
 
+
 import Foundation
 import SQLite3
 
-// MARK: - Localization helpers (file-scope)
-private func L(_ key: String) -> String {
-    NSLocalizedString(key, comment: "")
+// MARK: - ReportDataLoader localization helpers (file-scope)
+// Keep these helpers file-scoped so they are available everywhere in this file
+// (and avoid duplicating them inside functions).
+fileprivate func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
 }
 
-private func LF(_ key: String, _ args: CVarArg...) -> String {
-    String(format: L(key), locale: .current, arguments: args)
+fileprivate func LF(_ key: String, _ args: CVarArg...) -> String {
+    let fmt = L(key)
+    return String(format: fmt, locale: .current, arguments: args)
 }
 
 // Ensure ordinal suffixes appear in lowercase (e.g., 1st, 2nd, 3rd, 4th)
-private func prettifyOrdinals(_ s: String) -> String {
+fileprivate func prettifyOrdinals(_ s: String) -> String {
     do {
         let regex = try NSRegularExpression(
             pattern: "\\b(\\d+)([Ss][Tt]|[Nn][Dd]|[Rr][Dd]|[Tt][Hh])\\b"
@@ -52,6 +56,36 @@ private func prettifyOrdinals(_ s: String) -> String {
     }
 }
 
+// Visit type mapping used for report titles (avoid a global dictionary to keep compile-time light).
+fileprivate func readableVisitType(_ raw: String?) -> String? {
+    guard let r = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty else { return nil }
+
+    switch r {
+    case "one_month": return L("visit.type.one_month")
+    case "two_month": return L("visit.type.two_month")
+    case "four_month": return L("visit.type.four_month")
+    case "six_month": return L("visit.type.six_month")
+    case "nine_month": return L("visit.type.nine_month")
+    case "twelve_month": return L("visit.type.twelve_month")
+    case "fifteen_month": return L("visit.type.fifteen_month")
+    case "eighteen_month": return L("visit.type.eighteen_month")
+    case "twentyfour_month": return L("visit.type.twentyfour_month")
+    case "thirty_month": return L("visit.type.thirty_month")
+    case "thirtysix_month": return L("visit.type.thirtysix_month")
+    case "newborn_1st_after_maternity": return L("visit.type.newborn_1st_after_maternity")
+    case "episode": return L("visit.type.episode")
+    default:
+        // Fallback: prettify snake_case → Title Case with nice ordinals
+        let pretty = r.replacingOccurrences(of: "_", with: " ").capitalized
+        return prettifyOrdinals(pretty)
+    }
+}
+
+
+
+
+
+
 // MARK: - Visit type mapping (file-scope)
 private let VISIT_TITLES: [String:String] = [
     "one_month": L("visit.type.one_month"),
@@ -69,13 +103,7 @@ private let VISIT_TITLES: [String:String] = [
     "episode": L("visit.type.episode")
 ]
 
-private func readableVisitType(_ raw: String?) -> String? {
-    guard let r = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty else { return nil }
-    if let mapped = VISIT_TITLES[r] { return mapped }
-    // Fallback: prettify snake_case → Title Case with nice ordinals
-    let pretty = r.replacingOccurrences(of: "_", with: " ").capitalized
-    return prettifyOrdinals(pretty)
-}
+
 
 @MainActor
 final class ReportDataLoader {
@@ -886,12 +914,14 @@ final class ReportDataLoader {
                 // Columns we will try to read
                 let dateCol = cols.contains("visit_date") ? "visit_date" : (cols.contains("created_at") ? "created_at" : nil)
                 let typeCol = cols.contains("visit_type") ? "visit_type" : nil
+                let tokensExpr = cols.contains("problem_listing_tokens") ? "COALESCE(problem_listing_tokens,'')" : "''"
 
                 let sql = """
                 SELECT
                     id,
                     \(dateCol ?? "''") as visit_date,
                     \(typeCol ?? "''") as visit_type,
+                    \(tokensExpr) as problem_listing_tokens,
                     COALESCE(problem_listing,'') as problem_listing,
                     COALESCE(conclusions,'') as conclusions,
                     COALESCE(parents_concerns,'') as parents_concerns,
@@ -921,9 +951,10 @@ final class ReportDataLoader {
                         }
 
                         var idx: Int32 = 0
-                        let prevID = sqlite3_column_int64(st, idx); idx += 1 // id (unused in title)
+                        let prevID = sqlite3_column_int64(st, idx); idx += 1 // id
                         let visitDateISO = col(idx); idx += 1
                         let visitTypeRaw = col(idx); idx += 1
+                        let tokensRaw = col(idx); idx += 1
                         let problems = col(idx); idx += 1
                         let conclusions = col(idx); idx += 1
                         let parents = col(idx); idx += 1
@@ -945,15 +976,38 @@ final class ReportDataLoader {
                             lines.append(LF("report.previous.issues_since_last", issues))
                         }
 
-                        // Localize the previous visit's stored problem_listing lines (legacy EN or legacy keys)
-                        let ageMonthsPrev = (!effectiveDobISO.isEmpty && !visitDateISO.isEmpty) ? computeAgeMonths(dobISO: effectiveDobISO, visitISO: visitDateISO) : nil
-                        let localizedProblemsLines = localizePreviousWellProblemListingLines(visitID: Int(sqlite3_column_int64(st, 0)), rawProblemListing: problems, ageMonths: ageMonthsPrev)
+                        // Prefer tokens (localization-proof). Fall back to legacy text if tokens missing.
+                        let ageMonthsPrev = (!effectiveDobISO.isEmpty && !visitDateISO.isEmpty)
+                            ? computeAgeMonths(dobISO: effectiveDobISO, visitISO: visitDateISO)
+                            : nil
 
-                        if !localizedProblemsLines.isEmpty {
-                            // Add each problem as its own bullet line later in ReportBuilder
-                            lines.append(contentsOf: localizedProblemsLines)
+                        let tokenLines = renderPreviousWellProblemTokensJSONToLines(tokensRaw)
+
+                        // Always try to recover legacy lines too, because tokens may be partial for older visits
+                        let legacyLines = localizePreviousWellProblemListingLines(
+                            visitID: Int(prevID),
+                            rawProblemListing: problems,
+                            ageMonths: ageMonthsPrev
+                        )
+
+                        // Prefer tokens, but don't lose information: add any legacy lines that aren't already present.
+                        if !tokenLines.isEmpty {
+                            lines.append(contentsOf: tokenLines)
+
+                            // Deduplicate by normalized text (super simple + robust)
+                            let seen = Set(tokenLines.map {
+                                $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                            })
+
+                            let extras = legacyLines.filter { line in
+                                let k = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                                return !k.isEmpty && !seen.contains(k)
+                            }
+
+                            lines.append(contentsOf: extras)
+                        } else if !legacyLines.isEmpty {
+                            lines.append(contentsOf: legacyLines)
                         } else if !problems.isEmpty {
-                            // Fallback: keep the raw block
                             lines.append(LF("report.previous.problems", problems))
                         }
 
@@ -967,8 +1021,8 @@ final class ReportDataLoader {
                             lines.append(LF("report.previous.comments", comments))
                         }
 
-                        // Keep it concise
-                        if lines.count > 6 { lines = Array(lines.prefix(6)) }
+                        // Keep it concise (but still allow the same richness as the live Problem Listing)
+                        if lines.count > 20 { lines = Array(lines.prefix(20)) }
 
                         let dateOut = visitDateISO.isEmpty ? "—" : visitDateISO
                         let findingsStr: String? = lines.isEmpty ? nil : lines.joined(separator: " • ")
@@ -4561,3 +4615,68 @@ extension ReportDataLoader {
         }
     }
 }
+
+    // Decode + render problem_listing_tokens JSON for previous well visits.
+    // Returns lines WITHOUT leading bullets (ReportBuilder adds bullets).
+    private func renderPreviousWellProblemTokensJSONToLines(_ raw: String) -> [String] {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        // Try JSON array of objects. We intentionally parse dynamically to be resilient
+        // to future tweaks in `ProblemToken` property names.
+        guard let data = trimmed.data(using: .utf8) else { return [] }
+        guard let arr = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]] else { return [] }
+
+        func strArray(_ dict: [String: Any], keys: [String]) -> [String] {
+            for k in keys {
+                if let a = dict[k] as? [String] { return a }
+                if let a = dict[k] as? [Any] {
+                    let s = a.compactMap { $0 as? String }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    if !s.isEmpty { return s }
+                }
+            }
+            return []
+        }
+
+        func fmtString(_ key: String) -> String {
+            NSLocalizedString(key, comment: "")
+        }
+
+        func format(_ fmt: String, args: [String]) -> String {
+            guard !args.isEmpty else { return fmt }
+            let vargs: [CVarArg] = args
+            return String(format: fmt, locale: Locale.current, arguments: vargs)
+        }
+
+        var out: [String] = []
+        out.reserveCapacity(arr.count)
+
+        for d in arr {
+            guard let key = (d["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else { continue }
+
+            // Prefer already-localized render args when present; fall back to token args.
+            let formatArgs = strArray(d, keys: ["formatArgs", "format_args", "renderArgs", "render_args"])
+            let tokenArgs  = strArray(d, keys: ["args", "tokenArgs", "token_args", "tokenArguments", "token_arguments"])
+            let argsToUse  = !formatArgs.isEmpty ? formatArgs : tokenArgs
+
+            let fmt = fmtString(key)
+            let rendered: String
+            if fmt == key {
+                // Missing localization key: keep something readable instead of raw key.
+                if !argsToUse.isEmpty {
+                    rendered = key + ": " + argsToUse.joined(separator: ", ")
+                } else {
+                    rendered = key
+                }
+            } else if fmt.contains("%") {
+                rendered = format(fmt, args: argsToUse)
+            } else {
+                rendered = fmt
+            }
+
+            let line = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !line.isEmpty { out.append(line) }
+        }
+
+        return out
+    }
