@@ -3123,7 +3123,7 @@ struct WellVisitForm: View {
                 tokens.append(
                     ProblemToken(
                         "well_visit_form.problem_listing.token.milestone_item_v1",
-                        [code, status.rawValue, noteTrim]
+                        [code, status.rawValue, noteTrim, descriptor.label]
                     )
                 )
 

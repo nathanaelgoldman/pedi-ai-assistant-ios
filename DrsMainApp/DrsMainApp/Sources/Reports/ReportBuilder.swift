@@ -1177,6 +1177,117 @@ extension ReportBuilder {
 
         let fmt = NSLocalizedString(key, comment: "")
         let rawArgs = problemTokenStringArray(token, names: ["tokenArgs", "args", "arguments", "tokens"])
+
+        // --- v1 token renderers that do not rely on Localizable format strings ---
+        func localizedIfExists(_ k: String) -> String? {
+            let s = NSLocalizedString(k, comment: "")
+            return (s == k) ? nil : s
+        }
+
+        func looksLikeLocKey(_ s: String) -> Bool {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.hasPrefix("well_visit_form.") || t.hasPrefix("report.") || t.hasPrefix("visit.")
+        }
+
+        func stripLeadingDash(_ s: String) -> String {
+            var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            while t.hasPrefix("-") || t.hasPrefix("–") || t.hasPrefix("—") {
+                t.removeFirst()
+                t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return t
+        }
+
+        // PE field token (v1): tolerant decoding of args.
+        if key == "well_visit_form.problem_listing.token.pe_field_V1" ||
+           key == "well_visit_form.problem_listing.token.pe_field_v1" {
+
+            let labelKey = rawArgs.count > 0 ? rawArgs[0] : ""
+            let valueRaw = rawArgs.count > 1 ? rawArgs[1] : ""
+            let valueIsKeyRaw = rawArgs.count > 2 ? rawArgs[2] : ""
+            let detailRaw = rawArgs.count > 3 ? rawArgs[3] : ""
+
+            let labelText = localizedIfExists(labelKey) ?? labelKey
+
+            let valueIsKey: Bool = {
+                let v = valueIsKeyRaw.lowercased()
+                if v == "1" || v == "true" || v == "yes" { return true }
+                if v == "0" || v == "false" || v == "no" { return false }
+                // Heuristic fallback
+                return looksLikeLocKey(valueRaw)
+            }()
+
+            let valueText: String = {
+                let t = valueRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !t.isEmpty else { return "" }
+                if valueIsKey {
+                    return localizedIfExists(t) ?? t
+                }
+                return t
+            }()
+
+            let detailText = detailRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            var base = labelText
+            if !valueText.isEmpty {
+                base += ": \(valueText)"
+            }
+            if !detailText.isEmpty {
+                base += " – \(detailText)"
+            }
+
+            let outLine = stripLeadingDash(base)
+            return outLine.hasPrefix("•") ? outLine : ("• " + outLine)
+        }
+
+        // Teeth token (v1): tolerant decoding of args.
+        if key == "well_visit_form.problem_listing.token.pe_teeth_V1" ||
+           key == "well_visit_form.problem_listing.token.pe_teeth_v1" {
+
+            // Try to infer 'present' from any boolean-ish arg
+            let present: Bool = rawArgs.contains { a in
+                let v = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return v == "1" || v == "true" || v == "yes" || v == "present" || v == "présent" || v == "presente" || v == "présente"
+            }
+
+            // First arg that contains any digit -> treat as count
+            let countText: String = rawArgs.first(where: { $0.rangeOfCharacter(from: .decimalDigits) != nil })?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            // Last non-empty arg that isn't boolean-ish and isn't the count -> treat as comment
+            let commentText: String = {
+                var best = ""
+                for a in rawArgs {
+                    let t = a.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !t.isEmpty else { continue }
+                    let low = t.lowercased()
+                    let isBool = (low == "1" || low == "0" || low == "true" || low == "false" || low == "yes" || low == "no" || low == "present" || low == "absent" || low == "présent" || low == "présente")
+                    if isBool { continue }
+                    if !countText.isEmpty && t == countText { continue }
+                    best = t
+                }
+                return best
+            }()
+
+            let labelText = localizedIfExists("well_visit_form.problem_listing.pe.label.teeth")
+                ?? localizedIfExists("report.well.pe.teeth")
+                ?? "Teeth"
+
+            let presentText = localizedIfExists("well_visit_form.shared.present") ?? "present"
+            let absentText  = localizedIfExists("well_visit_form.shared.absent") ?? "absent"
+
+            var base = "\(labelText): \(present ? presentText : absentText)"
+            if !countText.isEmpty {
+                base += " (\(countText))"
+            }
+            if !commentText.isEmpty {
+                base += " – \(commentText)"
+            }
+
+            let outLine = stripLeadingDash(base)
+            return outLine.hasPrefix("•") ? outLine : ("• " + outLine)
+        }
+
         let args: [CVarArg] = rawArgs.map { localizeProblemTokenArg($0, tokenKey: key) }
 
         // New milestone token pipeline (v1): token args are [code, statusCode, optionalNote]
@@ -1190,11 +1301,22 @@ extension ReportBuilder {
                 ? rawArgs[2].trimmingCharacters(in: .whitespacesAndNewlines)
                 : ""
 
-            let label = localizedLabel(for: code, prefixes: [
-                "well_visit_form.milestone",
-                "well_visit_form.milestones.item",
-                "well_visit_form.shared"
-            ])
+            // Prefer the label captured by the live form pipeline (arg[3]) so reports match live UI.
+            // Fallback to code-based localization if the label is missing.
+            let rawLabel = (rawArgs.count >= 4)
+                ? rawArgs[3].trimmingCharacters(in: .whitespacesAndNewlines)
+                : ""
+
+            let label: String = {
+                if !rawLabel.isEmpty {
+                    // If the captured label is actually a localization key, resolve it.
+                    if looksLikeLocKey(rawLabel), let loc = localizedIfExists(rawLabel) {
+                        return loc
+                    }
+                    return rawLabel
+                }
+                return localizedMilestoneItemLabel(code)
+            }()
 
             let statusLabel = localizedLabel(for: statusCode, prefixes: [
                 "well_visit_form.milestones.status",
@@ -1305,6 +1427,8 @@ extension ReportBuilder {
             return localizedLabel(for: t, prefixes: [
                 "well_visit_form.milestone",
                 "well_visit_form.milestones.item",
+                "well_visit_form.milestones",
+                "well_visit_form.milestones.label",
                 "well_visit_form.shared"
             ]) as NSString
 
@@ -1329,6 +1453,38 @@ extension ReportBuilder {
             if s != k { return s }
         }
         return c
+    }
+    
+    /// Localizes a milestone item label from its stable code (e.g. "balances_moment").
+    /// Tries multiple key shapes so we’re compatible with different Localizable conventions.
+    private func localizedMilestoneItemLabel(_ code: String) -> String {
+        let c = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !c.isEmpty else { return "" }
+
+        // 1) Preferred: prefix + "." + code
+        let byPrefix = localizedLabel(for: c, prefixes: [
+            "well_visit_form.milestones.item",
+            "well_visit_form.milestones",
+            "well_visit_form.milestones.label",
+            "well_visit_form.milestone",
+            "well_visit_form.milestone.label",
+            "well_visit_form.shared"
+        ])
+        if byPrefix != c { return byPrefix }
+
+        // 2) Alternate: full-key with trailing ".label"
+        let fullKeys = [
+            "well_visit_form.milestones.\(c).label",
+            "well_visit_form.milestone.\(c).label",
+            "well_visit_form.milestones.item.\(c).label"
+        ]
+        for k in fullKeys {
+            let s = NSLocalizedString(k, comment: "")
+            if s != k { return s }
+        }
+
+        // 3) Fallback: readable instead of raw snake_case
+        return c.replacingOccurrences(of: "_", with: " ")
     }
 
     // M-CHAT result codes are stored as stable codes (e.g. low_risk/medium_risk/high_risk),
@@ -3860,11 +4016,138 @@ extension ReportBuilder {
 }
 
 
-// MARK: - Rendering
+    // MARK: - Rendering
 
 private extension ReportBuilder {
 
 
+
+    // MARK: - Problem Listing Token Rendering Helpers
+
+    /// Render a single problem-listing token line.
+    /// This includes logic for specific keys (used for teeth, etc).
+    fileprivate func renderProblemTokenLine(token: ProblemToken) -> String {
+        let key = token.key
+        // ... other token keys ...
+        if key == "well_visit_form.problem_listing.token.pe_teeth_V1" ||
+           key == "well_visit_form.problem_listing.token.pe_teeth_v1" {
+            
+            NSLog("[ReportDebug][TEETH] key=%@ args=%@",
+                  token.key,
+                  token.args.joined(separator: " | "))
+
+            // Teeth token (v1): args are typically [labelKey, presentKeyOrCode, countText, optionalComment]
+            // Robust rendering:
+            // - Count wins: count > 0 => present, count == 0 => absent
+            // - Else infer from present/absent key or literal
+            // - Localize present/absent via keys when available
+            let a = token.args
+
+            func norm(_ s: String) -> String {
+                s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            }
+
+            func extractFirstInt(from args: [String]) -> Int? {
+                for s in args {
+                    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !t.isEmpty else { continue }
+                    // Accept "20", "20 dents", etc.
+                    let digits = t.filter { $0.isNumber }
+                    if !digits.isEmpty, let v = Int(digits) { return v }
+                }
+                return nil
+            }
+
+            func presentBoolFromKeyOrLiteral(_ s: String) -> Bool? {
+                let t = norm(s)
+                // 1) Localization keys (your real pipeline)
+                if t.contains(".teeth.present") { return true }
+                if t.contains(".teeth.absent")  { return false }
+
+                // 2) Literal bool-ish fallback
+                switch t {
+                case "1", "true", "yes", "y", "present", "présent", "présente", "présentes":
+                    return true
+                case "0", "false", "no", "n", "absent", "absente", "absents", "absentes":
+                    return false
+                default:
+                    return nil
+                }
+            }
+
+            // Label key (prefer token arg[0] when it looks like a localization key)
+            let labelKey = a.first ?? "well_visit_form.problem_listing.pe.label.teeth"
+            let teethLabel = L(labelKey, comment: "Problem listing label: teeth")
+
+            // Count wins if present
+            let countVal = extractFirstInt(from: a)
+            let isPresent: Bool? = {
+                if let cv = countVal { return cv > 0 }
+                for s in a { if let b = presentBoolFromKeyOrLiteral(s) { return b } }
+                return nil
+            }()
+
+            // Prefer a provided localization key (arg[1]) if it is one of the teeth present/absent keys
+            let providedPresentKey: String? = {
+                guard a.count >= 2 else { return nil }
+                let t = a[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                return t.hasPrefix("well_visit_form.") ? t : nil
+            }()
+
+            let presentKey: String
+            if let pk = providedPresentKey,
+               norm(pk).contains(".teeth.present") || norm(pk).contains(".teeth.absent") {
+                presentKey = pk
+            } else {
+                presentKey = (isPresent == false)
+                    ? "well_visit_form.problem_listing.pe.teeth.absent"
+                    : "well_visit_form.problem_listing.pe.teeth.present"
+            }
+            let presentLabel = L(presentKey)
+
+            // Count text for rendering: preserve the original token arg[2] when available; fall back to parsed int.
+            let countText: String = {
+                if a.count >= 3 { return a[2].trimmingCharacters(in: .whitespacesAndNewlines) }
+                if let cv = countVal { return String(cv) }
+                return ""
+            }()
+
+            // Comment: pick the last meaningful arg that is not a known key and not count/presence.
+            let comment: String = {
+                for s in a.reversed() {
+                    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if t.isEmpty { continue }
+                    // Skip obvious localization keys used by this token
+                    if t.hasPrefix("well_visit_form.problem_listing.pe.label.teeth") { continue }
+                    if norm(t).contains(".teeth.present") || norm(t).contains(".teeth.absent") { continue }
+                    if t.hasPrefix("well_visit_form.") { continue }
+                    // Skip count-like strings
+                    let digits = t.filter { $0.isNumber }
+                    if !digits.isEmpty, Int(digits) != nil { continue }
+                    // Skip literal presence words
+                    if presentBoolFromKeyOrLiteral(t) != nil { continue }
+                    return t
+                }
+                return ""
+            }()
+
+            NSLog("[ReportDebug][TEETH] labelKey=%@ providedPresentKey=%@ presentKey=%@ presentLabel=%@ countVal=%@ isPresent=%@ countText=%@ comment=%@",
+                  labelKey,
+                  String(describing: providedPresentKey),
+                  presentKey,
+                  presentLabel,
+                  String(describing: countVal),
+                  String(describing: isPresent),
+                  countText,
+                  comment)
+            var line = "\(teethLabel): \(presentLabel)"
+            if !countText.isEmpty { line += " (\(countText))" }
+            if !comment.isEmpty { line += " – \(comment)" }
+            return line
+        }
+        // ... other token keys ...
+        return "" // fallback
+    }
 
     // Merge multiple PDF Data blobs into a single PDF
     private func mergePDFs(_ parts: [Data]) throws -> Data {

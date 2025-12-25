@@ -3600,6 +3600,11 @@ extension ReportDataLoader {
                         print("  allowedCols: \(Array(allowedCols).sorted())")
                         print("  row keys: \(Array(row.keys).sorted())")
                         #endif
+                        
+                        NSLog("[ReportDebug] teeth present=%@ count=%@ comment=%@",
+                              String(describing: row["pe_teeth_present"]),
+                              String(describing: row["pe_teeth_count"]),
+                              String(describing: row["pe_teeth_comment"]))
 
                         // --- Build grouped PE lines ---
                         let gGeneral         = L("report.pe.group.general")
