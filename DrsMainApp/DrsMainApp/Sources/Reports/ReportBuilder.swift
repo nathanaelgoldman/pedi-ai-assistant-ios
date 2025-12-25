@@ -321,6 +321,32 @@ final class ReportBuilder {
             }
         }
 
+        func localizedMchatInlineValue(_ raw: String) -> String {
+            let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return raw }
+
+            // Try to localize the trailing M-CHAT result code while preserving the left part.
+            let seps = [" – ", " — ", " - "]
+            for sep in seps {
+                if t.contains(sep) {
+                    let parts = t.components(separatedBy: sep)
+                    if parts.count >= 2 {
+                        let left = parts.dropLast().joined(separator: sep).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let right = (parts.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        let localizedRight = self.localizedMchatResultLabel(right)
+                        return left.isEmpty ? localizedRight : (left + sep + localizedRight)
+                    }
+                }
+            }
+
+            // If it's just a code, localize it directly.
+            return self.localizedMchatResultLabel(t)
+        }
+
+        func developmentalValue(_ key: String, _ value: String) -> String {
+            return (key == "M-CHAT") ? localizedMchatInlineValue(value) : value
+        }
+
         func measurementLabel(_ storageKey: String) -> String {
             switch storageKey {
             case "Weight":
@@ -468,6 +494,7 @@ final class ReportBuilder {
                     for raw in normalized.components(separatedBy: .newlines) {
                         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !t.isEmpty else { continue }
+
                         if t.hasPrefix("•") {
                             para(t, font: bodyFont)
                         } else {
@@ -619,7 +646,8 @@ final class ReportBuilder {
                 for key in devOrder {
                     guard let v = data.developmental[key],
                           !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                    para("\(developmentalLabel(key)): \(v)", font: bodyFont)
+                    let rendered = developmentalValue(key, v)
+                    para("\(developmentalLabel(key)): \(rendered)", font: bodyFont)
                 }
                 let extra = data.developmental.keys
                     .filter { !["Parent Concerns","M-CHAT","Developmental Test"].contains($0) }
@@ -627,7 +655,8 @@ final class ReportBuilder {
                 for key in extra {
                     if let v = data.developmental[key],
                        !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        para("\(developmentalLabel(key)): \(v)", font: bodyFont)
+                        let rendered = developmentalValue(key, v)
+                        para("\(developmentalLabel(key)): \(rendered)", font: bodyFont)
                     }
                 }
             }
@@ -899,11 +928,52 @@ final class ReportBuilder {
 // MARK: - Content assembly from AppState
 
 extension ReportBuilder {
+    /// Localizes an inline M-CHAT result code in a legacy/plain-text line.
+    /// Example: "• M-CHAT: score 5 – medium_risk" -> "• M-CHAT: score 5 – <localized label>"
+    private func localizedMchatInlineValueInLegacyLine(_ rawLine: String) -> String {
+        let original = rawLine
+        var line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return original }
+
+        // Keep a leading bullet prefix if present.
+        let hasBullet = line.hasPrefix("•")
+        if hasBullet {
+            line.removeFirst()
+            line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Only attempt this on lines that contain M-CHAT.
+        if !line.lowercased().contains("m-chat") {
+            return original
+        }
+
+        // Try to localize the trailing code while preserving the left part.
+        let seps = [" – ", " — ", " - "]
+        for sep in seps {
+            if line.contains(sep) {
+                let parts = line.components(separatedBy: sep)
+                if parts.count >= 2 {
+                    let left = parts.dropLast().joined(separator: sep).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let right = (parts.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let localizedRight = localizedMchatResultLabel(right)
+                    let rebuilt = left.isEmpty ? localizedRight : (left + sep + localizedRight)
+                    return hasBullet ? ("• " + rebuilt) : rebuilt
+                }
+            }
+        }
+
+        // If it's just a code, localize it directly.
+        let rebuilt = localizedMchatResultLabel(line)
+        return hasBullet ? ("• " + rebuilt) : rebuilt
+    }
     
     // MARK: - Well Visit problem listing (token-rendered)
 
     private func renderProblemListing(tokens: [ProblemToken], fallback: String?) -> String {
         // Prefer token-driven rendering (keeps ordering consistent with the form).
+        
+        
+        
         if !tokens.isEmpty {
             var out: [String] = []
             var insertedMilestonesHeader = false
@@ -911,11 +981,21 @@ extension ReportBuilder {
             for token in tokens {
                 let k = token.key.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // Insert a header line once, immediately before the first milestone-related line.
-                if k == "well_visit_form.problem_listing.milestones.line_format", !insertedMilestonesHeader {
+                // 0) If the token itself is the milestones header, dedupe it here.
+                if k == "well_visit_form.problem_listing.milestones.header" {
+                    if insertedMilestonesHeader { continue }
+                    insertedMilestonesHeader = true
+                }
+
+                // 1) Insert a header line once, immediately before the first milestone-related line
+                //    ONLY if we haven't already seen/printed the header token.
+                let isMilestoneLine =
+                    (k == "well_visit_form.problem_listing.milestones.line_format") ||
+                    (k == "well_visit_form.problem_listing.token.milestone_item_v1")
+
+                if isMilestoneLine, !insertedMilestonesHeader {
                     let headerKey = "well_visit_form.problem_listing.milestones.header"
                     let header = NSLocalizedString(headerKey, comment: "Problem listing subheader: milestones")
-                    // Keep the output tidy even if a localization is missing.
                     let headerText = (header == headerKey) ? "Milestones:" : header
                     out.append("• " + headerText)
                     insertedMilestonesHeader = true
@@ -985,7 +1065,7 @@ extension ReportBuilder {
         // Split while preserving simple line structure
         let lines = text.components(separatedBy: .newlines)
         for rawLine in lines {
-            var line = rawLine
+            var line = localizedMchatInlineValueInLegacyLine(rawLine)
 
             // Detect and normalize the legacy "• - ..." milestone lines.
             // We treat any bullet line that starts with "• -", "• –", or "• —" as a milestone item.
@@ -1021,7 +1101,71 @@ extension ReportBuilder {
                 continue
             }
 
-            out.append(rawLine)
+            out.append(line)
+        }
+
+        return dedupePreviousWellVisitSummaryLines(out.joined(separator: "\n"))
+    }
+
+    /// Dedupe previous-visit bullet lines in a stable, pipeline-driven way.
+    /// This prevents the same clinical fact from appearing twice due to legacy text sources.
+    private func dedupePreviousWellVisitSummaryLines(_ text: String) -> String {
+        let lines = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: .newlines)
+
+        var out: [String] = []
+        out.reserveCapacity(lines.count)
+
+        var seen = Set<String>()
+
+        func collapseSpaces(_ s: String) -> String {
+            var t = s
+            while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+            return t
+        }
+
+        func canonicalKey(for line: String) -> String {
+            var t = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Remove leading bullet for comparison
+            if t.hasPrefix("•") {
+                t.removeFirst()
+                t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            t = collapseSpaces(t)
+
+            // Generic normalization for duplicates like "(18)" vs "(18 dents)".
+            // If the parenthetical contains a number + a word that already appears earlier in the line,
+            // treat it as redundant for dedupe purposes.
+            if let re = try? NSRegularExpression(pattern: "\\((\\d+)\\s+([A-Za-zÀ-ÿ]+)\\)", options: []) {
+                let nsRange = NSRange(t.startIndex..<t.endIndex, in: t)
+                if let m = re.firstMatch(in: t, options: [], range: nsRange), m.numberOfRanges == 3,
+                   let rWord = Range(m.range(at: 2), in: t),
+                   let rParen = Range(m.range(at: 0), in: t) {
+                    let word = String(t[rWord])
+                    let prefix = t[..<rParen.lowerBound].lowercased()
+                    if prefix.contains(word.lowercased()) {
+                        // Replace "(N word)" with "(N)" for canonical comparison
+                        t = re.stringByReplacingMatches(in: t, options: [], range: nsRange, withTemplate: "($1)")
+                        t = collapseSpaces(t)
+                    }
+                }
+            }
+
+            return t.lowercased()
+        }
+
+        for raw in lines {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            let key = canonicalKey(for: trimmed)
+            guard seen.insert(key).inserted else { continue }
+
+            out.append(raw)
         }
 
         return out.joined(separator: "\n")
@@ -1034,6 +1178,68 @@ extension ReportBuilder {
         let fmt = NSLocalizedString(key, comment: "")
         let rawArgs = problemTokenStringArray(token, names: ["tokenArgs", "args", "arguments", "tokens"])
         let args: [CVarArg] = rawArgs.map { localizeProblemTokenArg($0, tokenKey: key) }
+
+        // New milestone token pipeline (v1): token args are [code, statusCode, optionalNote]
+        // Render it using the same localized strings as the live form.
+        if key == "well_visit_form.problem_listing.token.milestone_item_v1" {
+            guard rawArgs.count >= 2 else { return nil }
+
+            let code = rawArgs[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let statusCode = rawArgs[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            let note = (rawArgs.count >= 3)
+                ? rawArgs[2].trimmingCharacters(in: .whitespacesAndNewlines)
+                : ""
+
+            let label = localizedLabel(for: code, prefixes: [
+                "well_visit_form.milestone",
+                "well_visit_form.milestones.item",
+                "well_visit_form.shared"
+            ])
+
+            let statusLabel = localizedLabel(for: statusCode, prefixes: [
+                "well_visit_form.milestones.status",
+                "well_visit_form.shared"
+            ])
+
+            let lineKey = "well_visit_form.problem_listing.milestones.line_format"
+            let lineFmt = NSLocalizedString(lineKey, comment: "")
+            var line: String
+            if lineFmt == lineKey {
+                // Safe fallback if the format key is missing
+                line = "\(label) – \(statusLabel)"
+            } else {
+                line = String(format: lineFmt, label, statusLabel)
+            }
+
+            if !note.isEmpty {
+                let withNoteKey = "well_visit_form.problem_listing.milestones.line_with_note_format"
+                let withNoteFmt = NSLocalizedString(withNoteKey, comment: "")
+                if withNoteFmt == withNoteKey {
+                    line = "\(line) (\(note))"
+                } else {
+                    line = String(format: withNoteFmt, line, note)
+                }
+            }
+
+            let prefixKey = "well_visit_form.problem_listing.milestones.item_prefix_format"
+            let prefixFmt = NSLocalizedString(prefixKey, comment: "")
+            if prefixFmt != prefixKey {
+                line = String(format: prefixFmt, line)
+            }
+
+            var t = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // If the localized string already contains a bullet, keep it as-is.
+            if t.hasPrefix("•") { return t }
+
+            // Strip leading dash variants so we only have one bullet.
+            while t.hasPrefix("-") || t.hasPrefix("–") || t.hasPrefix("—") {
+                t.removeFirst()
+                t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            return "• " + t
+        }
 
         let raw: String
         if args.isEmpty {
@@ -1087,10 +1293,7 @@ extension ReportBuilder {
             ]) as NSString
 
         case "well_visit_form.problem_listing.mchat.line_format":
-            return localizedLabel(for: t, prefixes: [
-                "well_visit_form.mchat.result",
-                "well_visit_form.shared"
-            ]) as NSString
+            return localizedMchatResultLabel(t) as NSString
 
         case "well_visit_form.problem_listing.dev_test.line_format":
             return localizedLabel(for: t, prefixes: [
@@ -1106,6 +1309,12 @@ extension ReportBuilder {
             ]) as NSString
 
         default:
+            // Heuristic: if a token arg *looks like* a localization key, localize it.
+            // This is common for PE tokens where the value is a key (valueIsKey=true).
+            if (t.hasPrefix("well_visit_form.") || t.hasPrefix("report.") || t.hasPrefix("visit.")) && t.contains(".") {
+                let s = NSLocalizedString(t, comment: "")
+                if s != t { return s as NSString }
+            }
             return t as NSString
         }
     }
@@ -1120,6 +1329,60 @@ extension ReportBuilder {
             if s != k { return s }
         }
         return c
+    }
+
+    // M-CHAT result codes are stored as stable codes (e.g. low_risk/medium_risk/high_risk),
+    // but older data (or some normalizers) may store variants (e.g. low/medium/high).
+    // This helper tries a few safe fallbacks before giving up and returning the raw code.
+    private func localizedMchatResultLabel(_ code: String) -> String {
+        let c0 = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !c0.isEmpty else { return "" }
+
+        // 1) Prefer exact match using the same prefixes as the live form.
+        let exact = localizedLabel(for: c0, prefixes: [
+            "well_visit_form.mchat.result",
+            "well_visit_form.shared"
+        ])
+        if exact != c0 { return exact }
+
+        // 2) Try common legacy/variant shapes.
+        var candidates: [String] = []
+
+        // Convert snake_case to dotted form if any legacy keys used dots.
+        if c0.contains("_") {
+            candidates.append(c0.replacingOccurrences(of: "_", with: "."))
+        }
+
+        // If the code is like "medium_risk", also try "medium".
+        if c0.hasSuffix("_risk") {
+            let base = String(c0.dropLast("_risk".count))
+            if !base.isEmpty {
+                candidates.append(base)
+                if base.contains("_") {
+                    candidates.append(base.replacingOccurrences(of: "_", with: "."))
+                }
+            }
+        }
+
+        // If the code is like "medium", also try "medium_risk".
+        if c0 == "low" || c0 == "medium" || c0 == "high" {
+            candidates.append("\(c0)_risk")
+        }
+
+        // De-dup while preserving order.
+        var seen = Set<String>()
+        let uniq = candidates.filter { seen.insert($0).inserted }
+
+        for cand in uniq {
+            let s = localizedLabel(for: cand, prefixes: [
+                "well_visit_form.mchat.result",
+                "well_visit_form.shared"
+            ])
+            if s != cand { return s }
+        }
+
+        // 3) Give up: return the raw stable code.
+        return c0
     }
     
     // Centered title for figure pages

@@ -612,6 +612,9 @@
 "well_visit_form.mchat.risk.low" = "Based on the M-CHAT score, this result falls into the Low risk (0–2) category.";
 "well_visit_form.mchat.risk.medium" = "Based on the M-CHAT score, this result falls into the Medium risk (3–7) category.";
 "well_visit_form.mchat.risk.high" = "Based on the M-CHAT score, this result falls into the High risk (8–20) category.";
+"well_visit_form.mchat.result.low_risk" = "low risk";
+"well_visit_form.mchat.result.medium_risk" = "medium risk";
+"well_visit_form.mchat.result.high_risk" = "high risk";
 
 "well_visit_form.dev_test.title" = "Developmental test";
 "well_visit_form.dev_test.score.label" = "Dev test score";

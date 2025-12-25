@@ -1641,18 +1641,29 @@ struct WellVisitForm: View {
     /// - 0–2   → Low risk
     /// - 3–7   → Medium risk
     /// - 8–20  → High risk
-    private var mchatRiskCategoryDescription: String? {
-        let trimmed = mchatScore.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let score = Int(trimmed) else {
-            return nil
-        }
+    /// Derives the M-CHAT risk code from a score string, if valid.
+    /// Returns stable stored codes: "low_risk", "medium_risk", "high_risk".
+    private func mchatRiskCode(from scoreText: String) -> String? {
+        let t = scoreText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, let score = Int(t) else { return nil }
 
         switch score {
-        case 0...2:
+        case 0...2:  return "low_risk"
+        case 3...7:  return "medium_risk"
+        case 8...20: return "high_risk"
+        default:     return nil
+        }
+    }
+
+    /// Derives the M-CHAT risk category explanation from the current score, if valid.
+    private var mchatRiskCategoryDescription: String? {
+        guard let code = mchatRiskCode(from: mchatScore) else { return nil }
+        switch code {
+        case "low_risk":
             return NSLocalizedString("well_visit_form.mchat.risk.low", comment: "")
-        case 3...7:
+        case "medium_risk":
             return NSLocalizedString("well_visit_form.mchat.risk.medium", comment: "")
-        case 8...20:
+        case "high_risk":
             return NSLocalizedString("well_visit_form.mchat.risk.high", comment: "")
         default:
             return nil
@@ -3149,25 +3160,39 @@ struct WellVisitForm: View {
         if isMCHATVisit {
             let scoreTrim = trimmed(mchatScore)
             let resultRaw = trimmed(mchatResult)
+
             if !scoreTrim.isEmpty || !resultRaw.isEmpty {
-                // Prefer stable codes; fall back to legacy/free-text.
-                let code = normalizeMchatResultCode(resultRaw)
-                if !code.isEmpty, isKnownMCHATResultCode(code) {
-                    let label = localizedLabel(for: code, prefixes: [
+                // Prefer score-derived risk code when possible so results don't go stale.
+                if let derived = mchatRiskCode(from: scoreTrim) {
+                    let label = localizedLabel(for: derived, prefixes: [
                         "well_visit_form.mchat.result",
                         "well_visit_form.shared"
                     ])
                     addKey(
                         "well_visit_form.problem_listing.mchat.line_format",
-                        tokenArgs: [scoreTrim, code],
+                        tokenArgs: [scoreTrim, derived],
                         formatArgs: [scoreTrim, label]
                     )
                 } else {
-                    addKey(
-                        "well_visit_form.problem_listing.mchat.line_format",
-                        tokenArgs: [scoreTrim, resultRaw],
-                        formatArgs: [scoreTrim, resultRaw]
-                    )
+                    // Otherwise prefer stable codes from the stored result; fall back to legacy/free-text.
+                    let code = normalizeMchatResultCode(resultRaw)
+                    if !code.isEmpty, isKnownMCHATResultCode(code) {
+                        let label = localizedLabel(for: code, prefixes: [
+                            "well_visit_form.mchat.result",
+                            "well_visit_form.shared"
+                        ])
+                        addKey(
+                            "well_visit_form.problem_listing.mchat.line_format",
+                            tokenArgs: [scoreTrim, code],
+                            formatArgs: [scoreTrim, label]
+                        )
+                    } else {
+                        addKey(
+                            "well_visit_form.problem_listing.mchat.line_format",
+                            tokenArgs: [scoreTrim, resultRaw],
+                            formatArgs: [scoreTrim, resultRaw]
+                        )
+                    }
                 }
             }
         }

@@ -983,8 +983,11 @@ final class ReportDataLoader {
                             : nil
 
                         func normalizeKey(_ s: String) -> String {
+                            // Make comparison robust across languages (e.g., "présentes" vs "presentes")
+                            // and across legacy punctuation (parentheses, bullets, dashes).
                             var t = s
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
+                                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
                                 .lowercased()
 
                             // Strip common list prefixes/symbols and make comparison robust across stored formats.
@@ -994,6 +997,16 @@ final class ReportDataLoader {
                             t = t.replacingOccurrences(of: "-", with: " ")
                             t = t.replacingOccurrences(of: "_", with: " ")
                             t = t.replacingOccurrences(of: ":", with: " ")
+                            t = t.replacingOccurrences(of: "(", with: " ")
+                            t = t.replacingOccurrences(of: ")", with: " ")
+
+                            // Teeth/dentition lines often vary only by whether the unit word is repeated
+                            // (e.g., "(18)" vs "(18 dents)" / "(18 teeth)"). Normalize that away so dedupe works.
+                            if t.hasPrefix("dents") || t.hasPrefix("teeth") || t.hasPrefix("dentition") {
+                                // Remove the repeated unit word after a number.
+                                t = t.replacingOccurrences(of: " teeth", with: "")
+                                t = t.replacingOccurrences(of: " dents", with: "")
+                            }
 
                             while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
                             return t.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1005,9 +1018,6 @@ final class ReportDataLoader {
                         func isNoiseLine(_ s: String) -> Bool {
                             let raw = s.trimmingCharacters(in: .whitespacesAndNewlines)
                             let t = normalizeKey(raw)
-
-                            // Teeth / dentition lines were a frequent source of duplication.
-                            if t.hasPrefix("teeth") || t.hasPrefix("dentition") { return true }
 
                             // Milestone / development headers in various languages.
                             if t.hasPrefix("jalons") { return true } // FR: "Jalons préoccupants"
