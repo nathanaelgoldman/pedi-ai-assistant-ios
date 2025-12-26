@@ -2258,15 +2258,18 @@ struct WellVisitForm: View {
 
                 peSkinRashNormal      = boolDefaultTrue(45)
                 peSkinRashComment     = text(46)
-                
+
+                // Teeth: if a positive count exists, treat "present" as true.
+                // This prevents inconsistent rows (present=0 but count>0) from generating "absent" in the problem listing.
                 peTeethPresent        = boolDefaultFalse(47)
 
                 let teethCountInt     = sqlite3_column_int(stmt, 48)
                 if teethCountInt > 0 {
                     peTeethCount = String(teethCountInt)
+                    peTeethPresent = true
                 } else {
                     peTeethCount = ""
-                                }
+                }
 
                 peTeethComment        = text(49)
             }
@@ -2519,16 +2522,21 @@ struct WellVisitForm: View {
     // args[2] = count ("" if none)
     // args[3] = comment ("" if none)
     private func peTeethToken(countText: String, present: Bool, comment: String) -> (line: String, token: ProblemToken) {
-        let baseKey = present
+        // Robustness: if a positive count is present, we treat "teeth present" as true
+        // even if the boolean flag was never toggled (avoids generating "absent" incorrectly).
+        let cntTrim = trimmed(countText)
+        let countInt = Int(cntTrim) ?? 0
+        let effectivePresent = present || countInt > 0
+
+        let baseKey = effectivePresent
             ? "well_visit_form.problem_listing.pe.teeth.present"
             : "well_visit_form.problem_listing.pe.teeth.absent"
 
         var value = L(baseKey)
-        let cntTrim = trimmed(countText)
         var countArg = ""
-        if let cnt = Int(cntTrim), cnt > 0 {
-            countArg = String(cnt)
-            value += " " + String(format: L("well_visit_form.problem_listing.pe.teeth.count_format"), cnt)
+        if countInt > 0 {
+            countArg = String(countInt)
+            value += " " + String(format: L("well_visit_form.problem_listing.pe.teeth.count_format"), countInt)
         }
 
         let c = trimmed(comment)
@@ -3094,18 +3102,29 @@ struct WellVisitForm: View {
             add(item.line)
         }
 
-        if isTeethVisit,
-           (peTeethPresent
-            || !trimmed(peTeethCount).isEmpty
-            || !trimmed(peTeethComment).isEmpty) {
+        if isTeethVisit {
+            let cntTrim = trimmed(peTeethCount)
+            let countInt = Int(cntTrim) ?? 0
+            let effectivePresent = peTeethPresent || countInt > 0
+            let commentTrim = trimmed(peTeethComment)
 
-            let item = peTeethToken(
-                countText: peTeethCount,
-                present: peTeethPresent,
-                comment: peTeethComment
-            )
-            tokens.append(item.token)
-            add(item.line)
+            // Flag teeth only when abnormal:
+            // - Absent after 12 months
+            // - Count beyond plausible primary dentition max (20)
+            // - Any comment present (e.g., decay)
+            let absenceAbnormal = isPostTwelveMonthVisit && !effectivePresent
+            let countAbnormal = !cntTrim.isEmpty && countInt > 20
+            let shouldFlagTeeth = absenceAbnormal || countAbnormal || !commentTrim.isEmpty
+
+            if shouldFlagTeeth {
+                let item = peTeethToken(
+                    countText: peTeethCount,
+                    present: peTeethPresent,
+                    comment: peTeethComment
+                )
+                tokens.append(item.token)
+                add(item.line)
+            }
         }
 
         // 5) Milestones (only if some are not achieved / uncertain)
@@ -3757,9 +3776,12 @@ struct WellVisitForm: View {
         let peSkinIntegrityCommentDB       = peSkinIntegrityComment.trimmingCharacters(in: .whitespacesAndNewlines)
         let peSkinRashNormalDB: Int32      = peSkinRashNormal ? 1 : 0
         let peSkinRashCommentDB            = peSkinRashComment.trimmingCharacters(in: .whitespacesAndNewlines)
-        let peTeethPresentDB: Int32      = peTeethPresent ? 1 : 0
         let peTeethCountTrim             = peTeethCount.trimmingCharacters(in: .whitespacesAndNewlines)
         let peTeethCountDB: Int32?       = Int32(peTeethCountTrim).flatMap { $0 > 0 ? $0 : nil }
+
+        // Teeth: keep DB consistent — if count > 0, mark teeth as present.
+        let peTeethPresentDB: Int32      = (peTeethPresent || peTeethCountDB != nil) ? 1 : 0
+
         let peTeethCommentDB             = peTeethComment.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let sql = """
