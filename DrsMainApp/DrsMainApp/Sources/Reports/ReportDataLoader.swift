@@ -20,6 +20,9 @@
 import Foundation
 import SQLite3
 
+// SQLite helper: transient destructor pointer for sqlite3_bind_text
+fileprivate let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
 // MARK: - ReportDataLoader localization helpers (file-scope)
 // Keep these helpers file-scoped so they are available everywhere in this file
 // (and avoid duplicating them inside functions).
@@ -1312,8 +1315,20 @@ final class ReportDataLoader {
                             }
                         }
                         // Developmental test
-                        let dScore = nonEmpty(row["devtest_score"])
-                        let dRes   = nonEmpty(row["devtest_result"])
+                        // Note: some schemas store a default 0 when no score was entered.
+                        // For the report, we suppress that placeholder value.
+                        let dScoreRaw = nonEmpty(row["devtest_score"])
+                        let dResRaw   = nonEmpty(row["devtest_result"])
+
+                        let dScore: String? = {
+                            guard let s = dScoreRaw else { return nil }
+                            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if t == "0" { return nil }
+                            return t
+                        }()
+
+                        let dRes: String? = dResRaw.map { reportLocalizedWellChoiceToken($0) }
+
                         if let s = dScore, let r = dRes {
                             dev[L("report.dev.devtest")] = "\(s) (\(r))"
                         } else if let s = dScore {
@@ -3994,7 +4009,102 @@ extension ReportDataLoader {
                                 }
                             }
 
-                            guard let rendered = renderValue(rawVal, kind: mapping.kind) else {
+                            // Special-case: some sleep fields store raw token-like values (e.g. "wakes_per_night=1",
+                            // "10_15", "regular"). Normalize those so the Current Visit → Sleep section does not
+                            // print raw tokens.
+                            func normalizeSleepValue(dbKey: String, raw: String) -> String? {
+                                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !t.isEmpty else { return nil }
+
+                                // 1) Handle wakes-per-night tokens that may appear in various sleep text fields.
+                                // Accept common variants.
+                                let candidates = [
+                                    "wakes_per_night",
+                                    "wakes_for_feeds_per_night",
+                                    "wakesForFeedsPerNight"
+                                ]
+
+                                func extractInt(after marker: String, in s: String) -> String? {
+                                    guard let r = s.range(of: marker) else { return nil }
+                                    let tail = s[r.upperBound...]
+                                    let digits = tail.prefix { $0.isNumber }
+                                    return digits.isEmpty ? nil : String(digits)
+                                }
+
+                                for c in candidates {
+                                    if let n = extractInt(after: "\(c)=", in: t) {
+                                        let fmt = L("well_visit_form.problem_listing.sleep.wakes_per_night")
+                                        return String(format: fmt, locale: .current, n)
+                                    }
+                                }
+
+                                // 2) Handle simple numeric ranges stored as "10_15" -> "10–15".
+                                // Keep this conservative: only digits + underscore + digits.
+                                // For total-hours fields, also append a compact hour unit ("h") so the value
+                                // is self-contained in the report.
+                                let hoursKeys: Set<String> = [
+                                    "sleep_hours",
+                                    "sleep_total_hours",
+                                    "sleep_total",
+                                    "sleep_hours_text"
+                                ]
+
+                                // a) "10_15" -> "10–15" (and maybe add unit)
+                                if t.range(of: "^[0-9]+_[0-9]+$", options: .regularExpression) != nil {
+                                    let ranged = t.replacingOccurrences(of: "_", with: "–")
+                                    if hoursKeys.contains(dbKey), !ranged.lowercased().contains("h") {
+                                        return "\(ranged) h"
+                                    }
+                                    return ranged
+                                }
+
+                                // b) Already-ranged values like "10–15" coming from upstream: ensure unit for hours fields.
+                                if t.range(of: "^[0-9]+[–-][0-9]+$", options: .regularExpression) != nil {
+                                    if hoursKeys.contains(dbKey), !t.lowercased().contains("h") {
+                                        return "\(t) h"
+                                    }
+                                }
+
+                                // c) Single numeric value for hours fields: ensure unit.
+                                if hoursKeys.contains(dbKey), t.range(of: "^[0-9]+$", options: .regularExpression) != nil {
+                                    return "\(t) h"
+                                }
+
+                                // 3) Handle common enum-ish values.
+                                // Prefer an explicit mapping for known sleep enums; otherwise try localization keys; else raw.
+                                let lc = t.lowercased()
+
+                                // Sleep regularity is stored as tokens like "regular" / "irregular".
+                                if dbKey == "sleep_regular" {
+                                    let lang = (Locale.current.languageCode ?? "en").lowercased()
+                                    switch lc {
+                                    case "regular":
+                                        return (lang.hasPrefix("fr")) ? "régulier" : "regular"
+                                    case "irregular":
+                                        return (lang.hasPrefix("fr")) ? "irrégulier" : "irregular"
+                                    default:
+                                        break
+                                    }
+                                }
+
+                                if ["regular","irregular","poor","good","excellent"].contains(lc) {
+                                    let probe = NSLocalizedString(lc, comment: "")
+                                    return (probe == lc) ? t : probe
+                                }
+
+                                // Default: no normalization applied.
+                                return nil
+                            }
+
+                            let rendered: String?
+                            if mapping.section == .sleep {
+                                // Try to normalize token-like sleep values first.
+                                rendered = normalizeSleepValue(dbKey: key, raw: rawVal) ?? renderValue(rawVal, kind: mapping.kind)
+                            } else {
+                                rendered = renderValue(rawVal, kind: mapping.kind)
+                            }
+
+                            guard let rendered, !rendered.isEmpty else {
                                 continue
                             }
 
@@ -4021,18 +4131,21 @@ extension ReportDataLoader {
 }
 
 extension ReportDataLoader {
-    // Load Measurements for the current WELL visit from well_visits (or visits) table.
+    // Load Measurements for the current WELL visit.
+    // Primary source: manual_growth (if present for the visit date)
+    // Fallback: well_visits (older bundles)
     // Maps:
-    //  - weight_today_kg        -> "Weight"              (kg)
-    //  - length_today_cm        -> "Length"              (cm)
-    //  - head_circ_today_cm     -> "Head Circumference"  (cm)
-    //  - delta_weight_g         -> part of "Weight gain since discharge"
-    //  - delta_days_since_discharge -> appended as "over N days"
+    //  - weight_today_kg / weight_today_g -> "Weight" (kg)
+    //  - length_today_cm                  -> "Length" (cm)
+    //  - head_circ_today_cm               -> "Head Circumference" (cm)
+    //  - delta_weight_g                   -> part of "Weight gain since discharge" (well_visits)
+    //  - delta_days_since_discharge       -> appended as "over N days" (well_visits)
     @MainActor
     private func loadMeasurementsForWellVisit(visitID: Int) -> [String:String] {
         #if DEBUG
         print("[ReportDataLoader] loadMeasurementsForWellVisit visitID=\(visitID)")
         #endif
+
         var out: [String:String] = [:]
 
         func nonEmpty(_ s: String?) -> String? {
@@ -4053,6 +4166,12 @@ extension ReportDataLoader {
             if let d = Double(t) { return Int(d.rounded()) }
             return nil
         }
+        func fmtKgFromGrams(_ gramsRaw: String?) -> String? {
+            guard let g = fmtInt(gramsRaw) else { return nil }
+            let kg = Double(g) / 1000.0
+            let asInt = kg.truncatingRemainder(dividingBy: 1) == 0
+            return asInt ? "\(Int(kg)) kg" : String(format: "%.1f kg", kg)
+        }
 
         do {
             let dbPath = try bundleDBPathWithDebug()
@@ -4060,7 +4179,6 @@ extension ReportDataLoader {
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
                 defer { sqlite3_close(db) }
 
-                // Determine table that holds well visits
                 func columns(in table: String) -> Set<String> {
                     var cols = Set<String>()
                     var stmtCols: OpaquePointer?
@@ -4072,55 +4190,121 @@ extension ReportDataLoader {
                     }
                     return cols
                 }
-                let table = ["well_visits","visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
 
-                // Fetch the row
-                var stmt: OpaquePointer?
-                if sqlite3_prepare_v2(db, "SELECT * FROM \(table) WHERE id = ? LIMIT 1;", -1, &stmt, nil) == SQLITE_OK, let st = stmt {
-                    defer { sqlite3_finalize(st) }
-                    sqlite3_bind_int64(st, 1, Int64(visitID))
-                    if sqlite3_step(st) == SQLITE_ROW {
-                        // Build dictionary of all non-null, non-empty stringified values
-                        var row: [String:String] = [:]
-                        let n = sqlite3_column_count(st)
-                        for i in 0..<n {
-                            guard let cname = sqlite3_column_name(st, i) else { continue }
-                            let key = String(cString: cname)
-                            if sqlite3_column_type(st, i) != SQLITE_NULL, let cval = sqlite3_column_text(st, i) {
-                                let val = String(cString: cval).trimmingCharacters(in: .whitespacesAndNewlines)
-                                if !val.isEmpty { row[key] = val }
+                // We still read the well_visits row to get patient_id + visit_date, and to keep delta-weight logic unchanged.
+                let wellTable = ["well_visits","visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
+
+                var patientID: Int?
+                var visitDate: String?
+                var wellRow: [String:String] = [:]
+
+                // --- Fetch minimal well visit row ---
+                do {
+                    var stmt: OpaquePointer?
+                    if sqlite3_prepare_v2(db, "SELECT * FROM \(wellTable) WHERE id = ? LIMIT 1;", -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                        defer { sqlite3_finalize(st) }
+                        sqlite3_bind_int64(st, 1, Int64(visitID))
+                        if sqlite3_step(st) == SQLITE_ROW {
+                            let n = sqlite3_column_count(st)
+                            for i in 0..<n {
+                                guard let cname = sqlite3_column_name(st, i) else { continue }
+                                let key = String(cString: cname)
+                                if sqlite3_column_type(st, i) != SQLITE_NULL, let cval = sqlite3_column_text(st, i) {
+                                    let val = String(cString: cval).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !val.isEmpty { wellRow[key] = val }
+                                }
                             }
-                        }
-
-                        // Core measurements
-                        if let s = fmtNumber(row["weight_today_kg"], unit: "kg") {
-                            out[L("report.well.measurement.weight")] = s
-                        }
-                        if let s = fmtNumber(row["length_today_cm"], unit: "cm") {
-                            out[L("report.well.measurement.length")] = s
-                        }
-                        if let s = fmtNumber(row["head_circ_today_cm"], unit: "cm") {
-                            out[L("report.well.measurement.headCircumference")] = s
-                        }
-
-                        // Weight gain since discharge
-                        let dW = fmtInt(row["delta_weight_g"])
-                        let dD = fmtInt(row["delta_days_since_discharge"])
-                        if let dw = dW {
-                            let sign = dw > 0 ? "+" : ""
-                            let label = L("report.well.measurement.weightGainSinceDischarge")
-                            if let dd = dD {
-                                out[label] = String(format: L("report.well.measurement.weightGain.value.overDays"), sign, dw, dd)
-                            } else {
-                                out[label] = String(format: L("report.well.measurement.weightGain.value.simple"), sign, dw)
+                            if let pid = fmtInt(wellRow["patient_id"]) { patientID = pid }
+                            visitDate = nonEmpty(wellRow["visit_date"]) ?? nonEmpty(wellRow["date"]) ?? nonEmpty(wellRow["created_at"])
+                            if let vd = visitDate, vd.count >= 10 {
+                                visitDate = String(vd.prefix(10)) // normalize to YYYY-MM-DD
                             }
                         }
                     }
                 }
+
+                // --- Delta weight since discharge (kept exactly as before, sourced from well_visits) ---
+                let dW = fmtInt(wellRow["delta_weight_g"])
+                let dD = fmtInt(wellRow["delta_days_since_discharge"])
+                if let dw = dW {
+                    let sign = dw > 0 ? "+" : ""
+                    let label = L("report.well.measurement.weightGainSinceDischarge")
+                    if let dd = dD {
+                        out[label] = String(format: L("report.well.measurement.weightGain.value.overDays"), sign, dw, dd)
+                    } else {
+                        out[label] = String(format: L("report.well.measurement.weightGain.value.simple"), sign, dw)
+                    }
+                }
+
+                // Helper to fill the 3 core measurements from a row-dict using multiple possible column names.
+                func fillCore(from row: [String:String]) {
+                    // Weight
+                    if out[L("report.well.measurement.weight")] == nil {
+                        if let s = fmtNumber(row["weight_today_kg"] ?? row["weight_kg"], unit: "kg") {
+                            out[L("report.well.measurement.weight")] = s
+                        } else if let s = fmtKgFromGrams(row["weight_today_g"] ?? row["weight_g"] ?? row["weight_grams"]) {
+                            out[L("report.well.measurement.weight")] = s
+                        }
+                    }
+                    // Length/Height
+                    if out[L("report.well.measurement.length")] == nil {
+                        if let s = fmtNumber(row["length_today_cm"] ?? row["length_cm"] ?? row["height_cm"], unit: "cm") {
+                            out[L("report.well.measurement.length")] = s
+                        }
+                    }
+                    // Head circumference
+                    if out[L("report.well.measurement.headCircumference")] == nil {
+                        if let s = fmtNumber(row["head_circ_today_cm"] ?? row["head_circ_cm"] ?? row["head_circumference_cm"] ?? row["hc_cm"], unit: "cm") {
+                            out[L("report.well.measurement.headCircumference")] = s
+                        }
+                    }
+                }
+
+                // --- Primary source: manual_growth (same-day as visit) ---
+                let mgCols = columns(in: "manual_growth")
+                if !mgCols.isEmpty, let pid = patientID, let day = visitDate {
+                    // Determine which date-like column exists.
+                    let dateCol: String? = {
+                        if mgCols.contains("date") { return "date" }
+                        if mgCols.contains("visit_date") { return "visit_date" }
+                        if mgCols.contains("measured_at") { return "measured_at" }
+                        if mgCols.contains("recorded_at") { return "recorded_at" }
+                        if mgCols.contains("created_at") { return "created_at" }
+                        return nil
+                    }()
+
+                    if let dc = dateCol {
+                        // We match on same calendar day: substr(col,1,10) == YYYY-MM-DD
+                        let sql = "SELECT * FROM manual_growth WHERE patient_id = ? AND substr(\(dc),1,10) = ? ORDER BY \(dc) DESC, id DESC LIMIT 1;"
+                        var stmtMG: OpaquePointer?
+                        if sqlite3_prepare_v2(db, sql, -1, &stmtMG, nil) == SQLITE_OK, let st = stmtMG {
+                            defer { sqlite3_finalize(st) }
+                            sqlite3_bind_int64(st, 1, Int64(pid))
+                            sqlite3_bind_text(st, 2, day, -1, SQLITE_TRANSIENT)
+                            if sqlite3_step(st) == SQLITE_ROW {
+                                var row: [String:String] = [:]
+                                let n = sqlite3_column_count(st)
+                                for i in 0..<n {
+                                    guard let cname = sqlite3_column_name(st, i) else { continue }
+                                    let key = String(cString: cname)
+                                    if sqlite3_column_type(st, i) != SQLITE_NULL, let cval = sqlite3_column_text(st, i) {
+                                        let val = String(cString: cval).trimmingCharacters(in: .whitespacesAndNewlines)
+                                        if !val.isEmpty { row[key] = val }
+                                    }
+                                }
+                                fillCore(from: row)
+                            }
+                        }
+                    }
+                }
+
+                // --- Fallback: old behavior (some bundles store core measurements in well_visits) ---
+                fillCore(from: wellRow)
             }
         } catch {
             // leave empty; builder will skip section if empty
         }
+
         #if DEBUG
         print("[ReportDataLoader] loadMeasurementsForWellVisit out=\(out)")
         #endif

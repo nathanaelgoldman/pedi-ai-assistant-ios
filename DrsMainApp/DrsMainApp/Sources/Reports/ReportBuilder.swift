@@ -615,28 +615,103 @@ final class ReportBuilder {
         }
         content.append(NSAttributedString(string: "\n"))
 
-        if visibility?.showSleep ?? true {
-            para(L("report.well.section.sleep", comment: "Section title: sleep"), font: headerFont)
-            if data.sleep.isEmpty {
-                para("—", font: bodyFont)
-            } else {
-                let order = ["Total hours","Naps","Night wakings","Quality","Notes"]
-                for key in order {
-                    if let v = data.sleep[key], !v.isEmpty {
-                        para("\(sleepLabel(key)): \(v)", font: bodyFont)
-                    }
+if visibility?.showSleep ?? true {
+    para(L("report.well.section.sleep", comment: "Section title: sleep"), font: headerFont)
+
+    // Sleep notes sometimes carry stable key/value tokens (e.g. "wakes_per_night=1")
+    // which must be rendered through Localizable strings instead of printed verbatim.
+    func renderSleepNotesLines(_ raw: String) -> [String] {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return [] }
+
+        // Split on common separators while keeping it robust for single-token strings.
+        let separators = CharacterSet(charactersIn: ";,\n")
+        let parts = s
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var out: [String] = []
+        var freeText: [String] = []
+
+        for p in (parts.isEmpty ? [s] : parts) {
+            let t = p.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.lowercased().hasPrefix("wakes_per_night=") {
+                let valuePart = t.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: true).last.map(String.init) ?? ""
+                let n = Int(valuePart.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+                let fmtKey = "well_visit_form.problem_listing.sleep.wakes_per_night"
+                let fmt = NSLocalizedString(fmtKey, comment: "Sleep note: wakes to feed at night")
+                if fmt != fmtKey {
+                    out.append(String(format: fmt, n))
+                } else {
+                    // Safe fallback if the localization key is missing
+                    out.append("wakes_per_night: \(n)")
                 }
-                let extra = data.sleep.keys
-                    .filter { !["Total hours","Naps","Night wakings","Quality","Notes"].contains($0) }
-                    .sorted()
-                for key in extra {
-                    if let v = data.sleep[key], !v.isEmpty {
-                        para("\(sleepLabel(key)): \(v)", font: bodyFont)
-                    }
+                continue
+            }
+
+            // If someone stored a localization key directly, resolve it.
+            if (t.hasPrefix("well_visit_form.") || t.hasPrefix("report.") || t.hasPrefix("visit.")) && t.contains(".") {
+                let loc = NSLocalizedString(t, comment: "")
+                if loc != t {
+                    out.append(loc)
+                    continue
                 }
             }
-            content.append(NSAttributedString(string: "\n"))
+
+            freeText.append(t)
         }
+
+        if !freeText.isEmpty {
+            let notesLabel = sleepLabel("Notes")
+            out.append("\(notesLabel): \(freeText.joined(separator: "; "))")
+        }
+
+        return out
+    }
+
+    if data.sleep.isEmpty {
+        para("—", font: bodyFont)
+    } else {
+        let order = ["Total hours","Naps","Night wakings","Quality","Notes"]
+        for key in order {
+            guard let v = data.sleep[key], !v.isEmpty else { continue }
+
+            if key == "Notes" {
+                let lines = renderSleepNotesLines(v)
+                if lines.isEmpty {
+                    continue
+                }
+                for line in lines {
+                    para(line, font: bodyFont)
+                }
+            } else {
+                para("\(sleepLabel(key)): \(v)", font: bodyFont)
+            }
+        }
+
+        let extra = data.sleep.keys
+            .filter { !["Total hours","Naps","Night wakings","Quality","Notes"].contains($0) }
+            .sorted()
+        for key in extra {
+            guard let v = data.sleep[key], !v.isEmpty else { continue }
+
+            if key == "Notes" {
+                let lines = renderSleepNotesLines(v)
+                if lines.isEmpty {
+                    continue
+                }
+                for line in lines {
+                    para(line, font: bodyFont)
+                }
+            } else {
+                para("\(sleepLabel(key)): \(v)", font: bodyFont)
+            }
+        }
+    }
+
+    content.append(NSAttributedString(string: "\n"))
+}
 
         if visibility?.showDevelopment ?? true {
             para(L("report.well.section.development", comment: "Section title: developmental evaluation"), font: headerFont)
