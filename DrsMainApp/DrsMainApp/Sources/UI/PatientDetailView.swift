@@ -127,7 +127,7 @@ fileprivate func isSickCategory(_ raw: String) -> Bool {
         .lowercased()
         .replacingOccurrences(of: "-", with: "_")
         .replacingOccurrences(of: " ", with: "_")
-    return k == "episode" || prettyCategory(raw) == "Sick visit"
+    return k == "episode"
 }
 
 /// Right-pane details for a selected patient from the sidebar list.
@@ -633,6 +633,9 @@ struct PatientDetailView: View {
         }
         .id(patient.id)
         .onAppear {
+            // Ensure visit-detail loaders use the correct patient context.
+            appState.selectedPatientID = patient.id
+
             // Load both visits and the profile
             appState.loadVisits(for: patient.id)
             appState.loadPatientProfile(for: Int64(patient.id))
@@ -1175,7 +1178,11 @@ struct VisitDetailView: View {
 // Composite stable identifier to avoid duplicate IDs when mixing sick/well domains
 private extension VisitRow {
     var stableID: String {
-        let prefix = isSickCategory(self.category) ? "sick" : "well"
+        let k = self.category
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        let prefix = (k == "episode") ? "sick" : "well"
         return "\(prefix)-\(self.id)"
     }
 }

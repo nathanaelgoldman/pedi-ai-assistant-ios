@@ -3664,9 +3664,17 @@ extension ReportDataLoader {
                         // General
                         addNormal(gGeneral, L("report.pe.item.trophic"), normalKey: "pe_trophic_normal", commentKey: "pe_trophic_comment")
                         addNormal(gGeneral, L("report.pe.item.hydration"), normalKey: "pe_hydration_normal", commentKey: "pe_hydration_comment")
-                        if isAllowedPE(["pe_color", "pe_color_comment"]),
-                           let color = nonEmpty(row["pe_color"]) ?? nonEmpty(row["pe_color_comment"]) {
-                            add(gGeneral, String(format: L("report.pe.line.color"), color))
+                        if isAllowedPE(["pe_color", "pe_color_comment"]) {
+                            // `pe_color` is stored as a stable code (e.g., "normal" / "jaundice" / "pale").
+                            // Localize known codes via the WellVisitForm option keys; fall back to comment/free text when needed.
+                            if let rawCode = nonEmpty(row["pe_color"]) {
+                                let key = "well_visit_form.pe.general.color.option.\(rawCode)"
+                                let localized = L(key)
+                                let display = (localized == key) ? rawCode : localized
+                                add(gGeneral, String(format: L("report.pe.line.color"), display))
+                            } else if let comment = nonEmpty(row["pe_color_comment"]) {
+                                add(gGeneral, String(format: L("report.pe.line.color"), comment))
+                            }
                         }
                         addNormal(gGeneral, L("report.pe.item.tone"), normalKey: "pe_tone_normal", commentKey: "pe_tone_comment")
                         addNormal(gGeneral, L("report.pe.item.breathing"), normalKey: "pe_breathing_normal", commentKey: "pe_breathing_comment")
@@ -4096,16 +4104,86 @@ extension ReportDataLoader {
                                 return nil
                             }
 
-                            let rendered: String?
+                            let renderedOpt: String?
                             if mapping.section == .sleep {
                                 // Try to normalize token-like sleep values first.
-                                rendered = normalizeSleepValue(dbKey: key, raw: rawVal) ?? renderValue(rawVal, kind: mapping.kind)
+                                renderedOpt = normalizeSleepValue(dbKey: key, raw: rawVal) ?? renderValue(rawVal, kind: mapping.kind)
                             } else {
-                                rendered = renderValue(rawVal, kind: mapping.kind)
+                                renderedOpt = renderValue(rawVal, kind: mapping.kind)
                             }
 
-                            guard let rendered, !rendered.isEmpty else {
+                            guard var rendered = renderedOpt, !rendered.isEmpty else {
                                 continue
+                            }
+
+                            // Feeding: some fields store enum-like tokens (e.g. "uncertain") rather than free text.
+                            // Localize those tokens here so the report never falls back to the base language.
+                            if mapping.section == .feeding {
+                                switch key {
+                                case "food_variety_quality":
+                                    // Historically this field may be stored as a raw token ("appears_good"/"uncertain"/"probably_limited")
+                                    // or as the full localization key ("well_visit_form.shared.uncertain").
+                                    // Normalize both forms to the localized display string.
+                                    let t = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let lc = t.lowercased()
+
+                                    if lc == "appears_good" {
+                                        rendered = L("well_visit_form.shared.appears_good")
+                                    } else if lc == "uncertain" {
+                                        rendered = L("well_visit_form.shared.uncertain")
+                                    } else if lc == "probably_limited" {
+                                        rendered = L("well_visit_form.shared.probably_limited")
+                                    } else {
+                                        // If the stored value is itself a localization key, localize it.
+                                        let probe = NSLocalizedString(t, comment: "")
+                                        if probe != t { rendered = probe }
+                                    }
+
+                                case "milk_types":
+                                    // This field may be stored as a short token (e.g. "breast") or as a localization key.
+                                    // Localize known tokens and also support multiple values separated by commas/newlines.
+                                    let raw = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !raw.isEmpty else { break }
+
+                                    // Split on common separators (comma, semicolon, newline). Keep original order.
+                                    let cleaned = raw.replacingOccurrences(of: "•", with: "")
+                                    let parts = cleaned
+                                        .split(whereSeparator: { ch in
+                                            ch == "," || ch == ";" || ch == "\n" || ch == "\r"
+                                        })
+                                        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                                        .filter { !$0.isEmpty }
+
+                                    func localizeMilkToken(_ s: String) -> String {
+                                        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        guard !t.isEmpty else { return t }
+
+                                        // If it's already a localization key, localize it.
+                                        let probeKey = NSLocalizedString(t, comment: "")
+                                        if probeKey != t { return probeKey }
+
+                                        let lc = t.lowercased()
+
+                                        // Known legacy tokens.
+                                        if lc == "breast" || lc == "breastmilk" || lc == "breast_milk" {
+                                            return L("well_visit_form.feeding.milk_type.breastmilk")
+                                        }
+
+                                        // Generic: try the canonical milk-type key pattern.
+                                        let candidate = "well_visit_form.feeding.milk_type.\(lc)"
+                                        let localized = L(candidate)
+                                        return (localized == candidate) ? t : localized
+                                    }
+
+                                    if parts.isEmpty {
+                                        rendered = localizeMilkToken(raw)
+                                    } else {
+                                        rendered = parts.map(localizeMilkToken).joined(separator: ", ")
+                                    }
+
+                                default:
+                                    break
+                                }
                             }
 
                             switch mapping.section {
@@ -4937,7 +5015,9 @@ extension ReportDataLoader {
                 // args: [labelKey, value, ...]
                 if argsToUse.count >= 2 {
                     let label = loc(argsToUse[0])
-                    let value = argsToUse[1]
+                    // IMPORTANT: value may itself be a localization key (e.g. default abnormal).
+                    // Localize defensively; if it's not a key, this is a no-op.
+                    let value = loc(argsToUse[1])
                     let line = (label == argsToUse[0]) ? "\(argsToUse[0]): \(value)" : "\(label): \(value)"
                     out.append(line.trimmingCharacters(in: .whitespacesAndNewlines))
                 }

@@ -2034,7 +2034,7 @@
 "report.well.current.label.feedingComment" = "Commentaire sur l’alimentation";
 "report.well.current.label.milkTypes" = "Types de lait";
 "report.well.current.label.foodVarietyQuantity" = "Variété / quantité des aliments";
-"report.well.current.label.dairyAmount" = "Quantité de produits laitiers";
+"report.well.current.label.dairyAmount" = "Quantité de produits laitiers (nombre de tasses)";
 "report.well.current.label.feedingIssue" = "Problème d’alimentation";
 
 "report.well.current.label.feedsPer24h" = "Tétées / 24 h";
@@ -2066,7 +2066,7 @@
 "report.well.current.label.naps" = "Siestes";
 "report.well.current.label.nightWakings" = "Réveils nocturnes";
 "report.well.current.label.sleepQuality" = "Qualité";
-"report.well.current.label.sleepRegular" = "Régulier";
+"report.well.current.label.sleepRegular" = "Régularité";
 "report.well.current.label.sleepSnoring" = "Ronflements";
 "report.well.current.label.sleepIssueReported" = "Problème signalé";
 "report.well.current.label.sleepIssueNotes" = "Notes sur le problème";
@@ -2661,3 +2661,5 @@
 "well_visit_form.milestones.status.achieved" = "Acquis";
 "well_visit_form.milestones.status.uncertain" = "Incertain";
 "well_visit_form.milestones.status.not_yet" = "Pas encore acquis";
+
+"well_visit_form.weight_trend.delta_weight_per_day" = "Variation de poids par jour : %d g/jour";

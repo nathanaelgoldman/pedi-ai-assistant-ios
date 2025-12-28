@@ -2671,3 +2671,5 @@
 "well_visit_form.milestones.status.achieved" = "Achieved";
 "well_visit_form.milestones.status.uncertain" = "Uncertain";
 "well_visit_form.milestones.status.not_yet" = "Not yet";
+
+"well_visit_form.weight_trend.delta_weight_per_day" = "Weight change per day: %d g/day";

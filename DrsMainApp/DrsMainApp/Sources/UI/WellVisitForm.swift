@@ -2860,10 +2860,28 @@ struct WellVisitForm: View {
 
         if peColor != "normal" || !trimmed(peColorComment).isEmpty {
             let detail = trimmed(peColorComment).isEmpty ? nil : peColorComment
+
+            let raw = trimmed(peColor)
+            let prefixedKey = raw.isEmpty ? "" : "well_visit_form.pe.general.color.option.\(raw)"
+
+            // Prefer a real localization key when possible; otherwise keep the raw value (legacy/free-text).
+            let valueTextOrKey: String
+            let valueIsKey: Bool
+            if !raw.isEmpty, hasLocalization(raw) {
+                valueTextOrKey = raw
+                valueIsKey = true
+            } else if !prefixedKey.isEmpty, hasLocalization(prefixedKey) {
+                valueTextOrKey = prefixedKey
+                valueIsKey = true
+            } else {
+                valueTextOrKey = raw.isEmpty ? "normal" : raw
+                valueIsKey = false
+            }
+
             let item = peFieldWithDetailToken(
                 "well_visit_form.problem_listing.pe.label.color",
-                value: peColor,
-                valueIsKey: false,
+                value: valueTextOrKey,
+                valueIsKey: valueIsKey,
                 detail: detail
             )
             tokens.append(item.token)

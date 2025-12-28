@@ -883,7 +883,7 @@ final class AppState: ObservableObject {
                 "visit_date", "date", "created_at", "updated_at",
                 "encounter_date", "timestamp", "visited_at", "recorded_at"
             ]
-            let categoryCandidates = ["category", "kind", "type", "visit_type"]
+            let categoryCandidates = ["category", "kind", "type"]
             
             // 1) If a unified `visits` table exists and has required columns, use it.
             if tableExists(db, name: "visits") {
@@ -895,7 +895,7 @@ final class AppState: ObservableObject {
                     var sql = """
                           SELECT id, \(dateCol) AS dateISO
                           """
-                    if let catCol { sql += ", \(catCol) AS category" } else { sql += ", '' AS category" }
+                    if let catCol { sql += ", COALESCE(NULLIF(TRIM(\(catCol)),''), '') AS category" } else { sql += ", '' AS category" }
                     sql += """
                        FROM visits
                        WHERE \(pidCol) = ?
@@ -934,9 +934,18 @@ final class AppState: ObservableObject {
                 let cols = columnSet(of: t, db: db)
                 guard let pidCol = pickColumn(pidCandidates, available: cols),
                       let dateCol = pickColumn(dateCandidates, available: cols) else { continue }
-                
+
                 let catCol = pickColumn(categoryCandidates, available: cols)
-                let categoryExpr = catCol ?? (t == "episodes" ? "'episode'" : (t == "well_visits" ? "'well'" : "''"))
+
+                // Always ensure we produce a stable category for downstream detail loading.
+                // If a table has a category-like column but it is empty, fall back to a table-based default.
+                let defaultCat = (t == "episodes") ? "'episode'" : ((t == "well_visits") ? "'well'" : "''")
+                let categoryExpr: String
+                if let catCol {
+                    categoryExpr = "COALESCE(NULLIF(TRIM(\(catCol)),''), \(defaultCat))"
+                } else {
+                    categoryExpr = defaultCat
+                }
                 parts.append(Part(table: t, pidCol: pidCol, dateCol: dateCol, categoryExpr: categoryExpr))
             }
             
@@ -1074,6 +1083,32 @@ final class AppState: ObservableObject {
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
             sqlite3_bind_int64(stmt, 1, sqlite3_int64(id))
             return sqlite3_step(stmt) == SQLITE_ROW
+        }
+
+        /// Safer existence check: if a patient-id-like column exists and a patientID is provided,
+        /// require it to match to avoid cross-table id collisions (episodes vs well_visits).
+        private func rowExistsForPatient(_ table: String, id: Int, patientID: Int?, db: OpaquePointer?) -> Bool {
+            guard let db = db else { return false }
+
+            // If we don't know the patient, fall back to id-only.
+            guard let patientID = patientID else {
+                return rowExists(table, id: id, db: db)
+            }
+
+            // If the table has a patient-id column, enforce it.
+            let cols = columnSet(of: table, db: db)
+            if let pidCol = pickColumn(["patient_id", "patient", "pid", "patientId", "patientID"], available: cols) {
+                let sql = "SELECT 1 FROM \(table) WHERE id=? AND \(pidCol)=? LIMIT 1;"
+                var stmt: OpaquePointer?
+                defer { sqlite3_finalize(stmt) }
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+                sqlite3_bind_int64(stmt, 1, sqlite3_int64(id))
+                sqlite3_bind_int64(stmt, 2, sqlite3_int64(patientID))
+                return sqlite3_step(stmt) == SQLITE_ROW
+            }
+
+            // Otherwise, fall back to id-only.
+            return rowExists(table, id: id, db: db)
         }
         
         /// Load a concise summary for the given patient id.
@@ -1213,7 +1248,7 @@ final class AppState: ObservableObject {
                 visitSummary = nil
                 return
             }
-            
+
             var db: OpaquePointer?
             guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
                 if let db { sqlite3_close(db) }
@@ -1221,7 +1256,7 @@ final class AppState: ObservableObject {
                 return
             }
             defer { sqlite3_close(db) }
-            
+
             // Preferred unified table
             if tableExists(db, name: "visits") {
                 let cols = columnSet(of: "visits", db: db)
@@ -1266,78 +1301,150 @@ final class AppState: ObservableObject {
                     }
                 }
             }
-            
-            // Else probe episodes / well_visits
+
+            // New probe logic
+            let cat = visit.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let pid = selectedPatientID
+
             var problems: String? = nil
             var diagnosis: String? = nil
             var conclusions: String? = nil
             var mainComplaint: String? = nil
             var icd10: String? = nil
-            
-            if tableExists(db, name: "episodes"), rowExists("episodes", id: visit.id, db: db) {
-                let cols = columnSet(of: "episodes", db: db)
-                let mc  = pickColumn(["main_complaint","chief_complaint","complaint"], available: cols)
-                let pb  = pickColumn(["problem_listing","problem_list","problems"], available: cols)
-                let dx  = pickColumn(["diagnosis","final_diagnosis"], available: cols)
-                let icd = pickColumn(["icd10","icd_10","icd"], available: cols)
-                let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
 
-                let wanted = [mc, pb, dx, icd, con].compactMap { $0 }
-                if !wanted.isEmpty {
-                    var stmt: OpaquePointer?
-                    defer { sqlite3_finalize(stmt) }
-                    let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
-                    if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-                        sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
-                        if sqlite3_step(stmt) == SQLITE_ROW {
-                            var idx = 0
-                            func nextString() -> String? {
-                                defer { idx += 1 }
-                                if let c = sqlite3_column_text(stmt, Int32(idx)) {
-                                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                                    return s.isEmpty ? nil : s
+            if cat == "well" {
+                if tableExists(db, name: "well_visits"), rowExistsForPatient("well_visits", id: visit.id, patientID: pid, db: db) {
+                    let cols = columnSet(of: "well_visits", db: db)
+                    let pb  = pickColumn(["problem_listing","problem_list","problems"], available: cols)
+                    let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
+                    let wanted = [pb, con].compactMap { $0 }
+                    if !wanted.isEmpty {
+                        var stmt: OpaquePointer?
+                        defer { sqlite3_finalize(stmt) }
+                        let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
+                        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                            sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+                            if sqlite3_step(stmt) == SQLITE_ROW {
+                                var idx = 0
+                                if pb != nil {
+                                    if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                        problems = s.isEmpty ? nil : s
+                                    }
+                                    idx += 1
                                 }
-                                return nil
+                                if con != nil {
+                                    if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                        conclusions = s.isEmpty ? nil : s
+                                    }
+                                }
                             }
-                            mainComplaint = mc  != nil ? nextString() : nil
-                            problems      = pb  != nil ? nextString() : nil
-                            diagnosis     = dx  != nil ? nextString() : nil
-                            icd10         = icd != nil ? nextString() : nil
-                            conclusions   = con != nil ? nextString() : nil
                         }
                     }
                 }
-            } else if tableExists(db, name: "well_visits"), rowExists("well_visits", id: visit.id, db: db) {
-                let cols = columnSet(of: "well_visits", db: db)
-                let pb  = pickColumn(["problem_listing","problem_list","problems"], available: cols)
-                let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
-                let wanted = [pb, con].compactMap { $0 }
-                if !wanted.isEmpty {
-                    var stmt: OpaquePointer?
-                    defer { sqlite3_finalize(stmt) }
-                    let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
-                    if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-                        sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
-                        if sqlite3_step(stmt) == SQLITE_ROW {
-                            var idx = 0
-                            if pb != nil {
-                                if let c = sqlite3_column_text(stmt, Int32(idx)) {
-                                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                                    problems = s.isEmpty ? nil : s
+            } else if cat == "episode" {
+                if tableExists(db, name: "episodes"), rowExistsForPatient("episodes", id: visit.id, patientID: pid, db: db) {
+                    let cols = columnSet(of: "episodes", db: db)
+                    let mc  = pickColumn(["main_complaint","chief_complaint","complaint"], available: cols)
+                    let pb  = pickColumn(["problem_listing","problem_list","problems"], available: cols)
+                    let dx  = pickColumn(["diagnosis","final_diagnosis"], available: cols)
+                    let icd = pickColumn(["icd10","icd_10","icd"], available: cols)
+                    let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
+
+                    let wanted = [mc, pb, dx, icd, con].compactMap { $0 }
+                    if !wanted.isEmpty {
+                        var stmt: OpaquePointer?
+                        defer { sqlite3_finalize(stmt) }
+                        let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
+                        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                            sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+                            if sqlite3_step(stmt) == SQLITE_ROW {
+                                var idx = 0
+                                func nextString() -> String? {
+                                    defer { idx += 1 }
+                                    if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                        return s.isEmpty ? nil : s
+                                    }
+                                    return nil
                                 }
-                                idx += 1
+                                mainComplaint = mc  != nil ? nextString() : nil
+                                problems      = pb  != nil ? nextString() : nil
+                                diagnosis     = dx  != nil ? nextString() : nil
+                                icd10         = icd != nil ? nextString() : nil
+                                conclusions   = con != nil ? nextString() : nil
                             }
-                            if con != nil {
-                                if let c = sqlite3_column_text(stmt, Int32(idx)) {
-                                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                                    conclusions = s.isEmpty ? nil : s
+                        }
+                    }
+                }
+            } else {
+                // Unknown category (legacy): probe both, but patient-safe.
+                if tableExists(db, name: "episodes"), rowExistsForPatient("episodes", id: visit.id, patientID: pid, db: db) {
+                    let cols = columnSet(of: "episodes", db: db)
+                    let mc  = pickColumn(["main_complaint","chief_complaint","complaint"], available: cols)
+                    let pb  = pickColumn(["problem_listing","problem_list","problems"], available: cols)
+                    let dx  = pickColumn(["diagnosis","final_diagnosis"], available: cols)
+                    let icd = pickColumn(["icd10","icd_10","icd"], available: cols)
+                    let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
+
+                    let wanted = [mc, pb, dx, icd, con].compactMap { $0 }
+                    if !wanted.isEmpty {
+                        var stmt: OpaquePointer?
+                        defer { sqlite3_finalize(stmt) }
+                        let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
+                        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                            sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+                            if sqlite3_step(stmt) == SQLITE_ROW {
+                                var idx = 0
+                                func nextString() -> String? {
+                                    defer { idx += 1 }
+                                    if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                        return s.isEmpty ? nil : s
+                                    }
+                                    return nil
+                                }
+                                mainComplaint = mc  != nil ? nextString() : nil
+                                problems      = pb  != nil ? nextString() : nil
+                                diagnosis     = dx  != nil ? nextString() : nil
+                                icd10         = icd != nil ? nextString() : nil
+                                conclusions   = con != nil ? nextString() : nil
+                            }
+                        }
+                    }
+                } else if tableExists(db, name: "well_visits"), rowExistsForPatient("well_visits", id: visit.id, patientID: pid, db: db) {
+                    let cols = columnSet(of: "well_visits", db: db)
+                    let pb  = pickColumn(["problem_listing","problem_list","problems"], available: cols)
+                    let con = pickColumn(["conclusions","conclusion","plan"], available: cols)
+                    let wanted = [pb, con].compactMap { $0 }
+                    if !wanted.isEmpty {
+                        var stmt: OpaquePointer?
+                        defer { sqlite3_finalize(stmt) }
+                        let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
+                        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                            sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+                            if sqlite3_step(stmt) == SQLITE_ROW {
+                                var idx = 0
+                                if pb != nil {
+                                    if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                        problems = s.isEmpty ? nil : s
+                                    }
+                                    idx += 1
+                                }
+                                if con != nil {
+                                    if let c = sqlite3_column_text(stmt, Int32(idx)) {
+                                        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                        conclusions = s.isEmpty ? nil : s
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            
+
             self.visitSummary = VisitSummary(
                 mainComplaint: mainComplaint,
                 problems: problems,
@@ -1418,12 +1525,26 @@ final class AppState: ObservableObject {
                 for c in cands where avail.contains(c) { return c }
                 return nil
             }
-            func rowExists(_ table: String, id: Int) -> Bool {
+            func rowExists(_ table: String, id: Int, patientID: Int?) -> Bool {
+                // If the table has a patient-id column, enforce it to avoid id collisions across tables.
+                let cols = colSet(table)
+                let pidCol = pick(["patient_id","patient","pid","patientId","patientID"], cols)
+
                 var s: OpaquePointer?
                 defer { sqlite3_finalize(s) }
-                guard sqlite3_prepare_v2(db, "SELECT 1 FROM \(table) WHERE id=? LIMIT 1;", -1, &s, nil) == SQLITE_OK else { return false }
-                sqlite3_bind_int64(s, 1, sqlite3_int64(id))
-                return sqlite3_step(s) == SQLITE_ROW
+
+                if let pidCol, let patientID {
+                    let sql = "SELECT 1 FROM \(table) WHERE id=? AND \(pidCol)=? LIMIT 1;"
+                    guard sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK else { return false }
+                    sqlite3_bind_int64(s, 1, sqlite3_int64(id))
+                    sqlite3_bind_int64(s, 2, sqlite3_int64(patientID))
+                    return sqlite3_step(s) == SQLITE_ROW
+                } else {
+                    let sql = "SELECT 1 FROM \(table) WHERE id=? LIMIT 1;"
+                    guard sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK else { return false }
+                    sqlite3_bind_int64(s, 1, sqlite3_int64(id))
+                    return sqlite3_step(s) == SQLITE_ROW
+                }
             }
 
             var mainComplaint: String? = nil
@@ -1466,104 +1587,218 @@ final class AppState: ObservableObject {
                         }
                     }
                 }
-            } else if tableExists("episodes"), rowExists("episodes", id: visit.id) {
-                let cols = colSet("episodes")
-                let mc  = pick(["main_complaint","chief_complaint","complaint"], cols)
-                let pb  = pick(["problem_listing","problem_list","problems"], cols)
-                let dx  = pick(["diagnosis","final_diagnosis"], cols)
-                let icd = pick(["icd10","icd_10","icd"], cols)
-                let con = pick(["conclusions","conclusion","plan"], cols)
-                let sel = [mc,pb,dx,icd,con].compactMap{$0}
-                if !sel.isEmpty {
-                    var s: OpaquePointer?
-                    defer { sqlite3_finalize(s) }
-                    let sql = "SELECT " + sel.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
-                    if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
-                        sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
-                        if sqlite3_step(s) == SQLITE_ROW {
-                            var idx: Int32 = 0
-                            func nextStr() -> String? {
-                                defer { idx += 1 }
-                                if let c = sqlite3_column_text(s, idx) {
-                                    let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                                    return v.isEmpty ? nil : v
-                                }
-                                return nil
-                            }
-                            mainComplaint = mc  != nil ? nextStr() : nil
-                            problems      = pb  != nil ? nextStr() : nil
-                            diagnosis     = dx  != nil ? nextStr() : nil
-                            icd10         = icd != nil ? nextStr() : nil
-                            conclusions   = con != nil ? nextStr() : nil
-                        }
-                    }
-                }
-            } else if tableExists("well_visits"), rowExists("well_visits", id: visit.id) {
-                let cols = colSet("well_visits")
-                let pb  = pick(["problem_listing","problem_list","problems"], cols)
-                let con = pick(["conclusions","conclusion","plan"], cols)
-                let sel = [pb,con].compactMap{$0}
-                if !sel.isEmpty {
-                    var s: OpaquePointer?
-                    defer { sqlite3_finalize(s) }
-                    let sql = "SELECT " + sel.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
-                    if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
-                        sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
-                        if sqlite3_step(s) == SQLITE_ROW {
-                            var idx: Int32 = 0
-                            func nextStr() -> String? {
-                                defer { idx += 1 }
-                                if let c = sqlite3_column_text(s, idx) {
-                                    let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                                    return v.isEmpty ? nil : v
-                                }
-                                return nil
-                            }
-                            problems    = pb  != nil ? nextStr() : nil
-                            conclusions = con != nil ? nextStr() : nil
-                        }
-                    }
-                }
-                // Milestones summary if table present
-                if tableExists("well_visit_milestones") {
-                    var total = 0, achieved = 0
-                    var flags: [String] = []
-                    var s: OpaquePointer?
-                    defer { sqlite3_finalize(s) }
-                    if sqlite3_prepare_v2(db, "SELECT status,label FROM well_visit_milestones WHERE visit_id=?", -1, &s, nil) == SQLITE_OK {
-                        sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
-                        while sqlite3_step(s) == SQLITE_ROW {
-                            total += 1
-                            let status: String = (sqlite3_column_text(s, 0).flatMap { String(cString: $0) }) ?? ""
-                            let label:  String = (sqlite3_column_text(s, 1).flatMap { String(cString: $0) }) ?? ""
-                            if status == "achieved" { achieved += 1 }
-                            else if !label.trimmingCharacters(in: .whitespaces).isEmpty { flags.append(label) }
-                        }
-                    }
-                    if total > 0 {
-                        let achievedFormat = NSLocalizedString(
-                            "appstate.visitdetails.milestones.achieved_format",
-                            comment: "Milestones summary: achieved count format, e.g. 'Achieved 3/5'"
-                        )
-                        let flagsLabel = NSLocalizedString(
-                            "appstate.visitdetails.milestones.flags_label",
-                            comment: "Milestones summary label for flagged items, e.g. 'Flags:'"
-                        )
-                        let withFlagsFormat = NSLocalizedString(
-                            "appstate.visitdetails.milestones.summary_with_flags_format",
-                            comment: "Milestones summary: full line when flags exist. Example '%@; %@ %@'"
-                        )
-                        let flagsSeparator = NSLocalizedString(
-                            "appstate.visitdetails.milestones.flags_list_separator",
-                            comment: "Milestones summary: separator between flagged milestone labels"
-                        )
+            } else {
+                let cat = visit.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-                        let achievedText = String(format: achievedFormat, achieved, total)
-                        if !flags.isEmpty {
-                            let joinedFlags = flags.prefix(4).joined(separator: flagsSeparator)
-                            milestonesSummary = String(format: withFlagsFormat, achievedText, flagsLabel, joinedFlags)
-                        } else {
-                            milestonesSummary = achievedText
+                if cat == "episode" {
+                    if tableExists("episodes"), rowExists("episodes", id: visit.id, patientID: pid) {
+                        let cols = colSet("episodes")
+                        let mc  = pick(["main_complaint","chief_complaint","complaint"], cols)
+                        let pb  = pick(["problem_listing","problem_list","problems"], cols)
+                        let dx  = pick(["diagnosis","final_diagnosis"], cols)
+                        let icd = pick(["icd10","icd_10","icd"], cols)
+                        let con = pick(["conclusions","conclusion","plan"], cols)
+                        let sel = [mc,pb,dx,icd,con].compactMap{$0}
+                        if !sel.isEmpty {
+                            var s: OpaquePointer?
+                            defer { sqlite3_finalize(s) }
+                            let sql = "SELECT " + sel.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
+                            if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                                sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                                if sqlite3_step(s) == SQLITE_ROW {
+                                    var idx: Int32 = 0
+                                    func nextStr() -> String? {
+                                        defer { idx += 1 }
+                                        if let c = sqlite3_column_text(s, idx) {
+                                            let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                            return v.isEmpty ? nil : v
+                                        }
+                                        return nil
+                                    }
+                                    mainComplaint = mc  != nil ? nextStr() : nil
+                                    problems      = pb  != nil ? nextStr() : nil
+                                    diagnosis     = dx  != nil ? nextStr() : nil
+                                    icd10         = icd != nil ? nextStr() : nil
+                                    conclusions   = con != nil ? nextStr() : nil
+                                }
+                            }
+                        }
+                    }
+                } else if cat == "well" {
+                    if tableExists("well_visits"), rowExists("well_visits", id: visit.id, patientID: pid) {
+                        let cols = colSet("well_visits")
+                        let pb  = pick(["problem_listing","problem_list","problems"], cols)
+                        let con = pick(["conclusions","conclusion","plan"], cols)
+                        let sel = [pb,con].compactMap{$0}
+                        if !sel.isEmpty {
+                            var s: OpaquePointer?
+                            defer { sqlite3_finalize(s) }
+                            let sql = "SELECT " + sel.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
+                            if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                                sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                                if sqlite3_step(s) == SQLITE_ROW {
+                                    var idx: Int32 = 0
+                                    func nextStr() -> String? {
+                                        defer { idx += 1 }
+                                        if let c = sqlite3_column_text(s, idx) {
+                                            let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                            return v.isEmpty ? nil : v
+                                        }
+                                        return nil
+                                    }
+                                    problems    = pb  != nil ? nextStr() : nil
+                                    conclusions = con != nil ? nextStr() : nil
+                                }
+                            }
+                        }
+
+                        // Milestones summary if table present
+                        if tableExists("well_visit_milestones") {
+                            var total = 0, achieved = 0
+                            var flags: [String] = []
+                            var s: OpaquePointer?
+                            defer { sqlite3_finalize(s) }
+                            if sqlite3_prepare_v2(db, "SELECT status,label FROM well_visit_milestones WHERE visit_id=?", -1, &s, nil) == SQLITE_OK {
+                                sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                                while sqlite3_step(s) == SQLITE_ROW {
+                                    total += 1
+                                    let status: String = (sqlite3_column_text(s, 0).flatMap { String(cString: $0) }) ?? ""
+                                    let label:  String = (sqlite3_column_text(s, 1).flatMap { String(cString: $0) }) ?? ""
+                                    if status == "achieved" { achieved += 1 }
+                                    else if !label.trimmingCharacters(in: .whitespaces).isEmpty { flags.append(label) }
+                                }
+                            }
+                            if total > 0 {
+                                let achievedFormat = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.achieved_format",
+                                    comment: "Milestones summary: achieved count format, e.g. 'Achieved 3/5'"
+                                )
+                                let flagsLabel = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.flags_label",
+                                    comment: "Milestones summary label for flagged items, e.g. 'Flags:'"
+                                )
+                                let withFlagsFormat = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.summary_with_flags_format",
+                                    comment: "Milestones summary: full line when flags exist. Example '%@; %@ %@'"
+                                )
+                                let flagsSeparator = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.flags_list_separator",
+                                    comment: "Milestones summary: separator between flagged milestone labels"
+                                )
+
+                                let achievedText = String(format: achievedFormat, achieved, total)
+                                if !flags.isEmpty {
+                                    let joinedFlags = flags.prefix(4).joined(separator: flagsSeparator)
+                                    milestonesSummary = String(format: withFlagsFormat, achievedText, flagsLabel, joinedFlags)
+                                } else {
+                                    milestonesSummary = achievedText
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Unknown category (legacy): probe both, but patient-safe.
+                    if tableExists("episodes"), rowExists("episodes", id: visit.id, patientID: pid) {
+                        let cols = colSet("episodes")
+                        let mc  = pick(["main_complaint","chief_complaint","complaint"], cols)
+                        let pb  = pick(["problem_listing","problem_list","problems"], cols)
+                        let dx  = pick(["diagnosis","final_diagnosis"], cols)
+                        let icd = pick(["icd10","icd_10","icd"], cols)
+                        let con = pick(["conclusions","conclusion","plan"], cols)
+                        let sel = [mc,pb,dx,icd,con].compactMap{$0}
+                        if !sel.isEmpty {
+                            var s: OpaquePointer?
+                            defer { sqlite3_finalize(s) }
+                            let sql = "SELECT " + sel.joined(separator: ", ") + " FROM episodes WHERE id=? LIMIT 1;"
+                            if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                                sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                                if sqlite3_step(s) == SQLITE_ROW {
+                                    var idx: Int32 = 0
+                                    func nextStr() -> String? {
+                                        defer { idx += 1 }
+                                        if let c = sqlite3_column_text(s, idx) {
+                                            let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                            return v.isEmpty ? nil : v
+                                        }
+                                        return nil
+                                    }
+                                    mainComplaint = mc  != nil ? nextStr() : nil
+                                    problems      = pb  != nil ? nextStr() : nil
+                                    diagnosis     = dx  != nil ? nextStr() : nil
+                                    icd10         = icd != nil ? nextStr() : nil
+                                    conclusions   = con != nil ? nextStr() : nil
+                                }
+                            }
+                        }
+                    } else if tableExists("well_visits"), rowExists("well_visits", id: visit.id, patientID: pid) {
+                        let cols = colSet("well_visits")
+                        let pb  = pick(["problem_listing","problem_list","problems"], cols)
+                        let con = pick(["conclusions","conclusion","plan"], cols)
+                        let sel = [pb,con].compactMap{$0}
+                        if !sel.isEmpty {
+                            var s: OpaquePointer?
+                            defer { sqlite3_finalize(s) }
+                            let sql = "SELECT " + sel.joined(separator: ", ") + " FROM well_visits WHERE id=? LIMIT 1;"
+                            if sqlite3_prepare_v2(db, sql, -1, &s, nil) == SQLITE_OK {
+                                sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                                if sqlite3_step(s) == SQLITE_ROW {
+                                    var idx: Int32 = 0
+                                    func nextStr() -> String? {
+                                        defer { idx += 1 }
+                                        if let c = sqlite3_column_text(s, idx) {
+                                            let v = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                                            return v.isEmpty ? nil : v
+                                        }
+                                        return nil
+                                    }
+                                    problems    = pb  != nil ? nextStr() : nil
+                                    conclusions = con != nil ? nextStr() : nil
+                                }
+                            }
+                        }
+
+                        // Milestones summary if table present
+                        if tableExists("well_visit_milestones") {
+                            var total = 0, achieved = 0
+                            var flags: [String] = []
+                            var s: OpaquePointer?
+                            defer { sqlite3_finalize(s) }
+                            if sqlite3_prepare_v2(db, "SELECT status,label FROM well_visit_milestones WHERE visit_id=?", -1, &s, nil) == SQLITE_OK {
+                                sqlite3_bind_int64(s, 1, sqlite3_int64(visit.id))
+                                while sqlite3_step(s) == SQLITE_ROW {
+                                    total += 1
+                                    let status: String = (sqlite3_column_text(s, 0).flatMap { String(cString: $0) }) ?? ""
+                                    let label:  String = (sqlite3_column_text(s, 1).flatMap { String(cString: $0) }) ?? ""
+                                    if status == "achieved" { achieved += 1 }
+                                    else if !label.trimmingCharacters(in: .whitespaces).isEmpty { flags.append(label) }
+                                }
+                            }
+                            if total > 0 {
+                                let achievedFormat = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.achieved_format",
+                                    comment: "Milestones summary: achieved count format, e.g. 'Achieved 3/5'"
+                                )
+                                let flagsLabel = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.flags_label",
+                                    comment: "Milestones summary label for flagged items, e.g. 'Flags:'"
+                                )
+                                let withFlagsFormat = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.summary_with_flags_format",
+                                    comment: "Milestones summary: full line when flags exist. Example '%@; %@ %@'"
+                                )
+                                let flagsSeparator = NSLocalizedString(
+                                    "appstate.visitdetails.milestones.flags_list_separator",
+                                    comment: "Milestones summary: separator between flagged milestone labels"
+                                )
+
+                                let achievedText = String(format: achievedFormat, achieved, total)
+                                if !flags.isEmpty {
+                                    let joinedFlags = flags.prefix(4).joined(separator: flagsSeparator)
+                                    milestonesSummary = String(format: withFlagsFormat, achievedText, flagsLabel, joinedFlags)
+                                } else {
+                                    milestonesSummary = achievedText
+                                }
+                            }
                         }
                     }
                 }
