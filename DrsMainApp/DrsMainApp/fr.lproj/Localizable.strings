@@ -7,28 +7,28 @@
 */
 /* SIDEBAR */
 /* Sidebar – Header */
-"sidebar.header.title"    = "Pedi•AI — Médecin";
+"sidebar.header.title"    = "CareFlow Kids — L'appli du Médecin";
 "sidebar.header.active"   = "Actif : %@";
-"sidebar.header.inactive" = "Aucun bundle actif";
+"sidebar.header.inactive" = "Aucun dossier actif";
 
 /* Sidebar – Sections */
-"sidebar.section.recentBundles" = "Bundles récents";
+"sidebar.section.recentBundles" = "Dossiers récents";
 "sidebar.section.patients"      = "Patients";
 
 /* Sidebar – Recent bundles */
-"sidebar.recent.empty" = "Aucun bundle pour l’instant";
+"sidebar.recent.empty" = "Aucun dossier pour l’instant";
 
 /* Sidebar – Recent bundles (menu helpers, if used elsewhere) */
 "sidebar.menu.revealInFinder" = "Afficher dans le Finder";
 "sidebar.menu.copyPath"       = "Copier le chemin";
 
 /* Sidebar – Patients section */
-"sidebar.patients.noBundle"   = "Sélectionnez un bundle pour charger les patients";
-"sidebar.patients.empty"      = "Aucun patient dans ce bundle";
+"sidebar.patients.noBundle"   = "Sélectionnez un dossier pour charger les patients";
+"sidebar.patients.empty"      = "Aucun patient dans ce dossier";
 "sidebar.patients.reloadHelp" = "Recharger les patients depuis le db.sqlite actuel";
 
 /* Sidebar – Toolbar */
-"sidebar.toolbar.importBundles" = "Importer des bundles…";
+"sidebar.toolbar.importBundles" = "Importer un dossier…";
 "sidebar.toolbar.newPatient"    = "Nouveau patient…";
 
 /* Sidebar – Context menu */
@@ -42,7 +42,7 @@
 
 /* BUNDLEDETAILVIEW */
 /* Bundle Detail – header title */
-"bundleDetail.title" = "Détails du bundle";
+"bundleDetail.title" = "Détails du dossier";
 
 /* Bundle Detail – buttons */
 "bundleDetail.button.revealInFinder" = "Afficher dans le Finder";
@@ -56,24 +56,27 @@
 "bundleDetail.field.patientID" = "Identifiant patient";
 
 /* Bundle Detail – no patient in DB */
-"bundleDetail.noPatient" = "Aucun dossier patient trouvé dans ce bundle.";
+"bundleDetail.noPatient" = "Aucun patient trouvé dans ce dossier.";
 
 /* Bundle Detail – empty state when no bundle selected */
-"bundleDetail.empty.title" = "Aucun bundle sélectionné";
-"bundleDetail.empty.description" = "Utilisez « Add Bundles… » ou créez un nouveau patient.";
+"bundleDetail.empty.title" = "Aucun dossier sélectionné";
+"bundleDetail.empty.description" = "Utilisez « Ajouter un dossier… » ou créez un nouveau patient.";
 
 /* PATIENTSLISTVIEW */
 /* Patients List – header */
 "patientsList.title" = "Patients";
 
 /* Patients List – reload button help */
-"patientsList.reload.help" = "Recharger les patients depuis la base de données du bundle";
+"patientsList.reload.help" = "Recharger les patients depuis la base de données du dossier";
 
 /* Patients List – row details */
 "patientsList.row.details-format" = "%@ • %@ • %@";
 
 /* PATIENTSDETAILVIEW */
 /* Patient visit categories */
+/* PATIENTDETAILVIEW */
+/* Patient visit categories */
+"patient.visit-category.newborn-first" = "Première visite post-maternité";
 "patient.visit-category.one-month" = "Visite à 1 mois";
 "patient.visit-category.two-month" = "Visite à 2 mois";
 "patient.visit-category.four-month" = "Visite à 4 mois";

@@ -884,6 +884,9 @@ final class AppState: ObservableObject {
                 "encounter_date", "timestamp", "visited_at", "recorded_at"
             ]
             let categoryCandidates = ["category", "kind", "type"]
+            let wellTypeCandidates = [
+                "visit_type", "well_visit_type", "milestone_key", "visit_key", "visitCode", "visit_code"
+            ]
             
             // 1) If a unified `visits` table exists and has required columns, use it.
             if tableExists(db, name: "visits") {
@@ -891,11 +894,28 @@ final class AppState: ObservableObject {
                 if let pidCol = pickColumn(pidCandidates, available: cols),
                    let dateCol = pickColumn(dateCandidates, available: cols) {
                     
-                    let catCol = pickColumn(categoryCandidates, available: cols) // optional
+                    let catCol  = pickColumn(categoryCandidates, available: cols) // optional
+                    let typeCol = pickColumn(wellTypeCandidates, available: cols) // optional
+                    
                     var sql = """
-                          SELECT id, \(dateCol) AS dateISO
+                          SELECT id, \(dateCol) AS dateISO,
                           """
-                    if let catCol { sql += ", COALESCE(NULLIF(TRIM(\(catCol)),''), '') AS category" } else { sql += ", '' AS category" }
+                    
+                    // Prefer visit_type for well visits (so list shows one_month/two_month/...).
+                    // Keep episode rows as "episode" when category-like column says so.
+                    if let typeCol {
+                        // If category exists and explicitly says episode, keep it; otherwise prefer type.
+                        if let catCol {
+                            sql += "CASE WHEN LOWER(TRIM(\(catCol))) = 'episode' THEN 'episode' ELSE COALESCE(NULLIF(TRIM(\(typeCol)),''), COALESCE(NULLIF(TRIM(\(catCol)),''), '')) END AS category"
+                        } else {
+                            sql += "COALESCE(NULLIF(TRIM(\(typeCol)),''), '') AS category"
+                        }
+                    } else if let catCol {
+                        sql += "COALESCE(NULLIF(TRIM(\(catCol)),''), '') AS category"
+                    } else {
+                        sql += "'' AS category"
+                    }
+                    
                     sql += """
                        FROM visits
                        WHERE \(pidCol) = ?
@@ -935,13 +955,18 @@ final class AppState: ObservableObject {
                 guard let pidCol = pickColumn(pidCandidates, available: cols),
                       let dateCol = pickColumn(dateCandidates, available: cols) else { continue }
 
-                let catCol = pickColumn(categoryCandidates, available: cols)
+                let catCol  = pickColumn(categoryCandidates, available: cols)
+                let typeCol = pickColumn(wellTypeCandidates, available: cols)
 
-                // Always ensure we produce a stable category for downstream detail loading.
-                // If a table has a category-like column but it is empty, fall back to a table-based default.
+                // Always ensure we produce a stable category for downstream usage.
+                // Episodes must be "episode".
+                // Well visits should preserve their visit_type (one_month/two_month/...) when possible.
                 let defaultCat = (t == "episodes") ? "'episode'" : ((t == "well_visits") ? "'well'" : "''")
+
                 let categoryExpr: String
-                if let catCol {
+                if t == "well_visits", let typeCol {
+                    categoryExpr = "COALESCE(NULLIF(TRIM(\(typeCol)),''), \(defaultCat))"
+                } else if let catCol {
                     categoryExpr = "COALESCE(NULLIF(TRIM(\(catCol)),''), \(defaultCat))"
                 } else {
                     categoryExpr = defaultCat
@@ -1071,7 +1096,32 @@ final class AppState: ObservableObject {
                 return nil
             }
         }
-        
+        // MARK: - Visit kind helpers (avoid episodes vs well_visits id collisions)
+
+        private let wellVisitTypeKeys: Set<String> = [
+            "well",
+            "one_month",
+            "two_month",
+            "four_month",
+            "six_month",
+            "nine_month",
+            "twelve_month",
+            "fifteen_month",
+            "eighteen_month",
+            "twentyfour_month",
+            "thirty_month",
+            "thirtysix_month",
+            // Already used by the app even if not in VISIT_TITLES yet.
+            "newborn_first"
+        ]
+
+        /// True if the list-category string should be treated as coming from `well_visits`.
+        /// Accepts both the generic kind (`well`) and specific milestone keys.
+        private func looksLikeWellVisitCategory(_ cat: String) -> Bool {
+            if wellVisitTypeKeys.contains(cat) { return true }
+            if cat.hasSuffix("_month") { return true }
+            return false
+        }
         // MARK: - Summaries (patient + visit)
         
         /// Quick existence check for a row id in a table.
@@ -1304,6 +1354,7 @@ final class AppState: ObservableObject {
 
             // New probe logic
             let cat = visit.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let isWell = looksLikeWellVisitCategory(cat)
             let pid = selectedPatientID
 
             var problems: String? = nil
@@ -1312,7 +1363,7 @@ final class AppState: ObservableObject {
             var mainComplaint: String? = nil
             var icd10: String? = nil
 
-            if cat == "well" {
+            if isWell {
                 if tableExists(db, name: "well_visits"), rowExistsForPatient("well_visits", id: visit.id, patientID: pid, db: db) {
                     let cols = columnSet(of: "well_visits", db: db)
                     let pb  = pickColumn(["problem_listing","problem_list","problems"], available: cols)
@@ -1589,6 +1640,7 @@ final class AppState: ObservableObject {
                 }
             } else {
                 let cat = visit.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let isWell = self.looksLikeWellVisitCategory(cat)
 
                 if cat == "episode" {
                     if tableExists("episodes"), rowExists("episodes", id: visit.id, patientID: pid) {
@@ -1624,7 +1676,7 @@ final class AppState: ObservableObject {
                             }
                         }
                     }
-                } else if cat == "well" {
+                } else if isWell {
                     if tableExists("well_visits"), rowExists("well_visits", id: visit.id, patientID: pid) {
                         let cols = colSet("well_visits")
                         let pb  = pick(["problem_listing","problem_list","problems"], cols)

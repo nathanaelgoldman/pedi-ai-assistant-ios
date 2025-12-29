@@ -7,7 +7,7 @@
 */
 /* SIDEBAR */
 /* Sidebar – Header */
-"sidebar.header.title"    = "Pedi•AI — Doctor";
+"sidebar.header.title"    = "CareFlow Kids — The Doctor's App";
 "sidebar.header.active"   = "Active: %@";
 "sidebar.header.inactive" = "No active bundle";
 
@@ -74,6 +74,7 @@
 
 /* PATIENTSDETAILVIEW */
 /* Patient visit categories */
+"patient.visit-category.newborn-first" = "First visit after maternity";
 "patient.visit-category.one-month" = "1-month visit";
 "patient.visit-category.two-month" = "2-month visit";
 "patient.visit-category.four-month" = "4-month visit";

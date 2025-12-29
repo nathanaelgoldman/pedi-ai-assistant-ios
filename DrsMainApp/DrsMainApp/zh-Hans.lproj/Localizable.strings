@@ -74,6 +74,7 @@
 
 /* PATIENTSDETAILVIEW */
 /* Patient visit categories */
+"patient.visit-category.newborn-first" = "First visit after maternity";
 "patient.visit-category.one-month" = "1-month visit";
 "patient.visit-category.two-month" = "2-month visit";
 "patient.visit-category.four-month" = "4-month visit";
@@ -2668,3 +2669,5 @@
 "well_visit_form.milestones.status.achieved" = "Achieved";
 "well_visit_form.milestones.status.uncertain" = "Uncertain";
 "well_visit_form.milestones.status.not_yet" = "Not yet";
+
+"well_visit_form.weight_trend.delta_weight_per_day" = "Weight change per day: %d g/day";

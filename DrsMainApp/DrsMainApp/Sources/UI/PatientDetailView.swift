@@ -66,6 +66,15 @@ fileprivate func prettyCategory(_ raw: String) -> String {
             "patient.visit-category.thirtysix-month",
             comment: "Visit type label: 36‑month well visit"
         ),
+        "newborn_first": NSLocalizedString(
+            "patient.visit-category.newborn-first",
+            comment: "Visit type label: first newborn visit after maternity"
+        ),
+        // Alias (if some data sources use a different key)
+        "first_after_maternity": NSLocalizedString(
+            "patient.visit-category.newborn-first",
+            comment: "Visit type label: first newborn visit after maternity"
+        ),
         "episode": NSLocalizedString(
             "patient.visit-category.sick",
             comment: "Visit type label: acute sick visit"
@@ -114,11 +123,13 @@ fileprivate func isWellCategory(_ raw: String) -> Bool {
     let wellKeys: Set<String> = [
         "one_month","two_month","four_month","six_month","nine_month",
         "twelve_month","fifteen_month","eighteen_month","twentyfour_month",
-        "twenty_four_month","thirty_month","thirtysix_month","thirty_six_month"
+        "twenty_four_month","thirty_month","thirtysix_month","thirty_six_month",
+        "newborn_first"
     ]
     if wellKeys.contains(k) { return true }
     // treat anything that's not explicit "episode" as well if it matches "month" pattern
     if k.contains("month") { return true }
+    if k.contains("newborn") { return true }
     return false
 }
 
