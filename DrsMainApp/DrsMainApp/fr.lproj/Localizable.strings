@@ -2667,4 +2667,4 @@
 
 "well_visit_form.weight_trend.delta_weight_per_day" = "Variation de poids par jour : %d g/jour";
 
-"growth.charts.tab.bmi" = "IMC"
+"growth.charts.tab.bmi" = "IMC";
