@@ -25,6 +25,7 @@ struct GrowthChartView: View {
         case weight
         case height
         case hc
+        case bmi
 
         var id: String { rawValue }
 
@@ -45,6 +46,11 @@ struct GrowthChartView: View {
                 return NSLocalizedString(
                     "growth.charts.tab.hc",
                     comment: "Segment title for head circumference chart tab"
+                )
+            case .bmi:
+                return NSLocalizedString(
+                    "growth.charts.tab.bmi",
+                    comment: "Segment title for BMI chart tab"
                 )
             }
         }
@@ -428,6 +434,7 @@ struct GrowthChartView: View {
     }
 
     private func makeSeries(points: [DBPoint], tab: Tab) -> [PlotPoint] {
+        let cal = Calendar(identifier: .iso8601)
         switch tab {
         case .weight:
             return points.compactMap { p in
@@ -444,6 +451,66 @@ struct GrowthChartView: View {
                 guard let v = p.headCircumferenceCm else { return nil }
                 return PlotPoint(date: p.recordedAt, value: v)
             }
+        case .bmi:
+            struct DayAgg {
+                var lastWeightAt: Date? = nil
+                var weightKg: Double? = nil
+                var lastHeightAt: Date? = nil
+                var heightCm: Double? = nil
+            }
+
+            // Aggregate by calendar day: keep the latest weight and latest height within each day.
+            var byDay: [Date: DayAgg] = [:]
+            for p in points {
+                let day = cal.startOfDay(for: p.recordedAt)
+                var agg = byDay[day] ?? DayAgg()
+
+                if let w = p.weightKg {
+                    if let t = agg.lastWeightAt {
+                        if p.recordedAt >= t {
+                            agg.lastWeightAt = p.recordedAt
+                            agg.weightKg = w
+                        }
+                    } else {
+                        agg.lastWeightAt = p.recordedAt
+                        agg.weightKg = w
+                    }
+                }
+
+                if let h = p.heightCm {
+                    if let t = agg.lastHeightAt {
+                        if p.recordedAt >= t {
+                            agg.lastHeightAt = p.recordedAt
+                            agg.heightCm = h
+                        }
+                    } else {
+                        agg.lastHeightAt = p.recordedAt
+                        agg.heightCm = h
+                    }
+                }
+
+                byDay[day] = agg
+            }
+
+            // Compute BMI when both weight + height are available for that day.
+            var out: [PlotPoint] = []
+            out.reserveCapacity(byDay.count)
+
+            for (_, agg) in byDay {
+                guard let w = agg.weightKg,
+                      let hcm = agg.heightCm,
+                      hcm > 0 else { continue }
+                let hm = hcm / 100.0
+                let bmi = w / (hm * hm)
+                guard bmi.isFinite else { continue }
+
+                // Use the later timestamp of the two measurements for plotting.
+                let dt = max(agg.lastWeightAt ?? Date.distantPast,
+                             agg.lastHeightAt ?? Date.distantPast)
+                out.append(PlotPoint(date: dt, value: bmi))
+            }
+
+            return out.sorted(by: { $0.date < $1.date })
         }
     }
 
@@ -461,7 +528,11 @@ struct GrowthChartView: View {
         case .weight: resourceBase = "wfa_0_24m_\(sexCode)"   // weight-for-age
         case .height: resourceBase = "lhfa_0_24m_\(sexCode)"  // length/height-for-age
         case .hc:     resourceBase = "hcfa_0_24m_\(sexCode)"  // head circumference-for-age
+        case .bmi:    resourceBase = "bfa_0_24m_\(sexCode)"   // BMI-for-age (optional; will be empty if file missing)
         }
+
+        // If BMI WHO curves are not packaged yet, we still want the BMI chart to work.
+        // We'll just show patient points and skip WHO overlays when the resource is missing.
 
         // Resolve patient DOB to align WHO months on the date axis
         guard let dbURL = appState.currentDBURL,
@@ -610,6 +681,14 @@ struct GrowthChartView: View {
             candidates.append(String(base.dropLast()) + "m")
         } else if base.hasSuffix("_F") {
             candidates.append(String(base.dropLast()) + "f")
+        }
+
+        // Also try the alternate range token in case resources are misnamed but content is correct.
+        // We still prefer the caller-provided name first.
+        if base.contains("_0_60m_") {
+            candidates.append(base.replacingOccurrences(of: "_0_60m_", with: "_0_24m_"))
+        } else if base.contains("_0_24m_") {
+            candidates.append(base.replacingOccurrences(of: "_0_24m_", with: "_0_60m_"))
         }
 
         let subdirs: [String?] = [
