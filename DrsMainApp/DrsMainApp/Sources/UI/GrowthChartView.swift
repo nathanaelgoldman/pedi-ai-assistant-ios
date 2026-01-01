@@ -528,7 +528,7 @@ struct GrowthChartView: View {
         case .weight: resourceBase = "wfa_0_24m_\(sexCode)"   // weight-for-age
         case .height: resourceBase = "lhfa_0_24m_\(sexCode)"  // length/height-for-age
         case .hc:     resourceBase = "hcfa_0_24m_\(sexCode)"  // head circumference-for-age
-        case .bmi:    resourceBase = "bfa_0_24m_\(sexCode)"   // BMI-for-age (optional; will be empty if file missing)
+        case .bmi:    resourceBase = "bmi_0_24m_\(sexCode)"   // BMI-for-age (optional; will be empty if file missing)
         }
 
         // If BMI WHO curves are not packaged yet, we still want the BMI chart to work.

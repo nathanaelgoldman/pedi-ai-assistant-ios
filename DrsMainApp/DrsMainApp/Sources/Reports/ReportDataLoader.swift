@@ -2957,6 +2957,7 @@ final class ReportDataLoader {
             let wfa: [ReportGrowth.Point]   // kg vs age (months)
             let lhfa: [ReportGrowth.Point]  // cm vs age (months)
             let hcfa: [ReportGrowth.Point]  // cm vs age (months)
+            let bmi: [ReportGrowth.Point]   // kg/m² vs age (months)
             let sex: ReportGrowth.Sex
             let dobISO: String
             let visitDateISO: String
@@ -3159,6 +3160,7 @@ final class ReportDataLoader {
             var wfa: [ReportGrowth.Point] = []
             var lhfa: [ReportGrowth.Point] = []
             var hcfa: [ReportGrowth.Point] = []
+            var bmi: [ReportGrowth.Point] = []
 
             // -------- PERINATAL: birth / discharge --------
             if columns(in: "perinatal_history").isEmpty == false {
@@ -3302,7 +3304,7 @@ final class ReportDataLoader {
             sortPts(&wfa); sortPts(&lhfa); sortPts(&hcfa)
 
             let sex = (sexStr.uppercased().hasPrefix("F")) ? ReportGrowth.Sex.female : .male
-            return ReportGrowthSeries(wfa: wfa, lhfa: lhfa, hcfa: hcfa, sex: sex, dobISO: dobISO, visitDateISO: visitDateISO)
+            return ReportGrowthSeries(wfa: wfa, lhfa: lhfa, hcfa: hcfa, bmi: bmi, sex: sex, dobISO: dobISO, visitDateISO: visitDateISO)
         }
     }
 
