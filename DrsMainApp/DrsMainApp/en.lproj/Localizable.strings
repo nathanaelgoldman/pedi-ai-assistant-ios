@@ -2676,3 +2676,4 @@
 "well_visit_form.weight_trend.delta_weight_per_day" = "Weight change per day: %d g/day";
 
 "growth.charts.tab.bmi" = "BMI";
+"report.chart.caption.bmi_for_age" = "BMI-for-Age";

@@ -2169,7 +2169,7 @@ extension ReportBuilder {
         // Force Growth Charts to start on a new page
         content.append(pageBreak())
 
-        // Render actual chart images (WFA, L/HFA, HCFA) — each chart on its own page
+        // Render actual chart images (WFA, L/HFA, HCFA, BMI) — each chart on its own page
         if let gs = dataLoader.loadGrowthSeriesForWell(visitID: visitID) {
             let contentWidth = REPORT_PAGE_SIZE.width - (2 * REPORT_INSET)
             let max18cm: CGFloat = (18.0 / 2.54) * 72.0
@@ -2190,6 +2190,10 @@ extension ReportBuilder {
                     caption = L("report.charts.caption.wfa", comment: "Charts caption: weight-for-age")
                 case 1:
                     caption = L("report.charts.caption.lhfa", comment: "Charts caption: length/height-for-age")
+                case 2:
+                    caption = L("report.charts.caption.hcfa", comment: "Charts caption: head circumference-for-age")
+                case 3:
+                    caption = L("report.chart.caption.bmi_for_age", comment: "Charts caption: BMI-for-age")
                 default:
                     caption = L("report.charts.caption.hcfa", comment: "Charts caption: head circumference-for-age")
                 }
@@ -4413,6 +4417,10 @@ private extension ReportBuilder {
                 caption = L("report.chart.caption.weight_for_age", comment: "Chart caption: Weight-for-Age")
             case 1:
                 caption = L("report.chart.caption.length_for_age", comment: "Chart caption: Length/Height-for-Age")
+            case 2:
+                caption = L("report.chart.caption.head_circumference_for_age", comment: "Chart caption: Head Circumference-for-Age")
+            case 3:
+                caption = L("report.chart.caption.bmi_for_age", comment: "Chart caption: BMI-for-Age")
             default:
                 caption = L("report.chart.caption.head_circumference_for_age", comment: "Chart caption: Head Circumference-for-Age")
             }

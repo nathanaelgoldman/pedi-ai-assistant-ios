@@ -9,7 +9,7 @@ import Foundation
 // Namespace to avoid collisions with your existing Growth types
 enum ReportGrowth {
 
-    enum Kind: String { case wfa = "wfa", lhfa = "lhfa", hcfa = "hcfa" }
+    enum Kind: String { case wfa = "wfa", lhfa = "lhfa", hcfa = "hcfa", bmi = "bmi" }
     enum Sex: String { case male = "M", female = "F" }
 
     enum Percentile: String, CaseIterable {

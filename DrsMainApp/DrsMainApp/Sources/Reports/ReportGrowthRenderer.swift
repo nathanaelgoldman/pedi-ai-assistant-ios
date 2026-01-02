@@ -10,8 +10,8 @@ import Foundation
 import AppKit
 
 // Local helper (this file is used from Reports and may not see UI-level helpers).
-fileprivate func L(_ key: String) -> String {
-    NSLocalizedString(key, comment: "")
+fileprivate func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
 }
 
 /// Renders WHO growth charts (0–24 months) for the Well Visit report.
@@ -33,11 +33,12 @@ final class ReportGrowthRenderer {
 
     // MARK: - Public API
 
-    /// Produce the three standard charts (WFA, L/HFA, HCFA) as images.
+    /// Produce the four standard charts (WFA, L/HFA, HCFA, BMI) as images.
     /// - Parameter series: Data from ReportDataLoader.loadGrowthSeriesForWell(visitID:)
-    /// - Returns: [NSImage] in order: WFA, L/HFA, HCFA
-    static func renderAllCharts(series: ReportDataLoader.ReportGrowthSeries,
-                                size: CGSize = CGSize(width: 700, height: 450)) -> [NSImage] {
+    /// - Returns: [NSImage] in order: WFA, L/HFA, HCFA, BMI
+static func renderAllCharts(series: ReportDataLoader.ReportGrowthSeries,
+                            size: CGSize = CGSize(width: 700, height: 450),
+                            drawWHO: Bool = true) -> [NSImage] {
 
         let clamped = clampSizeToMaxWidth(size)
         let sex = series.sex
@@ -45,26 +46,42 @@ final class ReportGrowthRenderer {
         let wfaCurves = (try? loadWHO(kind: .wfa, sex: sex)) ?? fallbackFlatCurves()
         let lhfaCurves = (try? loadWHO(kind: .lhfa, sex: sex)) ?? fallbackFlatCurves()
         let hcfaCurves = (try? loadWHO(kind: .hcfa, sex: sex)) ?? fallbackFlatCurves()
+        let bmiCurvesOpt = try? loadWHO(kind: .bmi, sex: sex)
+        let bmiCurves = bmiCurvesOpt ?? fallbackFlatCurves()
+        let hasBMI = (bmiCurvesOpt != nil)
+
+        // BMI points (computed from weight + length/height at the same ages)
+        let bmiPoints = computeBMIPoints(weights: series.wfa, lengths: series.lhfa)
 
         let wfaImg = renderChart(title: L("report.growth.title.wfa_0_60m"),
                                  yLabel: "kg",
                                  curves: wfaCurves,
                                  points: series.wfa,
-                                 size: clamped)
+                                 size: clamped,
+                                 drawWHO: drawWHO)
 
         let lhfaImg = renderChart(title: L("report.growth.title.lhfa_0_60m"),
                                   yLabel: "cm",
                                   curves: lhfaCurves,
                                   points: series.lhfa,
-                                  size: clamped)
+                                  size: clamped,
+                                  drawWHO: drawWHO)
 
         let hcfaImg = renderChart(title: L("report.growth.title.hcfa_0_60m"),
                                   yLabel: "cm",
                                   curves: hcfaCurves,
                                   points: series.hcfa,
-                                  size: clamped)
+                                  size: clamped,
+                                  drawWHO: drawWHO)
 
-        return [wfaImg, lhfaImg, hcfaImg]
+        let bmiImg = renderChart(title: L("growth.charts.tab.bmi", comment: "Growth chart title: BMI"),
+                                 yLabel: "kg/m²",
+                                 curves: bmiCurves,
+                                 points: bmiPoints,
+                                 size: clamped,
+                                 drawWHO: (drawWHO && hasBMI))
+
+        return [wfaImg, lhfaImg, hcfaImg, bmiImg]
     }
 
     // MARK: - WHO Loader
@@ -175,6 +192,45 @@ final class ReportGrowthRenderer {
         return ReportGrowth.Curves(agesMonths: ages, p3: zeros, p15: zeros, p50: zeros, p85: zeros, p97: zeros)
     }
 
+    // MARK: - Derived series
+
+    /// Compute BMI points (kg/m²) from weight (kg) and length/height (cm) points at matching ages.
+    private static func computeBMIPoints(weights: [ReportGrowth.Point],
+                                         lengths: [ReportGrowth.Point]) -> [ReportGrowth.Point] {
+        // Build a simple lookup for length/height by age.
+        // Ages usually match exactly because both series come from the same visit set.
+        let eps = 0.01
+        let sortedLengths = lengths.sorted { $0.ageMonths < $1.ageMonths }
+
+        func heightCM(at age: Double) -> Double? {
+            // Try exact match first
+            if let exact = sortedLengths.first(where: { abs($0.ageMonths - age) <= eps }) {
+                return exact.value
+            }
+            // Otherwise, try nearest within a small window
+            var best: (d: Double, v: Double)?
+            for p in sortedLengths {
+                let d = abs(p.ageMonths - age)
+                if d <= 0.25 { // within ~1 week
+                    if best == nil || d < best!.d { best = (d, p.value) }
+                }
+            }
+            return best?.v
+        }
+
+        var out: [ReportGrowth.Point] = []
+        for w in weights.sorted(by: { $0.ageMonths < $1.ageMonths }) {
+            guard let hcm = heightCM(at: w.ageMonths) else { continue }
+            let hm = hcm / 100.0
+            guard hm > 0.0 else { continue }
+            let bmi = w.value / (hm * hm)
+            // Keep a sensible range; skip impossible values
+            guard bmi.isFinite, bmi > 5, bmi < 60 else { continue }
+            out.append(ReportGrowth.Point(ageMonths: w.ageMonths, value: bmi))
+        }
+        return out
+    }
+
     // MARK: - Drawing
 
     private struct Style {
@@ -210,6 +266,7 @@ final class ReportGrowthRenderer {
                                     curves: ReportGrowth.Curves,
                                     points: [ReportGrowth.Point],
                                     size: CGSize,
+                                    drawWHO: Bool = true,
                                     style: Style = Style()) -> NSImage {
 
         // High-DPI rendering: target 300 DPI so lines remain crisp in PDF/print.
@@ -433,28 +490,30 @@ final class ReportGrowthRenderer {
         yAxis.draw(at: CGPoint(x: -ySize.width/2, y: -ySize.height/2))
         ctx.restoreGState()
 
-        // WHO curves (set clearer styles)
-        func strokeCurve(_ p: ReportGrowth.Percentile, color: NSColor, width: CGFloat, dash: [CGFloat]? = nil) {
-            let xs = curves.agesMonths
-            let ys = curves.values(for: p)
-            guard xs.count == ys.count, xs.count > 1 else { return }
-            ctx.saveGState()
-            ctx.setStrokeColor(color.cgColor)
-            ctx.setLineWidth(width)
-            if let dash = dash { ctx.setLineDash(phase: 0, lengths: dash) }
-            ctx.beginPath()
-            for i in 0..<xs.count {
-                let pt = CGPoint(x: X(xs[i]), y: Y(ys[i]))
-                if i == 0 { ctx.move(to: pt) } else { ctx.addLine(to: pt) }
+        if drawWHO {
+            // WHO curves (set clearer styles)
+            func strokeCurve(_ p: ReportGrowth.Percentile, color: NSColor, width: CGFloat, dash: [CGFloat]? = nil) {
+                let xs = curves.agesMonths
+                let ys = curves.values(for: p)
+                guard xs.count == ys.count, xs.count > 1 else { return }
+                ctx.saveGState()
+                ctx.setStrokeColor(color.cgColor)
+                ctx.setLineWidth(width)
+                if let dash = dash { ctx.setLineDash(phase: 0, lengths: dash) }
+                ctx.beginPath()
+                for i in 0..<xs.count {
+                    let pt = CGPoint(x: X(xs[i]), y: Y(ys[i]))
+                    if i == 0 { ctx.move(to: pt) } else { ctx.addLine(to: pt) }
+                }
+                ctx.strokePath()
+                ctx.restoreGState()
             }
-            ctx.strokePath()
-            ctx.restoreGState()
+            strokeCurve(.p3,  color: style.curveP3,  width: 1.6, dash: [2,3])
+            strokeCurve(.p15, color: style.curveP15, width: 1.3, dash: [4,3])
+            strokeCurve(.p50, color: style.curveP50, width: style.curveThick, dash: nil)
+            strokeCurve(.p85, color: style.curveP85, width: 1.3, dash: [4,3])
+            strokeCurve(.p97, color: style.curveP97, width: 1.6, dash: [2,3])
         }
-        strokeCurve(.p3,  color: style.curveP3,  width: 1.6, dash: [2,3])
-        strokeCurve(.p15, color: style.curveP15, width: 1.3, dash: [4,3])
-        strokeCurve(.p50, color: style.curveP50, width: style.curveThick, dash: nil)
-        strokeCurve(.p85, color: style.curveP85, width: 1.3, dash: [4,3])
-        strokeCurve(.p97, color: style.curveP97, width: 1.6, dash: [2,3])
 
         // Patient polyline + points
         ctx.saveGState()
@@ -477,7 +536,9 @@ final class ReportGrowthRenderer {
         ctx.restoreGState()
 
         // Legend (top-right inside the plot)
-        drawLegend(in: plot, style: style)
+        if drawWHO {
+            drawLegend(in: plot, style: style)
+        }
 
         // Finalize high-DPI render and wrap into an NSImage at logical size
         NSGraphicsContext.current = nil
@@ -552,13 +613,3 @@ final class ReportGrowthRenderer {
     }
 }
 
-// MARK: - Temporary overload to support drawWHO flag from callers
-extension ReportGrowthRenderer {
-    /// Overload that accepts `drawWHO` to match updated call sites.
-    /// Currently forwards to the original implementation; WHO drawing is already handled inside.
-    static func renderAllCharts(series: ReportDataLoader.ReportGrowthSeries,
-                                size: CGSize,
-                                drawWHO: Bool) -> [NSImage] {
-        return renderAllCharts(series: series, size: size)
-    }
-}
