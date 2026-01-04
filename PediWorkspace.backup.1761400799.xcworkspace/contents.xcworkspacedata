@@ -7,4 +7,7 @@
    <FileRef
       location = "group:DrsMainApp/DrsMainApp/DrsMainApp.xcodeproj">
    </FileRef>
+   <FileRef
+      location = "group:PatientViewerApp/PatientViewerApp.xcodeproj">
+   </FileRef>
 </Workspace>
