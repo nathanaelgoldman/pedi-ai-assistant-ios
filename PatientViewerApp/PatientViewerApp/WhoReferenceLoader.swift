@@ -9,7 +9,8 @@ import OSLog
 struct WhoReferenceLoader {
     private static let log = Logger(subsystem: "com.yunastic.PatientViewerApp", category: "WhoReferenceLoader")
 
-    // Simple in-memory cache so we don’t re-parse CSV every time.
+    // Cache key must include sex to avoid returning the wrong curves when callers pass a generic name
+    // (e.g., "wfa_0_24m") with different `sex` values across calls.
     private static var cache: [String: [(label: String, points: [GrowthDataPoint])]] = [:]
 
     /// Load WHO/CDC curves from a CSV in the bundle.
@@ -18,14 +19,17 @@ struct WhoReferenceLoader {
     ///   - sex: "M" or "F" (not strictly required if csvName already encodes sex). Kept for signature compatibility.
     /// - Returns: Curves as (label, points). We *aim* for 5 standard curves when possible.
     static func loadCurve(fromCSV csvName: String, sex: String) -> [(label: String, points: [GrowthDataPoint])] {
-        // Cache hit
-        if let cached = cache[csvName] {
-            log.debug("Cache hit for \(csvName, privacy: .public)")
+        let sexNorm = sex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cacheKey = "\(csvName)|\(sexNorm)"
+
+        // Cache hit (keyed by name + sex)
+        if let cached = cache[cacheKey] {
+            log.debug("Cache hit for \(cacheKey, privacy: .public)")
             return cached
         }
 
         // Find the CSV (try a few likely subdirectories too)
-        guard let url = findCSV(named: csvName) ?? findCSV(named: "\(csvName)_\(sex)") else {
+        guard let url = findCSV(named: csvName) ?? findCSV(named: "\(csvName)_\(sexNorm)") else {
             log.error("Could not find CSV resource for \(csvName, privacy: .public)")
             return []
         }
@@ -117,7 +121,7 @@ struct WhoReferenceLoader {
                 return li < ri || (li == ri && lhs.label < rhs.label)
             }
 
-            cache[csvName] = curves
+            cache[cacheKey] = curves
             log.debug("Parsed \(curves.count, privacy: .public) curve(s) from \(url.lastPathComponent, privacy: .public)")
             return curves
         } catch {

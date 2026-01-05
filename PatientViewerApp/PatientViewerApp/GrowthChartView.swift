@@ -1,3 +1,10 @@
+//
+//  GrowthChartView.swift
+//  PatientViewerApp
+//
+//  Created by yunastic on 10/12/25.
+//
+
 import SwiftUI
 import Charts
 import os
@@ -19,7 +26,8 @@ struct GrowthChartView: View {
     private static let defaultRanges: [String: ClosedRange<Double>] = [
         "weight": 0...20,
         "height": 40...100,
-        "head_circ": 30...55
+        "head_circ": 30...55,
+        "bmi": 10...30
     ]
 
     /// Compute a padded, clamped Y-axis range from patient + reference values.
@@ -189,6 +197,8 @@ struct GrowthChartView: View {
             return 5.0       // 5 cm steps
         case "weight", "head_circ":
             return 2.0       // 2 kg / 2 cm steps
+        case "bmi":
+            return 1.0       // BMI steps
         default:
             return 1.0       // fallback
         }
@@ -222,6 +232,7 @@ struct GrowthChartView: View {
         case "weight": return "Weight-for-Age"
         case "height": return "Length-for-Age"
         case "head_circ": return "Head Circumference-for-Age"
+        case "bmi": return "BMI-for-Age"
         default: return "Growth Chart"
         }
     }
@@ -231,13 +242,8 @@ struct GrowthChartView: View {
         case "weight": return "Weight (kg)"
         case "height": return "Length/Height (cm)"
         case "head_circ": return "Head Circumference (cm)"
+        case "bmi": return "BMI (kg/m²)"
         default: return "Measurement"
         }
     }
-}//
-//  GrowthChartView.swift
-//  PatientViewerApp
-//
-//  Created by yunastic on 10/12/25.
-//
-
+}

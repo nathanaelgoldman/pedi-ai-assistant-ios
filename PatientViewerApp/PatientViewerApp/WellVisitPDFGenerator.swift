@@ -1,3 +1,10 @@
+//
+//  WellVisitPdfGenerator.swift
+//  PatientViewerApp
+//
+//  Created by yunastic on 10/11/25.
+//
+
 import Foundation
 import SQLite
 import PDFKit
@@ -296,7 +303,8 @@ struct WellVisitPDFGenerator {
             let chartTypes: [(String, String, String)] = [
                 ("weight", "Weight-for-Age (0–60m)", "wfa_0_24m_\(sexTextForCharts)"),
                 ("height", "Length-for-Age (0–60m)", "lhfa_0_24m_\(sexTextForCharts)"),
-                ("head_circ", "Head Circumference-for-Age (0–60m)", "hcfa_0_24m_\(sexTextForCharts)")
+                ("head_circ", "Head Circumference-for-Age (0–60m)", "hcfa_0_24m_\(sexTextForCharts)"),
+                ("bmi", "BMI-for-Age (0–60m)", "bmi_0_24m_\(sexTextForCharts)")
             ]
             for (measurement, title, filename) in chartTypes {
                 if let cutoff = ageMonthsForCharts {
@@ -1633,10 +1641,5 @@ struct WellVisitPDFGenerator {
             return "\(raw)"
         }
     }
-}//
-//  WellVisitPdfGenerator.swift
-//  PatientViewerApp
-//
-//  Created by yunastic on 10/11/25.
-//
+}
 

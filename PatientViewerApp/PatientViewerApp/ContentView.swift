@@ -9,6 +9,17 @@ import os
 
 private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ContentView")
 
+// MARK: - Localization (file-local)
+@inline(__always)
+private func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
+}
+
+@inline(__always)
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), locale: Locale.current, arguments: args)
+}
+
 struct ContentView: SwiftUI.View {
     @State private var extractedFolderURL: URL?
     @State private var bundleAliasLabel: String?
@@ -17,7 +28,7 @@ struct ContentView: SwiftUI.View {
     // File export (Save As…) routing
     @State private var showFileExporter = false
     @State private var exportDoc = ZipFileDocument(data: Data())
-    @State private var exportDefaultName = "patientviewer"
+    @State private var exportDefaultName = L("patient_viewer.content.export.default_filename", comment: "Default export filename")
     // Unified sheet router (single source of truth for modal sheets)
     enum SheetRoute: Identifiable, Equatable {
         case bundleLibrary
@@ -60,8 +71,8 @@ struct ContentView: SwiftUI.View {
                 case .bundleLibrary:
                     BundleLibraryView(
                         extractedFolderURL: $extractedFolderURL,
-                        bundleAlias: Binding(get: { bundleAliasLabel ?? "Unknown" }, set: { bundleAliasLabel = $0 }),
-                        bundleDOB: Binding(get: { bundleDOB ?? "Unknown" }, set: { bundleDOB = $0 })
+                        bundleAlias: Binding(get: { bundleAliasLabel ?? L("patient_viewer.content.placeholder.unknown", comment: "Placeholder: unknown") }, set: { bundleAliasLabel = $0 }),
+                        bundleDOB: Binding(get: { bundleDOB ?? L("patient_viewer.content.placeholder.unknown", comment: "Placeholder: unknown") }, set: { bundleDOB = $0 })
                     )
 
                 case .settings:
@@ -111,9 +122,9 @@ struct ContentView: SwiftUI.View {
                     importError = error.localizedDescription
                 }
             }
-            .confirmationDialog("A bundle for this patient already exists.",
+            .confirmationDialog(L("patient_viewer.content.import.duplicate.title", comment: "Import: duplicate bundle"),
                                 isPresented: $showDuplicateDialog) {
-                Button("Overwrite (archive previous)", role: .destructive) {
+                Button(L("patient_viewer.content.import.duplicate.overwrite", comment: "Import: overwrite bundle"), role: .destructive) {
                     guard let p = pendingImport else { return }
                     do {
                         let activation = try BundleIO.ImportService.confirmOverwrite(p)
@@ -130,17 +141,17 @@ struct ContentView: SwiftUI.View {
                         importError = error.localizedDescription
                     }
                 }
-                Button("Cancel", role: .cancel) {
+                Button(L("patient_viewer.content.common.cancel", comment: "Common: cancel"), role: .cancel) {
                     if let p = pendingImport { BundleIO.ImportService.cancelOverwrite(p) }
                     pendingImport = nil
                 }
             }
-            .alert("Error", isPresented: .constant(importError != nil), actions: {
-                Button("OK") { importError = nil }
+            .alert(L("patient_viewer.content.error.title", comment: "Alert title"), isPresented: .constant(importError != nil), actions: {
+                Button(L("patient_viewer.content.common.ok", comment: "Common: OK")) { importError = nil }
             }, message: {
                 Text(importError ?? "")
             })
-            .navigationTitle("Medical Records")
+            .navigationTitle(L("patient_viewer.content.nav_title", comment: "Navigation title"))
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .background, .inactive:
@@ -157,11 +168,11 @@ struct ContentView: SwiftUI.View {
         VStack(spacing: 32) {
             // Header / intro
             VStack(alignment: .leading, spacing: 8) {
-                Text("Patient Viewer")
+                Text(L("patient_viewer.content.app_title", comment: "App title"))
                     .font(.largeTitle.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text("Load a patient bundle to review visits, growth charts and documents.")
+                Text(L("patient_viewer.content.intro", comment: "Intro text"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -181,9 +192,9 @@ struct ContentView: SwiftUI.View {
                             .frame(width: 32, height: 32)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Load New Bundle from Device")
+                            Text(L("patient_viewer.content.action.load_new.title", comment: "Empty state action title"))
                                 .font(.headline)
-                            Text("Import a .peMR.zip file from Files or iCloud.")
+                            Text(L("patient_viewer.content.action.load_new.subtitle", comment: "Empty state action subtitle"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -210,9 +221,9 @@ struct ContentView: SwiftUI.View {
                             .frame(width: 32, height: 32)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Load from Saved Bundles")
+                            Text(L("patient_viewer.content.action.load_saved.title", comment: "Empty state action title"))
                                 .font(.headline)
-                            Text("Open a previously stored patient bundle on this device.")
+                            Text(L("patient_viewer.content.action.load_saved.subtitle", comment: "Empty state action subtitle"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -239,9 +250,9 @@ struct ContentView: SwiftUI.View {
                             .frame(width: 32, height: 32)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Settings")
+                            Text(L("patient_viewer.content.action.settings.title", comment: "Empty state action title"))
                                 .font(.headline)
-                            Text("Manage app lock and viewer preferences.")
+                            Text(L("patient_viewer.content.action.settings.subtitle", comment: "Empty state action subtitle"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -284,8 +295,8 @@ struct ContentView: SwiftUI.View {
         let dbPath = url.appendingPathComponent("db.sqlite").path
         let (patientSex, allPatientData) = GrowthDataFetcher.fetchAllGrowthData(dbPath: dbPath)
         let patientId = GrowthDataFetcher.getPatientId(from: dbPath) ?? -1
-        let alias = bundleAliasLabel ?? "Unknown patient"
-        let dob = bundleDOB ?? "Unknown date of birth"
+        let alias = bundleAliasLabel ?? L("patient_viewer.content.placeholder.unknown_patient", comment: "Placeholder: unknown patient")
+        let dob = bundleDOB ?? L("patient_viewer.content.placeholder.unknown_dob", comment: "Placeholder: unknown date of birth")
 
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -314,7 +325,7 @@ struct ContentView: SwiftUI.View {
                     }
 
                     if !patientSex.isEmpty {
-                        Text("Sex: \(patientSex)")
+                        Text(LF("patient_viewer.content.patient.sex", patientSex))
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
@@ -334,8 +345,8 @@ struct ContentView: SwiftUI.View {
                     ) {
                         ActionCard(
                             systemImage: "list.bullet.rectangle",
-                            title: "View Visits",
-                            subtitle: "Browse all visits, summaries and clinical notes."
+                            title: L("patient_viewer.content.card.visits.title", comment: "Visits card title"),
+                            subtitle: L("patient_viewer.content.card.visits.subtitle", comment: "Visits card subtitle")
                         )
                     }
                     .buttonStyle(.plain)
@@ -349,8 +360,8 @@ struct ContentView: SwiftUI.View {
                     ) {
                         ActionCard(
                             systemImage: "chart.bar.xaxis",
-                            title: "View Growth Charts",
-                            subtitle: "See weight, height and head circumference over time."
+                            title: L("patient_viewer.content.card.growth.title", comment: "Growth card title"),
+                            subtitle: L("patient_viewer.content.card.growth.subtitle", comment: "Growth card subtitle")
                         )
                     }
                     .buttonStyle(.plain)
@@ -370,8 +381,8 @@ struct ContentView: SwiftUI.View {
                         ) {
                             ActionCard(
                                 systemImage: "text.bubble.fill",
-                                title: "Parent Notes",
-                                subtitle: "View and add notes written by parents."
+                                title: L("patient_viewer.content.card.parent_notes.title", comment: "Parent notes card title"),
+                                subtitle: L("patient_viewer.content.card.parent_notes.subtitle", comment: "Parent notes card subtitle")
                             )
                         }
                         .buttonStyle(.plain)
@@ -383,8 +394,8 @@ struct ContentView: SwiftUI.View {
                     ) {
                         ActionCard(
                             systemImage: "paperclip",
-                            title: "Patient Documents",
-                            subtitle: "Open scans, vaccination records and other files."
+                            title: L("patient_viewer.content.card.documents.title", comment: "Documents card title"),
+                            subtitle: L("patient_viewer.content.card.documents.subtitle", comment: "Documents card subtitle")
                         )
                     }
                     .buttonStyle(.plain)
@@ -407,8 +418,8 @@ struct ContentView: SwiftUI.View {
                     ) {
                         ActionCard(
                             systemImage: "square.and.arrow.up",
-                            title: "Export Bundle",
-                            subtitle: "Create an encrypted .peMR bundle to share or archive."
+                            title: L("patient_viewer.content.card.export.title", comment: "Export card title"),
+                            subtitle: L("patient_viewer.content.card.export.subtitle", comment: "Export card subtitle")
                         )
                     }
                     .buttonStyle(.plain)
@@ -421,12 +432,12 @@ struct ContentView: SwiftUI.View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "trash")
-                            Text("Clear Active Bundle")
+                            Text(L("patient_viewer.content.clear_button", comment: "Clear bundle button"))
                         }
                         .font(.subheadline.weight(.semibold))
                     }
 
-                    Text("This keeps your persistent saved bundles; only the currently open working copy is cleared.")
+                    Text(L("patient_viewer.content.clear_note", comment: "Clear bundle note"))
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }

@@ -76,16 +76,25 @@ final class GrowthDataFetcher {
         return nil
     }
 
-    /// Fetch growth datapoints for a single measurement ("weight" | "height" | "head_circ")
+    /// Fetch growth datapoints for a single measurement ("weight" | "height" | "head_circ" | "bmi")
     static func fetchGrowthData(dbPath: String, patientID: Int64, measurement: String) -> [GrowthDataPoint] {
 
-        // Map measurement -> column name in `vitals`
-        let colMap: [String: String] = [
-            "weight": "weight_kg",
-            "height": "height_cm",
-            "head_circ": "head_circumference_cm"
-        ]
-        guard let vitalsColumn = colMap[measurement] else {
+        // Map measurement -> column name in `manual_growth`.
+        // BMI is computed from weight_kg + height_cm (in the same row).
+        let m = measurement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let isBMI = (m == "bmi")
+
+        let vitalsColumn: String?
+        switch m {
+        case "weight":
+            vitalsColumn = "weight_kg"
+        case "height":
+            vitalsColumn = "height_cm"
+        case "head_circ":
+            vitalsColumn = "head_circumference_cm"
+        case "bmi":
+            vitalsColumn = nil
+        default:
             log.error("fetchGrowthData: invalid measurement '\(measurement, privacy: .public)'")
             return []
         }
@@ -124,36 +133,80 @@ final class GrowthDataFetcher {
         // --- Step 1: manual_growth rows for this patient / measurement ---
         let manualGrowth = Table("manual_growth")
         let recAtCol = Expression<String>("recorded_at")
-        let valueCol = Expression<Swift.Double?>(vitalsColumn) // allow NULLs
         let pidCol = Expression<Int64>("patient_id")
 
         do {
-            for row in try db.prepare(manualGrowth.filter(pidCol == patientID && valueCol != nil)) {
-                guard let value = row[valueCol] else {
-                    log.warning("fetchGrowthData: nil value for \(measurement, privacy: .public)")
-                    continue
-                }
-                // Filter out non-sensical/invalid numeric values early
-                guard value.isFinite, value > 0 else {
-                    log.warning("fetchGrowthData: invalid value \(value, privacy: .public) for \(measurement, privacy: .public); skipping")
-                    continue
+            if isBMI {
+                let wCol = Expression<Swift.Double?>("weight_kg")
+                let hCol = Expression<Swift.Double?>("height_cm")
+
+                for row in try db.prepare(manualGrowth.filter(pidCol == patientID && wCol != nil && hCol != nil)) {
+                    guard let wKg = row[wCol], let hCm = row[hCol] else {
+                        log.warning("fetchGrowthData: nil weight/height for bmi")
+                        continue
+                    }
+
+                    // Filter out non-sensical/invalid numeric values early
+                    guard wKg.isFinite, wKg > 0, hCm.isFinite, hCm > 0 else {
+                        log.warning("fetchGrowthData: invalid w=\(wKg, privacy: .public) h=\(hCm, privacy: .public) for bmi; skipping")
+                        continue
+                    }
+
+                    let hM = hCm / 100.0
+                    let bmi = wKg / (hM * hM)
+
+                    guard bmi.isFinite, bmi > 0 else {
+                        log.warning("fetchGrowthData: invalid bmi=\(bmi, privacy: .public); skipping")
+                        continue
+                    }
+
+                    let rawWhen = row[recAtCol]
+                    guard let when = parseDate(rawWhen) else {
+                        log.warning("fetchGrowthData: unparseable date '\(rawWhen, privacy: .public)'")
+                        continue
+                    }
+
+                    let ageDays = when.timeIntervalSince(dob) / secondsPerDay
+                    var ageMonths = ageDays / daysPerMonth
+
+                    if ageMonths < 0 {
+                        log.warning("fetchGrowthData: negative age \(ageMonths, privacy: .public) for date '\(rawWhen, privacy: .public)'; clamping to 0.0")
+                        ageMonths = 0.0
+                    }
+
+                    results.append(GrowthDataPoint(ageMonths: ageMonths, value: bmi))
                 }
 
-                let rawWhen = row[recAtCol]
-                guard let when = parseDate(rawWhen) else {
-                    log.warning("fetchGrowthData: unparseable date '\(rawWhen, privacy: .public)'")
-                    continue
+            } else if let vitalsColumn = vitalsColumn {
+                let valueCol = Expression<Swift.Double?>(vitalsColumn) // allow NULLs
+
+                for row in try db.prepare(manualGrowth.filter(pidCol == patientID && valueCol != nil)) {
+                    guard let value = row[valueCol] else {
+                        log.warning("fetchGrowthData: nil value for \(measurement, privacy: .public)")
+                        continue
+                    }
+                    // Filter out non-sensical/invalid numeric values early
+                    guard value.isFinite, value > 0 else {
+                        log.warning("fetchGrowthData: invalid value \(value, privacy: .public) for \(measurement, privacy: .public); skipping")
+                        continue
+                    }
+
+                    let rawWhen = row[recAtCol]
+                    guard let when = parseDate(rawWhen) else {
+                        log.warning("fetchGrowthData: unparseable date '\(rawWhen, privacy: .public)'")
+                        continue
+                    }
+
+                    let ageDays = when.timeIntervalSince(dob) / secondsPerDay
+                    var ageMonths = ageDays / daysPerMonth
+
+                    if ageMonths < 0 {
+                        log.warning("fetchGrowthData: negative age \(ageMonths, privacy: .public) for date '\(rawWhen, privacy: .public)'; clamping to 0.0")
+                        ageMonths = 0.0
+                    }
+
+                    results.append(GrowthDataPoint(ageMonths: ageMonths, value: value))
                 }
-
-                let ageDays = when.timeIntervalSince(dob) / secondsPerDay
-                var ageMonths = ageDays / daysPerMonth
-
-                if ageMonths < 0 {
-                    log.warning("fetchGrowthData: negative age \(ageMonths, privacy: .public) for date '\(rawWhen, privacy: .public)'; clamping to 0.0")
-                    ageMonths = 0.0
-                }
-
-                results.append(GrowthDataPoint(ageMonths: ageMonths, value: value))
             }
         } catch {
             log.error("fetchGrowthData: query manual_growth failed: \(String(describing: error), privacy: .public)")
@@ -195,6 +248,20 @@ final class GrowthDataFetcher {
                     // ~2 days ~ 0.07 months for a visible baseline before first check
                     if !hasPoint(nearAge: 0.07, value: valKg) {
                         results.append(GrowthDataPoint(ageMonths: 0.07, value: valKg))
+                    }
+                }
+
+            case "bmi":
+                let birthG: Int? = (try? row.get(bwGCol)) ?? nil
+                let birthLen: Swift.Double? = (try? row.get(blCmCol)) ?? nil
+                if let g = birthG, g > 0, let cm = birthLen, cm > 0 {
+                    let kg = Swift.Double(g) / 1000.0
+                    let m = cm / 100.0
+                    let bmi = kg / (m * m)
+                    if bmi.isFinite, bmi > 0 {
+                        if !hasPoint(nearAge: 0.0, value: bmi) {
+                            results.append(GrowthDataPoint(ageMonths: 0.0, value: bmi))
+                        }
                     }
                 }
 

@@ -4,4 +4,45 @@
 //
 //  Created by Nathanael on 1/5/26.
 //
+// ContentView
+"patient_viewer.content.nav_title" = "Medical Records";
+"patient_viewer.content.app_title" = "Patient Viewer";
+"patient_viewer.content.intro" = "Load a patient bundle to review visits, growth charts and documents.";
+
+"patient_viewer.content.action.load_new.title" = "Load New Bundle from Device";
+"patient_viewer.content.action.load_new.subtitle" = "Import a .peMR.zip file from Files or iCloud.";
+"patient_viewer.content.action.load_saved.title" = "Load from Saved Bundles";
+"patient_viewer.content.action.load_saved.subtitle" = "Open a previously stored patient bundle on this device.";
+"patient_viewer.content.action.settings.title" = "Settings";
+"patient_viewer.content.action.settings.subtitle" = "Manage app lock and viewer preferences.";
+
+"patient_viewer.content.import.duplicate.title" = "A bundle for this patient already exists.";
+"patient_viewer.content.import.duplicate.overwrite" = "Overwrite (archive previous)";
+
+"patient_viewer.content.error.title" = "Error";
+"patient_viewer.content.common.ok" = "OK";
+"patient_viewer.content.common.cancel" = "Cancel";
+
+"patient_viewer.content.placeholder.unknown" = "Unknown";
+"patient_viewer.content.placeholder.unknown_patient" = "Unknown patient";
+"patient_viewer.content.placeholder.unknown_dob" = "Unknown date of birth";
+
+"patient_viewer.content.patient.sex" = "Sex: %@";
+
+"patient_viewer.content.card.visits.title" = "View Visits";
+"patient_viewer.content.card.visits.subtitle" = "Browse all visits, summaries and clinical notes.";
+"patient_viewer.content.card.growth.title" = "View Growth Charts";
+"patient_viewer.content.card.growth.subtitle" = "See weight, height and head circumference over time.";
+"patient_viewer.content.card.parent_notes.title" = "Parent Notes";
+"patient_viewer.content.card.parent_notes.subtitle" = "View and add notes written by parents.";
+"patient_viewer.content.card.documents.title" = "Patient Documents";
+"patient_viewer.content.card.documents.subtitle" = "Open scans, vaccination records and other files.";
+"patient_viewer.content.card.export.title" = "Export Bundle";
+"patient_viewer.content.card.export.subtitle" = "Create an encrypted .peMR bundle to share or archive.";
+
+"patient_viewer.content.clear_button" = "Clear Active Bundle";
+"patient_viewer.content.clear_note" = "This keeps your persistent saved bundles; only the currently open working copy is cleared.";
+
+"patient_viewer.content.export.default_filename" = "patientviewer";
+
 

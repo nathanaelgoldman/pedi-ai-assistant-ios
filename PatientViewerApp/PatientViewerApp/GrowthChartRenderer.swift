@@ -16,7 +16,8 @@ struct GrowthChartRenderer {
     private static let defaultRanges: [String: ClosedRange<Double>] = [
         "weight": 0...26,     // kg (0–24m)
         "height": 40...120,   // cm (0–24m)
-        "head_circ": 30...55  // cm (0–24m)
+        "head_circ": 30...55, // cm (0–24m)
+        "bmi": 8...40         // kg/m² (0–60m) — wide enough to avoid clipping
     ]
 
     private static let logger = Logger(
@@ -58,6 +59,66 @@ struct GrowthChartRenderer {
             return defaults
         }
     }
+
+    /// Compute BMI-for-age points from weight (kg) and height/length (cm).
+    /// We match weight and height points by ageMonths within a small tolerance.
+    private static func computeBMIData(
+        weightPoints: [GrowthDataPoint],
+        heightPoints: [GrowthDataPoint]
+    ) -> [GrowthDataPoint] {
+        let w = weightPoints.filter { $0.ageMonths.isFinite && $0.value.isFinite }
+            .sorted { $0.ageMonths < $1.ageMonths }
+        let h = heightPoints.filter { $0.ageMonths.isFinite && $0.value.isFinite }
+            .sorted { $0.ageMonths < $1.ageMonths }
+
+        guard !w.isEmpty, !h.isEmpty else {
+            Self.logger.notice("BMI: missing source series (weight.count=\(w.count, privacy: .public), height.count=\(h.count, privacy: .public))")
+            return []
+        }
+
+        // ~4–5 days tolerance (in months) to pair measurements taken around the same time.
+        let tol: Double = 0.15
+        var j = 0
+        var out: [GrowthDataPoint] = []
+        out.reserveCapacity(min(w.count, h.count))
+
+        for wp in w {
+            // Move height pointer forward until it's within the left window.
+            while j < h.count && h[j].ageMonths < wp.ageMonths - tol {
+                j += 1
+            }
+
+            // Pick the closest height point within [age-tol, age+tol].
+            var best: GrowthDataPoint? = nil
+            var k = j
+            while k < h.count && h[k].ageMonths <= wp.ageMonths + tol {
+                let cand = h[k]
+                if best == nil || abs(cand.ageMonths - wp.ageMonths) < abs(best!.ageMonths - wp.ageMonths) {
+                    best = cand
+                }
+                k += 1
+            }
+
+            guard let hp = best else { continue }
+
+            let meters = hp.value / 100.0
+            guard meters > 0 else { continue }
+
+            let bmi = wp.value / (meters * meters)
+            guard bmi.isFinite else { continue }
+
+            out.append(GrowthDataPoint(ageMonths: wp.ageMonths, value: bmi))
+        }
+
+        if out.isEmpty {
+            Self.logger.notice("BMI: no matched points produced (weight.count=\(w.count, privacy: .public), height.count=\(h.count, privacy: .public))")
+        } else {
+            Self.logger.debug("BMI: produced \(out.count, privacy: .public) point(s) from weight.count=\(w.count, privacy: .public), height.count=\(h.count, privacy: .public)")
+        }
+
+        return out
+    }
+
     static func generateChartImage(
         dbPath: String,
         patientID: Int64,
@@ -69,11 +130,42 @@ struct GrowthChartRenderer {
         Self.logger.info("Render start: measurement=\(measurement, privacy: .public), patientID=\(patientID, privacy: .public), sex=\(sex, privacy: .public), csv=\(filename, privacy: .public)")
         // These loaders are synchronous — no 'await' needed here.
         let refCurves = WhoReferenceLoader.loadCurve(fromCSV: filename, sex: sex)
-        let patientData = GrowthDataFetcher.fetchGrowthData(
-            dbPath: dbPath,
-            patientID: patientID,
-            measurement: measurement
-        )
+
+        let patientData: [GrowthDataPoint]
+        if measurement == "bmi" {
+            // Prefer BMI computed from same-row weight+height in the DB (manual_growth),
+            // which avoids accidental pairing across different dates (e.g., discharge weight vs birth length).
+            let bmiDirect = GrowthDataFetcher.fetchGrowthData(
+                dbPath: dbPath,
+                patientID: patientID,
+                measurement: "bmi"
+            )
+
+            if !bmiDirect.isEmpty {
+                patientData = bmiDirect
+                Self.logger.debug("BMI: using direct series from DB (count=\(bmiDirect.count, privacy: .public))")
+            } else {
+                // Fallback: derive BMI by pairing weight and height points by age proximity.
+                let w = GrowthDataFetcher.fetchGrowthData(
+                    dbPath: dbPath,
+                    patientID: patientID,
+                    measurement: "weight"
+                )
+                let h = GrowthDataFetcher.fetchGrowthData(
+                    dbPath: dbPath,
+                    patientID: patientID,
+                    measurement: "height"
+                )
+                patientData = Self.computeBMIData(weightPoints: w, heightPoints: h)
+                Self.logger.debug("BMI: direct series empty; using paired series (count=\(patientData.count, privacy: .public))")
+            }
+        } else {
+            patientData = GrowthDataFetcher.fetchGrowthData(
+                dbPath: dbPath,
+                patientID: patientID,
+                measurement: measurement
+            )
+        }
 
         // Filter out any non-finite (NaN/±Inf) values from both sources before plotting.
         let cleanPatientAll = patientData.filter { $0.ageMonths.isFinite && $0.value.isFinite }
@@ -135,7 +227,8 @@ struct GrowthChartRenderer {
                 let placeholder = ZStack {
                     Color.white
                     VStack(spacing: 12) {
-                        Text("No \(measurement.capitalized) data available")
+                        let prettyName = (measurement == "bmi") ? "BMI" : measurement.capitalized
+                        Text("No \(prettyName) data available")
                             .font(.title2)
                             .bold()
                         Text("Add measurements to see the chart.")
@@ -234,6 +327,19 @@ struct GrowthChartRenderer {
                             if let v = value.as(Double.self) {
                                 AxisValueLabel {
                                     Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    case "bmi":
+                        AxisMarks(position: .leading, values: .stride(by: 2)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(format: "%.1f", v))
                                         .foregroundColor(.black)
                                 }
                             }

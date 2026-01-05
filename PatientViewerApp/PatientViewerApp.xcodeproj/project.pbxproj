@@ -13,6 +13,7 @@
 		BB812EE12EA5E7AD0049DDB7 /* FMDB in Frameworks */ = {isa = PBXBuildFile; productRef = BB812EE02EA5E7AD0049DDB7 /* FMDB */; };
 		BBCC55082E97622B005002B9 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55072E97622B005002B9 /* ZIPFoundation */; };
 		BBCC55112E976F7E005002B9 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = BBCC55102E976F7E005002B9 /* SQLite */; };
+		E90370042F0BA54D009F4E1B /* Localizable.strings in Sources */ = {isa = PBXBuildFile; fileRef = E90370032F0BA54D009F4E1B /* Localizable.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,6 +39,9 @@
 		BBCC54DC2E976199005002B9 /* PatientViewerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PatientViewerApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBCC54E92E97619A005002B9 /* PatientViewerAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E90370022F0BA54D009F4E1B /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E90370052F0BA6FB009F4E1B /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E90370062F0BA706009F4E1B /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -119,6 +123,7 @@
 		BBCC54D32E976199005002B9 = {
 			isa = PBXGroup;
 			children = (
+				E90370032F0BA54D009F4E1B /* Localizable.strings */,
 				BBDC9DFB2EAB669C00E341B6 /* docs */,
 				BBCC54DE2E976199005002B9 /* PatientViewerApp */,
 				BBCC54EC2E97619A005002B9 /* PatientViewerAppTests */,
@@ -244,6 +249,8 @@
 			knownRegions = (
 				en,
 				Base,
+				fr,
+				"zh-Hans",
 			);
 			mainGroup = BBCC54D32E976199005002B9;
 			minimizedProjectReferenceProxies = 1;
@@ -293,6 +300,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E90370042F0BA54D009F4E1B /* Localizable.strings in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -325,12 +333,26 @@
 		};
 /* End PBXTargetDependency section */
 
+/* Begin PBXVariantGroup section */
+		E90370032F0BA54D009F4E1B /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				E90370022F0BA54D009F4E1B /* en */,
+				E90370052F0BA6FB009F4E1B /* fr */,
+				E90370062F0BA706009F4E1B /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin XCBuildConfiguration section */
 		BBCC54FB2E97619A005002B9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -395,6 +417,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
