@@ -4831,12 +4831,21 @@ final class AppState: ObservableObject {
     private func extractPatientIdentity(from bundleRoot: URL) -> PatientIdentity? {
         let fm = FileManager.default
 
+        // Cache manifest info for later heuristics/decryption.
+        var manifestObj: [String: Any]? = nil
+        var manifestEncryptedFlag = false
+        var manifestScheme: String? = nil
+
         // 1) Prefer manifest.json at bundle root
         let manifestURL = bundleRoot.appendingPathComponent("manifest.json")
         if fm.fileExists(atPath: manifestURL.path) {
             do {
                 let data = try Data(contentsOf: manifestURL)
                 if let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    manifestObj = obj
+                    manifestEncryptedFlag = (obj["encrypted"] as? Bool) ?? false
+                    manifestScheme = (obj["encryption_scheme"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
                     // v2 schema (preferred): explicit identity fields
                     let hasV2 = ((obj["format"] as? String)?.lowercased() == "pemr") || (obj["schema_version"] != nil)
                     if hasV2 {
@@ -4851,6 +4860,7 @@ final class AppState: ObservableObject {
                             return PatientIdentity(mrn: mrn, alias: alias, dobISO: dob)
                         }
                     }
+
                     // Legacy "file list" manifest (v0/v1) without identity
                     if obj["files"] != nil {
                         self.log.info("extractPatientIdentity: legacy file-list manifest without identity at \(manifestURL.lastPathComponent, privacy: .public)")
@@ -4861,72 +4871,102 @@ final class AppState: ObservableObject {
             }
         }
 
-        // 2) Folder-name heuristic as a last-resort identity (alias only)
-        //    Examples: "Teal_Robin_-bundle.peMR-7-2025-11-13T01-49-38Z" or "Silver_Unicorn_🦊-2025-11-12_19-47-55.peMR"
-        func aliasFromFolderName(_ name: String) -> String? {
-            var cand = name
-            // Strip extension marker like ".peMR" and anything after it
-            if let r = cand.range(of: ".peMR", options: [.caseInsensitive]) {
-                cand = String(cand[..<r.lowerBound])
+        // Helper: probe a readable sqlite DB file for identity.
+        func probeIdentityFromSQLite(at dbURL: URL) -> PatientIdentity? {
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { return nil }
+            defer { sqlite3_close(db) }
+
+            let cols = columnSet(of: "patients", db: db)
+            guard !cols.isEmpty else { return nil }
+
+            let mrnCol = cols.contains("mrn") ? "mrn" : nil
+            let aliasCol = cols.contains("alias_label") ? "alias_label" : (cols.contains("alias") ? "alias" : nil)
+            let dobCol = cols.contains("dob") ? "dob" : nil
+
+            var wanted: [String] = []
+            if let mrnCol { wanted.append(mrnCol) }
+            if let aliasCol { wanted.append(aliasCol) }
+            if let dobCol { wanted.append(dobCol) }
+            if wanted.isEmpty { return nil }
+
+            let sql = "SELECT \(wanted.joined(separator: ", ")) FROM patients ORDER BY id LIMIT 1;"
+
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return nil }
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+
+            var idx: Int32 = 0
+            func nextStr() -> String? {
+                defer { idx += 1 }
+                if let c = sqlite3_column_text(stmt, idx) {
+                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                    return s.isEmpty ? nil : s
+                }
+                return nil
             }
-            // If a timestamp pattern is present (e.g., -2025-11-12...), chop from the first "-20"
-            if let r = cand.range(of: "-20") { // crude but effective for our exported names
-                cand = String(cand[..<r.lowerBound])
-            }
-            cand = cand.replacingOccurrences(of: "_", with: " ")
-                       .trimmingCharacters(in: .whitespacesAndNewlines)
-            // Keep something reasonable
-            return cand.isEmpty ? nil : cand
-        }
-        if let guess = aliasFromFolderName(bundleRoot.lastPathComponent) {
-            // Return minimal identity so we can still de-duplicate by alias if needed
-            return PatientIdentity(mrn: nil, alias: guess, dobISO: nil)
-        }
 
-        // 3) Fallback: probe db.sqlite for identity (works even if manifest is missing)
-        let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
-        guard fm.fileExists(atPath: dbURL.path) else { return nil }
+            let mrn  = mrnCol  != nil ? nextStr() : nil
+            let alias = aliasCol != nil ? nextStr() : nil
+            var dob  = dobCol  != nil ? nextStr() : nil
+            if let d = dob, let day = d.split(separator: "T").first { dob = String(day) }
 
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
-        defer { sqlite3_close(db) }
-
-        let cols = columnSet(of: "patients", db: db)
-        guard !cols.isEmpty else { return nil }
-
-        let mrnCol = cols.contains("mrn") ? "mrn" : nil
-        let aliasCol = cols.contains("alias_label") ? "alias_label" : (cols.contains("alias") ? "alias" : nil)
-        let dobCol = cols.contains("dob") ? "dob" : nil
-
-        var sql = "SELECT "
-        var wanted: [String] = []
-        if let mrnCol { wanted.append(mrnCol) }
-        if let aliasCol { wanted.append(aliasCol) }
-        if let dobCol { wanted.append(dobCol) }
-        if wanted.isEmpty { return nil }
-        sql += wanted.joined(separator: ", ")
-        sql += " FROM patients ORDER BY id LIMIT 1;"
-
-        var stmt: OpaquePointer?
-        defer { sqlite3_finalize(stmt) }
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
-        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
-
-        var idx: Int32 = 0
-        func nextStr() -> String? {
-            defer { idx += 1 }
-            if let c = sqlite3_column_text(stmt, idx) {
-                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                return s.isEmpty ? nil : s
+            if (mrn?.isEmpty == false) || (alias?.isEmpty == false) || (dob?.isEmpty == false) {
+                return PatientIdentity(mrn: mrn, alias: alias, dobISO: dob)
             }
             return nil
         }
-        let mrn  = mrnCol  != nil ? nextStr() : nil
-        let alias = aliasCol != nil ? nextStr() : nil
-        var dob  = dobCol  != nil ? nextStr() : nil
-        if let d = dob, let day = d.split(separator: "T").first { dob = String(day) }
 
-        return PatientIdentity(mrn: mrn, alias: alias, dobISO: dob)
+        // 2) Probe DB first (preferred fallback), because it preserves exact alias (including emoji/case)
+        let plainDBURL = bundleRoot.appendingPathComponent("db.sqlite")
+        if fm.fileExists(atPath: plainDBURL.path),
+           let id = probeIdentityFromSQLite(at: plainDBURL) {
+            return id
+        }
+
+        // 2b) If only encrypted DB exists, try decrypting to a temp file just long enough to read identity.
+        let encDBURL = bundleRoot.appendingPathComponent("db.sqlite.enc")
+        if fm.fileExists(atPath: encDBURL.path) {
+            let shouldTryDecrypt = manifestEncryptedFlag || (manifestScheme != nil) || (manifestObj?["files"] != nil) || (manifestObj == nil)
+            if shouldTryDecrypt {
+                let tmpURL = fm.temporaryDirectory
+                    .appendingPathComponent("pemr-\(UUID().uuidString)")
+                    .appendingPathExtension("sqlite")
+                do {
+                    // NOTE: adjust the call name/signature if your BundleCrypto differs.
+                    try BundleCrypto.decryptFile(at: encDBURL, to: tmpURL)
+                    defer { try? fm.removeItem(at: tmpURL) }
+
+                    if let id = probeIdentityFromSQLite(at: tmpURL) {
+                        return id
+                    }
+                } catch {
+                    self.log.warning("extractPatientIdentity: failed to decrypt db.sqlite.enc for identity probe (\(String(describing: error), privacy: .public))")
+                    try? fm.removeItem(at: tmpURL)
+                }
+            }
+        }
+
+        // 3) Folder-name heuristic as a last-resort identity (alias only)
+        func aliasFromFolderName(_ name: String) -> String? {
+            var cand = name
+            if let r = cand.range(of: ".peMR", options: [.caseInsensitive]) {
+                cand = String(cand[..<r.lowerBound])
+            }
+            if let r = cand.range(of: "-20") {
+                cand = String(cand[..<r.lowerBound])
+            }
+            cand = cand.replacingOccurrences(of: "_", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return cand.isEmpty ? nil : cand
+        }
+
+        if let guess = aliasFromFolderName(bundleRoot.lastPathComponent) {
+            return PatientIdentity(mrn: nil, alias: guess, dobISO: nil)
+        }
+
+        return nil
     }
 
         private func existingBundleMatching(identity: PatientIdentity) -> URL? {
@@ -5494,9 +5534,9 @@ final class AppState: ObservableObject {
         ///
         /// - Returns `true` if:
         ///   • There is no manifest, or
-        ///   • The manifest has no `db_sha256` field, or
-        ///   • The DB hash matches the manifest (docs mismatches are logged but non‑fatal).
-        /// - Returns `false` only when a manifest explicitly declares `db_sha256` and the
+        ///   • The manifest has no usable hash fields for the DB payload, or
+        ///   • The relevant DB payload hash matches the manifest (docs mismatches are logged but non‑fatal).
+        /// - Returns `false` only when a manifest explicitly declares a hash for the DB payload and the
         ///   corresponding DB file on disk does not match or cannot be hashed.
         private func validateBundleIntegrity(at bundleRoot: URL) -> Bool {
             let fm = FileManager.default
@@ -5520,31 +5560,53 @@ final class AppState: ObservableObject {
                     return true
                 }
 
-                // If there is no db_sha256, we cannot validate DB integrity – accept but log.
-                guard let expectedDBHash = (obj["db_sha256"] as? String)?
-                        .trimmingCharacters(in: .whitespacesAndNewlines),
-                      !expectedDBHash.isEmpty else {
-                    let msg = NSLocalizedString(
-                        "appstate.manifest.validate.no_db_sha256_skip",
-                        comment: "Log when manifest has no db_sha256 and DB hash validation is skipped."
-                    )
-                    log.info("\(msg, privacy: .public)")
-                    return true
-                }
-
                 let encryptedFlag = (obj["encrypted"] as? Bool) ?? false
                 let plainDB = bundleRoot.appendingPathComponent("db.sqlite")
                 let encDB   = bundleRoot.appendingPathComponent("db.sqlite.enc")
 
-                // Decide which DB file to hash: prefer encrypted when manifest says so and file exists.
-                let dbToHash: URL?
-                if encryptedFlag, fm.fileExists(atPath: encDB.path) {
-                    dbToHash = encDB
-                } else if fm.fileExists(atPath: plainDB.path) {
-                    dbToHash = plainDB
+                // Helper: find a per-file hash inside legacy DrsMainApp manifests that include `files: [{path, sha256}, ...]`.
+                func fileHashFromFilesList(for relativePath: String) -> String? {
+                    guard let files = obj["files"] as? [[String: Any]] else { return nil }
+                    for entry in files {
+                        guard let p = (entry["path"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              p == relativePath else { continue }
+                        let h = (entry["sha256"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return (h?.isEmpty == false) ? h : nil
+                    }
+                    return nil
+                }
+
+                // Decide which DB payload we can/should validate and which expected hash applies.
+                // There are two common patterns:
+                //  1) PatientViewerApp-style (schema_version>=2): `db_sha256` hashes the *payload file* present in the bundle
+                //     (plain db.sqlite for unencrypted bundles; db.sqlite.enc for encrypted bundles).
+                //  2) DrsMainApp encrypted file-list manifests: `db_sha256` hashes the *plaintext* db.sqlite, but the bundle
+                //     contains only db.sqlite.enc; the encrypted file's hash is stored in `files[]` under path `db.sqlite.enc`.
+
+                var dbURLToHash: URL?
+                var expectedHash: String?
+
+                // Prefer verifying plaintext db.sqlite against db_sha256 when plaintext is present.
+                if fm.fileExists(atPath: plainDB.path) {
+                    dbURLToHash = plainDB
+                    expectedHash = (obj["db_sha256"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 } else if fm.fileExists(atPath: encDB.path) {
-                    // Fallback: encrypted present even if manifest encrypted=false
-                    dbToHash = encDB
+                    dbURLToHash = encDB
+
+                    if encryptedFlag {
+                        // If the manifest includes a per-file list, prefer the explicit hash for db.sqlite.enc.
+                        if let encExpected = fileHashFromFilesList(for: "db.sqlite.enc") {
+                            expectedHash = encExpected
+                        } else {
+                            // Fall back to db_sha256 (PatientViewerApp-style encrypted exports).
+                            expectedHash = (obj["db_sha256"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    } else {
+                        // Manifest says unencrypted but only enc exists → best-effort fallback.
+                        // Prefer files[] hash if present; else fall back to db_sha256.
+                        expectedHash = fileHashFromFilesList(for: "db.sqlite.enc")
+                            ?? (obj["db_sha256"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
                 } else {
                     let fmt = NSLocalizedString(
                         "appstate.manifest.validate.no_db_files_found_under_format",
@@ -5555,8 +5617,16 @@ final class AppState: ObservableObject {
                     return false
                 }
 
-                guard let dbURL = dbToHash else {
-                    return false
+                // If there is no usable expected hash, we cannot validate DB integrity – accept but log.
+                guard let dbURL = dbURLToHash,
+                      let expected = expectedHash?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !expected.isEmpty else {
+                    let msg = NSLocalizedString(
+                        "appstate.manifest.validate.no_db_sha256_skip",
+                        comment: "Log when manifest has no db_sha256 (or usable db hash) and DB hash validation is skipped."
+                    )
+                    log.info("\(msg, privacy: .public)")
+                    return true
                 }
 
                 let actualHash = sha256OfFile(at: dbURL)
@@ -5570,12 +5640,12 @@ final class AppState: ObservableObject {
                     return false
                 }
 
-                if actualHash.lowercased() != expectedDBHash.lowercased() {
+                if actualHash.lowercased() != expected.lowercased() {
                     let fmt = NSLocalizedString(
                         "appstate.manifest.validate.db_hash_mismatch_format",
                         comment: "Log when bundle DB hash mismatches manifest. %@ is bundle path, %@ expected hash, %@ actual hash."
                     )
-                    let line = String(format: fmt, bundleRoot.path, expectedDBHash, actualHash)
+                    let line = String(format: fmt, bundleRoot.path, expected, actualHash)
                     log.error("\(line, privacy: .public)")
                     return false
                 }

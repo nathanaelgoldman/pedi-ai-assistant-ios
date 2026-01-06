@@ -41,8 +41,8 @@ struct WellVisitPDFGenerator {
         // Visit type mapping for readable names (localized)
         let visitMap: [String: String] = [
             // Newborn / post-maternity first visit
-            "first_visit_after_maternity": WellVisitPDFGenerator.L(
-                "well_report.visit_type.first_visit_after_maternity",
+            "newborn_first": WellVisitPDFGenerator.L(
+                "well_report.visit_type.newborn_first",
                 "First visit after maternity"
             ),
             // Common aliases (in case older DB rows used different keys)
