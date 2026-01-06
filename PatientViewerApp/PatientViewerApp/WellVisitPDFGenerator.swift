@@ -14,6 +14,11 @@ import CoreText
 
 struct WellVisitPDFGenerator {
     private static let log = Logger(subsystem: "com.patientviewer.app", category: "pdf.well")
+    // Simple localization helper for non-SwiftUI code (PDF rendering).
+    // Uses the key if available in Localizable.strings, otherwise falls back to the provided English.
+    private static func L(_ key: String, _ fallback: String) -> String {
+        NSLocalizedString(key, value: fallback, comment: "")
+    }
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
         WellVisitPDFGenerator.log.info("Generating WellVisit PDF for id=\(visit.id, privacy: .public) base=\(dbURL.path, privacy: .public)")
         let pdfMetaData = [
@@ -33,20 +38,38 @@ struct WellVisitPDFGenerator {
         let margin: CGFloat = 40
         let contentWidth = pageWidth - 2 * margin
 
-        // Visit type mapping for readable names
+        // Visit type mapping for readable names (localized)
         let visitMap: [String: String] = [
-            "one_month": "1-month visit",
-            "two_month": "2-month visit",
-            "four_month": "4-month visit",
-            "six_month": "6-month visit",
-            "nine_month": "9-month visit",
-            "twelve_month": "12-month visit",
-            "fifteen_month": "15-month visit",
-            "eighteen_month": "18-month visit",
-            "twentyfour_month": "24-month visit",
-            "thirty_month": "30-month visit",
-            "thirtysix_month": "36-month visit"
+            // Newborn / post-maternity first visit
+            "first_visit_after_maternity": WellVisitPDFGenerator.L(
+                "well_report.visit_type.first_visit_after_maternity",
+                "First visit after maternity"
+            ),
+            // Common aliases (in case older DB rows used different keys)
+            "post_maternity_first": WellVisitPDFGenerator.L(
+                "well_report.visit_type.first_visit_after_maternity",
+                "First visit after maternity"
+            ),
+            "first_after_maternity": WellVisitPDFGenerator.L(
+                "well_report.visit_type.first_visit_after_maternity",
+                "First visit after maternity"
+            ),
+
+            // Standard milestone visits
+            "one_month": WellVisitPDFGenerator.L("well_report.visit_type.one_month", "1-month visit"),
+            "two_month": WellVisitPDFGenerator.L("well_report.visit_type.two_month", "2-month visit"),
+            "four_month": WellVisitPDFGenerator.L("well_report.visit_type.four_month", "4-month visit"),
+            "six_month": WellVisitPDFGenerator.L("well_report.visit_type.six_month", "6-month visit"),
+            "nine_month": WellVisitPDFGenerator.L("well_report.visit_type.nine_month", "9-month visit"),
+            "twelve_month": WellVisitPDFGenerator.L("well_report.visit_type.twelve_month", "12-month visit"),
+            "fifteen_month": WellVisitPDFGenerator.L("well_report.visit_type.fifteen_month", "15-month visit"),
+            "eighteen_month": WellVisitPDFGenerator.L("well_report.visit_type.eighteen_month", "18-month visit"),
+            "twentyfour_month": WellVisitPDFGenerator.L("well_report.visit_type.twentyfour_month", "24-month visit"),
+            "thirty_month": WellVisitPDFGenerator.L("well_report.visit_type.thirty_month", "30-month visit"),
+            "thirtysix_month": WellVisitPDFGenerator.L("well_report.visit_type.thirtysix_month", "36-month visit")
         ]
+
+        let defaultWellVisitTitle = WellVisitPDFGenerator.L("well_report.visit_type.well_visit", "Well Visit")
 
         // Helper to compute age in months, with fallback to DOB + visit date if age_days is missing
         func computeAgeMonths(dobString: String, visitDateString: String, ageDays: Int?) -> Double? {
@@ -361,8 +384,8 @@ struct WellVisitPDFGenerator {
             let titleFont = UIFont.boldSystemFont(ofSize: 20)
             let subFont = UIFont.systemFont(ofSize: 14)
 
-            drawText("Well Visit Report", font: titleFont)
-            drawText("Report Generated: \(WellVisitPDFGenerator.formatDate(Date()))", font: subFont)
+            drawText(WellVisitPDFGenerator.L("well_report.title", "Well Visit Report"), font: titleFont)
+            drawText("\(WellVisitPDFGenerator.L("well_report.generated", "Report Generated")): \(WellVisitPDFGenerator.formatDate(Date()))", font: subFont)
 
             let dbPath = dbURL.appendingPathComponent("db.sqlite").path
             WellVisitPDFGenerator.log.debug("Opening SQLite at path=\(dbPath, privacy: .public)")
@@ -396,7 +419,11 @@ struct WellVisitPDFGenerator {
                 }
 
                 let name = "\(patientRow[firstName]) \(patientRow[lastName])"
-                let aliasText = patientRow[alias] ?? "—"
+
+                // Localized placeholder
+                let placeholderDash = WellVisitPDFGenerator.L("well_report.placeholder.dash", "—")
+
+                let aliasText = patientRow[alias] ?? placeholderDash
                 let dobText = patientRow[dob]
                 let sexText = patientRow[sex]
                 let mrnText = patientRow[mrn]
@@ -406,23 +433,53 @@ struct WellVisitPDFGenerator {
                 let visitType = visitRow[Expression<String>("visit_type")]
                 let ageDaysDB = visitRow[Expression<Int?>("age_days")]
 
-                drawText("Alias: \(aliasText)", font: subFont)
-                drawText("Name: \(name)", font: subFont)
-                drawText("DOB: \(dobText)", font: subFont)
-                drawText("Sex: \(sexText)", font: subFont)
-                drawText("MRN: \(mrnText)", font: subFont)
+                // Localized patient/visit header labels
+                let hdrAlias = WellVisitPDFGenerator.L("well_report.header.alias", "Alias")
+                let hdrName = WellVisitPDFGenerator.L("well_report.header.name", "Name")
+                let hdrDOB = WellVisitPDFGenerator.L("well_report.header.dob", "DOB")
+                let hdrSex = WellVisitPDFGenerator.L("well_report.header.sex", "Sex")
+                let hdrMRN = WellVisitPDFGenerator.L("well_report.header.mrn", "MRN")
+                let hdrAgeAtVisit = WellVisitPDFGenerator.L("well_report.header.age_at_visit", "Age at Visit")
+                let hdrVisitDate = WellVisitPDFGenerator.L("well_report.header.visit_date", "Visit Date")
+                let hdrVisitType = WellVisitPDFGenerator.L("well_report.header.visit_type", "Visit Type")
+                let unitDays = WellVisitPDFGenerator.L("well_report.unit.days", "days")
+
+                drawText("\(hdrAlias): \(aliasText)", font: subFont)
+                drawText("\(hdrName): \(name)", font: subFont)
+                drawText("\(hdrDOB): \(dobText)", font: subFont)
+                drawText("\(hdrSex): \(sexText)", font: subFont)
+                drawText("\(hdrMRN): \(mrnText)", font: subFont)
 
                 if let ageString = formatAgeString(dobString: dobText, visitDateString: visitDate, ageDays: ageDaysDB) {
-                    drawText("Age at Visit: \(ageString)", font: subFont)
+                    drawText("\(hdrAgeAtVisit): \(ageString)", font: subFont)
                 } else if let ageDays = ageDaysDB, ageDays > 0 {
                     // Fallback: if age_days is somehow populated, at least show it
-                    drawText("Age at Visit: \(ageDays) days", font: subFont)
+                    drawText("\(hdrAgeAtVisit): \(ageDays) \(unitDays)", font: subFont)
                 } else {
-                    drawText("Age at Visit: —", font: subFont)
+                    drawText("\(hdrAgeAtVisit): \(placeholderDash)", font: subFont)
                 }
-                drawText("Visit Date: \(WellVisitPDFGenerator.formatDate(visitDate))", font: subFont)
-                let visitTypeReadable = visitMap[visitType] ?? visitType
-                drawText("Visit Type: \(visitTypeReadable)", font: subFont)
+
+                drawText("\(hdrVisitDate): \(WellVisitPDFGenerator.formatDate(visitDate))", font: subFont)
+                let visitTypeTrimmed = visitType.trimmingCharacters(in: .whitespacesAndNewlines)
+                let visitTypeReadable = visitTypeTrimmed.isEmpty
+                    ? defaultWellVisitTitle
+                    : (visitMap[visitTypeTrimmed] ?? visitTypeTrimmed)
+                drawText("\(hdrVisitType): \(visitTypeReadable)", font: subFont)
+                // Localized section titles
+                let secPerinatalSummary = WellVisitPDFGenerator.L("well_report.section.perinatal_summary", "Perinatal Summary")
+                let secPreviousWellVisits = WellVisitPDFGenerator.L("well_report.section.previous_well_visits", "Findings from Previous Well Visits")
+                let secCurrentVisit = WellVisitPDFGenerator.L("well_report.section.current_visit", "Current Visit")
+                let secParentsConcerns = WellVisitPDFGenerator.L("well_report.section.parents_concerns", "Parents' Concerns")
+                let secFeeding = WellVisitPDFGenerator.L("well_report.section.feeding", "Feeding")
+                let secSupplementation = WellVisitPDFGenerator.L("well_report.section.supplementation", "Supplementation")
+                let secStools = WellVisitPDFGenerator.L("well_report.section.stools", "Stools")
+                let secSleep = WellVisitPDFGenerator.L("well_report.section.sleep", "Sleep")
+                let secDevelopmentMilestones = WellVisitPDFGenerator.L("well_report.section.development_milestones", "Development & Milestones")
+                let secMeasurements = WellVisitPDFGenerator.L("well_report.section.measurements", "Measurements")
+                let secPhysicalExamination = WellVisitPDFGenerator.L("well_report.section.physical_examination", "Physical Examination")
+                let secProblemListing = WellVisitPDFGenerator.L("well_report.section.problem_listing", "Problem Listing")
+                let secConclusions = WellVisitPDFGenerator.L("well_report.section.conclusions", "Conclusions")
+                let secAnticipatoryGuidance = WellVisitPDFGenerator.L("well_report.section.anticipatory_guidance", "Anticipatory Guidance")
 
                 let users = Table("users")
                 let userID = Expression<Int64?>("user_id")
@@ -433,16 +490,18 @@ struct WellVisitPDFGenerator {
                 if let userIdVal = visitRow[userID] {
                     if let userRow = try? db.pluck(users.filter(Expression<Int64>("id") == userIdVal)) {
                         let clinicianName = "\(userRow[firstNameUser]) \(userRow[lastNameUser])"
-                        drawText("Clinician: \(clinicianName)", font: subFont)
+                        let hdrClinician = WellVisitPDFGenerator.L("well_report.header.clinician", "Clinician")
+                        drawText("\(hdrClinician): \(clinicianName)", font: subFont)
                     }
                 } else {
                     // Optionally, you could show something here:
-                    // drawText("Clinician: —", font: subFont)
+                    // let hdrClinician = WellVisitPDFGenerator.L("well_report.header.clinician", "Clinician")
+                    // drawText("\(hdrClinician): —", font: subFont)
                 }
                 
                 // MARK: - Perinatal Summary
                 y += 12
-                drawText("Perinatal Summary", font: UIFont.boldSystemFont(ofSize: 16))
+                drawText(secPerinatalSummary, font: UIFont.boldSystemFont(ofSize: 16))
 
                 let perinatal = Table("perinatal_history")
                 let pregnancyRisk = Expression<String?>("pregnancy_risk")
@@ -463,39 +522,123 @@ struct WellVisitPDFGenerator {
                 let afterBirth = Expression<String?>("illnesses_after_birth")
                 let motherVacc = Expression<String?>("mother_vaccinations")
 
+                // Localized content labels (Perinatal Summary)
+                let periLblPregnancy = WellVisitPDFGenerator.L("well_report.perinatal.label.pregnancy", "Pregnancy")
+                let periLblBirthMode = WellVisitPDFGenerator.L("well_report.perinatal.label.birth_mode", "Birth Mode")
+                let periLblResuscitation = WellVisitPDFGenerator.L("well_report.perinatal.label.resuscitation", "Resuscitation")
+                let periLblInfectionRisk = WellVisitPDFGenerator.L("well_report.perinatal.label.infection_risk", "Infection Risk")
+                let periLblFeedingInMaternity = WellVisitPDFGenerator.L("well_report.perinatal.label.feeding_in_maternity", "Feeding")
+                let periLblMaternityVaccinations = WellVisitPDFGenerator.L("well_report.perinatal.label.maternity_vaccinations", "Vaccinations")
+                let periLblMaternityStayEvents = WellVisitPDFGenerator.L("well_report.perinatal.label.maternity_stay_events", "Events")
+                let periLblHearingScreening = WellVisitPDFGenerator.L("well_report.perinatal.label.hearing_screening", "Hearing")
+                let periLblHeartScreening = WellVisitPDFGenerator.L("well_report.perinatal.label.heart_screening", "Heart")
+                let periLblMetabolicScreening = WellVisitPDFGenerator.L("well_report.perinatal.label.metabolic_screening", "Metabolic")
+                let periLblIllnessesAfterBirth = WellVisitPDFGenerator.L("well_report.perinatal.label.illnesses_after_birth", "After birth")
+                let periLblMotherVaccinations = WellVisitPDFGenerator.L("well_report.perinatal.label.mother_vaccinations", "Mother Vacc")
+
+                // Localized formatted fields (Perinatal Summary)
+                let periFmtGAWeeks = WellVisitPDFGenerator.L("well_report.perinatal.fmt.ga_weeks", "GA: %d w")
+                let periFmtBirthWeightG = WellVisitPDFGenerator.L("well_report.perinatal.fmt.birth_weight_g", "BW: %d g")
+                let periFmtBirthLengthCM = WellVisitPDFGenerator.L("well_report.perinatal.fmt.birth_length_cm", "BL: %.1f cm")
+                let periFmtBirthHeadCircCM = WellVisitPDFGenerator.L("well_report.perinatal.fmt.birth_head_circumference_cm", "HC: %.1f cm")
+                let periFmtDischargeWeightG = WellVisitPDFGenerator.L("well_report.perinatal.fmt.discharge_weight_g", "Discharge Wt: %d g")
+
                 if let peri = try? db.pluck(perinatal.filter(Expression<Int64>("patient_id") == pid)) {
                     var parts: [String] = []
-                    if let v = try? peri.get(pregnancyRisk), !v.isEmpty { parts.append("Pregnancy: \(v)") }
-                    if let v = try? peri.get(birthMode), !v.isEmpty { parts.append("Birth Mode: \(v)") }
-                    if let v = try? peri.get(term) { parts.append("GA: \(v)") }
-                    if let v = try? peri.get(resuscitation), !v.isEmpty { parts.append("Resuscitation: \(v)") }
-                    if let v = try? peri.get(infectionRisk), !v.isEmpty { parts.append("Infection Risk: \(v)") }
-                    if let v = try? peri.get(birthWeight) { parts.append("BW: \(v) g") }
-                    if let v = try? peri.get(birthLength) { parts.append("BL: \(String(format: "%.1f", v)) cm") }
-                    if let v = try? peri.get(headCirc) { parts.append("HC: \(String(format: "%.1f", v)) cm") }
-                    if let v = try? peri.get(dischargeWeight) { parts.append("Discharge Wt: \(v) g") }
-                    if let v = try? peri.get(feeding), !v.isEmpty { parts.append("Feeding: \(v)") }
-                    if let v = try? peri.get(vaccinations), !v.isEmpty { parts.append("Vaccinations: \(v)") }
-                    if let v = try? peri.get(events), !v.isEmpty { parts.append("Events: \(v)") }
-                    if let v = try? peri.get(hearing), !v.isEmpty { parts.append("Hearing: \(v)") }
-                    if let v = try? peri.get(heart), !v.isEmpty { parts.append("Heart: \(v)") }
-                    if let v = try? peri.get(metabolic), !v.isEmpty { parts.append("Metabolic: \(v)") }
-                    if let v = try? peri.get(afterBirth), !v.isEmpty { parts.append("After birth: \(v)") }
-                    if let v = try? peri.get(motherVacc), !v.isEmpty { parts.append("Mother Vacc: \(v)") }
+
+                    if let v = try? peri.get(pregnancyRisk) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblPregnancy): \(t)") }
+                    }
+
+                    if let v = try? peri.get(birthMode) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblBirthMode): \(t)") }
+                    }
+
+                    if let ga = ((try? peri.get(term)) ?? nil) {
+                        parts.append(String(format: periFmtGAWeeks, ga))
+                    }
+
+                    if let v = try? peri.get(resuscitation) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblResuscitation): \(t)") }
+                    }
+
+                    if let v = try? peri.get(infectionRisk) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblInfectionRisk): \(t)") }
+                    }
+
+                    if let bw = ((try? peri.get(birthWeight)) ?? nil) {
+                        parts.append(String(format: periFmtBirthWeightG, bw))
+                    }
+
+                    if let bl = ((try? peri.get(birthLength)) ?? nil) {
+                        parts.append(String(format: periFmtBirthLengthCM, bl))
+                    }
+
+                    if let hc = ((try? peri.get(headCirc)) ?? nil) {
+                        parts.append(String(format: periFmtBirthHeadCircCM, hc))
+                    }
+
+                    if let dw = ((try? peri.get(dischargeWeight)) ?? nil) {
+                        parts.append(String(format: periFmtDischargeWeightG, dw))
+                    }
+
+                    if let v = try? peri.get(feeding) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblFeedingInMaternity): \(t)") }
+                    }
+
+                    if let v = try? peri.get(vaccinations) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblMaternityVaccinations): \(t)") }
+                    }
+
+                    if let v = try? peri.get(events) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblMaternityStayEvents): \(t)") }
+                    }
+
+                    if let v = try? peri.get(hearing) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblHearingScreening): \(t)") }
+                    }
+
+                    if let v = try? peri.get(heart) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblHeartScreening): \(t)") }
+                    }
+
+                    if let v = try? peri.get(metabolic) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblMetabolicScreening): \(t)") }
+                    }
+
+                    if let v = try? peri.get(afterBirth) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblIllnessesAfterBirth): \(t)") }
+                    }
+
+                    if let v = try? peri.get(motherVacc) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append("\(periLblMotherVaccinations): \(t)") }
+                    }
 
                     if !parts.isEmpty {
                         let summary = parts.joined(separator: "; ")
                         drawWrappedText(summary, font: subFont, in: pageRect, at: &y, using: context)
                     } else {
-                        drawText("—", font: subFont)
+                        drawText(placeholderDash, font: subFont)
                     }
                 } else {
-                    drawText("—", font: subFont)
+                    drawText(placeholderDash, font: subFont)
                 }
 
                 // MARK: - Findings from Previous Well Visits
                 y += 12
-                drawText("Findings from Previous Well Visits", font: UIFont.boldSystemFont(ofSize: 16))
+                drawText(secPreviousWellVisits, font: UIFont.boldSystemFont(ofSize: 16))
 
                 let allVisits = Table("well_visits")
                 let problemListing = Expression<String?>("problem_listing")
@@ -511,8 +654,13 @@ struct WellVisitPDFGenerator {
                 )
 
                 for v in previousVisits {
-                    let vType = v[visitTypeCol]
-                    let vTitle = visitMap[vType] ?? "Well Visit"
+                    let vTypeRaw = v[visitTypeCol]
+                    let vType = vTypeRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let vTitle = vType.isEmpty ? defaultWellVisitTitle : (visitMap[vType] ?? defaultWellVisitTitle)
+
+                    if vType.isEmpty || visitMap[vType] == nil {
+                        WellVisitPDFGenerator.log.warning("Previous well visit has unmapped/empty visit_type='\(vTypeRaw, privacy: .public)'")
+                    }
                     let vDate = v[visitDateCol]
                     let createdAt = v[visitCreatedAt]
                     let displayDate = vDate.isEmpty ? createdAt : vDate
@@ -520,10 +668,42 @@ struct WellVisitPDFGenerator {
                     let findings = v[problemListing]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
                     drawText("\(vTitle) — \(formattedDate)", font: subFont)
+
+                    func stripLeadingListMarker(_ raw: String) -> String {
+                        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        // Normalize common list prefixes so we don't end up with "• - ..." or "- - ..."
+                        let prefixes = ["• -", "•-", "- ", "– ", "— ", "• ", "· "]
+                        for p in prefixes {
+                            if s.hasPrefix(p) {
+                                s = String(s.dropFirst(p.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                                break
+                            }
+                        }
+                        if s.hasPrefix("•") {
+                            s = String(s.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                        return s
+                    }
+
                     if !findings.isEmpty {
-                        drawWrappedText(findings.replacingOccurrences(of: "\n", with: "; "), font: subFont, in: pageRect, at: &y, using: context)
+                        let lines = findings
+                            .components(separatedBy: .newlines)
+                            .map { stripLeadingListMarker($0) }
+                            .filter { !$0.isEmpty }
+
+                        if lines.count <= 1 {
+                            // Single line: keep as-is (no forced semicolons)
+                            drawWrappedText(lines.first ?? findings, font: subFont, in: pageRect, at: &y, using: context)
+                        } else {
+                            // Multi-line: render as a clean bullet list (no extra dashes)
+                            for line in lines {
+                                ensureSpace(for: 16)
+                                drawWrappedText("• \(line)", font: subFont, in: pageRect, at: &y, using: context)
+                                y += 2
+                            }
+                        }
                     } else {
-                        drawText("—", font: subFont)
+                        drawText(placeholderDash, font: subFont)
                     }
 
                     y += 6
@@ -532,17 +712,20 @@ struct WellVisitPDFGenerator {
                 // MARK: - Current Visit Section
                 y += 12
                 ensureSpace(for: 20)
-                drawText("Current Visit", font: UIFont.boldSystemFont(ofSize: 16))
+                drawText(secCurrentVisit, font: UIFont.boldSystemFont(ofSize: 16))
 
                 let visitTypeRaw = visitRow[Expression<String>("visit_type")]
-                let visitTypeReadableCurrent = visitMap[visitTypeRaw] ?? "Well Visit"
+                let visitTypeKeyCurrent = visitTypeRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let visitTypeReadableCurrent = visitTypeKeyCurrent.isEmpty
+                    ? defaultWellVisitTitle
+                    : (visitMap[visitTypeKeyCurrent] ?? defaultWellVisitTitle)
                 ensureSpace(for: 16)
                 drawText(visitTypeReadableCurrent, font: UIFont.italicSystemFont(ofSize: 14))
 
                 // Parents' Concerns
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Parents' Concerns", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secParentsConcerns, font: UIFont.boldSystemFont(ofSize: 15))
                 let parentsConcerns = visitRow[Expression<String?>("parent_concerns")] ?? ""
                 if !parentsConcerns.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     drawWrappedText(parentsConcerns, font: subFont, in: pageRect, at: &y, using: context)
@@ -553,36 +736,60 @@ struct WellVisitPDFGenerator {
                 // MARK: - Feeding Section
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Feeding", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secFeeding, font: UIFont.boldSystemFont(ofSize: 15))
 
                 var feedingLines: [String] = []
+
+                // Localized content labels (Feeding)
+                let valYes = WellVisitPDFGenerator.L("well_report.value.yes", "Yes")
+                let valNo  = WellVisitPDFGenerator.L("well_report.value.no", "No")
+
+                let lblMilk = WellVisitPDFGenerator.L("well_report.feeding.label.milk", "Milk")
+                let lblRegurgitation = WellVisitPDFGenerator.L("well_report.feeding.label.regurgitation", "Regurgitation")
+                let lblFeedingIssue = WellVisitPDFGenerator.L("well_report.feeding.label.feeding_issue", "Feeding issue")
+                let lblSolidFoodsStarted = WellVisitPDFGenerator.L("well_report.feeding.label.solid_foods_started", "Solid foods started")
+                let lblSolidFoodsSince = WellVisitPDFGenerator.L("well_report.feeding.label.solid_foods_since", "Solid foods since")
+                let lblSolidFoodQuality = WellVisitPDFGenerator.L("well_report.feeding.label.solid_food_quality", "Solid food quality")
+                let lblSolidFoodComment = WellVisitPDFGenerator.L("well_report.feeding.label.solid_food_comment", "Solid food comment")
+                let lblFoodVarietyQuantity = WellVisitPDFGenerator.L("well_report.feeding.label.food_variety_quantity", "Food variety / quantity")
+                let lblDairyIntakeDaily = WellVisitPDFGenerator.L("well_report.feeding.label.dairy_intake_daily", "Dairy intake daily")
+                let lblComment = WellVisitPDFGenerator.L("well_report.label.comment", "Comment")
+
+                let valAppearsGood = WellVisitPDFGenerator.L("well_report.value.appears_good", "appears good")
+                let valProbablyLimited = WellVisitPDFGenerator.L("well_report.value.probably_limited", "probably limited")
+
+                let fmtTypicalFeedVolume = WellVisitPDFGenerator.L("well_report.feeding.fmt.typical_feed_volume_ml", "Typical feed volume: %.0f ml")
+                let fmtFeedsPer24h = WellVisitPDFGenerator.L("well_report.feeding.fmt.feeds_per_24h", "Feeds per 24h: %d times")
+                let fmtEstimatedTotalIntake = WellVisitPDFGenerator.L("well_report.feeding.fmt.estimated_total_intake_ml_per_24h", "Estimated total intake: %.0f ml/24h")
+                let fmtEstimatedIntakePerKg = WellVisitPDFGenerator.L("well_report.feeding.fmt.estimated_intake_ml_per_kg_24h", "Estimated intake: %.0f ml/kg/24h")
+                let fmtDairyCupsOrBottles = WellVisitPDFGenerator.L("well_report.feeding.fmt.dairy_cups_or_bottles", "Dairy intake daily: %@ cup(s) or bottle(s)")
 
                 // milk_types TEXT
                 if let milkTypesRaw = visitRow[Expression<String?>("milk_types")] {
                     let milkTypes = milkTypesRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !milkTypes.isEmpty {
-                        feedingLines.append("Milk: \(milkTypes)")
+                        feedingLines.append("\(lblMilk): \(milkTypes)")
                     }
                 }
 
                 // feed_volume_ml REAL
                 if let volume = visitRow[Expression<Double?>("feed_volume_ml")] {
-                    feedingLines.append(String(format: "Typical feed volume: %.0f ml", volume))
+                    feedingLines.append(String(format: fmtTypicalFeedVolume, volume))
                 }
 
                 // feed_freq_per_24h INTEGER
                 if let freq = visitRow[Expression<Int?>("feed_freq_per_24h")] {
-                    feedingLines.append("Feeds per 24h: \(freq) times")
+                    feedingLines.append(String(format: fmtFeedsPer24h, freq))
                 }
 
                 // est_total_ml REAL
                 if let total = visitRow[Expression<Double?>("est_total_ml")] {
-                    feedingLines.append(String(format: "Estimated total intake: %.0f ml/24h", total))
+                    feedingLines.append(String(format: fmtEstimatedTotalIntake, total))
                 }
 
                 // est_ml_per_kg_24h REAL
                 if let perKg = visitRow[Expression<Double?>("est_ml_per_kg_24h")] {
-                    feedingLines.append(String(format: "Estimated intake: %.0f ml/kg/24h", perKg))
+                    feedingLines.append(String(format: fmtEstimatedIntakePerKg, perKg))
                 }
 
                 // regurgitation INTEGER (boolean)
@@ -593,8 +800,8 @@ struct WellVisitPDFGenerator {
                                                         visitDateString: visitDate,
                                                         ageDays: ageDaysValue),
                        ageMonths <= 4.0 {
-                        let text = (reg == 1) ? "Yes" : "No"
-                        feedingLines.append("Regurgitation: \(text)")
+                        let text = (reg == 1) ? valYes : valNo
+                        feedingLines.append("\(lblRegurgitation): \(text)")
                     }
                 }
 
@@ -602,7 +809,7 @@ struct WellVisitPDFGenerator {
                 if let issueRaw = visitRow[Expression<String?>("feeding_issue")] {
                     let issue = issueRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !issue.isEmpty {
-                        feedingLines.append("Feeding issue: \(issue)")
+                        feedingLines.append("\(lblFeedingIssue): \(issue)")
                     }
                 }
 
@@ -614,8 +821,8 @@ struct WellVisitPDFGenerator {
                                                         visitDateString: visitDate,
                                                         ageDays: ageDaysValue),
                        ageMonths >= 4.0 && ageMonths <= 9.0 {
-                        let text = (solidStarted == 1) ? "Yes" : "No"
-                        feedingLines.append("Solid foods started: \(text)")
+                        let text = (solidStarted == 1) ? valYes : valNo
+                        feedingLines.append("\(lblSolidFoodsStarted): \(text)")
                     }
                 }
 
@@ -623,7 +830,7 @@ struct WellVisitPDFGenerator {
                 if let solidDateRaw = visitRow[Expression<String?>("solid_food_start_date")] {
                     let solidDate = solidDateRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !solidDate.isEmpty {
-                        feedingLines.append("Solid foods since: \(solidDate)")
+                        feedingLines.append("\(lblSolidFoodsSince): \(solidDate)")
                     }
                 }
 
@@ -634,13 +841,13 @@ struct WellVisitPDFGenerator {
                         let prettyQuality: String
                         switch solidQuality {
                         case "appears_good":
-                            prettyQuality = "appears good"
+                            prettyQuality = valAppearsGood
                         case "probably_limited":
-                            prettyQuality = "probably limited"
+                            prettyQuality = valProbablyLimited
                         default:
                             prettyQuality = solidQuality
                         }
-                        feedingLines.append("Solid food quality: \(prettyQuality)")
+                        feedingLines.append("\(lblSolidFoodQuality): \(prettyQuality)")
                     }
                 }
 
@@ -648,7 +855,7 @@ struct WellVisitPDFGenerator {
                 if let solidCommentRaw = visitRow[Expression<String?>("solid_food_comment")] {
                     let solidComment = solidCommentRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !solidComment.isEmpty {
-                        feedingLines.append("Solid food comment: \(solidComment)")
+                        feedingLines.append("\(lblSolidFoodComment): \(solidComment)")
                     }
                 }
 
@@ -658,11 +865,11 @@ struct WellVisitPDFGenerator {
                     if !variety.isEmpty {
                         let prettyVariety: String
                         if variety == "appears_good" {
-                            prettyVariety = "appears good"
+                            prettyVariety = valAppearsGood
                         } else {
                             prettyVariety = variety
                         }
-                        feedingLines.append("Food variety / quantity: \(prettyVariety)")
+                        feedingLines.append("\(lblFoodVarietyQuantity): \(prettyVariety)")
                     }
                 }
 
@@ -670,7 +877,7 @@ struct WellVisitPDFGenerator {
                 if let dairyRaw = visitRow[Expression<String?>("dairy_amount_text")] {
                     let dairy = dairyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !dairy.isEmpty {
-                        feedingLines.append("Dairy intake daily: \(dairy) cup(s) or bottle(s)")
+                        feedingLines.append(String(format: fmtDairyCupsOrBottles, dairy))
                     }
                 }
 
@@ -678,12 +885,12 @@ struct WellVisitPDFGenerator {
                 if let commentRaw = visitRow[Expression<String?>("feeding_comment")] {
                     let comment = commentRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !comment.isEmpty {
-                        feedingLines.append("Comment: \(comment)")
+                        feedingLines.append("\(lblComment): \(comment)")
                     }
                 }
 
                 if feedingLines.isEmpty {
-                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                    drawText(placeholderDash, font: UIFont.italicSystemFont(ofSize: 14))
                 } else {
                     for line in feedingLines {
                         ensureSpace(for: 16)
@@ -695,7 +902,7 @@ struct WellVisitPDFGenerator {
                 // Supplementation Section
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Supplementation", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secSupplementation, font: UIFont.boldSystemFont(ofSize: 15))
 
                 let vitaminDGiven = visitRow[Expression<Int?>("vitamin_d_given")]
                 if let val = vitaminDGiven {
@@ -712,7 +919,7 @@ struct WellVisitPDFGenerator {
                 // MARK: - Stools
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Stools", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secStools, font: UIFont.boldSystemFont(ofSize: 15))
 
                 let poopStatusExp = Expression<String?>("poop_status")
                 let poopCommentExp = Expression<String?>("poop_comment")
@@ -761,7 +968,7 @@ struct WellVisitPDFGenerator {
                 // MARK: - Sleep Section
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Sleep", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secSleep, font: UIFont.boldSystemFont(ofSize: 15))
 
                 var sleepLines: [String] = []
 
@@ -827,7 +1034,7 @@ struct WellVisitPDFGenerator {
                 // MARK: - Development & Milestones
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Development & Milestones", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secDevelopmentMilestones, font: UIFont.boldSystemFont(ofSize: 15))
 
                 // Age in months for gating dev test and M-CHAT
                 let ageDaysValueForDev = visitRow[Expression<Int?>("age_days")]
@@ -923,17 +1130,34 @@ struct WellVisitPDFGenerator {
 
                 if !flags.isEmpty {
                     drawText("Flags:", font: subFont)
+
+                    func stripLeadingListMarker(_ raw: String) -> String {
+                        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let prefixes = ["• -", "•-", "- ", "– ", "— ", "• ", "· "]
+                        for p in prefixes {
+                            if s.hasPrefix(p) {
+                                s = String(s.dropFirst(p.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                                break
+                            }
+                        }
+                        if s.hasPrefix("•") {
+                            s = String(s.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                        return s
+                    }
+
                     for item in flags {
-                        drawWrappedText("- \(item)", font: subFont, in: pageRect, at: &y, using: context)
+                        let cleaned = stripLeadingListMarker(item)
+                        drawWrappedText("• \(cleaned)", font: subFont, in: pageRect, at: &y, using: context)
                     }
                 } else {
-                    drawText("Flags: —", font: subFont)
+                    drawText("Flags: \(placeholderDash)", font: subFont)
                 }
                 
                 // MARK: - Measurements
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Measurements", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secMeasurements, font: UIFont.boldSystemFont(ofSize: 15))
 
                 // Collect measurement lines; prefer manual_growth, fall back to legacy visit fields.
                 var measurementLines: [String] = []
@@ -1251,7 +1475,7 @@ struct WellVisitPDFGenerator {
                 // MARK: - Physical Examination
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Physical Examination", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secPhysicalExamination, font: UIFont.boldSystemFont(ofSize: 15))
 
                 // Age in months for PE-specific gating (hips, fontanelle, teeth, etc.)
                 let ageMonthsForPE = computeAgeMonths(
@@ -1449,13 +1673,15 @@ struct WellVisitPDFGenerator {
                 }
 
                 if !foundPE {
-                    drawText("No physical exam findings recorded.", font: subFont)
+                    drawText(WellVisitPDFGenerator.L("well_report.default.no_physical_exam_findings",
+                                                     "No physical exam findings recorded."),
+                             font: subFont)
                 }
                 
                 // MARK: - Problem Listing
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Problem Listing", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secProblemListing, font: UIFont.boldSystemFont(ofSize: 15))
 
                 let rawProblems = visitRow[Expression<String?>("problem_listing")] ?? ""
                 let trimmedProblems = rawProblems.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1484,7 +1710,7 @@ struct WellVisitPDFGenerator {
                 // MARK: - Conclusions
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Conclusions", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secConclusions, font: UIFont.boldSystemFont(ofSize: 15))
                 let conclusions = visitRow[Expression<String?>("conclusions")] ?? ""
                 let trimmedConclusions = conclusions.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1504,25 +1730,30 @@ struct WellVisitPDFGenerator {
                 // MARK: - Anticipatory Guidance
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Anticipatory Guidance", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(secAnticipatoryGuidance, font: UIFont.boldSystemFont(ofSize: 15))
                 let guidance = visitRow[Expression<String?>("anticipatory_guidance")] ?? ""
                 if !guidance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     drawWrappedText(guidance, font: subFont, in: pageRect, at: &y, using: context)
                 } else {
-                    drawText("Age appropriate anticipatory guidance", font: subFont)
-                }
+                    drawText(WellVisitPDFGenerator.L("well_report.default.anticipatory_guidance",
+                                                     "Age appropriate anticipatory guidance"),
+                             font: subFont)                }
 
                
 
                 // MARK: - Clinician Comments
                 y += 12
                 ensureSpace(for: 18)
-                drawText("Clinician Comments", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(WellVisitPDFGenerator.L("well_report.section.clinician_comments",
+                                                 "Clinician Comments"),
+                         font: UIFont.boldSystemFont(ofSize: 15))
                 let comments = visitRow[Expression<String?>("comments")] ?? ""
                 if !comments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     drawWrappedText(comments, font: subFont, in: pageRect, at: &y, using: context)
                 } else {
-                    drawText("No clinician comments recorded.", font: subFont)
+                    drawText(WellVisitPDFGenerator.L("well_report.default.no_clinician_comments",
+                                                     "No clinician comments recorded."),
+                             font: subFont)
                 }
 
                 // MARK: - Next Visit Date (optional)
@@ -1530,13 +1761,19 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 let nextVisit = visitRow[Expression<String?>("next_visit_date")] ?? ""
                 if !nextVisit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    drawText("Next Visit Date: \(nextVisit)", font: subFont)
+                    let lblNextVisitDate = WellVisitPDFGenerator.L(
+                        "well_report.label.next_visit_date",
+                        "Next Visit Date"
+                    )
+                    drawText("\(lblNextVisitDate): \(nextVisit)", font: subFont)
                 }
 
                 // MARK: - AI Assistant Input
                 y += 12
                 ensureSpace(for: 18)
-                drawText("AI Assistant Input", font: UIFont.boldSystemFont(ofSize: 15))
+                drawText(WellVisitPDFGenerator.L("well_report.section.ai_assistant_input",
+                                                 "AI Assistant Input"),
+                         font: UIFont.boldSystemFont(ofSize: 15))
 
                 let aiTable = Table("well_ai_inputs")
                 let aiVisitID = Expression<Int64>("well_visit_id")
@@ -1555,10 +1792,13 @@ struct WellVisitPDFGenerator {
                     if !response.isEmpty {
                         drawWrappedText(response, font: subFont, in: pageRect, at: &y, using: context)
                     } else {
-                        drawText("No AI input recorded", font: subFont)
-                    }
+                        drawText(WellVisitPDFGenerator.L("well_report.default.no_ai_input",
+                                                         "No AI input recorded"),
+                                 font: subFont)                    }
                 } else {
-                    drawText("No AI input recorded", font: subFont)
+                    drawText(WellVisitPDFGenerator.L("well_report.default.no_ai_input",
+                                                     "No AI input recorded"),
+                             font: subFont)
                 }
                 
                 // MARK: - Growth Charts

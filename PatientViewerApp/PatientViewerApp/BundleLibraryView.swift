@@ -16,6 +16,17 @@ import os
 // Central logger for this file
 private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "BundleLibraryView")
 
+// MARK: - Localization (file-local)
+@inline(__always)
+private func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
+}
+
+@inline(__always)
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), locale: Locale.current, arguments: args)
+}
+
 // Single source of truth for the currently active bundle location.
 struct ActiveBundleLocator {
     private static let key = "ActiveBundleBaseURL"
@@ -219,12 +230,20 @@ enum BundleIO {
                 }
             }
             guard fm.fileExists(atPath: dbURL.path) else {
-                throw NSError(domain: "BundleIO", code: 100, userInfo: [NSLocalizedDescriptionKey: "db.sqlite not found in imported bundle"])
+                throw NSError(
+                                    domain: "BundleIO",
+                                    code: 100,
+                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")]
+                                )
             }
 
             var db: OpaquePointer?
             guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else {
-                throw NSError(domain: "BundleIO", code: 101, userInfo: [NSLocalizedDescriptionKey: "Unable to open SQLite database"])
+                throw NSError(
+                                    domain: "BundleIO",
+                                    code: 101,
+                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_open_failed", comment: "Error: unable to open SQLite database")]
+                                )
             }
             defer { sqlite3_close(db) }
 
@@ -232,11 +251,19 @@ enum BundleIO {
             var stmt: OpaquePointer?
             let tableQuery = "SELECT name FROM sqlite_master WHERE type='table' AND name='patients' LIMIT 1;"
             guard sqlite3_prepare_v2(db, tableQuery, -1, &stmt, nil) == SQLITE_OK else {
-                throw NSError(domain: "BundleIO", code: 102, userInfo: [NSLocalizedDescriptionKey: "Failed to prepare validation query"])
+                throw NSError(
+                                    domain: "BundleIO",
+                                    code: 102,
+                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_prepare_failed", comment: "Error: failed to prepare validation query")]
+                                )
             }
             defer { sqlite3_finalize(stmt) }
             guard sqlite3_step(stmt) == SQLITE_ROW else {
-                throw NSError(domain: "BundleIO", code: 103, userInfo: [NSLocalizedDescriptionKey: "Invalid bundle: missing 'patients' table"])
+                throw NSError(
+                                    domain: "BundleIO",
+                                    code: 103,
+                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_missing_patients_table", comment: "Error: imported bundle is missing the patients table")]
+                                )
             }
 
             // Ensure there is at least one row
@@ -246,7 +273,11 @@ enum BundleIO {
                 if sqlite3_step(stmt2) == SQLITE_ROW {
                     let count = sqlite3_column_int(stmt2, 0)
                     if count <= 0 {
-                        throw NSError(domain: "BundleIO", code: 104, userInfo: [NSLocalizedDescriptionKey: "Invalid bundle: empty 'patients' table"])
+                        throw NSError(
+                                                    domain: "BundleIO",
+                                                    code: 104,
+                                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_empty_patients_table", comment: "Error: imported bundle has an empty patients table")]
+                                                )
                     }
                 }
             }
@@ -383,7 +414,11 @@ enum BundleIO {
                 }
             }
             guard fm.fileExists(atPath: dbURL.path) else {
-                throw NSError(domain: "BundleIO", code: 2, userInfo: [NSLocalizedDescriptionKey: "db.sqlite not found in imported bundle"]) }
+                throw NSError(
+                                    domain: "BundleIO",
+                                    code: 2,
+                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")]
+                                ) }
 
             var db: OpaquePointer?
             var alias = ""
@@ -551,7 +586,11 @@ enum BundleIO {
                 }
             }
             guard fm.fileExists(atPath: activeDBBase.appendingPathComponent("db.sqlite").path) else {
-                throw NSError(domain: "BundleIO", code: 200, userInfo: [NSLocalizedDescriptionKey: "Active bundle missing db.sqlite"])
+                throw NSError(
+                                    domain: "BundleIO",
+                                    code: 200,
+                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.active_bundle_missing_db", comment: "Error: active bundle is missing db.sqlite")]
+                                )
             }
 
             // Persist active base for the app to use
@@ -680,11 +719,11 @@ struct BundleLibraryView: View {
             // Header
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("📚 Saved Patient Bundles")
+                    Text(L("patient_viewer.bundle_library.title", comment: "Screen title"))
                         .font(.title2)
                         .fontWeight(.semibold)
 
-                    Text("Open a saved bundle to view visits, growth and documents.")
+                    Text(L("patient_viewer.bundle_library.subtitle", comment: "Screen subtitle"))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -694,7 +733,7 @@ struct BundleLibraryView: View {
             // Toolbar row
             HStack {
                 Button(action: { isImportingZip = true }) {
-                    Label("Import .peMR.zip", systemImage: "tray.and.arrow.down")
+                    Label(L("patient_viewer.bundle_library.action.import", comment: "Button"), systemImage: "tray.and.arrow.down")
                         .font(.body.weight(.semibold))
                 }
                 .buttonStyle(.borderedProminent)
@@ -711,10 +750,10 @@ struct BundleLibraryView: View {
                         .font(.system(size: 32, weight: .regular))
                         .foregroundColor(.secondary)
 
-                    Text("No saved bundles yet")
+                    Text(L("patient_viewer.bundle_library.empty.title", comment: "Empty state title"))
                         .font(.headline)
 
-                    Text("Imported patient bundles will appear here so you can reopen them later.")
+                    Text(L("patient_viewer.bundle_library.empty.message", comment: "Empty state message"))
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.secondary)
@@ -732,7 +771,7 @@ struct BundleLibraryView: View {
                         Button(action: {
                             let fileManager = FileManager.default
                             guard fileManager.fileExists(atPath: bundle.folderURL.path) else {
-                                alertMessage = "The folder \"\(bundle.folderURL.lastPathComponent)\" no longer exists."
+                                alertMessage = LF("patient_viewer.bundle_library.error.folder_missing", bundle.folderURL.lastPathComponent)
                                 showAlert = true
                                 return
                             }
@@ -740,7 +779,7 @@ struct BundleLibraryView: View {
                                 try activatePersistentBundle(at: bundle.folderURL)
                             } catch {
                                 log.error("Failed to load bundle: \(error.localizedDescription, privacy: .public)")
-                                alertMessage = "Failed to load bundle: \(error.localizedDescription)"
+                                alertMessage = LF("patient_viewer.bundle_library.error.load_failed", error.localizedDescription)
                                 showAlert = true
                             }
                         }) {
@@ -757,7 +796,7 @@ struct BundleLibraryView: View {
                                 pendingDeletion = bundle
                                 showDeleteConfirm = true
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label(L("patient_viewer.bundle_library.action.delete", comment: "Swipe action"), systemImage: "trash")
                             }
                         }
                     }
@@ -783,43 +822,43 @@ struct BundleLibraryView: View {
                 }
             case .failure(let error):
                 log.error("fileImporter failed: \(error.localizedDescription, privacy: .public)")
-                alertMessage = "Import failed: \(error.localizedDescription)"
+                alertMessage = LF("patient_viewer.bundle_library.error.import_failed", error.localizedDescription)
                 showAlert = true
             }
         }
         .alert(isPresented: $showAlert) {
             Alert(
-                title: Text("Error"),
+                title: Text(L("patient_viewer.common.error", comment: "Common")),
                 message: Text(alertMessage),
-                dismissButton: .default(Text("OK"))
+                dismissButton: .default(Text(L("patient_viewer.common.ok", comment: "Common")))
             )
         }
         .confirmationDialog(
-            "Delete this saved bundle?",
+            L("patient_viewer.bundle_library.delete_confirm.title", comment: "Delete confirmation dialog title"),
             isPresented: $showDeleteConfirm
         ) {
-            Button("Delete", role: .destructive) {
+            Button(L("patient_viewer.bundle_library.delete_confirm.delete", comment: "Delete button"), role: .destructive) {
                 if let bundle = pendingDeletion {
                     deleteBundle(bundle)
                 }
                 pendingDeletion = nil
             }
-            Button("Cancel", role: .cancel) {
+            Button(L("patient_viewer.bundle_library.delete_confirm.cancel", comment: "Cancel button"), role: .cancel) {
                 pendingDeletion = nil
             }
         } message: {
             if let b = pendingDeletion {
-                Text("Permanently remove “\(b.alias)”. This deletes it from Saved Bundles and any active copy in ActiveBundle.")
+                Text(LF("patient_viewer.bundle_library.delete_confirm.message_specific", b.alias))
             } else {
-                Text("Permanently remove this saved bundle.")
+                Text(L("patient_viewer.bundle_library.delete_confirm.message_generic", comment: "Generic delete confirmation message"))
             }
         }
         .confirmationDialog(
-            "A bundle for this patient already exists.",
+            L("patient_viewer.bundle_library.duplicate_import.title", comment: "Duplicate import dialog title"),
             isPresented: $showDuplicateImportDialog,
             titleVisibility: .visible
         ) {
-            Button("Overwrite (archive previous)", role: .destructive) {
+            Button(L("patient_viewer.bundle_library.duplicate_import.overwrite", comment: "Duplicate import overwrite button"), role: .destructive) {
                 guard let pending = pendingImport else { return }
                 do {
                     try archiveExistingAndReplace(
@@ -832,11 +871,11 @@ struct BundleLibraryView: View {
                     pendingImport = nil
                 } catch {
                     log.error("Overwrite failed: \(error.localizedDescription, privacy: .public)")
-                    alertMessage = "Overwrite failed: \(error.localizedDescription)"
+                    alertMessage = LF("patient_viewer.bundle_library.error.overwrite_failed", error.localizedDescription)
                     showAlert = true
                 }
             }
-            Button("Cancel", role: .cancel) {
+            Button(L("patient_viewer.bundle_library.duplicate_import.cancel", comment: "Duplicate import cancel button"), role: .cancel) {
                 if let pending = pendingImport {
                     safelyRemoveImportTemp(for: pending.tempRoot)
                 }
@@ -844,9 +883,13 @@ struct BundleLibraryView: View {
             }
         } message: {
             if let p = pendingImport {
-                Text("Patient: \(p.identity.alias)\nDOB: \(p.identity.dob ?? "—")\nAn existing saved bundle will be archived and replaced if you continue.")
+                Text(LF(
+                    "patient_viewer.bundle_library.duplicate_import.message_specific",
+                    p.identity.alias,
+                    (p.identity.dob ?? "—")
+                ))
             } else {
-                Text("An existing saved bundle will be archived and replaced if you continue.")
+                Text(L("patient_viewer.bundle_library.duplicate_import.message_generic", comment: "Duplicate import generic message"))
             }
         }
     }
@@ -882,7 +925,7 @@ private struct BundleRowCard: View {
                 }
 
                 if let dob, !dob.isEmpty {
-                    Text("DOB: \(dob)")
+                    Text(LF("patient_viewer.bundle_library.dob", dob))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -1021,7 +1064,11 @@ private struct BundleRowCard: View {
         }
 
         guard fileManager.fileExists(atPath: activeDBBase.appendingPathComponent("db.sqlite").path) else {
-            throw NSError(domain: "BundleLibraryView", code: 200, userInfo: [NSLocalizedDescriptionKey: "Active bundle missing db.sqlite"])
+            throw NSError(
+                            domain: "BundleLibraryView",
+                            code: 200,
+                            userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.active_bundle_missing_db", comment: "Error: active bundle is missing db.sqlite")]
+                        )
         }
 
         // Persist the active base and log
@@ -1363,14 +1410,14 @@ private struct BundleRowCard: View {
         guard fm.fileExists(atPath: dbURL.path) else {
             throw NSError(domain: "BundleLibraryView",
                           code: 100,
-                          userInfo: [NSLocalizedDescriptionKey: "db.sqlite not found in imported bundle"])
+                          userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")])
         }
 
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else {
             throw NSError(domain: "BundleLibraryView",
                           code: 101,
-                          userInfo: [NSLocalizedDescriptionKey: "Unable to open SQLite database"])
+                          userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_open_failed", comment: "Error: unable to open SQLite database")])
         }
         defer { sqlite3_close(db) }
 
@@ -1380,13 +1427,13 @@ private struct BundleRowCard: View {
         guard sqlite3_prepare_v2(db, tableQuery, -1, &stmt, nil) == SQLITE_OK else {
             throw NSError(domain: "BundleLibraryView",
                           code: 102,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to prepare validation query"])
+                          userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_prepare_failed", comment: "Error: failed to prepare validation query")])
         }
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_step(stmt) == SQLITE_ROW else {
             throw NSError(domain: "BundleLibraryView",
                           code: 103,
-                          userInfo: [NSLocalizedDescriptionKey: "Invalid bundle: missing 'patients' table"])
+                          userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_missing_patients_table", comment: "Error: imported bundle is missing the patients table")])
         }
 
         // Ensure there is at least one row
@@ -1398,7 +1445,7 @@ private struct BundleRowCard: View {
                 if count <= 0 {
                     throw NSError(domain: "BundleLibraryView",
                                   code: 104,
-                                  userInfo: [NSLocalizedDescriptionKey: "Invalid bundle: empty 'patients' table"])
+                                  userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_empty_patients_table", comment: "Error: imported bundle has an empty patients table")])
                 }
             }
         }
@@ -1578,7 +1625,11 @@ private struct BundleRowCard: View {
             }
         }
         guard fm.fileExists(atPath: dbURL.path) else {
-            throw NSError(domain: "BundleLibraryView", code: 2, userInfo: [NSLocalizedDescriptionKey: "db.sqlite not found in imported bundle"]) }
+            throw NSError(
+                            domain: "BundleLibraryView",
+                            code: 2,
+                            userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")]
+                        ) }
 
         var db: OpaquePointer?
         var alias = ""
@@ -1627,9 +1678,9 @@ private struct BundleRowCard: View {
 
     private func metaLine(for bundle: SavedBundle) -> String {
         var parts: [String] = []
-        if let c = bundle.created { parts.append("Created: \(formattedDate(c))") }
-        if let i = bundle.imported { parts.append("Imported: \(formattedDate(i))") }
-        if let s = bundle.lastSaved { parts.append("Last save: \(formattedDate(s))") }
+        if let c = bundle.created { parts.append(LF("patient_viewer.bundle_library.meta.created", formattedDate(c))) }
+        if let i = bundle.imported { parts.append(LF("patient_viewer.bundle_library.meta.imported", formattedDate(i))) }
+        if let s = bundle.lastSaved { parts.append(LF("patient_viewer.bundle_library.meta.last_save", formattedDate(s))) }
         return parts.joined(separator: " • ")
     }
 
@@ -1708,7 +1759,7 @@ private struct BundleRowCard: View {
             loadPersistentBundles()
         } catch {
             log.error("Delete failed: \(error.localizedDescription, privacy: .public)")
-            alertMessage = "Failed to delete bundle: \(error.localizedDescription)"
+            alertMessage = LF("patient_viewer.bundle_library.error.delete_failed", error.localizedDescription)
             showAlert = true
         }
     }
@@ -1737,8 +1788,11 @@ private struct BundleRowCard: View {
         log.debug("📦 Using existing persistent bundle at: \(persistentBundleURL.path, privacy: .public)")
 
         guard fileManager.fileExists(atPath: persistentBundleURL.path) else {
-            throw NSError(domain: "BundleLibraryView", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Persistent bundle not found for selected ZIP."])
+            throw NSError(
+                            domain: "BundleLibraryView",
+                            code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.persistent_bundle_not_found", comment: "Error: persistent bundle not found for selected ZIP")]
+                        )
         }
 
         if !fileManager.fileExists(atPath: activeBundleURL.path) {
@@ -1774,7 +1828,11 @@ private struct BundleRowCard: View {
                 }
             }
             guard fileManager.fileExists(atPath: fallback.appendingPathComponent("db.sqlite").path) else {
-                throw NSError(domain: "BundleLibraryView", code: 200, userInfo: [NSLocalizedDescriptionKey: "Active bundle missing db.sqlite"])
+                throw NSError(
+                                    domain: "BundleLibraryView",
+                                    code: 200,
+                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.active_bundle_missing_db", comment: "Error: active bundle is missing db.sqlite")]
+                                )
             }
             extractedFolderURL = fallback
             ActiveBundleLocator.setCurrentBaseURL(fallback)
@@ -1888,7 +1946,7 @@ private struct BundleRowCard: View {
             // NOTE: The original ZIP (url) and any .zip.import.json next to it are left untouched.
         } catch {
             log.error("Import failed: \(error.localizedDescription, privacy: .public)")
-            alertMessage = "Import failed: \(error.localizedDescription)"
+            alertMessage = LF("patient_viewer.bundle_library.error.import_failed", error.localizedDescription)
             showAlert = true
             try? fm.removeItem(at: tempDir)
         }
@@ -1907,7 +1965,12 @@ private struct BundleRowCard: View {
             }
         }
         guard fm.fileExists(atPath: dbURL.path) else {
-            throw NSError(domain: "BundleLibraryView", code: 2, userInfo: [NSLocalizedDescriptionKey: "db.sqlite not found in imported bundle"]) }
+            throw NSError(
+                            domain: "BundleLibraryView",
+                            code: 2,
+                            userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")]
+                        )
+        }
 
         var db: OpaquePointer?
         var alias = ""

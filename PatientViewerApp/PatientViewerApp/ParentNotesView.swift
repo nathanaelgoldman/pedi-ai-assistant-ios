@@ -12,6 +12,14 @@ import UIKit
 
 private let notesLog = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ParentNotesView")
 
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, tableName: nil, bundle: .main, value: key, comment: "")
+}
+
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), arguments: args)
+}
+
 private let isoFormatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -31,7 +39,7 @@ private let isoFormatter: ISO8601DateFormatter = {
 
     var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("📓 Parent Notes")
+            Text("parentNotes.title")
                 .font(.title2)
                 .padding(.bottom, 8)
 
@@ -41,7 +49,7 @@ private let isoFormatter: ISO8601DateFormatter = {
 
             HStack {
                 Spacer()
-                Button("💾 Save Note") {
+                Button("parentNotes.saveNote") {
                     saveNote()
                 }
                 .buttonStyle(.borderedProminent)
@@ -50,10 +58,10 @@ private let isoFormatter: ISO8601DateFormatter = {
             Divider()
 
             if notes.isEmpty {
-                Text("No notes added yet.")
+                Text("parentNotes.empty")
                     .foregroundColor(.gray)
             } else {
-                Text("🗒️ Notes")
+                Text("parentNotes.notesHeader")
                     .font(.headline)
 
                 ScrollView {
@@ -66,9 +74,10 @@ private let isoFormatter: ISO8601DateFormatter = {
                                     .background(Color(.secondarySystemBackground))
                                     .cornerRadius(8)
                                 Spacer()
-                                Button("🗑") {
+                                Button("parentNotes.deleteIcon") {
                                     deleteNote(at: idx)
                                 }
+                                .accessibilityLabel(Text("parentNotes.deleteNote.accessibilityLabel"))
                                 .buttonStyle(.bordered)
                             }
                         }
@@ -92,7 +101,7 @@ private let isoFormatter: ISO8601DateFormatter = {
         .onDisappear {
             onAutoSaveToPersistent?()
         }
-        .alert("Error", isPresented: $showAlert, actions: {}) {
+        .alert("common.error", isPresented: $showAlert, actions: {}) {
             Text(alertMessage)
         }
     }
@@ -134,7 +143,7 @@ private let isoFormatter: ISO8601DateFormatter = {
         do {
             notesLog.debug("Attempting to load db from base URL: \(dbURL.path, privacy: .public)")
             guard let dbFileURL = resolveDBURL() else {
-                alertMessage = "Could not locate db.sqlite under \(dbURL.lastPathComponent)."
+                alertMessage = LF("parentNotes.error.dbNotFoundUnder_fmt", dbURL.lastPathComponent)
                 showAlert = true
                 return
             }
@@ -147,7 +156,7 @@ private let isoFormatter: ISO8601DateFormatter = {
             let parentNotes = Expression<String?>("parent_notes")
 
             guard let patientRow = try db.pluck(patients.filter(id == patientId)) else {
-                alertMessage = "No patient found."
+                alertMessage = L("parentNotes.error.noPatientFound")
                 showAlert = true
                 return
             }
@@ -157,7 +166,7 @@ private let isoFormatter: ISO8601DateFormatter = {
             notes = raw.split(separator: "\n\n").map { String($0) }
             notesLog.debug("View notes array now contains \(notes.count, privacy: .public) items.")
         } catch {
-            alertMessage = "Failed to load notes: \(error)"
+            alertMessage = LF("parentNotes.error.loadFailed_fmt", (error as NSError).localizedDescription)
             showAlert = true
         }
     }
@@ -168,7 +177,7 @@ private let isoFormatter: ISO8601DateFormatter = {
 
         do {
             guard let dbFileURL = resolveDBURL() else {
-                alertMessage = "Could not locate db.sqlite to save."
+                alertMessage = L("parentNotes.error.dbNotFoundToSave")
                 showAlert = true
                 return
             }
@@ -180,7 +189,7 @@ private let isoFormatter: ISO8601DateFormatter = {
             let parentNotes = Expression<String?>("parent_notes")
 
             guard let patientRow = try db.pluck(patients.filter(id == patientId)) else {
-                alertMessage = "No patient found."
+                alertMessage = L("parentNotes.error.noPatientFound")
                 showAlert = true
                 return
             }
@@ -207,7 +216,7 @@ private let isoFormatter: ISO8601DateFormatter = {
             loadNotes()
             refreshTrigger.toggle()
         } catch {
-            alertMessage = "Failed to save note: \(error)"
+            alertMessage = LF("parentNotes.error.saveFailed_fmt", (error as NSError).localizedDescription)
             showAlert = true
         }
     }
@@ -217,7 +226,7 @@ private let isoFormatter: ISO8601DateFormatter = {
 
         do {
             guard let dbFileURL = resolveDBURL() else {
-                alertMessage = "Could not locate db.sqlite to delete note."
+                alertMessage = L("parentNotes.error.dbNotFoundToDelete")
                 showAlert = true
                 return
             }
@@ -227,7 +236,7 @@ private let isoFormatter: ISO8601DateFormatter = {
             let parentNotes = Expression<String?>("parent_notes")
 
             guard try db.pluck(patients.filter(id == patientId)) != nil else {
-                alertMessage = "No patient found."
+                alertMessage = L("parentNotes.error.noPatientFound")
                 showAlert = true
                 return
             }
@@ -242,7 +251,7 @@ private let isoFormatter: ISO8601DateFormatter = {
 
             loadNotes()
         } catch {
-            alertMessage = "Failed to delete note: \(error)"
+            alertMessage = LF("parentNotes.error.deleteFailed_fmt", (error as NSError).localizedDescription)
             showAlert = true
         }
     }

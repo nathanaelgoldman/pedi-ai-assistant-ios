@@ -27,7 +27,40 @@ let outputDateFormatter: DateFormatter = {
 }()
 
 // Structured logger for Visit-related flows (lists, details, PDF generation)
+
 private let logVisits = Logger(subsystem: "com.yunastic.PatientViewerApp", category: "visits")
+
+// MARK: - Localization (file-local)
+@inline(__always)
+private func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
+}
+
+@inline(__always)
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), locale: Locale.current, arguments: args)
+}
+
+// Well-visit milestone code -> localized display title
+@inline(__always)
+private func wellVisitTitle(_ code: String) -> String {
+    switch code {
+    case "one_month": return L("patient_viewer.well_visit.title.one_month", comment: "Well visit title")
+    case "two_month": return L("patient_viewer.well_visit.title.two_month", comment: "Well visit title")
+    case "four_month": return L("patient_viewer.well_visit.title.four_month", comment: "Well visit title")
+    case "six_month": return L("patient_viewer.well_visit.title.six_month", comment: "Well visit title")
+    case "nine_month": return L("patient_viewer.well_visit.title.nine_month", comment: "Well visit title")
+    case "twelve_month": return L("patient_viewer.well_visit.title.twelve_month", comment: "Well visit title")
+    case "fifteen_month": return L("patient_viewer.well_visit.title.fifteen_month", comment: "Well visit title")
+    case "eighteen_month": return L("patient_viewer.well_visit.title.eighteen_month", comment: "Well visit title")
+    case "twentyfour_month": return L("patient_viewer.well_visit.title.twentyfour_month", comment: "Well visit title")
+    case "thirty_month": return L("patient_viewer.well_visit.title.thirty_month", comment: "Well visit title")
+    case "thirtysix_month": return L("patient_viewer.well_visit.title.thirtysix_month", comment: "Well visit title")
+    case "newborn_first": return L("patient_viewer.well_visit.title.newborn_first", comment: "Well visit title")
+    default:
+        return code
+    }
+}
 
 struct VisitSummary: Identifiable {
     let id: Int64
@@ -40,9 +73,9 @@ struct PDFGenerator {
     static func generateVisitPDF(visit: VisitSummary) -> URL? {
         logVisits.info("Generating simple PDF for visit id=\(visit.id, privacy: .public) category=\(visit.category, privacy: .public) date=\(visit.date, privacy: .public)")
         let pdfMetaData = [
-            kCGPDFContextCreator: "Patient Viewer",
-            kCGPDFContextAuthor: "Patient App",
-            kCGPDFContextTitle: "Visit Report"
+            kCGPDFContextCreator: L("patient_viewer.pdf.meta.creator", comment: "PDF metadata"),
+            kCGPDFContextAuthor: L("patient_viewer.pdf.meta.author", comment: "PDF metadata"),
+            kCGPDFContextTitle: L("patient_viewer.pdf.meta.title", comment: "PDF metadata")
         ]
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = pdfMetaData as [String: Any]
@@ -66,10 +99,10 @@ struct PDFGenerator {
                 y += font.lineHeight + 10
             }
 
-            drawText("Visit Report", font: titleFont)
-            drawText("Date: \(visit.date)", font: bodyFont)
-            drawText("Diagnosis: \(visit.type)", font: bodyFont)
-            drawText("Category: \(visit.category.capitalized)", font: bodyFont)
+            drawText(L("patient_viewer.pdf.fallback.title", comment: "Fallback visit PDF title"), font: titleFont)
+            drawText(LF("patient_viewer.pdf.fallback.date", visit.date), font: bodyFont)
+            drawText(LF("patient_viewer.pdf.fallback.diagnosis", visit.type), font: bodyFont)
+            drawText(LF("patient_viewer.pdf.fallback.category", visit.category.capitalized), font: bodyFont)
         }
         let dataSize = data.count
 
@@ -96,16 +129,16 @@ struct VisitDetailView: SwiftUI.View {
     var body: some SwiftUI.View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                GroupBox(label: Label("Visit Information", systemImage: "info.circle")) {
+                GroupBox(label: Label(L("patient_viewer.visit_detail.section.info", comment: "Section title"), systemImage: "info.circle")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Date: \(formatDate(visit.date))", systemImage: "calendar")
-                        Label("Diagnosis: \(visit.type)", systemImage: "stethoscope")
-                        Label("Category: \(visit.category.capitalized)", systemImage: "folder")
+                        Label(LF("patient_viewer.visit_detail.field.date", formatDate(visit.date)), systemImage: "calendar")
+                        Label(LF("patient_viewer.visit_detail.field.diagnosis", visit.type), systemImage: "stethoscope")
+                        Label(LF("patient_viewer.visit_detail.field.category", visit.category.capitalized), systemImage: "folder")
                     }
                     .padding(.top, 4)
                 }
 
-                GroupBox(label: Label("Report", systemImage: "doc.text")) {
+                GroupBox(label: Label(L("patient_viewer.visit_detail.section.report", comment: "Section title"), systemImage: "doc.text")) {
                     Button(action: {
                         logVisits.info("Preview PDF tapped for visit id=\(visit.id, privacy: .public) category=\(visit.category, privacy: .public)")
                         if visit.category == "sick" {
@@ -151,7 +184,7 @@ struct VisitDetailView: SwiftUI.View {
                             }
                         }
                     }) {
-                        Label("Preview PDF Report", systemImage: "doc.richtext")
+                        Label(L("patient_viewer.visit_detail.action.preview_pdf", comment: "Button"), systemImage: "doc.richtext")
                             .frame(maxWidth: .infinity)
                             .padding()
                             .background(Color.blue)
@@ -165,13 +198,17 @@ struct VisitDetailView: SwiftUI.View {
         .onAppear {
             logVisits.info("VisitDetailView appeared id=\(visit.id, privacy: .public) date=\(visit.date, privacy: .public) category=\(visit.category, privacy: .public)")
         }
-        .navigationTitle("Visit Details")
+        .navigationTitle(L("patient_viewer.visit_detail.nav_title", comment: "Navigation title"))
         .sheet(item: $generatedPDFURL) { identifiableURL in
             PDFPreviewContainer(fileURL: identifiableURL.url)
         }
         .padding()
         .alert(isPresented: $showExportAlert) {
-            Alert(title: Text("✅ PDF Generated"), message: Text("Report saved to Files app."), dismissButton: .default(Text("OK")))
+            Alert(
+                title: Text(L("patient_viewer.visit_detail.alert.pdf_generated.title", comment: "Alert title")),
+                message: Text(L("patient_viewer.visit_detail.alert.pdf_generated.message", comment: "Alert message")),
+                dismissButton: .default(Text(L("patient_viewer.common.ok", comment: "Common")))
+            )
         }
     }
 }
@@ -186,10 +223,10 @@ struct PDFPreviewContainer: SwiftUI.View {
             Group {
                 if let document = PDFDocument(url: fileURL) {
                     PDFKitView(document: document)
-                        .navigationTitle("PDF Preview")
+                        .navigationTitle(L("patient_viewer.pdf_preview.nav_title", comment: "Navigation title"))
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") {
+                                Button(L("patient_viewer.common.done", comment: "Common")) {
                                     logVisits.info("PDFPreview Done tapped for \(fileURL.lastPathComponent, privacy: .public)")
                                     dismiss()
                                 }
@@ -208,14 +245,14 @@ struct PDFPreviewContainer: SwiftUI.View {
                         }
                 } else {
                     VStack {
-                        Text("❌ Could not load PDF.")
+                        Text(L("patient_viewer.pdf_preview.error.could_not_load", comment: "Error"))
                             .foregroundColor(.red)
-                        Text("Path:")
+                        Text(L("patient_viewer.pdf_preview.label.path", comment: "Label"))
                         Text(fileURL.path)
                             .font(.caption)
                             .foregroundColor(.gray)
                             .padding()
-                        Button("Done") {
+                        Button(L("patient_viewer.common.done", comment: "Common")) {
                             dismiss()
                         }
                         .padding()
@@ -256,11 +293,11 @@ struct VisitListView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Visit Summaries")
+                    Text(L("patient_viewer.visits.list.title", comment: "Screen title"))
                         .font(.title2)
                         .fontWeight(.semibold)
 
-                    Text("Browse well and sick visits for this patient.")
+                    Text(L("patient_viewer.visits.list.subtitle", comment: "Screen subtitle"))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -268,9 +305,9 @@ struct VisitListView: SwiftUI.View {
 
                 // Segmented picker in a subtle card
                 VStack {
-                    Picker("Visit Type", selection: $selectedCategory) {
-                        Text("🧒 Well Visits").tag("well")
-                        Text("🤒 Sick Visits").tag("sick")
+                    Picker(L("patient_viewer.visits.list.picker.label", comment: "Picker label"), selection: $selectedCategory) {
+                        Text(L("patient_viewer.visits.list.segment.well", comment: "Segment")).tag("well")
+                        Text(L("patient_viewer.visits.list.segment.sick", comment: "Segment")).tag("sick")
                     }
                     .pickerStyle(.segmented)
                 }
@@ -290,11 +327,14 @@ struct VisitListView: SwiftUI.View {
                             .font(.system(size: 40, weight: .regular))
                             .foregroundColor(.secondary)
 
-                        Text(selectedCategory == "well" ? "No well visits yet." : "No sick visits yet.")
+                        Text(selectedCategory == "well"
+                            ? L("patient_viewer.visits.list.empty.well", comment: "Empty state")
+                            : L("patient_viewer.visits.list.empty.sick", comment: "Empty state")
+                        )
                             .font(.headline)
                             .foregroundColor(.secondary)
 
-                        Text("New visits will appear here once recorded in the doctor's app.")
+                        Text(L("patient_viewer.visits.list.empty.hint", comment: "Empty state hint"))
                             .font(.footnote)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -321,7 +361,7 @@ struct VisitListView: SwiftUI.View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .navigationTitle("Visit Summaries")
+        .navigationTitle(L("patient_viewer.visits.list.nav_title", comment: "Navigation title"))
         .onAppear {
             let path = dbURL.appendingPathComponent("db.sqlite").path
             logVisits.info("VisitListView appeared with db=\(path, privacy: .public)")
@@ -361,7 +401,10 @@ struct VisitListView: SwiftUI.View {
 
             for row in try db.prepare(wellVisitsTable) {
                 let date = (try? row.get(recordedAt)) ?? (try? row.get(createdAt)) ?? "—"
-                let type = (try? row.get(visitType)) ?? "Well Visit"
+                let rawType = (try? row.get(visitType)) ?? ""
+                let type = rawType.isEmpty
+                    ? L("patient_viewer.well_visit.title.default", comment: "Default well visit title")
+                    : wellVisitTitle(rawType)
                 newVisits.append(VisitSummary(id: row[id], date: date, type: type, category: "well"))
                 wellCount += 1
             }
@@ -373,7 +416,7 @@ struct VisitListView: SwiftUI.View {
 
             for row in try db.prepare(episodesTable) {
                 let date = (try? row.get(createdAtE)) ?? "—"
-                let type = (try? row.get(diagnosis)) ?? "Sick Visit"
+                let type = (try? row.get(diagnosis)) ?? L("patient_viewer.sick_visit.title.default", comment: "Default sick visit title")
                 newVisits.append(VisitSummary(id: row[id], date: date, type: type, category: "sick"))
                 sickCount += 1
             }
@@ -403,9 +446,9 @@ struct VisitCard: SwiftUI.View {
     private var categoryLabel: String {
         switch visit.category {
         case "well":
-            return "Well visit"
+            return L("patient_viewer.visits.card.category.well", comment: "Category label")
         case "sick":
-            return "Sick visit"
+            return L("patient_viewer.visits.card.category.sick", comment: "Category label")
         default:
             return visit.category.capitalized
         }
@@ -429,7 +472,7 @@ struct VisitCard: SwiftUI.View {
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
 
-                Text(visit.type.isEmpty ? "No title recorded" : visit.type)
+                Text(visit.type.isEmpty ? L("patient_viewer.visits.card.no_title", comment: "Fallback") : visit.type)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 

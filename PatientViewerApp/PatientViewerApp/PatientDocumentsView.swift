@@ -11,6 +11,11 @@ import QuickLook
 import UIKit
 import OSLog
 
+// MARK: - Localization helpers
+private func L(_ key: String) -> LocalizedStringKey { LocalizedStringKey(key) }
+private func LF(_ formatKey: String, _ args: CVarArg...) -> String {
+    String(format: NSLocalizedString(formatKey, comment: ""), arguments: args)
+}
 
 struct DocumentRecord: Identifiable, Codable {
     let id: UUID
@@ -30,7 +35,8 @@ struct DocumentRecord: Identifiable, Codable {
         self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         self.filename = try container.decode(String.self, forKey: .filename)
         self.originalName = (try? container.decode(String.self, forKey: .originalName)) ?? self.filename
-        self.uploadedAt = (try? container.decode(String.self, forKey: .uploadedAt)) ?? "Unknown"
+        self.uploadedAt = (try? container.decode(String.self, forKey: .uploadedAt))
+            ?? NSLocalizedString("common.unknown", comment: "")
     }
 }
 
@@ -84,9 +90,9 @@ struct PatientDocumentsView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Patient Documents")
+                        Text(L("patientDocs.title"))
                             .font(.title2.weight(.semibold))
-                        Text("View, upload, and share documents linked to this patient.")
+                        Text(L("patientDocs.subtitle"))
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
@@ -100,7 +106,7 @@ struct PatientDocumentsView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "square.and.arrow.up")
-                        Text("Upload Document")
+                        Text(L("patientDocs.upload"))
                             .fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity)
@@ -126,10 +132,10 @@ struct PatientDocumentsView: View {
                             .font(.system(size: 36, weight: .regular))
                             .foregroundColor(.secondary)
 
-                        Text("No documents yet")
+                        Text(L("patientDocs.empty.title"))
                             .font(.headline)
 
-                        Text("Upload lab reports, vaccination records, discharge summaries, or any other files you’d like to keep with this patient.")
+                        Text(L("patientDocs.empty.body"))
                             .font(.footnote)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -157,7 +163,7 @@ struct PatientDocumentsView: View {
                                     Spacer()
                                 }
 
-                                Text("Uploaded: \(record.uploadedAt)")
+                                Text(LF("patientDocs.uploaded_fmt", record.uploadedAt))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
 
@@ -165,7 +171,7 @@ struct PatientDocumentsView: View {
                                     Button {
                                         openFile(record: record)
                                     } label: {
-                                        Label("Preview", systemImage: "eye")
+                                        Label(L("patientDocs.preview"), systemImage: "eye")
                                             .font(.subheadline)
                                     }
                                     .buttonStyle(.bordered)
@@ -175,7 +181,7 @@ struct PatientDocumentsView: View {
                                     Button(role: .destructive) {
                                         confirmDelete = record
                                     } label: {
-                                        Label("Delete", systemImage: "trash")
+                                        Label(L("patientDocs.delete"), systemImage: "trash")
                                             .font(.subheadline)
                                     }
                                     .buttonStyle(.bordered)
@@ -206,8 +212,8 @@ struct PatientDocumentsView: View {
             loadManifest()
             didLoadOnce = true
         }
-        .alert("Error", isPresented: $showAlert) {
-            Button("OK", role: .cancel) {}
+        .alert(L("common.error"), isPresented: $showAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
             if let msg = alertMessage {
                 Text(msg)
@@ -221,7 +227,7 @@ struct PatientDocumentsView: View {
             QuickLookPreview(url: identifiableURL.url)
         }
         .confirmationDialog(
-            "Delete this document?",
+            L("patientDocs.confirmDelete.title"),
             isPresented: Binding(
                 get: { confirmDelete != nil },
                 set: { if !$0 { confirmDelete = nil } }
@@ -229,10 +235,10 @@ struct PatientDocumentsView: View {
             titleVisibility: .visible,
             presenting: confirmDelete
         ) { record in
-            Button("Delete", role: .destructive) {
+            Button(L("patientDocs.delete"), role: .destructive) {
                 deleteRecord(record)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: { record in
             Text(record.originalName)
         }
@@ -255,7 +261,7 @@ struct PatientDocumentsView: View {
             wrappedPreviewURL = IdentifiableURL(url: fileURL)
         } else {
             documentsLog.error("File not found at path: \(fileURL.path, privacy: .public)")
-            alertMessage = "File not found: \(record.originalName)"
+            alertMessage = LF("patientDocs.error.fileNotFound_fmt", record.originalName)
             showAlert = true
         }
     }
@@ -284,7 +290,7 @@ struct PatientDocumentsView: View {
             saveManifest()
         } catch {
             documentsLog.error("Failed to delete file: \(String(describing: error), privacy: .public)")
-            alertMessage = "Delete failed: \(error.localizedDescription)"
+            alertMessage = LF("patientDocs.error.deleteFailed_fmt", error.localizedDescription)
             showAlert = true
         }
     }
@@ -316,7 +322,7 @@ struct PatientDocumentsView: View {
             saveManifest()
         } catch {
             documentsLog.error("Import failed: \(String(describing: error), privacy: .public)")
-            alertMessage = "Import failed: \(error.localizedDescription)"
+            alertMessage = LF("patientDocs.error.importFailed_fmt", error.localizedDescription)
             showAlert = true
         }
     }
@@ -340,7 +346,8 @@ struct PatientDocumentsView: View {
                         let originalName = (meta["originalName"] as? String)
                                           ?? (meta["title"] as? String)
                                           ?? filename
-                        let uploadedAt = (meta["uploadedAt"] as? String) ?? "Unknown"
+                        let uploadedAt = (meta["uploadedAt"] as? String)
+                            ?? NSLocalizedString("common.unknown", comment: "")
                         // Use stable UUID if present (optional), else new one
                         let idString = meta["id"] as? String
                         let id = UUID(uuidString: idString ?? "") ?? UUID()
@@ -379,7 +386,8 @@ struct PatientDocumentsView: View {
                         let originalName = (meta["originalName"] as? String)
                                           ?? (meta["title"] as? String)
                                           ?? filename
-                        let uploadedAt = (meta["uploadedAt"] as? String) ?? "Unknown"
+                        let uploadedAt = (meta["uploadedAt"] as? String)
+                            ?? NSLocalizedString("common.unknown", comment: "")
                         let idString = meta["id"] as? String
                         let id = UUID(uuidString: idString ?? "") ?? UUID()
                         loaded.append(DocumentRecord(id: id,
@@ -455,7 +463,7 @@ struct PatientDocumentsView: View {
             try data.write(to: manifestURL, options: [.atomic])
             documentsLog.info("Saved legacy docs manifest at: \(manifestURL.path, privacy: .public)")
         } catch {
-            alertMessage = "Failed to save manifest."
+            alertMessage = NSLocalizedString("patientDocs.error.saveManifestFailed", comment: "")
             showAlert = true
             documentsLog.error("Failed to save legacy manifest: \(String(describing: error), privacy: .public)")
         }
@@ -537,12 +545,12 @@ struct QuickLookPreview: UIViewControllerRepresentable {
 
         @objc func shareTapped() {
             QuickLookPreview.log.info("Share tapped for \(self.url.lastPathComponent, privacy: .public)")
-            
+
             // Stage a copy in a temp location so any extension can read it safely.
             let tmpDir = FileManager.default.temporaryDirectory
             let stagedURL = tmpDir.appendingPathComponent(self.url.lastPathComponent)
             var provider: NSItemProvider?
-            
+
             do {
                 if FileManager.default.fileExists(atPath: stagedURL.path) {
                     try FileManager.default.removeItem(at: stagedURL)
@@ -554,14 +562,14 @@ struct QuickLookPreview: UIViewControllerRepresentable {
                 QuickLookPreview.log.error("Failed to stage share copy: \(String(describing: error), privacy: .public). Falling back to direct provider.")
                 provider = NSItemProvider(contentsOf: self.url)
             }
-            
+
             guard let itemProvider = provider else {
                 QuickLookPreview.log.error("Failed to create NSItemProvider for share.")
                 return
             }
             // Preserve the original filename in the share sheet when possible.
             itemProvider.suggestedName = self.url.lastPathComponent
-            
+
             let activityVC = UIActivityViewController(activityItems: [itemProvider], applicationActivities: nil)
             activityVC.completionWithItemsHandler = { _, completed, _, error in
                 if let error = error {
@@ -572,7 +580,7 @@ struct QuickLookPreview: UIViewControllerRepresentable {
                 // Best-effort cleanup for the staged file.
                 try? FileManager.default.removeItem(at: stagedURL)
             }
-            
+
             // iPad/iPhone support: anchor to the Share bar button if available
             if let barButton = navController?.topViewController?.navigationItem.rightBarButtonItem {
                 activityVC.popoverPresentationController?.barButtonItem = barButton

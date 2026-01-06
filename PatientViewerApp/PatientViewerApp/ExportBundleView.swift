@@ -5,9 +5,21 @@
 //  Created by yunastic on 10/14/25.
 //
 
+
 import SwiftUI
 import UniformTypeIdentifiers
 import OSLog
+
+// MARK: - Localization (file-local)
+@inline(__always)
+private func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
+}
+
+@inline(__always)
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), locale: Locale.current, arguments: args)
+}
 
 struct ExportBundleView: View {
     private static let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ExportUI")
@@ -24,11 +36,11 @@ struct ExportBundleView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Text("📤 Export Patient Bundle")
+            Text(L("patient_viewer.export_bundle.title", comment: "Screen title"))
                 .font(.title2)
                 .bold()
 
-            Text("Export your current records and documents as a portable `.peMR.zip` file. This file can be shared, saved, or transferred to another device.")
+            Text(L("patient_viewer.export_bundle.subtitle", comment: "Screen subtitle/description"))
                 .font(.body)
 
             Button(action: {
@@ -38,7 +50,7 @@ struct ExportBundleView: View {
             }) {
                 HStack {
                     Image(systemName: "arrow.down.doc.fill")
-                    Text("Export Bundle")
+                    Text(L("patient_viewer.export_bundle.action.export", comment: "Primary button"))
                 }
                 .padding()
                 .frame(maxWidth: .infinity)
@@ -49,11 +61,11 @@ struct ExportBundleView: View {
             .disabled(exportInProgress)
 
             if exportInProgress {
-                ProgressView("Exporting...")
+                ProgressView(L("patient_viewer.export_bundle.progress.exporting", comment: "Progress label"))
             }
 
             if let error = exportError {
-                Text("❌ \(error)")
+                Text(LF("patient_viewer.export_bundle.error.format", error))
                     .foregroundColor(.red)
             }
 

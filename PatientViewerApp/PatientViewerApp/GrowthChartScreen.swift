@@ -1,21 +1,31 @@
 import SwiftUI
 import os
 
+// MARK: - Localization (file-local)
+@inline(__always)
+private func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
+}
+
+@inline(__always)
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), locale: Locale.current, arguments: args)
+}
+
 struct GrowthChartScreen: View {
     let patientSex: String
     let allPatientData: [String: [GrowthDataPoint]]
 
     @State private var selectedMeasurement = "weight"
-    private let measurementOptions = ["weight", "height", "head_circ", "bmi"]
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp", category: "GrowthChartScreen")
 
     var body: some View {
         VStack {
-            Picker("Measurement", selection: $selectedMeasurement) {
-                Text("Weight").tag("weight")
-                Text("Height").tag("height")
-                Text("Head Circ.").tag("head_circ")
-                Text("BMI").tag("bmi")
+            Picker(L("patient_viewer.growth_chart.picker.measurement", comment: "Picker label"), selection: $selectedMeasurement) {
+                Text(L("patient_viewer.growth_chart.measurement.weight", comment: "Segment title")).tag("weight")
+                Text(L("patient_viewer.growth_chart.measurement.height", comment: "Segment title")).tag("height")
+                Text(L("patient_viewer.growth_chart.measurement.head_circ", comment: "Segment title")).tag("head_circ")
+                Text(L("patient_viewer.growth_chart.measurement.bmi", comment: "Segment title")).tag("bmi")
             }
             .pickerStyle(.segmented)
             .padding()
@@ -41,18 +51,18 @@ struct GrowthChartScreen: View {
                 // Avoid drawing an empty chart which can cause NaN in CoreGraphics on iOS.
                 VStack(spacing: 12) {
                     if selectedMeasurement == "bmi" {
-                        Text("No BMI yet")
+                        Text(L("patient_viewer.growth_chart.empty_bmi.title", comment: "Empty BMI title"))
                             .font(.headline)
                             .foregroundStyle(.secondary)
-                        Text("Add a weight and height measurement to see the BMI chart.")
+                        Text(L("patient_viewer.growth_chart.empty_bmi.message", comment: "Empty BMI message"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text("No measurements yet")
+                        Text(L("patient_viewer.growth_chart.empty.title", comment: "Empty state title"))
                             .font(.headline)
                             .foregroundStyle(.secondary)
-                        Text("Add a measurement to see the \(selectedMeasurement) chart.")
+                        Text(LF("patient_viewer.growth_chart.empty.message", measurementDisplayName(for: selectedMeasurement)))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -62,10 +72,10 @@ struct GrowthChartScreen: View {
             } else if referenceCurves.isEmpty {
                 // Also avoid rendering if reference curves failed to load.
                 VStack(spacing: 12) {
-                    Text("Reference curves unavailable")
+                    Text(L("patient_viewer.growth_chart.reference_unavailable.title", comment: "Reference missing title"))
                         .font(.headline)
                         .foregroundStyle(.secondary)
-                    Text("Missing WHO reference for “\(whoFileName)”. The chart will appear once curves are available.")
+                    Text(LF("patient_viewer.growth_chart.reference_unavailable.message", whoFileName))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -86,7 +96,17 @@ struct GrowthChartScreen: View {
         .onAppear {
             logger.info("GrowthChartScreen appeared for sex=\(self.patientSex, privacy: .public) initialMeasurement=\(self.selectedMeasurement, privacy: .public)")
         }
-        .navigationTitle("Growth Chart")
+        .navigationTitle(L("patient_viewer.growth_chart.title", comment: "Screen title"))
+    }
+
+    private func measurementDisplayName(for measurement: String) -> String {
+        switch measurement {
+        case "weight": return L("patient_viewer.growth_chart.measurement.weight", comment: "Measurement name")
+        case "height": return L("patient_viewer.growth_chart.measurement.height", comment: "Measurement name")
+        case "head_circ": return L("patient_viewer.growth_chart.measurement.head_circ", comment: "Measurement name")
+        case "bmi": return L("patient_viewer.growth_chart.measurement.bmi", comment: "Measurement name")
+        default: return L("patient_viewer.growth_chart.measurement.weight", comment: "Measurement name")
+        }
     }
 
     private func computeBMIData(weight: [GrowthDataPoint], height: [GrowthDataPoint]) -> [GrowthDataPoint] {

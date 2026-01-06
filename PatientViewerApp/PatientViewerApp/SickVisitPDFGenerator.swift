@@ -1,3 +1,4 @@
+
 import Foundation
 import SQLite
 import PDFKit
@@ -5,14 +6,23 @@ import UIKit
 import OSLog
 import CoreText
 
+// MARK: - Localization helpers (PDF uses String, not LocalizedStringKey)
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+private func LF(_ formatKey: String, _ args: CVarArg...) -> String {
+    String(format: NSLocalizedString(formatKey, comment: ""), arguments: args)
+}
+
 struct SickVisitPDFGenerator {
     private static let log = Logger(subsystem: "com.pedi.PatientViewer", category: "pdf.sick")
     static func generate(for visit: VisitSummary, dbURL: URL) -> URL? {
         Self.log.log("Generating SickVisit PDF for id=\(visit.id, privacy: .public) db=\(dbURL.path, privacy: .private)")
         let pdfMetaData = [
-            kCGPDFContextCreator: "Patient Viewer",
-            kCGPDFContextAuthor: "Patient App",
-            kCGPDFContextTitle: "Sick Visit Report"
+            kCGPDFContextCreator: L("pdf.meta.creator"),
+            kCGPDFContextAuthor: L("pdf.meta.author"),
+            kCGPDFContextTitle: L("pdf.sick.title")
         ]
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = pdfMetaData as [String: Any]
@@ -78,20 +88,20 @@ struct SickVisitPDFGenerator {
             let months = max(0, components.month ?? 0)
             let days = max(0, components.day ?? 0)
             if years == 0 && months == 0 {
-                return days == 1 ? "1 day" : "\(days) days"
+                return days == 1 ? L("age.day.one") : LF("age.days.fmt", days)
             } else if years == 0 && months >= 1 {
-                let monthPart = months == 1 ? "1 month" : "\(months) months"
+                let monthPart = months == 1 ? L("age.month.one") : LF("age.months.fmt", months)
                 if days > 0 {
-                    let dayPart = days == 1 ? "1 day" : "\(days) days"
-                    return "\(monthPart) \(dayPart)"
+                    let dayPart = days == 1 ? L("age.day.one") : LF("age.days.fmt", days)
+                    return LF("age.compound.fmt", monthPart, dayPart)
                 } else {
                     return monthPart
                 }
             } else if years >= 1 {
-                let yearPart = years == 1 ? "1 year" : "\(years) years"
+                let yearPart = years == 1 ? L("age.year.one") : LF("age.years.fmt", years)
                 if months > 0 {
-                    let monthPart = months == 1 ? "1 month" : "\(months) months"
-                    return "\(yearPart) \(monthPart)"
+                    let monthPart = months == 1 ? L("age.month.one") : LF("age.months.fmt", months)
+                    return LF("age.compound.fmt", yearPart, monthPart)
                 } else {
                     return yearPart
                 }
@@ -153,25 +163,15 @@ struct SickVisitPDFGenerator {
             return max(0.0, days / 30.0)
         }
 
-        // Helper to draw wrapped text for long lines (e.g., PE section), supporting multi-page and clean margins
-        func drawWrappedText(_ text: String, font: UIFont, in rect: CGRect, at y: inout CGFloat, using rendererContext: UIGraphicsPDFRendererContext) {
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.lineBreakMode = .byWordWrapping
-
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .paragraphStyle: paragraphStyle
-            ]
-
-            let attributedText = NSAttributedString(string: text, attributes: attributes)
+        // Helper to draw wrapped attributed text (multi-page, clean margins)
+        func drawWrappedAttributedText(_ attributedText: NSAttributedString, in rect: CGRect, at y: inout CGFloat, using rendererContext: UIGraphicsPDFRendererContext) {
             let framesetter = CTFramesetterCreateWithAttributedString(attributedText as CFAttributedString)
-
             var currentRange = CFRange(location: 0, length: 0)
 
             repeat {
                 // Always compute availableHeight based on y, but reset y before calculation if starting a new page
                 var availableHeight = rect.height - y - margin
-                if availableHeight < font.lineHeight * 2 {
+                if availableHeight < 24 { // small safety floor
                     rendererContext.beginPage()
                     y = margin
                     availableHeight = rect.height - y - margin
@@ -197,6 +197,7 @@ struct SickVisitPDFGenerator {
                 CTFrameDraw(frame, cgContext)
                 cgContext.restoreGState()
 
+                // Advance y by the height of the drawn portion
                 let suggestedSize = CTFramesetterSuggestFrameSizeWithConstraints(
                     framesetter,
                     currentRange,
@@ -215,6 +216,20 @@ struct SickVisitPDFGenerator {
                 }
 
             } while currentRange.location < attributedText.length
+        }
+
+        // Helper to draw wrapped text for long lines (e.g., PE section), supporting multi-page and clean margins
+        func drawWrappedText(_ text: String, font: UIFont, in rect: CGRect, at y: inout CGFloat, using rendererContext: UIGraphicsPDFRendererContext) {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineBreakMode = .byWordWrapping
+
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            let attributed = NSAttributedString(string: text, attributes: attributes)
+            drawWrappedAttributedText(attributed, in: rect, at: &y, using: rendererContext)
         }
 
         let data = renderer.pdfData { (rendererContext) in
@@ -248,12 +263,12 @@ struct SickVisitPDFGenerator {
             let subFont = UIFont.systemFont(ofSize: 14)
 
             // Title
-            drawText("Sick Visit Report", font: titleFont)
+            drawText(L("pdf.sick.title"), font: titleFont)
 
             // Visit date
             let formattedVisitDate = formatDate(visit.date)
-            drawText("Visit Date: \(formattedVisitDate)", font: subFont)
-            drawText("Report Generated: \(formatDate(Date()))", font: subFont)
+            drawText(LF("pdf.sick.visitDate.fmt", formattedVisitDate), font: subFont)
+            drawText(LF("pdf.sick.generated.fmt", formatDate(Date())), font: subFont)
 
             // Fetch patient info
             let dbPath = dbURL.appendingPathComponent("db.sqlite").path
@@ -268,7 +283,7 @@ struct SickVisitPDFGenerator {
                 // 1. Get patient_id for this visit (episode)
                 guard let episodeRow = try db.pluck(episodes.filter(episodeID == visit.id)) else {
                     Self.log.error("Episode \(visit.id, privacy: .public) not found in 'episodes' table.")
-                    drawText("❌ Error: Episode not found", font: subFont)
+                    drawText(L("pdf.sick.error.episodeNotFound"), font: subFont)
                     return
                 }
 
@@ -291,11 +306,11 @@ struct SickVisitPDFGenerator {
 
                 guard let patientRow = try db.pluck(patients.filter(id == pid)) else {
                     Self.log.error("Patient id=\(pid, privacy: .public) not found in 'patients' table.")
-                    drawText("❌ Error: Patient not found", font: subFont)
+                    drawText(L("pdf.sick.error.patientNotFound"), font: subFont)
                     return
                 }
 
-                let aliasText = patientRow[alias] ?? "—"
+                let aliasText = patientRow[alias] ?? L("common.placeholder")
                 let name = "\(patientRow[firstName]) \(patientRow[lastName])"
                 let dobText = patientRow[dob]
                 let sexText = patientRow[sex]
@@ -306,27 +321,27 @@ struct SickVisitPDFGenerator {
 
                 // 3. Render
                 y += 12
-                drawText("Patient Info", font: UIFont.boldSystemFont(ofSize: 16))
-                drawText("Alias: \(aliasText)", font: subFont)
-                drawText("Name: \(name)", font: subFont)
-                drawText("DOB: \(dobText)", font: subFont)
+                drawText(L("pdf.sick.section.patientInfo"), font: UIFont.boldSystemFont(ofSize: 16))
+                drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.alias"), aliasText), font: subFont)
+                drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.name"), name), font: subFont)
+                drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.dob"), dobText), font: subFont)
                 if let ageText = formatAgeString(dobString: dobText, visitDateString: visit.date) {
-                    drawText("Age at Visit: \(ageText)", font: subFont)
+                    drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.ageAtVisit"), ageText), font: subFont)
                 }
-                drawText("Sex: \(sexText)", font: subFont)
-                drawText("MRN: \(mrnText)", font: subFont)
+                drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.sex"), sexText), font: subFont)
+                drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.mrn"), mrnText), font: subFont)
                 // Clinician Name (if available)
                 if let clinicianID = episodeRow[episodeUserID],
                    let userRow = try? db.pluck(users.filter(userPK == clinicianID)) {
                     let clinicianName = "\(userRow[firstNameUser]) \(userRow[lastNameUser])".trimmingCharacters(in: .whitespaces)
                     if !clinicianName.isEmpty {
-                        drawText("Clinician: \(clinicianName)", font: subFont)
+                        drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.clinician"), clinicianName), font: subFont)
                     }
                 }
 
                 // Chief Complaint & History section
                 y += 12
-                drawText("Chief Complaint & History", font: UIFont.boldSystemFont(ofSize: 16))
+                drawText(L("pdf.sick.section.chiefComplaintHistory"), font: UIFont.boldSystemFont(ofSize: 16))
 
                 let mainComplaint = Expression<String?>("main_complaint")
                 let hpi = Expression<String?>("hpi")
@@ -338,20 +353,20 @@ struct SickVisitPDFGenerator {
                 let context = Expression<String?>("context")
 
                 if let episodeRow = try? db.pluck(episodes.filter(episodeID == visit.id)) {
-                    func showField(_ label: String, _ value: String?) {
+                    func showField(key: String, _ value: String?) {
                         if let val = value, !val.isEmpty {
-                            drawText("\(label): \(val)", font: subFont)
+                            drawText(LF("pdf.sick.labelValue.fmt", L(key), val), font: subFont)
                         }
                     }
 
-                    showField("Main Complaint", try? episodeRow.get(mainComplaint))
-                    showField("History", try? episodeRow.get(hpi))
-                    showField("Duration", try? episodeRow.get(duration))
-                    showField("Feeding", try? episodeRow.get(feeding))
-                    showField("Urination", try? episodeRow.get(urination))
-                    showField("Breathing", try? episodeRow.get(breathing))
-                    showField("Pain", try? episodeRow.get(pain))
-                    showField("Context", try? episodeRow.get(context))
+                    showField(key: "pdf.sick.hx.mainComplaint", try? episodeRow.get(mainComplaint))
+                    showField(key: "pdf.sick.hx.history", try? episodeRow.get(hpi))
+                    showField(key: "pdf.sick.hx.duration", try? episodeRow.get(duration))
+                    showField(key: "pdf.sick.hx.feeding", try? episodeRow.get(feeding))
+                    showField(key: "pdf.sick.hx.urination", try? episodeRow.get(urination))
+                    showField(key: "pdf.sick.hx.breathing", try? episodeRow.get(breathing))
+                    showField(key: "pdf.sick.hx.pain", try? episodeRow.get(pain))
+                    showField(key: "pdf.sick.hx.context", try? episodeRow.get(context))
                     
                     // MARK: - Vaccination Status
                     let vaccinationStatus = Expression<String?>("vaccination_status")
@@ -359,7 +374,7 @@ struct SickVisitPDFGenerator {
                     let vaccStatus = patientRow[vaccinationStatus]
                     if let status = vaccStatus, !status.isEmpty {
                         y += 12
-                        drawText("Vaccination Status", font: UIFont.boldSystemFont(ofSize: 16))
+                        drawText(L("pdf.sick.section.vaccinationStatus"), font: UIFont.boldSystemFont(ofSize: 16))
                         drawText(status, font: subFont)
                     }
 
@@ -374,8 +389,8 @@ struct SickVisitPDFGenerator {
                     let allergyDetails = Expression<String?>("allergy_details")
 
                     // Default lines (shown even when nothing is recorded)
-                    var perinatalLine = "Perinatal: —"
-                    var pmhLine = "History: —"
+                    var perinatalLine = LF("pdf.sick.perinatal.line.fmt", L("common.placeholder"))
+                    var pmhLine = LF("pdf.sick.pmh.line.fmt", L("common.placeholder"))
 
                     // Age-gated perinatal summary (only if < 3 months)
                     if let ageM = ageMonthsForVisit, ageM < 3.0 {
@@ -401,26 +416,26 @@ struct SickVisitPDFGenerator {
 
                         if let peri = try? db.pluck(perinatal.filter(perinatalPID == pid)) {
                             var parts: [String] = []
-                            if let v = try? peri.get(pregnancyRisk), !v.isEmpty { parts.append("Pregnancy: \(v)") }
-                            if let v = try? peri.get(birthMode), !v.isEmpty { parts.append("Birth mode: \(v)") }
-                            if let v = try? peri.get(term) { parts.append("GA: \(v) weeks") }
-                            if let v = try? peri.get(resuscitation), !v.isEmpty { parts.append("Resuscitation: \(v)") }
-                            if let v = try? peri.get(infectionRisk), !v.isEmpty { parts.append("Infection risk: \(v)") }
-                            if let v = try? peri.get(birthWeight) { parts.append("BW: \(v) g") }
-                            if let v = try? peri.get(birthLength) { parts.append("BL: \(String(format: "%.1f", v)) cm") }
-                            if let v = try? peri.get(headCirc) { parts.append("HC: \(String(format: "%.1f", v)) cm") }
-                            if let v = try? peri.get(dischargeWeight) { parts.append("Discharge wt: \(v) g") }
-                            if let v = try? peri.get(feedingMaternity), !v.isEmpty { parts.append("Feeding: \(v)") }
-                            if let v = try? peri.get(vaccinations), !v.isEmpty { parts.append("Vaccinations: \(v)") }
-                            if let v = try? peri.get(events), !v.isEmpty { parts.append("Events: \(v)") }
-                            if let v = try? peri.get(hearing), !v.isEmpty { parts.append("Hearing: \(v)") }
-                            if let v = try? peri.get(heart), !v.isEmpty { parts.append("Heart: \(v)") }
-                            if let v = try? peri.get(metabolic), !v.isEmpty { parts.append("Metabolic: \(v)") }
-                            if let v = try? peri.get(afterBirth), !v.isEmpty { parts.append("After birth: \(v)") }
-                            if let v = try? peri.get(motherVacc), !v.isEmpty { parts.append("Mother vacc: \(v)") }
+                            if let v = try? peri.get(pregnancyRisk), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.pregnancy.fmt", v)) }
+                            if let v = try? peri.get(birthMode), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.birthMode.fmt", v)) }
+                            if let v = try? peri.get(term) { parts.append(LF("pdf.sick.perinatal.gaWeeks.fmt", v)) }
+                            if let v = try? peri.get(resuscitation), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.resuscitation.fmt", v)) }
+                            if let v = try? peri.get(infectionRisk), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.infectionRisk.fmt", v)) }
+                            if let v = try? peri.get(birthWeight) { parts.append(LF("pdf.sick.perinatal.birthWeightG.fmt", v)) }
+                            if let v = try? peri.get(birthLength) { parts.append(LF("pdf.sick.perinatal.birthLengthCm.fmt", String(format: "%.1f", v))) }
+                            if let v = try? peri.get(headCirc) { parts.append(LF("pdf.sick.perinatal.birthHcCm.fmt", String(format: "%.1f", v))) }
+                            if let v = try? peri.get(dischargeWeight) { parts.append(LF("pdf.sick.perinatal.dischargeWeightG.fmt", v)) }
+                            if let v = try? peri.get(feedingMaternity), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.feeding.fmt", v)) }
+                            if let v = try? peri.get(vaccinations), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.vaccinations.fmt", v)) }
+                            if let v = try? peri.get(events), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.events.fmt", v)) }
+                            if let v = try? peri.get(hearing), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.hearing.fmt", v)) }
+                            if let v = try? peri.get(heart), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.heart.fmt", v)) }
+                            if let v = try? peri.get(metabolic), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.metabolic.fmt", v)) }
+                            if let v = try? peri.get(afterBirth), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.afterBirth.fmt", v)) }
+                            if let v = try? peri.get(motherVacc), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.motherVacc.fmt", v)) }
 
                             if !parts.isEmpty {
-                                perinatalLine = "Perinatal: " + parts.joined(separator: "; ")
+                                perinatalLine = LF("pdf.sick.perinatal.lineWithValue.fmt", parts.joined(separator: "; "))
                             }
                         }
                     }
@@ -428,31 +443,31 @@ struct SickVisitPDFGenerator {
                     // Non-perinatal past medical history
                     if let pmhRow = try? db.pluck(pmh.filter(pmhPID == pid)) {
                         var items: [String] = []
-                        if (try? pmhRow.get(asthma)) == 1 { items.append("Asthma") }
-                        if (try? pmhRow.get(otitis)) == 1 { items.append("Otitis") }
-                        if (try? pmhRow.get(uti)) == 1 { items.append("UTI") }
-                        if (try? pmhRow.get(allergies)) == 1 { items.append("Allergies") }
+                        if (try? pmhRow.get(asthma)) == 1 { items.append(L("pdf.sick.pmh.asthma")) }
+                        if (try? pmhRow.get(otitis)) == 1 { items.append(L("pdf.sick.pmh.otitis")) }
+                        if (try? pmhRow.get(uti)) == 1 { items.append(L("pdf.sick.pmh.uti")) }
+                        if (try? pmhRow.get(allergies)) == 1 { items.append(L("pdf.sick.pmh.allergies")) }
                         if let otherVal = try? pmhRow.get(other), !otherVal.isEmpty {
                             items.append(otherVal)
                         }
                         if let details = try? pmhRow.get(allergyDetails), !details.isEmpty {
-                            items.append("Allergy details: \(details)")
+                            items.append(LF("pdf.sick.pmh.allergyDetails.fmt", details))
                         }
 
                         if !items.isEmpty {
-                            pmhLine = "History: " + items.joined(separator: "; ")
+                            pmhLine = LF("pdf.sick.pmh.lineWithValue.fmt", items.joined(separator: "; "))
                         }
                     }
 
                     // Always render Past Medical History section with explicit placeholders
                     y += 12
-                    drawText("Past Medical History", font: UIFont.boldSystemFont(ofSize: 16))
+                    drawText(L("pdf.sick.section.pastMedicalHistory"), font: UIFont.boldSystemFont(ofSize: 16))
                     drawWrappedText(perinatalLine, font: subFont, in: pageRect, at: &y, using: rendererContext)
                     drawWrappedText(pmhLine, font: subFont, in: pageRect, at: &y, using: rendererContext)
 
                     // MARK: - Vitals
                     y += 12
-                    drawText("Vitals", font: UIFont.boldSystemFont(ofSize: 16))
+                    drawText(L("pdf.sick.section.vitals"), font: UIFont.boldSystemFont(ofSize: 16))
 
                     let vitals = Table("vitals")
                     let vEpisodeID = Expression<Int64>("episode_id")
@@ -477,32 +492,32 @@ struct SickVisitPDFGenerator {
                         var vitalsLines: [String] = []
 
                         if let w = vitalsRow[vWeight], w > 0 {
-                            vitalsLines.append(String(format: "Weight: %.1f kg", w))
+                            vitalsLines.append(LF("pdf.sick.vitals.weightKg.fmt", w))
                         }
                         if let h = vitalsRow[vHeight], h > 0 {
-                            vitalsLines.append(String(format: "Length/Height: %.1f cm", h))
+                            vitalsLines.append(LF("pdf.sick.vitals.heightCm.fmt", h))
                         }
                         if let hc = vitalsRow[vHeadCirc], hc > 0 {
-                            vitalsLines.append(String(format: "Head Circumference: %.1f cm", hc))
+                            vitalsLines.append(LF("pdf.sick.vitals.headCircCm.fmt", hc))
                         }
                         if let t = vitalsRow[vTemp], t > 0 {
-                            vitalsLines.append(String(format: "Temperature: %.1f °C", t))
+                            vitalsLines.append(LF("pdf.sick.vitals.tempC.fmt", t))
                         }
                         if let hr = vitalsRow[vHR], hr > 0 {
-                            vitalsLines.append("Heart Rate: \(hr) bpm")
+                            vitalsLines.append(LF("pdf.sick.vitals.hrBpm.fmt", hr))
                         }
                         if let rr = vitalsRow[vRR], rr > 0 {
-                            vitalsLines.append("Respiratory Rate: \(rr) /min")
+                            vitalsLines.append(LF("pdf.sick.vitals.rrPerMin.fmt", rr))
                         }
                         if let spo = vitalsRow[vSpO2], spo > 0 {
-                            vitalsLines.append("SpO₂: \(spo) %")
+                            vitalsLines.append(LF("pdf.sick.vitals.spo2Pct.fmt", spo))
                         }
                         if let sys = vitalsRow[vSys], let dia = vitalsRow[vDia], sys > 0, dia > 0 {
-                            vitalsLines.append("Blood Pressure: \(sys)/\(dia) mmHg")
+                            vitalsLines.append(LF("pdf.sick.vitals.bpMmhg.fmt", sys, dia))
                         }
 
                         if vitalsLines.isEmpty {
-                            drawText("—", font: subFont)
+                            drawText(L("common.placeholder"), font: subFont)
                         } else {
                             for line in vitalsLines {
                                 drawText(line, font: subFont)
@@ -510,37 +525,80 @@ struct SickVisitPDFGenerator {
                         }
                     } else {
                         // No vitals recorded for this episode
-                        drawText("—", font: subFont)
+                        drawText(L("common.placeholder"), font: subFont)
                     }
 
                 // MARK: - Physical Examination
                 y += 12
-                drawText("Physical Examination", font: UIFont.boldSystemFont(ofSize: 16))
+                drawText(L("pdf.sick.section.physicalExam"), font: UIFont.boldSystemFont(ofSize: 16))
 
                 func getPEField(_ key: String) -> String? {
-                    return try? episodeRow.get(Expression<String?>(key))
+                    try? episodeRow.get(Expression<String?>(key))
+                }
+
+                func peFieldLabel(_ dbKey: String) -> String {
+                    // Preferred localization: "pdf.sick.pe.field.<dbKey>"
+                    let locKey = "pdf.sick.pe.field.\(dbKey)"
+                    let localized = L(locKey)
+                    if localized != locKey {
+                        return localized
+                    }
+
+                    // Fallback: readable label from the DB key
+                    return dbKey
+                        .replacingOccurrences(of: "_", with: " ")
+                        .capitalized
                 }
 
                 let peGroups: [(label: String, keys: [String])] = [
-                    ("General", ["general_appearance", "hydration", "color", "skin"]),
-                    ("ENT", ["ent", "right_ear", "left_ear", "right_eye", "left_eye"]),
-                    ("Cardiorespiratory", ["heart", "lungs"]),
-                    ("Abdomen", ["abdomen", "peristalsis"]),
-                    ("Genitalia", ["genitalia"]),
-                    ("Neuro / MSK / Lymph", ["neurological", "musculoskeletal", "lymph_nodes"])
+                    (L("pdf.sick.pe.group.general"), ["general_appearance", "hydration", "color", "skin"]),
+                    (L("pdf.sick.pe.group.ent"), ["ent", "right_ear", "left_ear", "right_eye", "left_eye"]),
+                    (L("pdf.sick.pe.group.cardioresp"), ["heart", "lungs"]),
+                    (L("pdf.sick.pe.group.abdomen"), ["abdomen", "peristalsis"]),
+                    (L("pdf.sick.pe.group.genitalia"), ["genitalia"]),
+                    (L("pdf.sick.pe.group.neuroMskLymph"), ["neurological", "musculoskeletal", "lymph_nodes"])
                 ]
 
                 for group in peGroups {
                     var values: [String] = []
                     for key in group.keys {
                         if let val = getPEField(key), !val.isEmpty {
-                            // Capitalize only first letter of each part
-                            let label = key.replacingOccurrences(of: "_", with: " ").capitalized
-                            values.append("\(label): \(val)")
+                            let label = peFieldLabel(key)
+                            values.append(LF("pdf.sick.labelValue.fmt", label, val))
                         }
                     }
                     if !values.isEmpty {
-                        drawWrappedText("\(group.label): " + values.joined(separator: "; "), font: subFont, in: pageRect, at: &y, using: rendererContext)
+                        // Group label + all field label/value items on one wrapped line, with group label bold
+                        let boldFont = UIFont.boldSystemFont(ofSize: subFont.pointSize)
+                        let paragraphStyle = NSMutableParagraphStyle()
+                        paragraphStyle.lineBreakMode = .byWordWrapping
+
+                        let head = NSAttributedString(
+                            string: group.label + ": ",
+                            attributes: [
+                                .font: boldFont,
+                                .paragraphStyle: paragraphStyle
+                            ]
+                        )
+
+                        let body = NSAttributedString(
+                            string: values.joined(separator: "; "),
+                            attributes: [
+                                .font: subFont,
+                                .paragraphStyle: paragraphStyle
+                            ]
+                        )
+
+                        let combined = NSMutableAttributedString()
+                        combined.append(head)
+                        combined.append(body)
+
+                        drawWrappedAttributedText(
+                            combined,
+                            in: pageRect,
+                            at: &y,
+                            using: rendererContext
+                        )
                     }
                 }
                 }
@@ -551,14 +609,14 @@ struct SickVisitPDFGenerator {
                 ensureSpace(for: headerHeight)
                 
                 y += 12
-                drawText("Problem Listing", font: headerFont)
+                drawText(L("pdf.sick.section.problemListing"), font: headerFont)
 
                 let problemListing = Expression<String?>("problem_listing")
                 if let summary = try? episodeRow.get(problemListing), !summary.isEmpty {
                     let cleanSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
                     drawWrappedText(cleanSummary.replacingOccurrences(of: "\n", with: "; "), font: subFont, in: pageRect, at: &y, using: rendererContext)
                 } else {
-                    drawText("—", font: subFont)
+                    drawText(L("common.placeholder"), font: subFont)
                 }
                 // MARK: - Additional Episode Fields
                 let compInvestigations = Expression<String?>("complementary_investigations")
@@ -629,20 +687,20 @@ struct SickVisitPDFGenerator {
                     if let text = content?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
                         drawWrappedText(text.replacingOccurrences(of: "\n", with: "; "), font: bodyFont, in: pageRect, at: &y, using: rendererContext)
                     } else {
-                        drawText("—", font: bodyFont)
+                        drawText(L("common.placeholder"), font: bodyFont)
                     }
                 }
 
-                renderSection(title: "Investigations", content: try? episodeRow.get(compInvestigations))
-                renderSection(title: "Diagnosis", content: try? episodeRow.get(diagnosis))
-                renderSection(title: "ICD10", content: try? episodeRow.get(icd10))
-                renderSection(title: "Medications", content: try? episodeRow.get(medications))
-                renderSection(title: "Anticipatory Guidance", content: try? episodeRow.get(anticipatory))
-                renderSection(title: "Comments", content: try? episodeRow.get(comments))
-                renderSection(title: "AI Assistant Input", content: aiSectionContent)
+                renderSection(title: L("pdf.sick.section.investigations"), content: try? episodeRow.get(compInvestigations))
+                renderSection(title: L("pdf.sick.section.diagnosis"), content: try? episodeRow.get(diagnosis))
+                renderSection(title: L("pdf.sick.section.icd10"), content: try? episodeRow.get(icd10))
+                renderSection(title: L("pdf.sick.section.medications"), content: try? episodeRow.get(medications))
+                renderSection(title: L("pdf.sick.section.anticipatoryGuidance"), content: try? episodeRow.get(anticipatory))
+                renderSection(title: L("pdf.sick.section.comments"), content: try? episodeRow.get(comments))
+                renderSection(title: L("pdf.sick.section.aiAssistantInput"), content: aiSectionContent)
             } catch {
                 Self.log.error("DB error while generating sick visit PDF: \(error.localizedDescription, privacy: .public)")
-                drawText("❌ DB Error: \(error.localizedDescription)", font: subFont)
+                drawText(LF("pdf.sick.error.dbError.fmt", error.localizedDescription), font: subFont)
             }
         }  // end of renderer.pdfData
 

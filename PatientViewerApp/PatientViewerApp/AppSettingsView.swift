@@ -6,6 +6,17 @@
 //
 import SwiftUI
 
+// MARK: - Localization (file-local)
+@inline(__always)
+private func L(_ key: String, comment: String = "") -> String {
+    NSLocalizedString(key, comment: comment)
+}
+
+@inline(__always)
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), locale: Locale.current, arguments: args)
+}
+
 struct AppSettingsView: View {
     @EnvironmentObject var appLock: AppLockManager
     @Environment(\.dismiss) private var dismiss
@@ -32,61 +43,63 @@ struct AppSettingsView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(appLock.isLockEnabled ? "App Lock enabled" : "App Lock disabled")
+                            Text(appLock.isLockEnabled
+                                 ? L("patient_viewer.app_settings.app_lock.status_enabled", comment: "App Lock status")
+                                 : L("patient_viewer.app_settings.app_lock.status_disabled", comment: "App Lock status"))
                                 .font(.headline)
 
-                            Text("Protect access to this app with a simple passcode.")
+                            Text(L("patient_viewer.app_settings.app_lock.subtitle", comment: "App Lock subtitle"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                     }
                 } header: {
-                    Text("App Lock")
+                    Text(L("patient_viewer.app_settings.app_lock.header", comment: "Section header"))
                 }
 
                 if appLock.isLockEnabled {
-                    Section("Change passcode") {
-                        SecureField("Current passcode", text: $currentPasscode)
+                    Section(L("patient_viewer.app_settings.change_passcode.section", comment: "Section title")) {
+                        SecureField(L("patient_viewer.app_settings.field.current_passcode", comment: "Field placeholder"), text: $currentPasscode)
                             .textContentType(.password)
 
-                        SecureField("New passcode", text: $newPasscode)
+                        SecureField(L("patient_viewer.app_settings.field.new_passcode", comment: "Field placeholder"), text: $newPasscode)
                             .textContentType(.newPassword)
 
-                        SecureField("Confirm new passcode", text: $confirmPasscode)
+                        SecureField(L("patient_viewer.app_settings.field.confirm_new_passcode", comment: "Field placeholder"), text: $confirmPasscode)
                             .textContentType(.newPassword)
 
                         Button {
                             changePasscode()
                         } label: {
-                            Label("Change Passcode", systemImage: "arrow.triangle.2.circlepath")
+                            Label(L("patient_viewer.app_settings.action.change_passcode", comment: "Button"), systemImage: "arrow.triangle.2.circlepath")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(newPasscode.isEmpty || confirmPasscode.isEmpty)
                     }
 
-                    Section("Turn off App Lock") {
-                        SecureField("Current passcode", text: $currentPasscode)
+                    Section(L("patient_viewer.app_settings.turn_off.section", comment: "Section title")) {
+                        SecureField(L("patient_viewer.app_settings.field.current_passcode", comment: "Field placeholder"), text: $currentPasscode)
                             .textContentType(.password)
 
                         Button(role: .destructive) {
                             removePasscode()
                         } label: {
-                            Label("Remove Passcode", systemImage: "lock.open")
+                            Label(L("patient_viewer.app_settings.action.remove_passcode", comment: "Button"), systemImage: "lock.open")
                         }
                         .disabled(currentPasscode.isEmpty)
                     }
                 } else {
-                    Section("Set up App Lock") {
-                        SecureField("New passcode", text: $newPasscode)
+                    Section(L("patient_viewer.app_settings.setup.section", comment: "Section title")) {
+                        SecureField(L("patient_viewer.app_settings.field.new_passcode", comment: "Field placeholder"), text: $newPasscode)
                             .textContentType(.newPassword)
 
-                        SecureField("Confirm new passcode", text: $confirmPasscode)
+                        SecureField(L("patient_viewer.app_settings.field.confirm_new_passcode", comment: "Field placeholder"), text: $confirmPasscode)
                             .textContentType(.newPassword)
 
                         Button {
                             setInitialPasscode()
                         } label: {
-                            Label("Set Passcode", systemImage: "lock")
+                            Label(L("patient_viewer.app_settings.action.set_passcode", comment: "Button"), systemImage: "lock")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(newPasscode.isEmpty || confirmPasscode.isEmpty)
@@ -105,10 +118,10 @@ struct AppSettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle(L("patient_viewer.app_settings.nav_title", comment: "Navigation title"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button(L("patient_viewer.app_settings.done", comment: "Done button")) { dismiss() }
                 }
             }
         }
@@ -118,55 +131,55 @@ struct AppSettingsView: View {
 
     private func setInitialPasscode() {
         guard newPasscode == confirmPasscode else {
-            showError("Passcodes do not match.")
+            showError(L("patient_viewer.app_settings.error.passcodes_do_not_match", comment: "Error"))
             return
         }
         guard !newPasscode.isEmpty else {
-            showError("Passcode cannot be empty.")
+            showError(L("patient_viewer.app_settings.error.passcode_cannot_be_empty", comment: "Error"))
             return
         }
 
         do {
             try appLock.setPassword(newPasscode)
             clearFields()
-            showSuccess("Passcode set. App Lock is now enabled.")
+            showSuccess(L("patient_viewer.app_settings.success.passcode_set_enabled", comment: "Success"))
         } catch {
-            showError("Failed to set passcode: \(error.localizedDescription)")
+            showError(LF("patient_viewer.app_settings.error.failed_to_set_passcode", error.localizedDescription))
         }
     }
 
     private func changePasscode() {
         guard appLock.verifyPassword(currentPasscode) else {
-            showError("Current passcode is incorrect.")
+            showError(L("patient_viewer.app_settings.error.current_passcode_incorrect", comment: "Error"))
             return
         }
         guard newPasscode == confirmPasscode else {
-            showError("New passcodes do not match.")
+            showError(L("patient_viewer.app_settings.error.new_passcodes_do_not_match", comment: "Error"))
             return
         }
         guard !newPasscode.isEmpty else {
-            showError("New passcode cannot be empty.")
+            showError(L("patient_viewer.app_settings.error.new_passcode_cannot_be_empty", comment: "Error"))
             return
         }
 
         do {
             try appLock.setPassword(newPasscode)
             clearFields()
-            showSuccess("Passcode updated.")
+            showSuccess(L("patient_viewer.app_settings.success.passcode_updated", comment: "Success"))
         } catch {
-            showError("Failed to update passcode: \(error.localizedDescription)")
+            showError(LF("patient_viewer.app_settings.error.failed_to_update_passcode", error.localizedDescription))
         }
     }
 
     private func removePasscode() {
         guard appLock.verifyPassword(currentPasscode) else {
-            showError("Current passcode is incorrect.")
+            showError(L("patient_viewer.app_settings.error.current_passcode_incorrect", comment: "Error"))
             return
         }
 
         appLock.clearPassword()
         clearFields()
-        showSuccess("Passcode removed. App Lock is now disabled.")
+        showSuccess(L("patient_viewer.app_settings.success.passcode_removed_disabled", comment: "Success"))
     }
 
     private func clearFields() {
