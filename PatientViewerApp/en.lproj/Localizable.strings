@@ -485,3 +485,77 @@
 "well_report.visit_type.twentyfour_month" = "24-month visit";
 "well_report.visit_type.thirty_month" = "30-month visit";
 "well_report.visit_type.thirtysix_month" = "36-month visit";
+
+//* WellVisitPDFGenerator - formatAgeString()
+"well_report.age.day_singular" = "%d day";
+"well_report.age.day_plural" = "%d days";
+"well_report.age.month_singular" = "%d month";
+"well_report.age.month_plural" = "%d months";
+"well_report.age.year_singular" = "%d year";
+"well_report.age.year_plural" = "%d years";
+
+"well_report.age.format.month_day" = "%@ %@";
+"well_report.age.format.year_month" = "%@ %@";
+
+"well_report.supplementation.vitamin_d_given_fmt" = "Vitamin D given: %@";
+
+"well_report.stools.pattern_fmt" = "Stool pattern: %@";
+"well_report.stools.comment_fmt" = "Comment: %@";
+
+"well_report.sleep.fmt.range_hours" = "%@ to %@ hours";
+"well_report.sleep.duration_fmt" = "Sleep duration: %@";
+"well_report.sleep.regularity_fmt" = "Sleep regularity: %@";
+"well_report.sleep.snoring_fmt" = "Snoring: %@";
+"well_report.sleep.issue_reported_yes" = "Sleep issue reported: Yes";
+"well_report.sleep.issue_reported_no" = "Sleep issue reported: No";
+"well_report.sleep.issue_reported_yes_detail_fmt" = "Sleep issue reported: Yes – %@";
+
+"well_report.development.devtest.result_score_fmt" = "Developmental test: %@ (score %d)";
+"well_report.development.devtest.score_only_fmt" = "Developmental test score: %d";
+"well_report.development.devtest.result_only_fmt" = "Developmental test: %@";
+
+"well_report.development.mchat.result_score_fmt" = "M-CHAT: %@ (score %d)";
+"well_report.development.mchat.score_only_fmt" = "M-CHAT score: %d";
+"well_report.development.mchat.result_only_fmt" = "M-CHAT: %@";
+
+"well_report.milestones.achieved_fmt" = "Achieved: %d/%d";
+"well_report.milestones.achieved_none" = "Achieved: —";
+"well_report.milestones.flags_title" = "Flags:";
+"well_report.milestones.flags_fmt" = "Flags: %@";
+"well_report.milestones.status.uncertain" = "uncertain";
+"well_report.milestones.status.not_yet" = "not yet";
+
+//* Placeholders and dashes *//
+"well_report.placeholder.dash" = "—";
+
+"well_report.error.visit_not_found" = "❌ Error: Visit not found";
+"well_report.error.patient_not_found" = "❌ Error: Patient not found";
+"well_report.error.db_error_fmt" = "❌ DB Error: %@";
+
+//* Charts *//
+"well_report.growth_chart.title.weight_for_age" = "Weight-for-Age (0–60m)";
+"well_report.growth_chart.title.length_for_age" = "Length-for-Age (0–60m)";
+"well_report.growth_chart.title.head_circumference_for_age" = "Head Circumference-for-Age (0–60m)";
+"well_report.growth_chart.title.bmi_for_age" = "BMI-for-Age (0–60m)";
+/* Growth chart screen titles */
+"patient_viewer.growth_chart.title.weight_for_age" = "Weight-for-Age (0–60m)";
+"patient_viewer.growth_chart.title.length_for_age" = "Length-for-Age (0–60m)";
+"patient_viewer.growth_chart.title.head_circumference_for_age" = "Head Circumference-for-Age (0–60m)";
+"patient_viewer.growth_chart.title.bmi_for_age" = "BMI-for-Age (0–60m)";
+"patient_viewer.growth_chart.title.generic" = "Growth chart";
+
+/* Axis labels */
+"patient_viewer.growth_chart.axis.age_months" = "Age (months)";
+"patient_viewer.growth_chart.axis.value" = "Value";
+"patient_viewer.growth_chart.axis.curve" = "Curve";
+
+/* Empty state */
+"patient_viewer.growth_chart.empty.title" = "No growth data";
+"patient_viewer.growth_chart.empty.message" = "No patient measurements available for this chart.";
+
+/* Y axis labels */
+"patient_viewer.growth_chart.y_axis.weight" = "Weight (kg)";
+"patient_viewer.growth_chart.y_axis.height" = "Length/Height (cm)";
+"patient_viewer.growth_chart.y_axis.head_circ" = "Head circumference (cm)";
+"patient_viewer.growth_chart.y_axis.bmi" = "BMI";
+"patient_viewer.growth_chart.y_axis.generic" = "Value";

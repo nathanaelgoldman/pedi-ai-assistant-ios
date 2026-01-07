@@ -18,8 +18,9 @@ struct GrowthChartView: View {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp",
                                     category: "GrowthChartView")
 
-    private func loc(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
+    // Localization helper with fallback (mirrors the PDF generator behavior)
+    private func L(_ key: String, _ fallback: String) -> String {
+        NSLocalizedString(key, value: fallback, comment: "")
     }
 
     // Precomputed domains so we can log and keep body clean
@@ -99,8 +100,8 @@ struct GrowthChartView: View {
         // User data
         ForEach(Array(cleanData().enumerated()), id: \.offset) { _, point in
             PointMark(
-                x: .value(loc("patient_viewer.growth_chart.axis.age_months"), point.ageMonths),
-                y: .value(loc("patient_viewer.growth_chart.axis.value"), point.value)
+                x: .value(L("patient_viewer.growth_chart.axis.age_months", "Age (months)"), point.ageMonths),
+                y: .value(L("patient_viewer.growth_chart.axis.value", "Value"), point.value)
             )
             .foregroundStyle(.blue)
             .symbolSize(40)
@@ -110,11 +111,11 @@ struct GrowthChartView: View {
         ForEach(cleanCurves(), id: \.label) { curve in
             ForEach(Array(curve.points.enumerated()), id: \.offset) { _, refPoint in
                 LineMark(
-                    x: .value(loc("patient_viewer.growth_chart.axis.age_months"), refPoint.ageMonths),
-                    y: .value(loc("patient_viewer.growth_chart.axis.value"), refPoint.value)
+                    x: .value(L("patient_viewer.growth_chart.axis.age_months", "Age (months)"), refPoint.ageMonths),
+                    y: .value(L("patient_viewer.growth_chart.axis.value", "Value"), refPoint.value)
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(by: .value(loc("patient_viewer.growth_chart.axis.curve"), curve.label))
+                .foregroundStyle(by: .value(L("patient_viewer.growth_chart.axis.curve", "Curve"), curve.label))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
             }
         }
@@ -130,7 +131,7 @@ struct GrowthChartView: View {
                 .chartYScale(domain: yDom)
                 .chartScrollableAxes(.horizontal)
                 .chartXVisibleDomain(length: 24)
-                .chartXAxisLabel(loc("patient_viewer.growth_chart.axis.age_months"))
+                .chartXAxisLabel(L("patient_viewer.growth_chart.axis.age_months", "Age (months)"))
                 .chartYAxisLabel(yAxisLabel(measurement))
                 .onAppear {
                     Self.log.debug("Chart appear measurement=\(self.measurement, privacy: .public)")
@@ -171,9 +172,9 @@ struct GrowthChartView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .imageScale(.large)
-                    Text(loc("patient_viewer.growth_chart.empty.title"))
+                    Text(L("patient_viewer.growth_chart.empty.title", "No growth data"))
                         .font(.headline)
-                    Text(loc("patient_viewer.growth_chart.empty.message"))
+                    Text(L("patient_viewer.growth_chart.empty.message", "No patient measurements available for this chart."))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -233,21 +234,31 @@ struct GrowthChartView: View {
 
     private func titleForMeasurement(_ m: String) -> String {
         switch m {
-        case "weight": return loc("patient_viewer.growth_chart.title.weight_for_age")
-        case "height": return loc("patient_viewer.growth_chart.title.length_for_age")
-        case "head_circ": return loc("patient_viewer.growth_chart.title.hc_for_age")
-        case "bmi": return loc("patient_viewer.growth_chart.title.bmi_for_age")
-        default: return loc("patient_viewer.growth_chart.title.generic")
+        case "weight":
+            return L("patient_viewer.growth_chart.title.weight_for_age", "Weight-for-Age (0–60m)")
+        case "height":
+            return L("patient_viewer.growth_chart.title.length_for_age", "Length-for-Age (0–60m)")
+        case "head_circ":
+            return L("patient_viewer.growth_chart.title.head_circumference_for_age", "Head Circumference-for-Age (0–60m)")
+        case "bmi":
+            return L("patient_viewer.growth_chart.title.bmi_for_age", "BMI-for-Age (0–60m)")
+        default:
+            return L("patient_viewer.growth_chart.title.generic", "Growth chart")
         }
     }
     
     private func yAxisLabel(_ measurement: String) -> String {
         switch measurement {
-        case "weight": return loc("patient_viewer.growth_chart.y_axis.weight")
-        case "height": return loc("patient_viewer.growth_chart.y_axis.height")
-        case "head_circ": return loc("patient_viewer.growth_chart.y_axis.head_circ")
-        case "bmi": return loc("patient_viewer.growth_chart.y_axis.bmi")
-        default: return loc("patient_viewer.growth_chart.y_axis.generic")
+        case "weight":
+            return L("patient_viewer.growth_chart.y_axis.weight", "Weight (kg)")
+        case "height":
+            return L("patient_viewer.growth_chart.y_axis.height", "Length/Height (cm)")
+        case "head_circ":
+            return L("patient_viewer.growth_chart.y_axis.head_circ", "Head circumference (cm)")
+        case "bmi":
+            return L("patient_viewer.growth_chart.y_axis.bmi", "BMI")
+        default:
+            return L("patient_viewer.growth_chart.y_axis.generic", "Value")
         }
     }
 }

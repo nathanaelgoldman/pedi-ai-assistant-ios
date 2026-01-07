@@ -160,16 +160,16 @@ struct BundleExporter {
         // will only contain db.sqlite.enc.
         let ident = try loadPatientIdentity(from: dbURL)
         if fm.fileExists(atPath: dbURL.path) {
-            // 1) Hash plaintext for semantic integrity
-            let data = try Data(contentsOf: dbURL)
-            dbSHA256 = sha256Hex(data)
-
-            // 2) Encrypt db.sqlite → db.sqlite.enc
+            // Encrypt db.sqlite → db.sqlite.enc
             let encURL = stageRoot.appendingPathComponent("db.sqlite.enc")
             try BundleCrypto.encryptFile(at: dbURL, to: encURL)
 
-            // 3) Remove plaintext db.sqlite from the staged bundle
+            // Remove plaintext db.sqlite from the staged bundle
             try fm.removeItem(at: dbURL)
+
+            // Hash the *shipped* DB file so import-side validation checks what’s actually inside the bundle.
+            let encData = try Data(contentsOf: encURL)
+            dbSHA256 = sha256Hex(encData)
 
             encrypted = true
             encryptionScheme = "AES-GCM-v1"
@@ -206,6 +206,8 @@ struct BundleExporter {
         }
 
         let manifest: [String: Any?] = [
+            "format": "peMR",
+            "schema_version": 2,
             "version": 2,
             "created": ISO8601DateFormatter().string(from: Date()),
             "bundle_name": sourceRoot.lastPathComponent,

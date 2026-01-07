@@ -2674,3 +2674,5 @@
 
 "growth.charts.tab.bmi" = "BMI";
 "report.chart.caption.bmi_for_age" = "BMI-for-Age";
+
+"appstate.manifest.build_files_list.enumerate_failed_format" = "buildFilesList: failed to enumerate bundle root %@";

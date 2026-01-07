@@ -4502,6 +4502,10 @@ final class AppState: ObservableObject {
                         continue
                     }
 
+                    // Best-effort: upgrade/refresh manifest.json to the current v2 schema so
+                    // legacy bundles get re-circulated in a healthy up-to-date format.
+                    _ = self.upgradeBundleManifestIfNeeded(at: bundleRoot)
+
                     // Extract patient identity from the staged bundle
                     guard let identity = self.extractPatientIdentity(from: bundleRoot) else {
                         let fmt = NSLocalizedString(
@@ -4872,10 +4876,19 @@ final class AppState: ObservableObject {
         }
 
         // Helper: probe a readable sqlite DB file for identity.
-        func probeIdentityFromSQLite(at dbURL: URL) -> PatientIdentity? {
+        // NOTE: We keep this READONLY for real bundle DBs to avoid creating sidecar files.
+        // For temp decrypted copies we may open READWRITE to allow SQLite to create any needed WAL sidecars.
+        func probeIdentityFromSQLite(at dbURL: URL, openFlags: Int32 = SQLITE_OPEN_READONLY) -> PatientIdentity? {
             var db: OpaquePointer?
-            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { return nil }
+            guard sqlite3_open_v2(dbURL.path, &db, openFlags, nil) == SQLITE_OK, let db else { return nil }
             defer { sqlite3_close(db) }
+
+            // If we are allowed to open read-write (temp decrypted DB), force rollback journal mode.
+            // This prevents noisy failures when a DB header indicates WAL mode but no -wal file exists.
+            if (openFlags & SQLITE_OPEN_READWRITE) != 0 {
+                _ = sqlite3_exec(db, "PRAGMA journal_mode=DELETE;", nil, nil, nil)
+                _ = sqlite3_exec(db, "PRAGMA synchronous=OFF;", nil, nil, nil)
+            }
 
             let cols = columnSet(of: "patients", db: db)
             guard !cols.isEmpty else { return nil }
@@ -4936,9 +4949,13 @@ final class AppState: ObservableObject {
                 do {
                     // NOTE: adjust the call name/signature if your BundleCrypto differs.
                     try BundleCrypto.decryptFile(at: encDBURL, to: tmpURL)
-                    defer { try? fm.removeItem(at: tmpURL) }
+                    defer {
+                        try? fm.removeItem(at: tmpURL)
+                        try? fm.removeItem(at: URL(fileURLWithPath: tmpURL.path + "-wal"))
+                        try? fm.removeItem(at: URL(fileURLWithPath: tmpURL.path + "-shm"))
+                    }
 
-                    if let id = probeIdentityFromSQLite(at: tmpURL) {
+                    if let id = probeIdentityFromSQLite(at: tmpURL, openFlags: SQLITE_OPEN_READWRITE) {
                         return id
                     }
                 } catch {
@@ -5698,65 +5715,74 @@ final class AppState: ObservableObject {
             }
         }
 
-        ///
         /// Write/refresh a v2 peMR manifest.json at the given bundle root.
         /// Safe to call before exporting a bundle; idempotent and tolerant of missing bits.
         @discardableResult
         func writeManifestV2(bundleRoot: URL) -> Bool {
             let fm = FileManager.default
-            let dbURL = bundleRoot.appendingPathComponent("db.sqlite")
-            let docsURL = bundleRoot.appendingPathComponent("docs", isDirectory: true)
 
-            // Probe identity from DB if available
+            let manifestURL = bundleRoot.appendingPathComponent("manifest.json")
+            let dbPlainURL = bundleRoot.appendingPathComponent("db.sqlite")
+            let dbEncURL   = bundleRoot.appendingPathComponent("db.sqlite.enc")
+            let docsURL    = bundleRoot.appendingPathComponent("docs", isDirectory: true)
+
+            // Determine DB payload present in this bundle.
+            let hasPlain = fm.fileExists(atPath: dbPlainURL.path)
+            let hasEnc   = fm.fileExists(atPath: dbEncURL.path)
+
+            // If no DB payload at all, we cannot create a meaningful v2 manifest.
+            guard hasPlain || hasEnc else {
+                let fmt = NSLocalizedString(
+                    "appstate.manifest.write_v2.no_db_payload_format",
+                    comment: "Log when writeManifestV2 cannot find db.sqlite or db.sqlite.enc. %@ is bundle root path."
+                )
+                let line = String(format: fmt, bundleRoot.path)
+                log.warning("\(line, privacy: .public)")
+                return false
+            }
+
+            // Read existing manifest (if any) to preserve encryption_scheme if already present.
+            var existingScheme: String? = nil
+            if fm.fileExists(atPath: manifestURL.path),
+               let data = try? Data(contentsOf: manifestURL),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                existingScheme = (obj["encryption_scheme"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            // Identity: prefer DB/manifest via existing helper (handles encrypted bundles too).
+            let identity = extractPatientIdentity(from: bundleRoot)
+
+            // Attempt to read patient_id from plaintext DB when available.
             var patientID: Int? = nil
-            var mrn: String? = nil
-            var aliasLabel: String? = nil
-            var dobStr: String? = nil
-            var sexStr: String? = nil
-
-            if fm.fileExists(atPath: dbURL.path) {
+            if hasPlain {
                 var db: OpaquePointer?
-                if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                if sqlite3_open_v2(dbPlainURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
                     defer { sqlite3_close(db) }
-                    // Determine which columns exist
                     let cols = columnSet(of: "patients", db: db)
-                    if !cols.isEmpty {
-                        var wanted: [String] = ["id"]
-                        if cols.contains("mrn") { wanted.append("mrn") }
-                        if cols.contains("alias_label") { wanted.append("alias_label") }
-                        else if cols.contains("alias") { wanted.append("alias AS alias_label") }
-                        if cols.contains("dob") { wanted.append("dob") }
-                        if cols.contains("sex") { wanted.append("sex") }
-                        let sql = "SELECT " + wanted.joined(separator: ", ") + " FROM patients ORDER BY id LIMIT 1;"
+                    if cols.contains("id") {
+                        let sql = "SELECT id FROM patients ORDER BY id LIMIT 1;"
                         var stmt: OpaquePointer?
                         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt = stmt {
                             defer { sqlite3_finalize(stmt) }
                             if sqlite3_step(stmt) == SQLITE_ROW {
-                                var col = Int32(0)
-                                patientID = Int(sqlite3_column_int64(stmt, col)); col += 1
-                                if wanted.contains(where: { $0.hasPrefix("mrn") }) {
-                                    if let c = sqlite3_column_text(stmt, col) { mrn = String(cString: c) }; col += 1
-                                }
-                                if wanted.contains(where: { $0.contains("alias_label") }) {
-                                    if let c = sqlite3_column_text(stmt, col) { aliasLabel = String(cString: c) }; col += 1
-                                }
-                                if wanted.contains("dob") {
-                                    if let c = sqlite3_column_text(stmt, col) { dobStr = String(cString: c) }; col += 1
-                                }
-                                if wanted.contains("sex") {
-                                    if let c = sqlite3_column_text(stmt, col) { sexStr = String(cString: c) }; col += 1
-                                }
+                                patientID = Int(sqlite3_column_int64(stmt, 0))
                             }
                         }
                     }
                 }
             }
 
-            // Hash DB and build docs manifest
-            let dbSha256 = fm.fileExists(atPath: dbURL.path) ? sha256OfFile(at: dbURL) : ""
+            // Hash DB payload that actually exists in the bundle.
+            let dbPayloadURL: URL = hasPlain ? dbPlainURL : dbEncURL
+            let dbSha256 = sha256OfFile(at: dbPayloadURL)
+
+            // Docs manifest entries with relative paths (under 'docs/') and sha256.
             let docsManifest = buildDocsManifest(docsRoot: docsURL, bundleRoot: bundleRoot)
 
-            // Compose v2 manifest
+            // Build a backward-friendly flat file list (db payload + docs files).
+            let filesList: [[String: Any]] = buildFilesList(bundleRoot: bundleRoot)
+
+            // Compose v2 manifest.
             let iso = ISO8601DateFormatter()
             let nowISO = iso.string(from: Date())
 
@@ -5764,22 +5790,43 @@ final class AppState: ObservableObject {
                 "format": "peMR",
                 "version": 1,
                 "schema_version": 2,
-                "encrypted": false,
+                // Encryption metadata reflects the payload present.
+                "encrypted": hasEnc && !hasPlain,
                 "exported_at": nowISO,
                 "source": "DrsMainApp",
                 "includes_docs": !docsManifest.isEmpty,
+                // DB payload hash: hashes the file that actually exists (db.sqlite OR db.sqlite.enc).
                 "db_sha256": dbSha256,
-                "docs_manifest": docsManifest
+                "docs_manifest": docsManifest,
+                // Keep legacy-style list for older tooling/debuggability.
+                "files": filesList
             ]
+
+            if (hasEnc && !hasPlain) {
+                // Preserve an existing scheme if we have it; else default to AES-GCM-v1.
+                out["encryption_scheme"] = (existingScheme?.isEmpty == false) ? existingScheme! : "AES-GCM-v1"
+            }
+
             if let patientID { out["patient_id"] = patientID }
-            if let mrn = mrn, !mrn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out["mrn"] = mrn }
-            if let alias = aliasLabel, !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out["patient_alias"] = alias }
-            if let dobStr = dobStr, !dobStr.isEmpty { out["dob"] = dobStr }
-            if let sexStr = sexStr, !sexStr.isEmpty { out["patient_sex"] = sexStr }
+
+            if let mrn = identity?.mrn, !mrn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                out["mrn"] = mrn
+            }
+            if let alias = identity?.alias, !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                out["patient_alias"] = alias
+            }
+            if let dob = identity?.dobISO, !dob.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // Normalize to YYYY-MM-DD if possible (tolerate full ISO)
+                if let day = dob.split(separator: "T").first {
+                    out["dob"] = String(day)
+                } else {
+                    out["dob"] = dob
+                }
+            }
 
             do {
                 let data = try JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted, .sortedKeys])
-                try data.write(to: bundleRoot.appendingPathComponent("manifest.json"), options: .atomic)
+                try data.write(to: manifestURL, options: .atomic)
                 return true
             } catch {
                 let fmt = NSLocalizedString(
@@ -5790,6 +5837,94 @@ final class AppState: ObservableObject {
                 log.error("\(line, privacy: .public)")
                 return false
             }
+        }
+
+        /// Best-effort upgrade of legacy manifests to the current v2 schema.
+        /// Returns true if we wrote a refreshed manifest, false if skipped or failed.
+        @discardableResult
+        private func upgradeBundleManifestIfNeeded(at bundleRoot: URL) -> Bool {
+            let fm = FileManager.default
+            let manifestURL = bundleRoot.appendingPathComponent("manifest.json")
+
+            // If there's no manifest at all, write a fresh v2 one.
+            guard fm.fileExists(atPath: manifestURL.path) else {
+                return writeManifestV2(bundleRoot: bundleRoot)
+            }
+
+            // If manifest exists, decide if it already looks like healthy v2.
+            if let data = try? Data(contentsOf: manifestURL),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let format = (obj["format"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let schemaVersion = obj["schema_version"] as? Int
+                let hasDbSha = ((obj["db_sha256"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                let hasIdentity = (
+                    ((obj["patient_alias"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                    || ((obj["mrn"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                    || ((obj["dob"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                )
+
+                let looksHealthyV2 = (format == "pemr") && ((schemaVersion ?? 0) >= 2) && hasDbSha && hasIdentity
+                if looksHealthyV2 {
+                    return false
+                }
+            }
+
+            // Refresh to v2 (non-fatal if it fails).
+            return writeManifestV2(bundleRoot: bundleRoot)
+        }
+
+        /// Build a flat file list similar to exporter manifests for backward compatibility.
+        /// Includes db payload (db.sqlite or db.sqlite.enc) and docs/** files.
+        private func buildFilesList(bundleRoot: URL) -> [[String: Any]] {
+            let fm = FileManager.default
+            var out: [[String: Any]] = []
+            let iso = ISO8601DateFormatter()
+
+            guard let enumerator = fm.enumerator(
+                at: bundleRoot,
+                includingPropertiesForKeys: [
+                    URLResourceKey.isDirectoryKey,
+                    URLResourceKey.fileSizeKey,
+                    URLResourceKey.contentModificationDateKey
+                ],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else {
+                log.warning("buildFilesList: failed to enumerate bundle root \(bundleRoot.path, privacy: .public)")
+                return out
+            }
+
+            for case let url as URL in enumerator {
+                if url == bundleRoot { continue }
+                let name = url.lastPathComponent
+                if name == ".DS_Store" || name == "__MACOSX" || name.hasPrefix("._") { continue }
+                if name == "manifest.json" { continue }
+
+                let vals = try? url.resourceValues(forKeys: [
+                    URLResourceKey.isDirectoryKey,
+                    URLResourceKey.fileSizeKey,
+                    URLResourceKey.contentModificationDateKey
+                ])
+                if vals?.isDirectory == true { continue }
+
+                let relPath = url.path.replacingOccurrences(of: bundleRoot.path + "/", with: "")
+                let sha = sha256OfFile(at: url)
+
+                out.append([
+                    "path": relPath,
+                    "size": vals?.fileSize ?? 0,
+                    "modified": iso.string(from: vals?.contentModificationDate ?? Date()),
+                    "sha256": sha
+                ])
+            }
+
+            // Stable ordering for deterministic manifests.
+            out.sort {
+                let a = ($0["path"] as? String) ?? ""
+                let b = ($1["path"] as? String) ?? ""
+                return a.localizedStandardCompare(b) == .orderedAscending
+            }
+
+            return out
         }
 
         /// Convenience: refresh manifest.json for the currently selected bundle, if any.

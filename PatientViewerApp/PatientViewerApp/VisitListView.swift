@@ -200,7 +200,7 @@ struct VisitDetailView: SwiftUI.View {
         }
         .navigationTitle(L("patient_viewer.visit_detail.nav_title", comment: "Navigation title"))
         .sheet(item: $generatedPDFURL) { identifiableURL in
-            PDFPreviewContainer(fileURL: identifiableURL.url)
+            PDFPreviewContainer(fileURL: identifiableURL.url, visit: visit, dbURL: dbURL)
         }
         .padding()
         .alert(isPresented: $showExportAlert) {
@@ -215,8 +215,11 @@ struct VisitDetailView: SwiftUI.View {
 
 struct PDFPreviewContainer: SwiftUI.View {
     let fileURL: URL
+    let visit: VisitSummary
+    let dbURL: URL
+
     @Environment(\.dismiss) private var dismiss
-    @State private var showShareSheet = false
+    @State private var shareURL: IdentifiableURL?
 
     var body: some SwiftUI.View {
         NavigationView {
@@ -234,7 +237,13 @@ struct PDFPreviewContainer: SwiftUI.View {
                             ToolbarItem(placement: .primaryAction) {
                                 Button {
                                     logVisits.info("PDFPreview Share tapped for \(fileURL.lastPathComponent, privacy: .public)")
-                                    showShareSheet = true
+
+                                    // Build the named copy first, then present using a non-nil Identifiable URL.
+                                    // Using `.sheet(item:)` avoids the “No items to share” first-tap race.
+                                    let shareCopyURL = makeNamedShareCopy(originalURL: fileURL, visit: visit, bundleRoot: dbURL)
+                                    DispatchQueue.main.async {
+                                        self.shareURL = IdentifiableURL(url: shareCopyURL)
+                                    }
                                 } label: {
                                     Image(systemName: "square.and.arrow.up")
                                 }
@@ -260,8 +269,11 @@ struct PDFPreviewContainer: SwiftUI.View {
                 }
             }
         }
-        .sheet(isPresented: $showShareSheet) {
-            ActivityView(activityItems: [PDFShareItemSource(fileURL: fileURL)])
+        .sheet(item: $shareURL, onDismiss: {
+            // Reset between runs so the next share always starts clean.
+            self.shareURL = nil
+        }) { identifiable in
+            ActivityView(activityItems: [PDFShareItemSource(fileURL: identifiable.url)])
         }
     }
 }
@@ -519,10 +531,23 @@ struct ActivityView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
         let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+
+        // IMPORTANT: On iPad and Mac Catalyst, UIActivityViewController presents as a popover.
+        // If no sourceView/sourceRect is set, it can crash at presentation time.
+        if let pop = controller.popoverPresentationController {
+            pop.sourceView = controller.view
+            pop.sourceRect = CGRect(x: controller.view.bounds.midX,
+                                    y: controller.view.bounds.midY,
+                                    width: 1, height: 1)
+            pop.permittedArrowDirections = []
+        }
+
         return controller
     }
 
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+        // no-op
+    }
 }
 
 final class PDFShareItemSource: NSObject, UIActivityItemSource {
@@ -535,17 +560,31 @@ final class PDFShareItemSource: NSObject, UIActivityItemSource {
 
     // Placeholder required by UIActivityViewController
     func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
-        return Data()
+        // IMPORTANT: On Mac Catalyst, ShareKit needs a filename early.
+        // Returning a URL guarantees a name.
+        return fileURL
     }
 
-    // Provide raw PDF data instead of a sandboxed file URL to avoid LSSharing/CKShare errors
-    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
-        if let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) {
-            return data
-        } else {
-            // Fallback to the URL if data read fails
+    // Provide item
+    func activityViewController(_ activityViewController: UIActivityViewController,
+                                itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
+        let raw = activityType?.rawValue ?? ""
+
+        #if targetEnvironment(macCatalyst)
+        // Mac Catalyst: “Save to Files…” expects a file URL (needs a filename).
+        return fileURL
+        #else
+        // iOS: For Save-to-Files, prefer URL (keeps filename).
+        if raw.contains("SaveToFiles") {
             return fileURL
         }
+
+        // Other targets can accept Data.
+        if let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) {
+            return data
+        }
+        return fileURL
+        #endif
     }
 
     // Declare the UTI / content type for the data we return
@@ -561,6 +600,209 @@ final class PDFShareItemSource: NSObject, UIActivityItemSource {
     func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
         return fileURL.deletingPathExtension().lastPathComponent
     }
+}
+
+// MARK: - Share filename helpers
+private func makeNamedShareCopy(originalURL: URL, visit: VisitSummary, bundleRoot: URL) -> URL {
+    let fm = FileManager.default
+
+    let (aliasFromDB, _) = fetchPatientAliasAndDOB(bundleRoot: bundleRoot)
+    let aliasPartRaw = (aliasFromDB?.isEmpty == false) ? aliasFromDB! : bundleRoot.lastPathComponent
+    let aliasPart = sanitizeFilenameComponent(aliasPartRaw)
+
+    let visitDate = parseVisitDate(visit.date)
+    let visitDatePart = (visitDate != nil) ? formatDateForFilename(visitDate!) : "unknownDate"
+
+    let visitTypePart = computeVisitTypePart(visit: visit, bundleRoot: bundleRoot)
+
+    let savedPart = formatNowForFilename(Date())
+
+    let appNameRaw = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String)
+        ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+        ?? "PatientViewerApp"
+    let appPart = sanitizeFilenameComponent(appNameRaw)
+
+    // Example: Amber_Unicorn_🦋_36_month_visit_20251210_saved-20260107-123045_PatientViewerApp.pdf
+    let fileName = "\(aliasPart)_\(visitTypePart)_\(visitDatePart)_saved-\(savedPart)_\(appPart).pdf"
+
+    let dest = fm.temporaryDirectory.appendingPathComponent(fileName)
+
+    do {
+        if fm.fileExists(atPath: dest.path) {
+            try fm.removeItem(at: dest)
+        }
+        try fm.copyItem(at: originalURL, to: dest)
+        logVisits.info("Prepared share copy: \(dest.lastPathComponent, privacy: .public)")
+        return dest
+    } catch {
+        logVisits.error("Failed to create share copy (using original): \(String(describing: error))")
+        return originalURL
+    }
+}
+
+private func fetchPatientAliasAndDOB(bundleRoot: URL) -> (alias: String?, dob: Date?) {
+    let dbPath = bundleRoot.appendingPathComponent("db.sqlite").path
+
+    do {
+        let db = try Connection(dbPath)
+
+        // Try the most common schema: patients(id, alias, dob)
+        do {
+            let patients = Table("patients")
+            let id = Expression<Int64>("id")
+            let alias = Expression<String?>("alias")
+            let dob = Expression<String?>("dob")
+
+            if let row = try db.pluck(patients.filter(id == 1)) ?? db.pluck(patients.limit(1)) {
+                let aliasStr = (try? row.get(alias)) ?? nil
+                let dobStr = (try? row.get(dob)) ?? nil
+                return (aliasStr, parseDOB(dobStr))
+            }
+        } catch {
+            // Fall through to other attempts
+        }
+
+        // Some exports may store demographics elsewhere; best-effort fallback.
+        return (nil, nil)
+    } catch {
+        logVisits.error("Could not open DB for patient info: \(String(describing: error))")
+        return (nil, nil)
+    }
+}
+
+private func parseDOB(_ raw: String?) -> Date? {
+    guard let raw = raw, !raw.isEmpty else { return nil }
+    let df = DateFormatter()
+    df.locale = Locale(identifier: "en_US_POSIX")
+    df.timeZone = TimeZone.current
+    df.dateFormat = "yyyy-MM-dd"
+    return df.date(from: raw)
+}
+
+private func parseVisitDate(_ raw: String) -> Date? {
+    let rawTrim = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if rawTrim.isEmpty || rawTrim == "—" { return nil }
+
+    let formats = [
+        "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+        "yyyy-MM-dd'T'HH:mm:ss.SSS",
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd"
+    ]
+
+    for f in formats {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone.current
+        df.dateFormat = f
+        if let d = df.date(from: rawTrim) { return d }
+    }
+
+    return nil
+}
+
+private func computeVisitTypePart(visit: VisitSummary, bundleRoot: URL) -> String {
+    switch visit.category {
+    case "well":
+        if let code = fetchWellVisitTypeCode(visitID: visit.id, bundleRoot: bundleRoot) {
+            return mapWellVisitTypeCodeToFilename(code)
+        }
+        let fallback = sanitizeFilenameComponent(visit.type)
+        return fallback.isEmpty ? "well_visit" : fallback
+
+    case "sick":
+        let fallback = sanitizeFilenameComponent(visit.type)
+        return fallback.isEmpty ? "sick_visit" : fallback
+
+    default:
+        let fallback = sanitizeFilenameComponent(visit.category)
+        return fallback.isEmpty ? "visit" : fallback
+    }
+}
+
+private func fetchWellVisitTypeCode(visitID: Int64, bundleRoot: URL) -> String? {
+    let dbPath = bundleRoot.appendingPathComponent("db.sqlite").path
+
+    do {
+        let db = try Connection(dbPath)
+        let wellVisits = Table("well_visits")
+        let id = Expression<Int64>("id")
+        let visitType = Expression<String?>("visit_type")
+
+        if let row = try db.pluck(wellVisits.filter(id == visitID)) {
+            let raw = (try? row.get(visitType)) ?? nil
+            return (raw?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? raw : nil
+        }
+        return nil
+    } catch {
+        logVisits.error("Could not fetch well visit type code: \(String(describing: error))")
+        return nil
+    }
+}
+
+private func mapWellVisitTypeCodeToFilename(_ codeRaw: String) -> String {
+    let code = codeRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    switch code {
+    case "one_month": return "1_month_visit"
+    case "two_month": return "2_month_visit"
+    case "four_month": return "4_month_visit"
+    case "six_month": return "6_month_visit"
+    case "nine_month": return "9_month_visit"
+    case "twelve_month": return "12_month_visit"
+    case "fifteen_month": return "15_month_visit"
+    case "eighteen_month": return "18_month_visit"
+    case "twentyfour_month": return "24_month_visit"
+    case "thirty_month": return "30_month_visit"
+    case "thirtysix_month": return "36_month_visit"
+    case "newborn_first": return "newborn_first_visit"
+    default:
+        let cleaned = sanitizeFilenameComponent(code)
+        return cleaned.isEmpty ? "well_visit" : "\(cleaned)_visit"
+    }
+}
+
+private func computeAgePart(dob: Date?, visitDate: Date?) -> String {
+    guard let dob = dob, let visitDate = visitDate else { return "age-NA" }
+
+    let cal = Calendar(identifier: .gregorian)
+    let comps = cal.dateComponents([.year, .month], from: dob, to: visitDate)
+    let y = max(0, comps.year ?? 0)
+    let m = max(0, comps.month ?? 0)
+
+    if y > 0 {
+        return "\(y)y\(m)m"
+    } else {
+        return "\(m)m"
+    }
+}
+
+private func formatNowForFilename(_ d: Date) -> String {
+    let df = DateFormatter()
+    df.locale = Locale(identifier: "en_US_POSIX")
+    df.timeZone = TimeZone.current
+    df.dateFormat = "yyyyMMdd-HHmmss"
+    return df.string(from: d)
+}
+
+private func formatDateForFilename(_ d: Date) -> String {
+    let df = DateFormatter()
+    df.locale = Locale(identifier: "en_US_POSIX")
+    df.timeZone = TimeZone.current
+    df.dateFormat = "yyyyMMdd"
+    return df.string(from: d)
+}
+
+private func sanitizeFilenameComponent(_ s: String) -> String {
+    // Replace path separators and other unfriendly filename characters.
+    let forbidden = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t")
+    let parts = s.components(separatedBy: forbidden)
+    let joined = parts.joined(separator: "-")
+    // Collapse whitespace to underscores for nicer filenames.
+    let ws = CharacterSet.whitespacesAndNewlines
+    let cleaned = joined.components(separatedBy: ws).filter { !$0.isEmpty }.joined(separator: "_")
+    return cleaned.isEmpty ? "unknown" : cleaned
 }
 
 struct IdentifiableURL: Identifiable {

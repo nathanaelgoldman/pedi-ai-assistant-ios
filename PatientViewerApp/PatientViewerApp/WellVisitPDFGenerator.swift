@@ -12,6 +12,11 @@ import UIKit
 import OSLog
 import CoreText
 
+@inline(__always)
+private func L(_ key: String, _ fallback: String) -> String {
+    NSLocalizedString(key, comment: fallback)
+}
+
 struct WellVisitPDFGenerator {
     private static let log = Logger(subsystem: "com.patientviewer.app", category: "pdf.well")
     // Simple localization helper for non-SwiftUI code (PDF rendering).
@@ -170,9 +175,24 @@ struct WellVisitPDFGenerator {
                 return nil
             }
 
+            // Localized unit formats
+            let fmtDaySing  = WellVisitPDFGenerator.L("well_report.age.day_singular", "%d day")
+            let fmtDayPlur  = WellVisitPDFGenerator.L("well_report.age.day_plural", "%d days")
+            let fmtMonthSing = WellVisitPDFGenerator.L("well_report.age.month_singular", "%d month")
+            let fmtMonthPlur = WellVisitPDFGenerator.L("well_report.age.month_plural", "%d months")
+            let fmtYearSing  = WellVisitPDFGenerator.L("well_report.age.year_singular", "%d year")
+            let fmtYearPlur  = WellVisitPDFGenerator.L("well_report.age.year_plural", "%d years")
+
+            let fmtMonthDay = WellVisitPDFGenerator.L("well_report.age.format.month_day", "%@ %@")
+            let fmtYearMonth = WellVisitPDFGenerator.L("well_report.age.format.year_month", "%@ %@")
+
+            func unit(_ n: Int, singular: String, plural: String) -> String {
+                String(format: (n == 1 ? singular : plural), n)
+            }
+
             // If misconfigured and visit is before DOB, clamp to 0 days
             if finalVisitDate < dobDate {
-                return "0 days"
+                return String(format: fmtDayPlur, 0)
             }
 
             let calendar = Calendar(identifier: .gregorian)
@@ -184,25 +204,25 @@ struct WellVisitPDFGenerator {
 
             // Before 1 month: show days
             if years == 0 && months == 0 {
-                return "\(days) day" + (days == 1 ? "" : "s")
+                return unit(days, singular: fmtDaySing, plural: fmtDayPlur)
             }
 
-            // From 1 month to 12 months: month + days
+            // From 1 month to 12 months: month + optional days
             if years == 0 && months >= 1 {
-                let monthPart = months == 1 ? "1 month" : "\(months) months"
+                let monthPart = unit(months, singular: fmtMonthSing, plural: fmtMonthPlur)
                 if days > 0 {
-                    let dayPart = days == 1 ? "1 day" : "\(days) days"
-                    return "\(monthPart) \(dayPart)"
+                    let dayPart = unit(days, singular: fmtDaySing, plural: fmtDayPlur)
+                    return String(format: fmtMonthDay, monthPart, dayPart)
                 } else {
                     return monthPart
                 }
             }
 
-            // From 12 months onward: years + months
-            let yearPart = years == 1 ? "1 year" : "\(years) years"
+            // From 12 months onward: years + optional months
+            let yearPart = unit(years, singular: fmtYearSing, plural: fmtYearPlur)
             if months > 0 {
-                let monthPart = months == 1 ? "1 month" : "\(months) months"
-                return "\(yearPart) \(monthPart)"
+                let monthPart = unit(months, singular: fmtMonthSing, plural: fmtMonthPlur)
+                return String(format: fmtYearMonth, yearPart, monthPart)
             } else {
                 return yearPart
             }
@@ -272,6 +292,7 @@ struct WellVisitPDFGenerator {
 
         // Preload chart images before entering PDF rendering
         var chartImagesToRender: [(String, UIImage)] = []
+        
         // We'll need sexText and dbPath before rendering
         var sexTextForCharts: String = ""
         let dbPath: String = dbURL.appendingPathComponent("db.sqlite").path
@@ -324,10 +345,38 @@ struct WellVisitPDFGenerator {
         }
         if sexTextForCharts == "M" || sexTextForCharts == "F" {
             let chartTypes: [(String, String, String)] = [
-                ("weight", "Weight-for-Age (0–60m)", "wfa_0_24m_\(sexTextForCharts)"),
-                ("height", "Length-for-Age (0–60m)", "lhfa_0_24m_\(sexTextForCharts)"),
-                ("head_circ", "Head Circumference-for-Age (0–60m)", "hcfa_0_24m_\(sexTextForCharts)"),
-                ("bmi", "BMI-for-Age (0–60m)", "bmi_0_24m_\(sexTextForCharts)")
+                (
+                    "weight",
+                    WellVisitPDFGenerator.L(
+                        "well_report.growth_chart.title.weight_for_age",
+                        "Weight-for-Age (0–60m)"
+                    ),
+                    "wfa_0_24m_\(sexTextForCharts)"
+                ),
+                (
+                    "height",
+                    WellVisitPDFGenerator.L(
+                        "well_report.growth_chart.title.length_for_age",
+                        "Length-for-Age (0–60m)"
+                    ),
+                    "lhfa_0_24m_\(sexTextForCharts)"
+                ),
+                (
+                    "head_circ",
+                    WellVisitPDFGenerator.L(
+                        "well_report.growth_chart.title.head_circumference_for_age",
+                        "Head Circumference-for-Age (0–60m)"
+                    ),
+                    "hcfa_0_24m_\(sexTextForCharts)"
+                ),
+                (
+                    "bmi",
+                    WellVisitPDFGenerator.L(
+                        "well_report.growth_chart.title.bmi_for_age",
+                        "BMI-for-Age (0–60m)"
+                    ),
+                    "bmi_0_24m_\(sexTextForCharts)"
+                )
             ]
             for (measurement, title, filename) in chartTypes {
                 if let cutoff = ageMonthsForCharts {
@@ -397,7 +446,10 @@ struct WellVisitPDFGenerator {
                 let visitID = Expression<Int64>("id")
                 guard let visitRow = try db.pluck(wellVisits.filter(visitID == visit.id)) else {
                     WellVisitPDFGenerator.log.error("Visit id \(visit.id, privacy: .public) not found in DB")
-                    drawText("❌ Error: Visit not found", font: subFont)
+                    drawText(
+                        WellVisitPDFGenerator.L("well_report.error.visit_not_found", "❌ Error: Visit not found"),
+                        font: subFont
+                    )
                     return
                 }
 
@@ -414,7 +466,10 @@ struct WellVisitPDFGenerator {
                 let pid = visitRow[patientID]
                 guard let patientRow = try db.pluck(patients.filter(id == pid)) else {
                     WellVisitPDFGenerator.log.error("Patient for visit id \(visit.id, privacy: .public) not found in DB")
-                    drawText("❌ Error: Patient not found", font: subFont)
+                    drawText(
+                        WellVisitPDFGenerator.L("well_report.error.patient_not_found", "❌ Error: Patient not found"),
+                        font: subFont
+                    )
                     return
                 }
 
@@ -730,7 +785,7 @@ struct WellVisitPDFGenerator {
                 if !parentsConcerns.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     drawWrappedText(parentsConcerns, font: subFont, in: pageRect, at: &y, using: context)
                 } else {
-                    drawText("—", font: subFont)
+                    drawText(placeholderDash, font: subFont)
                 }
 
                 // MARK: - Feeding Section
@@ -904,12 +959,17 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText(secSupplementation, font: UIFont.boldSystemFont(ofSize: 15))
 
+                let fmtVitaminDGiven = WellVisitPDFGenerator.L(
+                    "well_report.supplementation.vitamin_d_given_fmt",
+                    "Vitamin D given: %@"
+                )
+
                 let vitaminDGiven = visitRow[Expression<Int?>("vitamin_d_given")]
                 if let val = vitaminDGiven {
                     if val == 1 {
-                        drawText("Vitamin D Given: Yes", font: UIFont.italicSystemFont(ofSize: 14))
+                        drawText(String(format: fmtVitaminDGiven, valYes), font: UIFont.italicSystemFont(ofSize: 14))
                     } else if val == 0 {
-                        drawText("Vitamin D Given: No", font: UIFont.italicSystemFont(ofSize: 14))
+                        drawText(String(format: fmtVitaminDGiven, valNo), font: UIFont.italicSystemFont(ofSize: 14))
                     }
                     // If other values are stored, we silently ignore them for now.
                 } else {
@@ -924,24 +984,27 @@ struct WellVisitPDFGenerator {
                 let poopStatusExp = Expression<String?>("poop_status")
                 let poopCommentExp = Expression<String?>("poop_comment")
 
+                let fmtStoolPattern = WellVisitPDFGenerator.L("well_report.stools.pattern_fmt", "Stool pattern: %@")
+                let fmtStoolComment = WellVisitPDFGenerator.L("well_report.stools.comment_fmt", "Comment: %@")
+
                 var stoolLines: [String] = []
 
                 if let statusRaw = visitRow[poopStatusExp] {
                     let status = statusRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !status.isEmpty {
-                        stoolLines.append("Stool pattern: \(status)")
+                        stoolLines.append(String(format: fmtStoolPattern, status))
                     }
                 }
 
                 if let commentRaw = visitRow[poopCommentExp] {
                     let comment = commentRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !comment.isEmpty {
-                        stoolLines.append("Comment: \(comment)")
+                        stoolLines.append(String(format: fmtStoolComment, comment))
                     }
                 }
 
                 if stoolLines.isEmpty {
-                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                    drawText(placeholderDash, font: UIFont.italicSystemFont(ofSize: 14))
                 } else {
                     for line in stoolLines {
                         ensureSpace(for: 16)
@@ -959,7 +1022,8 @@ struct WellVisitPDFGenerator {
                         let first = parts[0]
                         let second = parts[1]
                         if !first.isEmpty && !second.isEmpty {
-                            return "\(first) to \(second) hours"
+                            let fmtRangeHours = WellVisitPDFGenerator.L("well_report.sleep.fmt.range_hours", "%@ to %@ hours")
+                            return String(format: fmtRangeHours, String(first), String(second))
                         }
                     }
                     return trimmed
@@ -972,12 +1036,20 @@ struct WellVisitPDFGenerator {
 
                 var sleepLines: [String] = []
 
+                let fmtSleepDuration = WellVisitPDFGenerator.L("well_report.sleep.duration_fmt", "Sleep duration: %@")
+                let fmtSleepRegularity = WellVisitPDFGenerator.L("well_report.sleep.regularity_fmt", "Sleep regularity: %@")
+                let fmtSleepSnoring = WellVisitPDFGenerator.L("well_report.sleep.snoring_fmt", "Snoring: %@")
+
+                let sleepIssueYes = WellVisitPDFGenerator.L("well_report.sleep.issue_reported_yes", "Sleep issue reported: Yes")
+                let sleepIssueNo = WellVisitPDFGenerator.L("well_report.sleep.issue_reported_no", "Sleep issue reported: No")
+                let fmtSleepIssueYesDetail = WellVisitPDFGenerator.L("well_report.sleep.issue_reported_yes_detail_fmt", "Sleep issue reported: Yes – %@")
+
                 // 1. Sleep duration (pretty-printed, e.g. "10_15" -> "10 to 15 hours")
                 if let durationRaw = visitRow[Expression<String?>("sleep_hours_text")] {
                     let durationTrimmed = durationRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !durationTrimmed.isEmpty {
                         let pretty = prettySleepDuration(durationTrimmed)
-                        sleepLines.append("Sleep duration: \(pretty)")
+                        sleepLines.append(String(format: fmtSleepDuration, pretty))
                     }
                 }
 
@@ -985,7 +1057,7 @@ struct WellVisitPDFGenerator {
                 if let regularRaw = visitRow[Expression<String?>("sleep_regular")] {
                     let regular = regularRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !regular.isEmpty {
-                        sleepLines.append("Sleep regularity: \(regular)")
+                        sleepLines.append(String(format: fmtSleepRegularity, regular))
                     }
                 }
 
@@ -997,8 +1069,8 @@ struct WellVisitPDFGenerator {
                                                         ageDays: ageDaysValue),
                        ageMonths >= 12.0,
                        let snoreVal = visitRow[Expression<Int?>("sleep_snoring")] {
-                        let text = (snoreVal == 1) ? "Yes" : "No"
-                        sleepLines.append("Snoring: \(text)")
+                        let text = (snoreVal == 1) ? valYes : valNo
+                        sleepLines.append(String(format: fmtSleepSnoring, text))
                     }
                 } catch {
                     // If age_days is missing for some reason, we silently skip the Snoring line.
@@ -1012,17 +1084,17 @@ struct WellVisitPDFGenerator {
 
                 if issueReportedVal == 1 {
                     if issueText.isEmpty {
-                        sleepLines.append("Sleep issue reported: Yes")
+                        sleepLines.append(sleepIssueYes)
                     } else {
-                        sleepLines.append("Sleep issue reported: Yes – \(issueText)")
+                        sleepLines.append(String(format: fmtSleepIssueYesDetail, issueText))
                     }
                 } else {
                     // Explicitly document absence of reported issues
-                    sleepLines.append("Sleep issue reported: No")
+                    sleepLines.append(sleepIssueNo)
                 }
 
                 if sleepLines.isEmpty {
-                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                    drawText(placeholderDash, font: UIFont.italicSystemFont(ofSize: 14))
                 } else {
                     for line in sleepLines {
                         ensureSpace(for: 16)
@@ -1044,6 +1116,11 @@ struct WellVisitPDFGenerator {
                     ageDays: ageDaysValueForDev
                 )
 
+                // Developmental test strings
+                let fmtDevResultScore = WellVisitPDFGenerator.L("well_report.development.devtest.result_score_fmt", "Developmental test: %@ (score %d)")
+                let fmtDevScoreOnly = WellVisitPDFGenerator.L("well_report.development.devtest.score_only_fmt", "Developmental test score: %d")
+                let fmtDevResultOnly = WellVisitPDFGenerator.L("well_report.development.devtest.result_only_fmt", "Developmental test: %@")
+
                 // Developmental test (devtest_*), shown from 9 to 36 months
                 let devTestScore = visitRow[Expression<Int?>("devtest_score")]
                 let devResult = visitRow[Expression<String?>("devtest_result")] ?? ""
@@ -1054,9 +1131,9 @@ struct WellVisitPDFGenerator {
                         let trimmedResult = devResult.trimmingCharacters(in: .whitespacesAndNewlines)
                         var devString: String
                         if !trimmedResult.isEmpty {
-                            devString = "Developmental test: \(trimmedResult) (score \(score))"
+                            devString = String(format: fmtDevResultScore, trimmedResult, score)
                         } else {
-                            devString = "Developmental test score: \(score)"
+                            devString = String(format: fmtDevScoreOnly, score)
                         }
                         ensureSpace(for: 16)
                         drawWrappedText(devString, font: subFont, in: pageRect, at: &y, using: context)
@@ -1064,10 +1141,15 @@ struct WellVisitPDFGenerator {
                         let trimmedResult = devResult.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmedResult.isEmpty {
                             ensureSpace(for: 16)
-                            drawWrappedText("Developmental test: \(trimmedResult)", font: subFont, in: pageRect, at: &y, using: context)
+                            drawWrappedText(String(format: fmtDevResultOnly, trimmedResult), font: subFont, in: pageRect, at: &y, using: context)
                         }
                     }
                 }
+
+                // M-CHAT strings
+                let fmtMchatResultScore = WellVisitPDFGenerator.L("well_report.development.mchat.result_score_fmt", "M-CHAT: %@ (score %d)")
+                let fmtMchatScoreOnly = WellVisitPDFGenerator.L("well_report.development.mchat.score_only_fmt", "M-CHAT score: %d")
+                let fmtMchatResultOnly = WellVisitPDFGenerator.L("well_report.development.mchat.result_only_fmt", "M-CHAT: %@")
 
                 // M-CHAT (mchat_*), shown from 18 to 30 months
                 let mchatScore = visitRow[Expression<Int?>("mchat_score")]
@@ -1079,9 +1161,9 @@ struct WellVisitPDFGenerator {
                         let trimmed = mchatResult.trimmingCharacters(in: .whitespacesAndNewlines)
                         var mchatLine: String
                         if !trimmed.isEmpty {
-                            mchatLine = "M-CHAT: \(trimmed) (score \(score))"
+                            mchatLine = String(format: fmtMchatResultScore, trimmed, score)
                         } else {
-                            mchatLine = "M-CHAT score: \(score)"
+                            mchatLine = String(format: fmtMchatScoreOnly, score)
                         }
                         ensureSpace(for: 16)
                         drawWrappedText(mchatLine, font: subFont, in: pageRect, at: &y, using: context)
@@ -1089,7 +1171,7 @@ struct WellVisitPDFGenerator {
                         let trimmed = mchatResult.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmed.isEmpty {
                             ensureSpace(for: 16)
-                            drawWrappedText("M-CHAT: \(trimmed)", font: subFont, in: pageRect, at: &y, using: context)
+                            drawWrappedText(String(format: fmtMchatResultOnly, trimmed), font: subFont, in: pageRect, at: &y, using: context)
                         }
                     }
                 }
@@ -1097,6 +1179,14 @@ struct WellVisitPDFGenerator {
                 // Milestones summary (from well_visit_milestones)
                 y += 12
                 ensureSpace(for: 18)
+
+                let fmtAchieved = WellVisitPDFGenerator.L("well_report.milestones.achieved_fmt", "Achieved: %d/%d")
+                let achievedNone = WellVisitPDFGenerator.L("well_report.milestones.achieved_none", "Achieved: —")
+                let flagsTitle = WellVisitPDFGenerator.L("well_report.milestones.flags_title", "Flags:")
+                let fmtFlags = WellVisitPDFGenerator.L("well_report.milestones.flags_fmt", "Flags: %@")
+
+                let statUncertain = WellVisitPDFGenerator.L("well_report.milestones.status.uncertain", "uncertain")
+                let statNotYet = WellVisitPDFGenerator.L("well_report.milestones.status.not_yet", "not yet")
 
                 let milestonesTable = Table("well_visit_milestones")
                 _ = Expression<String>("code")
@@ -1117,19 +1207,28 @@ struct WellVisitPDFGenerator {
                             achievedCount += 1
                         } else if stat == "uncertain" || stat == "not yet" {
                             let itemLabel = row[label]
-                            flags.append("\(itemLabel): \(stat)")
+                            let statDisplay: String
+                            switch stat {
+                            case "uncertain":
+                                statDisplay = statUncertain
+                            case "not yet":
+                                statDisplay = statNotYet
+                            default:
+                                statDisplay = stat
+                            }
+                            flags.append("\(itemLabel): \(statDisplay)")
                         }
                     }
                 }
 
                 if totalCount > 0 {
-                    drawText("Achieved: \(achievedCount)/\(totalCount)", font: subFont)
+                    drawText(String(format: fmtAchieved, achievedCount, totalCount), font: subFont)
                 } else {
-                    drawText("Achieved: —", font: subFont)
+                    drawText(achievedNone, font: subFont)
                 }
 
                 if !flags.isEmpty {
-                    drawText("Flags:", font: subFont)
+                    drawText(flagsTitle, font: subFont)
 
                     func stripLeadingListMarker(_ raw: String) -> String {
                         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1151,7 +1250,7 @@ struct WellVisitPDFGenerator {
                         drawWrappedText("• \(cleaned)", font: subFont, in: pageRect, at: &y, using: context)
                     }
                 } else {
-                    drawText("Flags: \(placeholderDash)", font: subFont)
+                    drawText(String(format: fmtFlags, placeholderDash), font: subFont)
                 }
                 
                 // MARK: - Measurements
@@ -1463,7 +1562,7 @@ struct WellVisitPDFGenerator {
 
                 // 3. Render measurements or a placeholder if none
                 if measurementLines.isEmpty {
-                    drawText("—", font: UIFont.italicSystemFont(ofSize: 14))
+                    drawText(placeholderDash, font: UIFont.italicSystemFont(ofSize: 14))
                 } else {
                     for line in measurementLines {
                         ensureSpace(for: 16)
@@ -1688,7 +1787,7 @@ struct WellVisitPDFGenerator {
 
                 if trimmedProblems.isEmpty {
                     // No problem listing documented
-                    drawText("—", font: subFont)
+                    drawText(placeholderDash, font: subFont)
                 } else {
                     // Split into logical lines and render each as a bullet
                     let lines = trimmedProblems
@@ -1697,7 +1796,7 @@ struct WellVisitPDFGenerator {
                         .filter { !$0.isEmpty }
 
                     if lines.isEmpty {
-                        drawText("—", font: subFont)
+                        drawText(placeholderDash, font: subFont)
                     } else {
                         for line in lines {
                             ensureSpace(for: 16)
@@ -1848,7 +1947,8 @@ struct WellVisitPDFGenerator {
 
             } catch {
                 WellVisitPDFGenerator.log.error("DB error during PDF render: \(error.localizedDescription, privacy: .public)")
-                drawText("❌ DB Error: \(error.localizedDescription)", font: subFont)
+                let fmtDBError = WellVisitPDFGenerator.L("well_report.error.db_error_fmt", "❌ DB Error: %@")
+                drawText(String(format: fmtDBError, error.localizedDescription), font: subFont)
             }
         }
 
