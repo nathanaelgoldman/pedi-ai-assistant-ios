@@ -9,6 +9,15 @@
 import Foundation
 import CryptoKit
 
+// MARK: - Localization helpers
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), arguments: args)
+}
+
 enum BundleCrypto {
 
     // MARK: - Key Derivation (HKDF)
@@ -60,7 +69,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1001,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to obtain combined AES-GCM box for \(src.path)"]
+                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.combined_box_failed", src.path)]
             )
         }
 
@@ -86,7 +95,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1501,
-                userInfo: [NSLocalizedDescriptionKey: "BundleCrypto: encrypted file too short to contain HMAC and ciphertext at \(src.path)"]
+                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.file_too_short", src.path)]
             )
         }
 
@@ -101,7 +110,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1502,
-                userInfo: [NSLocalizedDescriptionKey: "BundleCrypto: HMAC verification failed for \(src.path)"]
+                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.hmac_failed", src.path)]
             )
         }
 
@@ -172,7 +181,7 @@ enum BundleCrypto {
                     domain: "BundleCrypto",
                     code: 2003,
                     userInfo: [
-                        NSLocalizedDescriptionKey: "BundleCrypto: failed to remove plaintext db.sqlite after encryption at \(plain.path)"
+                        NSLocalizedDescriptionKey: LF("bundle_crypto.error.remove_plain_failed", plain.path)
                     ]
                 )
             }
@@ -185,7 +194,7 @@ enum BundleCrypto {
             domain: "BundleCrypto",
             code: 2004,
             userInfo: [
-                NSLocalizedDescriptionKey: "BundleCrypto: neither db.sqlite nor db.sqlite.enc found under \(bundleRoot.path)"
+                NSLocalizedDescriptionKey: LF("bundle_crypto.error.missing_db_both", bundleRoot.path)
             ]
         )
     }

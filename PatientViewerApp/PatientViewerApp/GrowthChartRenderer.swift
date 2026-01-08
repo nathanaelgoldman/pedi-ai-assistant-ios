@@ -25,6 +25,26 @@ struct GrowthChartRenderer {
         category: "GrowthChartRenderer"
     )
 
+    // MARK: - Localization helpers
+
+    /// Localized display name for a measurement key (e.g., "weight", "height", "head_circ", "bmi").
+    private static func localizedMeasurementName(_ measurement: String) -> String {
+        let m = measurement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch m {
+        case "weight":
+            return NSLocalizedString("growth.measurement.weight", comment: "Measurement label: weight")
+        case "height":
+            return NSLocalizedString("growth.measurement.height", comment: "Measurement label: height/length")
+        case "head_circ":
+            return NSLocalizedString("growth.measurement.head_circ", comment: "Measurement label: head circumference")
+        case "bmi":
+            return NSLocalizedString("growth.measurement.bmi", comment: "Measurement label: BMI")
+        default:
+            // Best-effort fallback for unknown measurement strings
+            return measurement.capitalized
+        }
+    }
+
     private static func dynamicYRange(
         measurement: String,
         patientValues: [Double],
@@ -227,13 +247,25 @@ struct GrowthChartRenderer {
                 let placeholder = ZStack {
                     Color.white
                     VStack(spacing: 12) {
-                        let prettyName = (measurement == "bmi") ? "BMI" : measurement.capitalized
-                        Text("No \(prettyName) data available")
+                        let prettyName = Self.localizedMeasurementName(measurement)
+                        let title = String(
+                            format: NSLocalizedString(
+                                "growth.chart.placeholder.title",
+                                comment: "Placeholder title when no growth data is available for a chart. %@ = measurement name"
+                            ),
+                            locale: Locale.current,
+                            prettyName
+                        )
+                        Text(title)
                             .font(.title2)
                             .bold()
-                        Text("Add measurements to see the chart.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+
+                        Text(NSLocalizedString(
+                            "growth.chart.placeholder.subtitle",
+                            comment: "Placeholder subtitle inviting the user to add measurements"
+                        ))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     }
                     .padding()
                 }
@@ -257,6 +289,18 @@ struct GrowthChartRenderer {
         // Build the Chart and render on the main actor so all @MainActor-isolated
         // view modifiers (e.g., .chartLegend) are called on the correct actor.
         let image: UIImage? = await MainActor.run {
+            let axisAgeLabel = NSLocalizedString(
+                "growth.chart.axis.ageMonths",
+                comment: "Chart axis label for age in months"
+            )
+            let axisValueLabel = NSLocalizedString(
+                "growth.chart.axis.value",
+                comment: "Chart axis label for the plotted measurement values"
+            )
+            let percentileLegendLabel = NSLocalizedString(
+                "growth.chart.legend.percentile",
+                comment: "Legend label for percentile/SD reference curves"
+            )
             // 1) Base chart content
             let chartContent = Chart {
                 // Reference Curves (filtered inside the loop)
@@ -264,20 +308,20 @@ struct GrowthChartRenderer {
                     let points = curve.points.filter { $0.ageMonths.isFinite && $0.value.isFinite }
                     ForEach(points, id: \.ageMonths) { point in
                         LineMark(
-                            x: .value("Age (months)", point.ageMonths),
-                            y: .value("Value", point.value)
+                            x: .value(axisAgeLabel, point.ageMonths),
+                            y: .value(axisValueLabel, point.value)
                         )
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                         .opacity(0.7)
                     }
-                    .foregroundStyle(by: .value("Percentile", curve.label))
+                    .foregroundStyle(by: .value(percentileLegendLabel, curve.label))
                 }
 
                 // Patient Data
                 ForEach(cleanPatient, id: \.ageMonths) { point in
                     PointMark(
-                        x: .value("Age (months)", point.ageMonths),
-                        y: .value("Value", point.value)
+                        x: .value(axisAgeLabel, point.ageMonths),
+                        y: .value(axisValueLabel, point.value)
                     )
                     .foregroundStyle(.blue)
                     .symbolSize(40)

@@ -559,3 +559,184 @@
 "patient_viewer.growth_chart.y_axis.head_circ" = "Head circumference (cm)";
 "patient_viewer.growth_chart.y_axis.bmi" = "BMI";
 "patient_viewer.growth_chart.y_axis.generic" = "Value";
+
+/* Measurements */
+"well_report.measurements.line.weight_measured_on_fmt" = "Weight: %.2f kg (measured on %@)";
+"well_report.measurements.line.length_height_measured_on_fmt" = "Length/Height: %.1f cm (measured on %@)";
+"well_report.measurements.line.head_circ_measured_on_fmt" = "Head circumference: %.1f cm (measured on %@)";
+
+"well_report.measurements.line.weight_today_fmt" = "Today's weight: %.2f kg";
+"well_report.measurements.line.length_today_fmt" = "Today's length: %.1f cm";
+"well_report.measurements.line.head_circ_today_fmt" = "Today's head circumference: %.1f cm";
+
+/* Healthy conclusion */
+"well_report.conclusions.default.healthy_with_age_fmt" = "Healthy %@";
+"well_report.conclusions.default.healthy" = "Healthy";
+
+/* WellVisitPDFGenerator — Physical Exam */
+
+/* Values */
+"well_report.value.normal" = "Normal";
+"well_report.value.abnormal" = "Abnormal";
+
+/* PE group titles */
+"well_report.pe.group.general" = "General";
+"well_report.pe.group.cardiorespiratory" = "Cardiorespiratory";
+"well_report.pe.group.eyes_head" = "Eyes & Head";
+"well_report.pe.group.abdomen_genitalia" = "Abdomen & Genitalia";
+"well_report.pe.group.skin" = "Skin";
+"well_report.pe.group.msk" = "MSK";
+
+/* PE field labels */
+"well_report.pe.field.trophic" = "Trophic";
+"well_report.pe.field.hydration" = "Hydration";
+"well_report.pe.field.color" = "Color";
+"well_report.pe.field.tone" = "Tone";
+"well_report.pe.field.wakefulness" = "Wakefulness";
+"well_report.pe.field.breathing" = "Breathing";
+"well_report.pe.field.heart_sounds" = "Heart sounds";
+"well_report.pe.field.femoral_pulses" = "Femoral pulses";
+"well_report.pe.field.fontanelle" = "Fontanelle";
+"well_report.pe.field.pupils_rr" = "Pupils RR";
+"well_report.pe.field.ocular_motility" = "Ocular motility";
+"well_report.pe.field.teeth_present" = "Teeth present";
+"well_report.pe.field.teeth_count" = "Teeth count";
+"well_report.pe.field.liver_spleen" = "Liver/Spleen";
+"well_report.pe.field.abdominal_mass" = "Abdominal mass";
+"well_report.pe.field.genitalia" = "Genitalia";
+"well_report.pe.field.umbilic" = "Umbilic";
+"well_report.pe.field.testicles_descended" = "Testicles descended";
+"well_report.pe.field.skin_marks" = "Marks";
+"well_report.pe.field.skin_integrity" = "Integrity";
+"well_report.pe.field.skin_rash" = "Rash";
+"well_report.pe.field.spine" = "Spine";
+"well_report.pe.field.hips" = "Hips";
+
+/* PE color enum values */
+"well_report.enum.pe_color.normal" = "Normal";
+"well_report.enum.pe_color.jaundice" = "Jaundiced";
+"well_report.enum.pe_color.pale" = "Pale";
+
+/* Feeding — milk_types enum values */
+"well_report.enum.milk_types.breast" = "Breast milk";
+"well_report.enum.milk_types.formula" = "Formula";
+
+/* solid_food_quality (stored enum) */
+"well_report.enum.solid_food_quality.appears_good" = "appears good";
+"well_report.enum.solid_food_quality.uncertain" = "uncertain";
+"well_report.enum.solid_food_quality.probably_limited" = "probably limited";
+
+/* food_variety_quality (stored enum) */
+"well_report.enum.food_variety_quality.appears_good" = "appears good";
+"well_report.enum.food_variety_quality.uncertain" = "uncertain";
+"well_report.enum.food_variety_quality.probably_limited" = "probably limited";
+
+"well_report.sleep.fmt.less_than_hours" = "less than %d hours";
+"well_report.sleep.fmt.more_than_hours" = "more than %d hours";
+/* Sleep regularity (stored enum) */
+"well_report.enum.sleep_regular.regular" = "regular";
+"well_report.enum.sleep_regular.irregular" = "irregular";
+
+"well_report.sleep.issue.wakes_per_night_fmt" = "Wakes per night: %d";
+/* Mchat and dev */
+"well_report.enum.mchat_result.low_risk" = "Low risk";
+"well_report.enum.mchat_result.medium_risk" = "Medium risk";
+"well_report.enum.mchat_result.high_risk" = "High risk";
+
+"well_report.enum.devtest_result.normal" = "Normal";
+"well_report.enum.devtest_result.abnormal" = "Abnormal";
+
+/* meta */
+"well_report.pdf.meta.creator" = "Patient Viewer";
+"well_report.pdf.meta.author"  = "Patient App";
+"well_report.pdf.meta.title"   = "Well Visit Report";
+
+/* Stool pattern (DB: poop_status) */
+"well_report.enum.poop_status.normal" = "Normal / typical stools in breastfeeding";
+"well_report.enum.poop_status.abnormal" = "Abnormal (reported)";
+"well_report.enum.poop_status.hard" = "Hard stools / constipation";
+
+"well_report.enum.sex.M" = "Male";
+"well_report.enum.sex.F" = "Female";
+
+/* BundleImporter — UI */
+"bundle_importer.button.import" = "📦 Import .peMR Bundle";
+"bundle_importer.ui.extracted_to" = "✅ Bundle extracted to: %@";
+"bundle_importer.ui.import_failed" = "❌ Import failed: %@";
+"bundle_importer.ui.failed_to_import" = "❌ Failed to import: %@";
+
+/* BundleImporter — values */
+"bundle_importer.value.none" = "<none>";
+
+/* BundleImporter — errors (thrown / surfaced) */
+"bundle_importer.error.db_too_small" = "db.sqlite is too small to be a valid SQLite file.";
+"bundle_importer.error.sqlite_header_mismatch" = "db.sqlite header is not 'SQLite format 3\\0' (got: %@)";
+"bundle_importer.error.corrupt_bundle_hash_mismatch" = "Corrupt bundle: db.sqlite hash mismatch. Expected %@…, got %@…";
+
+"bundle_importer.error.documents_dir_not_found" = "❌ Failed to locate documents directory.";
+"bundle_importer.error.duplicate_bundle" = "Bundle with the same name already exists.";
+"bundle_importer.error.missing_manifest" = "❌ Extracted bundle is missing manifest.json.";
+"bundle_importer.error.unsupported_encryption_scheme" = "❌ Unsupported encryption scheme: %@.";
+"bundle_importer.error.missing_db_enc" = "❌ Encrypted bundle is missing db.sqlite.enc.";
+"bundle_importer.error.decrypt_failed" = "❌ Failed to decrypt bundle database: %@";
+"bundle_importer.error.missing_db" = "❌ Extracted bundle is missing db.sqlite.";
+"bundle_importer.error.invalid_sqlite" = "❌ Not a valid SQLite file: %@";
+"bundle_importer.error.verification_failed" = "❌ Verification failed: %@";
+"bundle_importer.error.integrity_check_failed" = "❌ Integrity check failed for db.sqlite: %@";
+
+"bundle_importer.error.open_db_for_migration" = "Unable to open DB for migration: %@";
+"bundle_importer.error.add_parent_notes_failed" = "Failed adding parent_notes column: %@";
+"bundle_importer.error.unable_open_db_at_path" = "Unable to open DB at %@";
+
+"bundle_importer.error.open_db_for_integrity" = "Unable to open DB for integrity_check: %@";
+"bundle_importer.error.prepare_integrity_check_failed" = "Failed to run integrity_check: %@";
+"bundle_importer.error.integrity_check_failed_details" = "integrity_check failed: %@";
+
+/* BundleCrypto */
+"bundle_crypto.error.combined_box_failed" = "Failed to obtain combined AES-GCM box for %@";
+"bundle_crypto.error.file_too_short" = "Encrypted file is too short to contain HMAC and ciphertext (%@)";
+"bundle_crypto.error.hmac_failed" = "HMAC verification failed for %@";
+"bundle_crypto.error.remove_plain_failed" = "Failed to remove plaintext db.sqlite after encryption at %@";
+"bundle_crypto.error.missing_db_both" = "Neither db.sqlite nor db.sqlite.enc found under %@";
+
+/* BundleExporter */
+"bundle_exporter.error.open_input_stream" = "Unable to open input stream for %@.";
+"bundle_exporter.error.stream_read" = "Stream read error for %@.";
+"bundle_exporter.error.missing_patient_id" = "Missing patient ID.";
+"bundle_exporter.error.integrity_check_failed" = "SQLite integrity check failed for the export copy.";
+"bundle_exporter.error.foreign_key_check_failed" = "SQLite foreign key check failed for the export copy.";
+"bundle_exporter.error.encrypt_failed" = "Failed to encrypt the database for export.";
+"bundle_exporter.error.missing_db_files" = "Neither db.sqlite nor db.sqlite.enc was found in the export bundle.";
+
+/* AppLock biometrics prompt reason */
+"app_lock.biometrics.reason.unlock" = "Unlock Patient Viewer";
+
+/* Generic cancel */
+"common.cancel" = "Cancel";
+
+/* Keychain storage failure (OSStatus code) */
+"app_lock.keychain.store_failed" = "Failed to store password hash (status %d)";
+
+/* PatientViewerAppApp */
+"lock_screen.title" = "Patient Viewer Locked";
+"lock_screen.subtitle" = "Enter your passcode or use Face ID / Touch ID to continue.";
+"lock_screen.passcode.placeholder" = "Passcode";
+"lock_screen.action.unlock" = "Unlock";
+"lock_screen.action.use_biometrics" = "Use Face ID / Touch ID";
+"lock_screen.error.incorrect_passcode" = "Incorrect passcode. Please try again.";
+"lock_screen.error.biometric_failed" = "Biometric authentication failed. You can try again or use your passcode.";
+
+/* GrowthChartRenderer */
+"growth_chart.placeholder.no_data" = "No %@ data available";
+"growth_chart.placeholder.add_measurements" = "Add measurements to see the chart.";
+/* Chart axis label for age in months */
+"growth.chart.axis.ageMonths" = "Age (months)";
+"growth_chart.measurement.weight" = "Weight";
+"growth_chart.measurement.height" = "Length / Height";
+"growth_chart.measurement.head_circ" = "Head circumference";
+"growth_chart.measurement.bmi" = "BMI";
+/* Chart axis label for the plotted measurement values */
+"growth.chart.axis.value" = "Value";
+
+/* Legend label for percentile/SD reference curves */
+"growth.chart.legend.percentile" = "Percentile";

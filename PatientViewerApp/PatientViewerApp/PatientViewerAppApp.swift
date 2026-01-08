@@ -67,10 +67,10 @@ struct LockScreenView: View {
                         .font(.system(size: 52, weight: .semibold))
                         .foregroundStyle(.tint)
 
-                    Text("Patient Viewer Locked")
+                    Text(NSLocalizedString("lock_screen.title", comment: "Lock screen title"))
                         .font(.title2.weight(.semibold))
 
-                    Text("Enter your passcode or use Face ID / Touch ID to continue.")
+                    Text(NSLocalizedString("lock_screen.subtitle", comment: "Lock screen helper text"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -79,7 +79,7 @@ struct LockScreenView: View {
 
                 // Passcode + error
                 VStack(spacing: 10) {
-                    SecureField("Passcode", text: $passcode)
+                    SecureField(NSLocalizedString("lock_screen.passcode.placeholder", comment: "Passcode field placeholder"), text: $passcode)
                         .textContentType(.password)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
@@ -106,11 +106,11 @@ struct LockScreenView: View {
                             passcode = ""
                             errorMessage = nil
                         } else {
-                            errorMessage = "Incorrect passcode. Please try again."
+                            errorMessage = NSLocalizedString("lock_screen.error.incorrect_passcode", comment: "Incorrect passcode error")
                             passcode = ""
                         }
                     } label: {
-                        Text("Unlock")
+                        Text(NSLocalizedString("lock_screen.action.unlock", comment: "Unlock button"))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -125,11 +125,11 @@ struct LockScreenView: View {
                                     passcode = ""
                                 } else {
                                     // Non-fatal: user can still unlock with passcode
-                                    errorMessage = "Biometric authentication failed. You can try again or use your passcode."
+                                    errorMessage = NSLocalizedString("lock_screen.error.biometric_failed", comment: "Biometrics failed error")
                                 }
                             }
                         } label: {
-                            Label("Use Face ID / Touch ID", systemImage: "faceid")
+                            Label(NSLocalizedString("lock_screen.action.use_biometrics", comment: "Use biometrics button"), systemImage: "faceid")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)

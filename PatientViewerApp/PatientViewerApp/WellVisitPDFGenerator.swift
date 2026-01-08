@@ -12,10 +12,6 @@ import UIKit
 import OSLog
 import CoreText
 
-@inline(__always)
-private func L(_ key: String, _ fallback: String) -> String {
-    NSLocalizedString(key, comment: fallback)
-}
 
 struct WellVisitPDFGenerator {
     private static let log = Logger(subsystem: "com.patientviewer.app", category: "pdf.well")
@@ -24,12 +20,13 @@ struct WellVisitPDFGenerator {
     private static func L(_ key: String, _ fallback: String) -> String {
         NSLocalizedString(key, value: fallback, comment: "")
     }
+    
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
         WellVisitPDFGenerator.log.info("Generating WellVisit PDF for id=\(visit.id, privacy: .public) base=\(dbURL.path, privacy: .public)")
         let pdfMetaData = [
-            kCGPDFContextCreator: "Patient Viewer",
-            kCGPDFContextAuthor: "Patient App",
-            kCGPDFContextTitle: "Well Visit Report"
+            kCGPDFContextCreator: WellVisitPDFGenerator.L("well_report.pdf.meta.creator", "Patient Viewer"),
+            kCGPDFContextAuthor:  WellVisitPDFGenerator.L("well_report.pdf.meta.author",  "Patient App"),
+            kCGPDFContextTitle:   WellVisitPDFGenerator.L("well_report.pdf.meta.title",   "Well Visit Report")
         ]
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = pdfMetaData as [String: Any]
@@ -478,6 +475,29 @@ struct WellVisitPDFGenerator {
                 // Localized placeholder
                 let placeholderDash = WellVisitPDFGenerator.L("well_report.placeholder.dash", "—")
 
+                // Localize stored enum tokens safely (graceful fallback for unsafe tokens like poop_status=xyz)
+                func localizeEnumToken(prefix: String, token: String, unknownFallback: String? = nil) -> String {
+                    let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return trimmed }
+
+                    // Only allow keys made of letters/numbers/underscore to avoid bad NSLocalizedString keys
+                    let isKeySafe = trimmed.allSatisfy { ch in
+                        ch.isLetter || ch.isNumber || ch == "_"
+                    }
+
+                    // If the stored value is not a safe enum token (e.g. contains '='), do NOT print it in the PDF.
+                    guard isKeySafe else {
+                        return unknownFallback ?? placeholderDash
+                    }
+
+                    // If localized string is missing, fall back to the raw safe token by default.
+                    let localized = WellVisitPDFGenerator.L("\(prefix).\(trimmed)", "")
+                    if localized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        return unknownFallback ?? trimmed
+                    }
+                    return localized
+                }
+
                 let aliasText = patientRow[alias] ?? placeholderDash
                 let dobText = patientRow[dob]
                 let sexText = patientRow[sex]
@@ -502,7 +522,8 @@ struct WellVisitPDFGenerator {
                 drawText("\(hdrAlias): \(aliasText)", font: subFont)
                 drawText("\(hdrName): \(name)", font: subFont)
                 drawText("\(hdrDOB): \(dobText)", font: subFont)
-                drawText("\(hdrSex): \(sexText)", font: subFont)
+                let sexPretty = localizeEnumToken(prefix: "well_report.enum.sex", token: sexText, unknownFallback: placeholderDash)
+                drawText("\(hdrSex): \(sexPretty)", font: subFont)
                 drawText("\(hdrMRN): \(mrnText)", font: subFont)
 
                 if let ageString = formatAgeString(dobString: dobText, visitDateString: visitDate, ageDays: ageDaysDB) {
@@ -810,8 +831,6 @@ struct WellVisitPDFGenerator {
                 let lblDairyIntakeDaily = WellVisitPDFGenerator.L("well_report.feeding.label.dairy_intake_daily", "Dairy intake daily")
                 let lblComment = WellVisitPDFGenerator.L("well_report.label.comment", "Comment")
 
-                let valAppearsGood = WellVisitPDFGenerator.L("well_report.value.appears_good", "appears good")
-                let valProbablyLimited = WellVisitPDFGenerator.L("well_report.value.probably_limited", "probably limited")
 
                 let fmtTypicalFeedVolume = WellVisitPDFGenerator.L("well_report.feeding.fmt.typical_feed_volume_ml", "Typical feed volume: %.0f ml")
                 let fmtFeedsPer24h = WellVisitPDFGenerator.L("well_report.feeding.fmt.feeds_per_24h", "Feeds per 24h: %d times")
@@ -819,11 +838,23 @@ struct WellVisitPDFGenerator {
                 let fmtEstimatedIntakePerKg = WellVisitPDFGenerator.L("well_report.feeding.fmt.estimated_intake_ml_per_kg_24h", "Estimated intake: %.0f ml/kg/24h")
                 let fmtDairyCupsOrBottles = WellVisitPDFGenerator.L("well_report.feeding.fmt.dairy_cups_or_bottles", "Dairy intake daily: %@ cup(s) or bottle(s)")
 
-                // milk_types TEXT
+
+                // milk_types TEXT (stored enum(s): e.g. "breast", "formula" or "breast,formula")
                 if let milkTypesRaw = visitRow[Expression<String?>("milk_types")] {
-                    let milkTypes = milkTypesRaw.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !milkTypes.isEmpty {
-                        feedingLines.append("\(lblMilk): \(milkTypes)")
+                    let raw = milkTypesRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !raw.isEmpty {
+                        let tokens = raw
+                            .split(separator: ",")
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+
+                        func locMilkType(_ token: String) -> String {
+                            // If unknown / legacy value, fall back to the raw token
+                            WellVisitPDFGenerator.L("well_report.enum.milk_types.\(token)", token)
+                        }
+
+                        let pretty = tokens.isEmpty ? raw : tokens.map(locMilkType).joined(separator: ", ")
+                        feedingLines.append("\(lblMilk): \(pretty)")
                     }
                 }
 
@@ -885,7 +916,7 @@ struct WellVisitPDFGenerator {
                 if let solidDateRaw = visitRow[Expression<String?>("solid_food_start_date")] {
                     let solidDate = solidDateRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !solidDate.isEmpty {
-                        feedingLines.append("\(lblSolidFoodsSince): \(solidDate)")
+                        feedingLines.append("\(lblSolidFoodsSince): \(WellVisitPDFGenerator.formatDate(solidDate))")
                     }
                 }
 
@@ -893,15 +924,7 @@ struct WellVisitPDFGenerator {
                 if let solidQualityRaw = visitRow[Expression<String?>("solid_food_quality")] {
                     let solidQuality = solidQualityRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !solidQuality.isEmpty {
-                        let prettyQuality: String
-                        switch solidQuality {
-                        case "appears_good":
-                            prettyQuality = valAppearsGood
-                        case "probably_limited":
-                            prettyQuality = valProbablyLimited
-                        default:
-                            prettyQuality = solidQuality
-                        }
+                        let prettyQuality = localizeEnumToken(prefix: "well_report.enum.solid_food_quality", token: solidQuality)
                         feedingLines.append("\(lblSolidFoodQuality): \(prettyQuality)")
                     }
                 }
@@ -918,12 +941,7 @@ struct WellVisitPDFGenerator {
                 if let varietyRaw = visitRow[Expression<String?>("food_variety_quality")] {
                     let variety = varietyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !variety.isEmpty {
-                        let prettyVariety: String
-                        if variety == "appears_good" {
-                            prettyVariety = valAppearsGood
-                        } else {
-                            prettyVariety = variety
-                        }
+                        let prettyVariety = localizeEnumToken(prefix: "well_report.enum.food_variety_quality", token: variety)
                         feedingLines.append("\(lblFoodVarietyQuantity): \(prettyVariety)")
                     }
                 }
@@ -992,7 +1010,8 @@ struct WellVisitPDFGenerator {
                 if let statusRaw = visitRow[poopStatusExp] {
                     let status = statusRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !status.isEmpty {
-                        stoolLines.append(String(format: fmtStoolPattern, status))
+                        let prettyStatus = localizeEnumToken(prefix: "well_report.enum.poop_status", token: status)
+                        stoolLines.append(String(format: fmtStoolPattern, prettyStatus))
                     }
                 }
 
@@ -1013,19 +1032,50 @@ struct WellVisitPDFGenerator {
                     }
                 }
 
-                // Helper to prettify sleep duration string (e.g. "10_15" -> "10 to 15 hours")
+                // Helper to prettify sleep duration string (e.g. "10_15" -> "10 to 15 hours", "<_10" -> "less than 10 hours")
                 func prettySleepDuration(_ raw: String) -> String {
                     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                    // Expecting values like "10_15" -> "10 to 15 hours"
+                    guard !trimmed.isEmpty else { return trimmed }
+
+                    // 1) Special tokens like "<_10" or ">_15"
+                    // DB uses values like "<_10" for "less than 10 hours".
+                    if trimmed.hasPrefix("<_") || trimmed.hasPrefix(">_") {
+                        let isLess = trimmed.hasPrefix("<_")
+                        let numberPart = trimmed.dropFirst(2) // remove "<_" or ">_"
+                        if let hours = Int(numberPart) {
+                            if isLess {
+                                let fmtLessThanHours = WellVisitPDFGenerator.L(
+                                    "well_report.sleep.fmt.less_than_hours",
+                                    "less than %d hours"
+                                )
+                                return String(format: fmtLessThanHours, hours)
+                            } else {
+                                let fmtMoreThanHours = WellVisitPDFGenerator.L(
+                                    "well_report.sleep.fmt.more_than_hours",
+                                    "more than %d hours"
+                                )
+                                return String(format: fmtMoreThanHours, hours)
+                            }
+                        }
+                        // If parsing fails, fall back to raw token.
+                        return trimmed
+                    }
+
+                    // 2) Range tokens like "10_15" -> "10 to 15 hours"
                     let parts = trimmed.split(separator: "_", omittingEmptySubsequences: true)
                     if parts.count == 2 {
                         let first = parts[0]
                         let second = parts[1]
                         if !first.isEmpty && !second.isEmpty {
-                            let fmtRangeHours = WellVisitPDFGenerator.L("well_report.sleep.fmt.range_hours", "%@ to %@ hours")
+                            let fmtRangeHours = WellVisitPDFGenerator.L(
+                                "well_report.sleep.fmt.range_hours",
+                                "%@ to %@ hours"
+                            )
                             return String(format: fmtRangeHours, String(first), String(second))
                         }
                     }
+
+                    // 3) Unknown token; return as-is
                     return trimmed
                 }
 
@@ -1053,11 +1103,12 @@ struct WellVisitPDFGenerator {
                     }
                 }
 
-                // 2. Sleep regularity (free text)
+                // 2. Sleep regularity (stored enum token)
                 if let regularRaw = visitRow[Expression<String?>("sleep_regular")] {
                     let regular = regularRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !regular.isEmpty {
-                        sleepLines.append(String(format: fmtSleepRegularity, regular))
+                        let pretty = localizeEnumToken(prefix: "well_report.enum.sleep_regular", token: regular)
+                        sleepLines.append(String(format: fmtSleepRegularity, pretty))
                     }
                 }
 
@@ -1082,11 +1133,34 @@ struct WellVisitPDFGenerator {
                 let issueTextRaw = visitRow[Expression<String?>("sleep_issue_text")] ?? ""
                 let issueText = issueTextRaw.trimmingCharacters(in: .whitespacesAndNewlines)
 
+                func prettySleepIssueText(_ raw: String) -> String {
+                    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return trimmed }
+
+                    // Known structured token: wakes_per_night=<int>
+                    if trimmed.hasPrefix("wakes_per_night=") {
+                        let nStr = trimmed.replacingOccurrences(of: "wakes_per_night=", with: "")
+                        if let n = Int(nStr) {
+                            let fmtWakesPerNight = WellVisitPDFGenerator.L(
+                                "well_report.sleep.issue.wakes_per_night_fmt",
+                                "Wakes per night: %d"
+                            )
+                            return String(format: fmtWakesPerNight, n)
+                        }
+                        // If parsing fails, fall back to raw token.
+                        return trimmed
+                    }
+
+                    // For any other safe enum-like token, try localized enum mapping; fail-open to raw.
+                    return localizeEnumToken(prefix: "well_report.enum.sleep_issue_text", token: trimmed)
+                }
+
                 if issueReportedVal == 1 {
                     if issueText.isEmpty {
                         sleepLines.append(sleepIssueYes)
                     } else {
-                        sleepLines.append(String(format: fmtSleepIssueYesDetail, issueText))
+                        let prettyIssue = prettySleepIssueText(issueText)
+                        sleepLines.append(String(format: fmtSleepIssueYesDetail, prettyIssue))
                     }
                 } else {
                     // Explicitly document absence of reported issues
@@ -1123,25 +1197,27 @@ struct WellVisitPDFGenerator {
 
                 // Developmental test (devtest_*), shown from 9 to 36 months
                 let devTestScore = visitRow[Expression<Int?>("devtest_score")]
-                let devResult = visitRow[Expression<String?>("devtest_result")] ?? ""
+                let devResultRaw = visitRow[Expression<String?>("devtest_result")] ?? ""
+                let devResultToken = devResultRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let devResultPretty = devResultToken.isEmpty
+                    ? ""
+                    : localizeEnumToken(prefix: "well_report.enum.devtest_result", token: devResultToken)
 
                 if let ageMonths = ageMonthsForDev,
                    ageMonths >= 9.0, ageMonths <= 36.0 {
                     if let score = devTestScore {
-                        let trimmedResult = devResult.trimmingCharacters(in: .whitespacesAndNewlines)
                         var devString: String
-                        if !trimmedResult.isEmpty {
-                            devString = String(format: fmtDevResultScore, trimmedResult, score)
+                        if !devResultPretty.isEmpty {
+                            devString = String(format: fmtDevResultScore, devResultPretty, score)
                         } else {
                             devString = String(format: fmtDevScoreOnly, score)
                         }
                         ensureSpace(for: 16)
                         drawWrappedText(devString, font: subFont, in: pageRect, at: &y, using: context)
                     } else {
-                        let trimmedResult = devResult.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmedResult.isEmpty {
+                        if !devResultPretty.isEmpty {
                             ensureSpace(for: 16)
-                            drawWrappedText(String(format: fmtDevResultOnly, trimmedResult), font: subFont, in: pageRect, at: &y, using: context)
+                            drawWrappedText(String(format: fmtDevResultOnly, devResultPretty), font: subFont, in: pageRect, at: &y, using: context)
                         }
                     }
                 }
@@ -1153,25 +1229,27 @@ struct WellVisitPDFGenerator {
 
                 // M-CHAT (mchat_*), shown from 18 to 30 months
                 let mchatScore = visitRow[Expression<Int?>("mchat_score")]
-                let mchatResult = visitRow[Expression<String?>("mchat_result")] ?? ""
+                let mchatResultRaw = visitRow[Expression<String?>("mchat_result")] ?? ""
+                let mchatResultToken = mchatResultRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let mchatResultPretty = mchatResultToken.isEmpty
+                    ? ""
+                    : localizeEnumToken(prefix: "well_report.enum.mchat_result", token: mchatResultToken)
 
                 if let ageMonths = ageMonthsForDev,
                    ageMonths >= 18.0, ageMonths <= 30.0 {
                     if let score = mchatScore {
-                        let trimmed = mchatResult.trimmingCharacters(in: .whitespacesAndNewlines)
                         var mchatLine: String
-                        if !trimmed.isEmpty {
-                            mchatLine = String(format: fmtMchatResultScore, trimmed, score)
+                        if !mchatResultPretty.isEmpty {
+                            mchatLine = String(format: fmtMchatResultScore, mchatResultPretty, score)
                         } else {
                             mchatLine = String(format: fmtMchatScoreOnly, score)
                         }
                         ensureSpace(for: 16)
                         drawWrappedText(mchatLine, font: subFont, in: pageRect, at: &y, using: context)
                     } else {
-                        let trimmed = mchatResult.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
+                        if !mchatResultPretty.isEmpty {
                             ensureSpace(for: 16)
-                            drawWrappedText(String(format: fmtMchatResultOnly, trimmed), font: subFont, in: pageRect, at: &y, using: context)
+                            drawWrappedText(String(format: fmtMchatResultOnly, mchatResultPretty), font: subFont, in: pageRect, at: &y, using: context)
                         }
                     }
                 }
@@ -1260,6 +1338,40 @@ struct WellVisitPDFGenerator {
 
                 // Collect measurement lines; prefer manual_growth, fall back to legacy visit fields.
                 var measurementLines: [String] = []
+                // Localized measurement line formats
+                let fmtWeightMeasuredOn = WellVisitPDFGenerator.L(
+                    "well_report.measurements.line.weight_measured_on_fmt",
+                    "Weight: %.2f kg (measured on %@)"
+                )
+                let fmtLengthMeasuredOn = WellVisitPDFGenerator.L(
+                    "well_report.measurements.line.length_height_measured_on_fmt",
+                    "Length/Height: %.1f cm (measured on %@)"
+                )
+                let fmtHeadCircMeasuredOn = WellVisitPDFGenerator.L(
+                    "well_report.measurements.line.head_circ_measured_on_fmt",
+                    "Head circumference: %.1f cm (measured on %@)"
+                )
+                let fmtTodayWeight = WellVisitPDFGenerator.L(
+                    "well_report.measurements.line.weight_today_fmt",
+                    "Today's weight: %.2f kg"
+                )
+                let fmtTodayLength = WellVisitPDFGenerator.L(
+                    "well_report.measurements.line.length_today_fmt",
+                    "Today's length: %.1f cm"
+                )
+                let fmtTodayHeadCirc = WellVisitPDFGenerator.L(
+                    "well_report.measurements.line.head_circ_today_fmt",
+                    "Today's head circumference: %.1f cm"
+                )
+                
+                let fmtWeightGainSinceReference = WellVisitPDFGenerator.L(
+                    "well_report.measurements.line.weight_gain_since_reference_fmt",
+                    "Weight gain since reference: %.1f g/day (Δ %@%d g over %d days)"
+                )
+                let noReferenceWeightFound = WellVisitPDFGenerator.L(
+                    "well_report.measurements.no_reference_weight_found",
+                    "No reference weight found."
+                )
 
                 // 1. Try manual_growth (prefer measurements up to 24h after visit date)
                 let manualGrowth = Table("manual_growth")
@@ -1378,13 +1490,13 @@ struct WellVisitPDFGenerator {
                     }
 
                     if let wt = mgRow[mgWeight] {
-                        measurementLines.append(String(format: "Weight: %.2f kg (measured on %@)", wt, recordedAtPretty))
+                        measurementLines.append(String(format: fmtWeightMeasuredOn, wt, recordedAtPretty))
                     }
                     if let ht = mgRow[mgHeight] {
-                        measurementLines.append(String(format: "Length/Height: %.1f cm (measured on %@)", ht, recordedAtPretty))
+                        measurementLines.append(String(format: fmtLengthMeasuredOn, ht, recordedAtPretty))
                     }
                     if let hc = mgRow[mgHeadCirc] {
-                        measurementLines.append(String(format: "Head circumference: %.1f cm (measured on %@)", hc, recordedAtPretty))
+                        measurementLines.append(String(format: fmtHeadCircMeasuredOn, hc, recordedAtPretty))
                     }
 
                     // Optional: weight gain (delta) for young infants (up to ~2 months)
@@ -1416,133 +1528,132 @@ struct WellVisitPDFGenerator {
                             }
                         }
 
-                        // If we still can't parse the date, skip the delta line but keep the measurements
-                        guard let currentDateParsed = currentDateFinal else {
-                            WellVisitPDFGenerator.log.warning("Measurements: unable to parse manual_growth recorded_at='\(recordedAtRawForDelta)' for delta weight")
-                            // Skip delta, do not append any additional line.
-                            // The raw measurements above have already been rendered.
-                            return
-                        }
+                        // If we can't parse the date, skip the delta line but keep the measurements
 
-                        var baselineWeightGrams: Double? = nil
-                        var baselineDate: Date? = nil
+                        deltaWeightCalc: do {
+                            guard let currentDateParsed = currentDateFinal else {
+                                WellVisitPDFGenerator.log.warning("Measurements: couldn't parse current date from recorded_at='\(recordedAtRawForDelta, privacy: .public)' — skipping delta weight")
+                                break deltaWeightCalc
+                            }
 
-                        // For ages > ~30 days (1 month), try to use the most recent prior manual_growth as reference
-                        if ageMonthsForDelta > 1.0 {
-                            if let rows = try? db.prepare(manualGrowth.filter(mgPatientID == pid)) {
-                                var latestPrevDate: Date? = nil
+                            var baselineWeightGrams: Double? = nil
+                            var baselineDate: Date? = nil
 
-                                for row in rows {
-                                    let raw = row[mgRecordedAt]
+                            // For ages > ~30 days (1 month), try to use the most recent prior manual_growth as reference
+                            if ageMonthsForDelta > 1.0 {
+                                if let rows = try? db.prepare(manualGrowth.filter(mgPatientID == pid)) {
+                                    var latestPrevDate: Date? = nil
 
-                                    var prevDate: Date? = nil
-                                    let isoPrev = ISO8601DateFormatter()
-                                    isoPrev.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                                    if let d = isoPrev.date(from: raw) {
-                                        prevDate = d
-                                    } else {
-                                        isoPrev.formatOptions = [.withInternetDateTime]
-                                        if let d2 = isoPrev.date(from: raw) {
-                                            prevDate = d2
+                                    for row in rows {
+                                        let raw = row[mgRecordedAt]
+
+                                        var prevDate: Date? = nil
+                                        let isoPrev = ISO8601DateFormatter()
+                                        isoPrev.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                                        if let d = isoPrev.date(from: raw) {
+                                            prevDate = d
                                         } else {
-                                            let dateOnlyPrev = DateFormatter()
-                                            dateOnlyPrev.dateFormat = "yyyy-MM-dd"
-                                            dateOnlyPrev.locale = Locale(identifier: "en_US_POSIX")
-                                            prevDate = dateOnlyPrev.date(from: raw)
+                                            isoPrev.formatOptions = [.withInternetDateTime]
+                                            if let d2 = isoPrev.date(from: raw) {
+                                                prevDate = d2
+                                            } else {
+                                                let dateOnlyPrev = DateFormatter()
+                                                dateOnlyPrev.dateFormat = "yyyy-MM-dd"
+                                                dateOnlyPrev.locale = Locale(identifier: "en_US_POSIX")
+                                                prevDate = dateOnlyPrev.date(from: raw)
+                                            }
                                         }
-                                    }
 
-                                    guard let prevDateFinal = prevDate, prevDateFinal < currentDateParsed else {
-                                        continue
-                                    }
+                                        guard let prevDateFinal = prevDate, prevDateFinal < currentDateParsed else {
+                                            continue
+                                        }
 
-                                    if let existing = latestPrevDate {
-                                        if prevDateFinal > existing {
+                                        if let existing = latestPrevDate {
+                                            if prevDateFinal > existing {
+                                                latestPrevDate = prevDateFinal
+                                                if let wPrev = row[mgWeight] {
+                                                    baselineWeightGrams = wPrev * 1000.0
+                                                    baselineDate = prevDateFinal
+                                                }
+                                            }
+                                        } else {
                                             latestPrevDate = prevDateFinal
                                             if let wPrev = row[mgWeight] {
                                                 baselineWeightGrams = wPrev * 1000.0
                                                 baselineDate = prevDateFinal
                                             }
                                         }
-                                    } else {
-                                        latestPrevDate = prevDateFinal
-                                        if let wPrev = row[mgWeight] {
-                                            baselineWeightGrams = wPrev * 1000.0
-                                            baselineDate = prevDateFinal
+                                    }
+                                }
+                            }
+
+                            // If no prior manual_growth reference, fall back to perinatal discharge, then birth weight
+                            if baselineWeightGrams == nil || baselineDate == nil {
+                                let perinatalTable = Table("perinatal_history")
+                                let perinatalPatientID = Expression<Int64>("patient_id")
+                                let dischargeWeightCol = Expression<Int?>("discharge_weight_g")
+                                let dischargeDateCol = Expression<String?>("maternity_discharge_date")
+                                let birthWeightCol = Expression<Int?>("birth_weight_g")
+
+                                if let peri = try? db.pluck(perinatalTable.filter(perinatalPatientID == pid)) {
+                                    // 1) Try discharge weight + discharge date
+                                    let dwOpt: Int?? = try? peri.get(dischargeWeightCol)
+                                    let dischargeDateOpt: String?? = try? peri.get(dischargeDateCol)
+
+                                    if let dwUnwrapped = dwOpt,
+                                       let dw = dwUnwrapped,
+                                       let dischargeDateUnwrapped = dischargeDateOpt,
+                                       let dischargeDateStr = dischargeDateUnwrapped {
+
+                                        let dateOnlyFormatter = DateFormatter()
+                                        dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+                                        dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+                                        if let dischargeDateFinal = dateOnlyFormatter.date(from: dischargeDateStr) {
+                                            baselineWeightGrams = Double(dw)
+                                            baselineDate = dischargeDateFinal
+                                        }
+                                    }
+
+                                    // 2) If still no baseline, try birth weight + DOB
+                                    if (baselineWeightGrams == nil || baselineDate == nil) {
+                                        let bwOpt: Int?? = try? peri.get(birthWeightCol)
+                                        if let bwUnwrapped = bwOpt,
+                                           let bw = bwUnwrapped {
+
+                                            let dobFormatter = DateFormatter()
+                                            dobFormatter.dateFormat = "yyyy-MM-dd"
+                                            dobFormatter.locale = Locale(identifier: "en_US_POSIX")
+                                            if let dobDate = dobFormatter.date(from: dobText) {
+                                                baselineWeightGrams = Double(bw)
+                                                baselineDate = dobDate
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        // If no prior manual_growth reference, fall back to perinatal discharge, then birth weight
-                        if baselineWeightGrams == nil || baselineDate == nil {
-                            let perinatalTable = Table("perinatal_history")
-                            let perinatalPatientID = Expression<Int64>("patient_id")
-                            let dischargeWeightCol = Expression<Int?>("discharge_weight_g")
-                            let dischargeDateCol = Expression<String?>("maternity_discharge_date")
-                            let birthWeightCol = Expression<Int?>("birth_weight_g")
+                            if let baselineWeight = baselineWeightGrams,
+                               let baselineDateFinal = baselineDate {
+                                let currentWeightGrams = currentWeightKg * 1000.0
+                                let deltaGrams = currentWeightGrams - baselineWeight
+                                let seconds = currentDateParsed.timeIntervalSince(baselineDateFinal)
+                                let daysDouble = seconds / (60.0 * 60.0 * 24.0)
+                                let days = Int(round(daysDouble))
 
-                            if let peri = try? db.pluck(perinatalTable.filter(perinatalPatientID == pid)) {
-                                // 1) Try discharge weight + discharge date
-                                let dwOpt: Int?? = try? peri.get(dischargeWeightCol)
-                                let dischargeDateOpt: String?? = try? peri.get(dischargeDateCol)
-
-                                if let dwUnwrapped = dwOpt,
-                                   let dw = dwUnwrapped,
-                                   let dischargeDateUnwrapped = dischargeDateOpt,
-                                   let dischargeDateStr = dischargeDateUnwrapped {
-
-                                    let dateOnlyFormatter = DateFormatter()
-                                    dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
-                                    dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
-                                    if let dischargeDateFinal = dateOnlyFormatter.date(from: dischargeDateStr) {
-                                        baselineWeightGrams = Double(dw)
-                                        baselineDate = dischargeDateFinal
-                                    }
+                                if days > 0 {
+                                    let dailyGain = deltaGrams / Double(days)
+                                    let deltaSign = deltaGrams >= 0 ? "+" : "-"
+                                    let deltaAbs = abs(Int(round(deltaGrams)))
+                                    let line = String(format: fmtWeightGainSinceReference,
+                                                      dailyGain,
+                                                      deltaSign,
+                                                      deltaAbs,
+                                                      days)
+                                    measurementLines.append(line)
                                 }
-
-                                // 2) If still no baseline, try birth weight + DOB
-                                if (baselineWeightGrams == nil || baselineDate == nil) {
-                                    let bwOpt: Int?? = try? peri.get(birthWeightCol)
-                                    if let bwUnwrapped = bwOpt,
-                                       let bw = bwUnwrapped {
-
-                                        let dobFormatter = DateFormatter()
-                                        dobFormatter.dateFormat = "yyyy-MM-dd"
-                                        dobFormatter.locale = Locale(identifier: "en_US_POSIX")
-                                        if let dobDate = dobFormatter.date(from: dobText) {
-                                            baselineWeightGrams = Double(bw)
-                                            baselineDate = dobDate
-                                        }
-                                    }
-                                }
+                            } else {
+                                measurementLines.append(noReferenceWeightFound)
                             }
-                        }
-
-                        if let baselineWeight = baselineWeightGrams,
-                           let baselineDateFinal = baselineDate {
-                            let currentWeightGrams = currentWeightKg * 1000.0
-                            let deltaGrams = currentWeightGrams - baselineWeight
-                            let seconds = currentDateParsed.timeIntervalSince(baselineDateFinal)
-                            let daysDouble = seconds / (60.0 * 60.0 * 24.0)
-                            let days = Int(round(daysDouble))
-
-                            if days > 0 {
-                                let dailyGain = deltaGrams / Double(days)
-                                let deltaSign = deltaGrams >= 0 ? "+" : "-"
-                                let deltaAbs = abs(Int(round(deltaGrams)))
-                                let line = String(
-                                    format: "Weight gain since reference: %.1f g/day (Δ %@%d g over %d days)",
-                                    dailyGain,
-                                    deltaSign,
-                                    deltaAbs,
-                                    days
-                                )
-                                measurementLines.append(line)
-                            }
-                        } else {
-                            measurementLines.append("No reference weight found.")
                         }
                     }
                 }
@@ -1550,13 +1661,13 @@ struct WellVisitPDFGenerator {
                 // 2. If nothing from manual_growth, fall back to legacy per-visit fields
                 if measurementLines.isEmpty {
                     if let wt = visitRow[Expression<Double?>("weight_today_kg")] {
-                        measurementLines.append(String(format: "Today's weight: %.2f kg", wt))
+                        measurementLines.append(String(format: fmtTodayWeight, wt))
                     }
                     if let length = visitRow[Expression<Double?>("length_today_cm")] {
-                        measurementLines.append(String(format: "Today's length: %.1f cm", length))
+                        measurementLines.append(String(format: fmtTodayLength, length))
                     }
                     if let hc = visitRow[Expression<Double?>("head_circ_today_cm")] {
-                        measurementLines.append(String(format: "Today's head circumference: %.1f cm", hc))
+                        measurementLines.append(String(format: fmtTodayHeadCirc, hc))
                     }
                 }
 
@@ -1576,6 +1687,11 @@ struct WellVisitPDFGenerator {
                 ensureSpace(for: 18)
                 drawText(secPhysicalExamination, font: UIFont.boldSystemFont(ofSize: 15))
 
+                // Localized common values
+                // (valYes / valNo are already defined earlier and reused here)
+                let valNormal = WellVisitPDFGenerator.L("well_report.value.normal", "Normal")
+                let valAbnormal = WellVisitPDFGenerator.L("well_report.value.abnormal", "Abnormal")
+
                 // Age in months for PE-specific gating (hips, fontanelle, teeth, etc.)
                 let ageMonthsForPE = computeAgeMonths(
                     dobString: dobText,
@@ -1583,78 +1699,154 @@ struct WellVisitPDFGenerator {
                     ageDays: ageDaysDB
                 )
 
-                func yesNo(_ value: Int?) -> String? {
-                    if value == 1 { return "normal" }
-                    if value == 0 { return "abnormal" }
+                // PE localization helpers (keep internal keys stable; localize only at render time)
+                func peGroupTitle(_ key: String) -> String {
+                    switch key {
+                    case "general":
+                        return WellVisitPDFGenerator.L("well_report.pe.group.general", "General")
+                    case "cardiorespiratory":
+                        return WellVisitPDFGenerator.L("well_report.pe.group.cardiorespiratory", "Cardiorespiratory")
+                    case "eyes_head":
+                        return WellVisitPDFGenerator.L("well_report.pe.group.eyes_head", "Eyes & Head")
+                    case "abdomen_genitalia":
+                        return WellVisitPDFGenerator.L("well_report.pe.group.abdomen_genitalia", "Abdomen & Genitalia")
+                    case "skin":
+                        return WellVisitPDFGenerator.L("well_report.pe.group.skin", "Skin")
+                    case "msk":
+                        return WellVisitPDFGenerator.L("well_report.pe.group.msk", "MSK")
+                    default:
+                        return key
+                    }
+                }
+
+                func peFieldLabel(_ key: String) -> String {
+                    switch key {
+                    case "trophic":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.trophic", "Trophic")
+                    case "hydration":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.hydration", "Hydration")
+                    case "color":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.color", "Color")
+                    case "tone":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.tone", "Tone")
+                    case "wakefulness":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.wakefulness", "Wakefulness")
+                    case "breathing":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.breathing", "Breathing")
+                    case "heart_sounds":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.heart_sounds", "Heart sounds")
+                    case "femoral_pulses":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.femoral_pulses", "Femoral pulses")
+                    case "fontanelle":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.fontanelle", "Fontanelle")
+                    case "pupils_rr":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.pupils_rr", "Pupils RR")
+                    case "ocular_motility":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.ocular_motility", "Ocular motility")
+                    case "teeth_present":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.teeth_present", "Teeth present")
+                    case "teeth_count":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.teeth_count", "Teeth count")
+                    case "liver_spleen":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.liver_spleen", "Liver/Spleen")
+                    case "abdominal_mass":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.abdominal_mass", "Abdominal mass")
+                    case "genitalia":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.genitalia", "Genitalia")
+                    case "umbilic":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.umbilic", "Umbilic")
+                    case "testicles_descended":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.testicles_descended", "Testicles descended")
+                    case "skin_marks":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.skin_marks", "Marks")
+                    case "skin_integrity":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.skin_integrity", "Integrity")
+                    case "skin_rash":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.skin_rash", "Rash")
+                    case "spine":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.spine", "Spine")
+                    case "hips":
+                        return WellVisitPDFGenerator.L("well_report.pe.field.hips", "Hips")
+                    default:
+                        return key
+                    }
+                }
+
+                func normalAbnormal(_ value: Int?) -> String? {
+                    guard let v = value else { return nil }
+                    if v == 1 { return valNormal }
+                    if v == 0 { return valAbnormal }
                     return nil
                 }
-                func testicleStatus(_ value: Int?) -> String? {
-                    if value == 1 { return "descended" }
-                    if value == 0 { return "undescended" }
+
+                func yesNoValue(_ value: Int?) -> String? {
+                    guard let v = value else { return nil }
+                    if v == 1 { return valYes }
+                    if v == 0 { return valNo }
                     return nil
                 }
 
                 // Grouped PE fields like in Python app
-                let peGroups: [(String, [(String, Any?, Any?)])] = [
-                    ("General", [
-                        ("Trophic", visitRow[Expression<Int?>("pe_trophic_normal")], visitRow[Expression<String?>("pe_trophic_comment")]),
-                        ("Hydration", visitRow[Expression<Int?>("pe_hydration_normal")], visitRow[Expression<String?>("pe_hydration_comment")]),
-                        ("Color", visitRow[Expression<String?>("pe_color")], visitRow[Expression<String?>("pe_color_comment")]),
-                        ("Tone", visitRow[Expression<Int?>("pe_tone_normal")], visitRow[Expression<String?>("pe_tone_comment")]),
-                        ("Wakefulness", visitRow[Expression<Int?>("pe_wakefulness_normal")], visitRow[Expression<String?>("pe_wakefulness_comment")])
+                let peGroups: [(groupKey: String, fields: [(fieldKey: String, rawValue: Any?, comment: Any?)])] = [
+                    ("general", [
+                        ("trophic", visitRow[Expression<Int?>("pe_trophic_normal")], visitRow[Expression<String?>("pe_trophic_comment")]),
+                        ("hydration", visitRow[Expression<Int?>("pe_hydration_normal")], visitRow[Expression<String?>("pe_hydration_comment")]),
+                        ("color", visitRow[Expression<String?>("pe_color")], visitRow[Expression<String?>("pe_color_comment")]),
+                        ("tone", visitRow[Expression<Int?>("pe_tone_normal")], visitRow[Expression<String?>("pe_tone_comment")]),
+                        ("wakefulness", visitRow[Expression<Int?>("pe_wakefulness_normal")], visitRow[Expression<String?>("pe_wakefulness_comment")])
                     ]),
-                    ("Cardiorespiratory", [
-                        ("Breathing", visitRow[Expression<Int?>("pe_breathing_normal")], visitRow[Expression<String?>("pe_breathing_comment")]),
-                        ("Heart sounds", visitRow[Expression<Int?>("pe_heart_sounds_normal")], visitRow[Expression<String?>("pe_heart_sounds_comment")]),
-                        ("Femoral pulses", visitRow[Expression<Int?>("pe_femoral_pulses_normal")], visitRow[Expression<String?>("pe_femoral_pulses_comment")])
+                    ("cardiorespiratory", [
+                        ("breathing", visitRow[Expression<Int?>("pe_breathing_normal")], visitRow[Expression<String?>("pe_breathing_comment")]),
+                        ("heart_sounds", visitRow[Expression<Int?>("pe_heart_sounds_normal")], visitRow[Expression<String?>("pe_heart_sounds_comment")]),
+                        ("femoral_pulses", visitRow[Expression<Int?>("pe_femoral_pulses_normal")], visitRow[Expression<String?>("pe_femoral_pulses_comment")])
                     ]),
-                    ("Eyes & Head", [
-                        ("Fontanelle", visitRow[Expression<Int?>("pe_fontanelle_normal")], visitRow[Expression<String?>("pe_fontanelle_comment")]),
-                        ("Pupils RR", visitRow[Expression<Int?>("pe_pupils_rr_normal")], visitRow[Expression<String?>("pe_pupils_rr_comment")]),
-                        ("Ocular motility", visitRow[Expression<Int?>("pe_ocular_motility_normal")], visitRow[Expression<String?>("pe_ocular_motility_comment")]),
+                    ("eyes_head", [
+                        ("fontanelle", visitRow[Expression<Int?>("pe_fontanelle_normal")], visitRow[Expression<String?>("pe_fontanelle_comment")]),
+                        ("pupils_rr", visitRow[Expression<Int?>("pe_pupils_rr_normal")], visitRow[Expression<String?>("pe_pupils_rr_comment")]),
+                        ("ocular_motility", visitRow[Expression<Int?>("pe_ocular_motility_normal")], visitRow[Expression<String?>("pe_ocular_motility_comment")]),
                         // Teeth belong to Eyes & Head group, with age gating and dependency on presence flag
-                        ("Teeth present", visitRow[Expression<Int?>("pe_teeth_present")], visitRow[Expression<String?>("pe_teeth_comment")]),
-                        ("Teeth count", visitRow[Expression<Int?>("pe_teeth_count")], nil)
+                        ("teeth_present", visitRow[Expression<Int?>("pe_teeth_present")], visitRow[Expression<String?>("pe_teeth_comment")]),
+                        ("teeth_count", visitRow[Expression<Int?>("pe_teeth_count")], nil)
                     ]),
-                    ("Abdomen & Genitalia", [
-                        ("Liver/Spleen", visitRow[Expression<Int?>("pe_liver_spleen_normal")], visitRow[Expression<String?>("pe_liver_spleen_comment")]),
-                        ("Abdominal mass", visitRow[Expression<Int?>("pe_abd_mass")], nil),
-                        ("Genitalia", visitRow[Expression<String?>("pe_genitalia")], nil),
-                        ("Umbilic", visitRow[Expression<Int?>("pe_umbilic_normal")], visitRow[Expression<String?>("pe_umbilic_comment")]),
-                        ("Testicles descended", visitRow[Expression<Int?>("pe_testicles_descended")], nil)
+                    ("abdomen_genitalia", [
+                        ("liver_spleen", visitRow[Expression<Int?>("pe_liver_spleen_normal")], visitRow[Expression<String?>("pe_liver_spleen_comment")]),
+                        ("abdominal_mass", visitRow[Expression<Int?>("pe_abd_mass")], nil),
+                        ("genitalia", visitRow[Expression<String?>("pe_genitalia")], nil),
+                        ("umbilic", visitRow[Expression<Int?>("pe_umbilic_normal")], visitRow[Expression<String?>("pe_umbilic_comment")]),
+                        ("testicles_descended", visitRow[Expression<Int?>("pe_testicles_descended")], nil)
                     ]),
-                    ("Skin", [
-                        ("Marks", visitRow[Expression<Int?>("pe_skin_marks_normal")], visitRow[Expression<String?>("pe_skin_marks_comment")]),
-                        ("Integrity", visitRow[Expression<Int?>("pe_skin_integrity_normal")], visitRow[Expression<String?>("pe_skin_integrity_comment")]),
-                        ("Rash", visitRow[Expression<Int?>("pe_skin_rash_normal")], visitRow[Expression<String?>("pe_skin_rash_comment")])
+                    ("skin", [
+                        ("skin_marks", visitRow[Expression<Int?>("pe_skin_marks_normal")], visitRow[Expression<String?>("pe_skin_marks_comment")]),
+                        ("skin_integrity", visitRow[Expression<Int?>("pe_skin_integrity_normal")], visitRow[Expression<String?>("pe_skin_integrity_comment")]),
+                        ("skin_rash", visitRow[Expression<Int?>("pe_skin_rash_normal")], visitRow[Expression<String?>("pe_skin_rash_comment")])
                     ]),
-                    ("MSK", [
-                        ("Spine", visitRow[Expression<Int?>("pe_spine_normal")], visitRow[Expression<String?>("pe_spine_comment")]),
-                        ("Hips", visitRow[Expression<Int?>("pe_hips_normal")], visitRow[Expression<String?>("pe_hips_comment")])
+                    ("msk", [
+                        ("spine", visitRow[Expression<Int?>("pe_spine_normal")], visitRow[Expression<String?>("pe_spine_comment")]),
+                        ("hips", visitRow[Expression<Int?>("pe_hips_normal")], visitRow[Expression<String?>("pe_hips_comment")])
                     ])
                 ]
 
                 var foundPE = false
 
-                for (groupName, fields) in peGroups {
+                for (groupKey, fields) in peGroups {
                     var groupParts: [String] = []
 
-                    for (label, rawValue, commentRaw) in fields {
+                    for (fieldKey, rawValue, commentRaw) in fields {
                         // Sex gating: never show testicles for girls
-                        if label == "Testicles descended", sexText != "M" {
+                        if fieldKey == "testicles_descended", sexText != "M" {
                             continue
                         }
 
                         // Age gating rules – fail open if ageMonthsForPE is nil
                         if let ageMonths = ageMonthsForPE {
-                            switch label {
-                            case "Hips":
+                            switch fieldKey {
+                            case "hips":
                                 // Hips visible only up to 6 months
                                 if ageMonths > 6.0 { continue }
-                            case "Fontanelle":
+                            case "fontanelle":
                                 // Fontanelle visible only up to 24 months
                                 if ageMonths > 24.0 { continue }
-                            case "Teeth present", "Teeth count":
+                            case "teeth_present", "teeth_count":
                                 // Teeth visible from 4 months onward
                                 if ageMonths < 4.0 { continue }
                             default:
@@ -1664,53 +1856,62 @@ struct WellVisitPDFGenerator {
 
                         var displayValue: String?
 
+                        func localizedPEEnumValue(fieldKey: String, raw: String) -> String {
+                            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else { return trimmed }
+
+                            // Only localize known picker/enumerated values; fail-open to raw for anything unexpected.
+                            switch fieldKey {
+                            case "color":
+                                switch trimmed {
+                                case "normal", "jaundice", "pale":
+                                    return WellVisitPDFGenerator.L("well_report.enum.pe_color.\(trimmed)", trimmed)
+                                default:
+                                    return trimmed
+                                }
+                            default:
+                                return trimmed
+                            }
+                        }
+
+                        func valueForInt(_ v: Int) -> String? {
+                            switch fieldKey {
+                            case "abdominal_mass":
+                                return (v == 1) ? valYes : (v == 0) ? valNo : nil
+                            case "teeth_present":
+                                return (v == 1) ? valYes : (v == 0) ? valNo : nil
+                            case "testicles_descended":
+                                return (v == 1) ? valYes : (v == 0) ? valNo : nil
+                            case "teeth_count":
+                                // Only show count if we know teeth are present
+                                let presentVal = visitRow[Expression<Int?>("pe_teeth_present")] ?? 0
+                                return (presentVal == 1) ? "\(v)" : nil
+                            default:
+                                return normalAbnormal(v)
+                            }
+                        }
+
                         switch rawValue {
                         case let b as Int:
-                            if label == "Abdominal mass" {
-                                // 0 == no mass, 1 == mass present
-                                if b == 1 { displayValue = "yes" }
-                                else if b == 0 { displayValue = "no" }
-                            } else if label == "Teeth present" {
-                                // Teeth present as yes/no
-                                displayValue = (b == 1 ? "yes" : "no")
-                            } else if label == "Testicles descended" {
-                                // Testicles descended as yes/no
-                                displayValue = (b == 1 ? "yes" : "no")
-                            } else {
-                                displayValue = yesNo(b)
-                            }
+                            displayValue = valueForInt(b)
 
                         case let s as String:
-                            if !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                displayValue = s
+                            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmed.isEmpty {
+                                displayValue = localizedPEEnumValue(fieldKey: fieldKey, raw: trimmed)
                             }
 
                         case let optStr as Optional<String>:
-                            if let s = optStr,
-                               !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                displayValue = s
+                            if let s = optStr {
+                                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !trimmed.isEmpty {
+                                    displayValue = localizedPEEnumValue(fieldKey: fieldKey, raw: trimmed)
+                                }
                             }
 
                         case let optInt as Optional<Int>:
                             if let v = optInt {
-                                if label == "Testicles descended" {
-                                    // yes/no semantics for testicles descended
-                                    displayValue = (v == 1 ? "yes" : "no")
-                                } else if label == "Teeth present" {
-                                    // yes/no semantics for teeth present
-                                    displayValue = (v == 1 ? "yes" : "no")
-                                } else if label == "Teeth count" {
-                                    // Only show count if we know teeth are present
-                                    let presentVal = visitRow[Expression<Int?>("pe_teeth_present")] ?? 0
-                                    if presentVal == 1 {
-                                        displayValue = "\(v)"
-                                    }
-                                } else if label == "Abdominal mass" {
-                                    // yes/no semantics for abdominal mass
-                                    displayValue = (v == 1 ? "yes" : "no")
-                                } else {
-                                    displayValue = "\(v)"
-                                }
+                                displayValue = valueForInt(v)
                             }
 
                         default:
@@ -1718,6 +1919,7 @@ struct WellVisitPDFGenerator {
                         }
 
                         if let result = displayValue {
+                            let label = peFieldLabel(fieldKey)
                             var line = "\(label): \(result)"
 
                             // Unwrap commentRaw safely (handles both String and String?)
@@ -1731,19 +1933,19 @@ struct WellVisitPDFGenerator {
                             if let c = commentString,
                                !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 // Field-specific rules for when to append comments
-                                if label == "Teeth present" {
+                                if fieldKey == "teeth_present" {
                                     // Only attach comment if teeth are present
                                     let presentVal = visitRow[Expression<Int?>("pe_teeth_present")] ?? 0
                                     if presentVal == 1 {
                                         line += " (\(c))"
                                     }
-                                } else if label == "Hips" {
+                                } else if fieldKey == "hips" {
                                     // Only attach comment if hips are abnormal
                                     let hipsNormalVal = visitRow[Expression<Int?>("pe_hips_normal")] ?? 1
                                     if hipsNormalVal == 0 {
                                         line += " (\(c))"
                                     }
-                                } else if label == "Fontanelle" {
+                                } else if fieldKey == "fontanelle" {
                                     // Only attach comment if fontanelle is abnormal
                                     let fontanelleVal = visitRow[Expression<Int?>("pe_fontanelle_normal")] ?? 1
                                     if fontanelleVal == 0 {
@@ -1761,8 +1963,9 @@ struct WellVisitPDFGenerator {
 
                     if !groupParts.isEmpty {
                         foundPE = true
+                        let groupTitle = peGroupTitle(groupKey)
                         drawWrappedText(
-                            "\(groupName): " + groupParts.joined(separator: "; "),
+                            "\(groupTitle): " + groupParts.joined(separator: "; "),
                             font: subFont,
                             in: pageRect,
                             at: &y,
@@ -1817,12 +2020,29 @@ struct WellVisitPDFGenerator {
                     drawWrappedText(trimmedConclusions, font: subFont, in: pageRect, at: &y, using: context)
                 } else {
                     // Default conclusion when nothing specific is documented
+                    let fmtHealthyWithAge = WellVisitPDFGenerator.L(
+                        "well_report.conclusions.default.healthy_with_age_fmt",
+                        "Healthy %@"
+                    )
+                    let healthyOnly = WellVisitPDFGenerator.L(
+                        "well_report.conclusions.default.healthy",
+                        "Healthy"
+                    )
+
                     if let ageStr = formatAgeString(dobString: dobText,
                                                    visitDateString: visitDate,
                                                    ageDays: ageDaysDB) {
-                        drawWrappedText("Healthy \(ageStr)", font: subFont, in: pageRect, at: &y, using: context)
+                        drawWrappedText(String(format: fmtHealthyWithAge, ageStr),
+                                       font: subFont,
+                                       in: pageRect,
+                                       at: &y,
+                                       using: context)
                     } else {
-                        drawWrappedText("Healthy", font: subFont, in: pageRect, at: &y, using: context)
+                        drawWrappedText(healthyOnly,
+                                       font: subFont,
+                                       in: pageRect,
+                                       at: &y,
+                                       using: context)
                     }
                 }
 
@@ -1864,7 +2084,7 @@ struct WellVisitPDFGenerator {
                         "well_report.label.next_visit_date",
                         "Next Visit Date"
                     )
-                    drawText("\(lblNextVisitDate): \(nextVisit)", font: subFont)
+                    drawText("\(lblNextVisitDate): \(WellVisitPDFGenerator.formatDate(nextVisit))", font: subFont)
                 }
 
                 // MARK: - AI Assistant Input
@@ -1964,22 +2184,54 @@ struct WellVisitPDFGenerator {
         return fileURL
     }
 
-    private static func formatDate(_ raw: Any) -> String {
-        let inputFormatter = DateFormatter()
-        inputFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-        inputFormatter.locale = Locale(identifier: "en_US_POSIX")
-
-        let outputFormatter = DateFormatter()
-        outputFormatter.dateStyle = .medium
-        outputFormatter.timeStyle = .short
-
-        if let dateString = raw as? String, let parsed = inputFormatter.date(from: dateString) {
-            return outputFormatter.string(from: parsed)
-        } else if let date = raw as? Date {
-            return outputFormatter.string(from: date)
-        } else {
-            return "\(raw)"
+    private static func formatDate(_ raw: Any, includeTime: Bool = false) -> String {
+        func formatOut(_ date: Date) -> String {
+            let out = DateFormatter()
+            out.locale = Locale.autoupdatingCurrent
+            out.timeZone = TimeZone.autoupdatingCurrent
+            out.dateStyle = .medium
+            out.timeStyle = includeTime ? .short : .none
+            return out.string(from: date)
         }
+
+        if let date = raw as? Date {
+            return formatOut(date)
+        }
+
+        if let dateString = raw as? String {
+            let trimmed = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return "" }
+
+            // 1) ISO8601 with fractional seconds (e.g. 2025-12-29T18:05:30.123Z)
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = iso.date(from: trimmed) { return formatOut(d) }
+
+            // 2) ISO8601 without fractional seconds (e.g. 2025-12-29T18:05:30Z)
+            iso.formatOptions = [.withInternetDateTime]
+            if let d = iso.date(from: trimmed) { return formatOut(d) }
+
+            // 3) Legacy microseconds format (e.g. 2025-12-29T18:05:30.123456)
+            let legacy = DateFormatter()
+            legacy.locale = Locale(identifier: "en_US_POSIX")
+            legacy.timeZone = TimeZone(secondsFromGMT: 0)
+
+            legacy.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+            if let d = legacy.date(from: trimmed) { return formatOut(d) }
+
+            // 4) Legacy without fractional seconds (e.g. 2025-12-29T18:05:30)
+            legacy.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            if let d = legacy.date(from: trimmed) { return formatOut(d) }
+
+            // 5) Date-only (e.g. 2025-12-29)
+            legacy.dateFormat = "yyyy-MM-dd"
+            if let d = legacy.date(from: trimmed) { return formatOut(d) }
+
+            // Fail-open: if we can't parse, keep the original string
+            return trimmed
+        }
+
+        return "\(raw)"
     }
 }
 

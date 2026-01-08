@@ -13,6 +13,16 @@ let archiveDirName = "ArchivedZips"
 
 private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "BundleImporter")
 
+@inline(__always)
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+@inline(__always)
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), arguments: args)
+}
+
 // MARK: - Integrity utilities
 
 private struct DocsEntry: Codable {
@@ -42,11 +52,11 @@ private func loadManifest(at root: URL) throws -> ManifestV2 {
 private func validateSQLiteHeader(dbURL: URL) throws {
     let data = try Data(contentsOf: dbURL, options: [.mappedIfSafe])
     guard data.count >= 16 else {
-        throw NSError(domain: "DBIntegrity", code: 100, userInfo: [NSLocalizedDescriptionKey: "db.sqlite is too small to be a valid SQLite file."])
+        throw NSError(domain: "DBIntegrity", code: 100, userInfo: [NSLocalizedDescriptionKey: L("bundle_importer.error.db_too_small")])
     }
     let magic = String(decoding: data.prefix(16), as: UTF8.self)
     if magic != "SQLite format 3\u{0}" {
-        throw NSError(domain: "DBIntegrity", code: 101, userInfo: [NSLocalizedDescriptionKey: "db.sqlite header is not 'SQLite format 3\\0' (got: \(magic))"])
+        throw NSError(domain: "DBIntegrity", code: 101, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.sqlite_header_mismatch", magic)])
     }
 }
 
@@ -67,7 +77,10 @@ private func verifyExtractedBundle(root: URL, dbURL: URL, log: (String) -> Void)
         if expected.lowercased() != actual.lowercased() {
             throw NSError(domain: "BundleImport", code: 2002,
                           userInfo: [NSLocalizedDescriptionKey:
-                                     "Corrupt bundle: db.sqlite hash mismatch. Expected \(expected.prefix(12))…, got \(actual.prefix(12))…"])
+                                     LF("bundle_importer.error.corrupt_bundle_hash_mismatch",
+                                        String(expected.prefix(12)),
+                                        String(actual.prefix(12)))
+                          ])
         }
         log("[DEBUG] db.sqlite hash verified.")
     } else {
@@ -127,7 +140,7 @@ struct BundleImporter: View {
         let start = Date()
         log.info("Import started for \(zipURL.lastPathComponent, privacy: .public)")
         guard let docsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            throw NSError(domain: "BundleImporter", code: 1, userInfo: [NSLocalizedDescriptionKey: "❌ Failed to locate documents directory."])
+            throw NSError(domain: "BundleImporter", code: 1, userInfo: [NSLocalizedDescriptionKey: L("bundle_importer.error.documents_dir_not_found")])
         }
 
         // Ensure Bundles folder exists
@@ -145,7 +158,11 @@ struct BundleImporter: View {
             if let existingDate = existingAttributes[.modificationDate] as? Date,
                let newDate = newAttributes[.modificationDate] as? Date,
                existingDate == newDate {
-                throw NSError(domain: "BundleImporter", code: 2, userInfo: [NSLocalizedDescriptionKey: "Bundle with the same name already exists.", "bundleURL": destinationZipPath, "originalZipURL": zipURL])
+                throw NSError(domain: "BundleImporter", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: L("bundle_importer.error.duplicate_bundle"),
+                    "bundleURL": destinationZipPath,
+                    "originalZipURL": zipURL
+                ])
             }
         }
 
@@ -162,7 +179,7 @@ struct BundleImporter: View {
         guard fm.fileExists(atPath: manifestURL.path) else {
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
-            throw NSError(domain: "BundleImporter", code: 3, userInfo: [NSLocalizedDescriptionKey: "❌ Extracted bundle is missing manifest.json."])
+            throw NSError(domain: "BundleImporter", code: 3, userInfo: [NSLocalizedDescriptionKey: L("bundle_importer.error.missing_manifest")])
         }
 
         // Determine whether this bundle is encrypted (DrsMainApp v2+ exports set these keys)
@@ -180,7 +197,9 @@ struct BundleImporter: View {
                 throw NSError(
                     domain: "BundleImporter",
                     code: 12,
-                    userInfo: [NSLocalizedDescriptionKey: "❌ Unsupported encryption scheme: \(scheme ?? "<none>")."]
+                    userInfo: [NSLocalizedDescriptionKey:
+                        LF("bundle_importer.error.unsupported_encryption_scheme", scheme ?? L("bundle_importer.value.none"))
+                    ]
                 )
             }
 
@@ -191,7 +210,9 @@ struct BundleImporter: View {
                 throw NSError(
                     domain: "BundleImporter",
                     code: 13,
-                    userInfo: [NSLocalizedDescriptionKey: "❌ Encrypted bundle is missing db.sqlite.enc."]
+                    userInfo: [NSLocalizedDescriptionKey:
+                        L("bundle_importer.error.missing_db_enc")
+                    ]
                 )
             }
 
@@ -207,7 +228,9 @@ struct BundleImporter: View {
                 throw NSError(
                     domain: "BundleImporter",
                     code: 14,
-                    userInfo: [NSLocalizedDescriptionKey: "❌ Failed to decrypt bundle database: \(error.localizedDescription)"]
+                    userInfo: [NSLocalizedDescriptionKey:
+                        LF("bundle_importer.error.decrypt_failed", error.localizedDescription)
+                    ]
                 )
             }
 
@@ -221,7 +244,9 @@ struct BundleImporter: View {
                 throw NSError(
                     domain: "BundleImporter",
                     code: 3,
-                    userInfo: [NSLocalizedDescriptionKey: "❌ Extracted bundle is missing db.sqlite."]
+                    userInfo: [NSLocalizedDescriptionKey:
+                        L("bundle_importer.error.missing_db")
+                    ]
                 )
             }
             dbURL = expectedDB
@@ -237,7 +262,9 @@ struct BundleImporter: View {
             throw NSError(
                 domain: "BundleImporter",
                 code: 11,
-                userInfo: [NSLocalizedDescriptionKey: "❌ Not a valid SQLite file: \(error.localizedDescription)"]
+                userInfo: [NSLocalizedDescriptionKey:
+                    LF("bundle_importer.error.invalid_sqlite", error.localizedDescription)
+                ]
             )
         }
 
@@ -252,7 +279,9 @@ struct BundleImporter: View {
             throw NSError(
                 domain: "BundleImporter",
                 code: 10,
-                userInfo: [NSLocalizedDescriptionKey: "❌ Verification failed: \(error.localizedDescription)"]
+                userInfo: [NSLocalizedDescriptionKey:
+                    LF("bundle_importer.error.verification_failed", error.localizedDescription)
+                ]
             )
         }
 
@@ -265,7 +294,9 @@ struct BundleImporter: View {
             throw NSError(
                 domain: "BundleImporter",
                 code: 9,
-                userInfo: [NSLocalizedDescriptionKey: "❌ Integrity check failed for db.sqlite: \(error.localizedDescription)"]
+                userInfo: [NSLocalizedDescriptionKey:
+                    LF("bundle_importer.error.integrity_check_failed", error.localizedDescription)
+                ]
             )
         }
 
@@ -374,7 +405,7 @@ struct BundleImporter: View {
     // MARK: - View
     var body: some View {
         VStack {
-            Button("📦 Import .peMR Bundle") {
+            Button(L("bundle_importer.button.import")) {
                 isImporterPresented = true
             }
             .fileImporter(
@@ -399,18 +430,18 @@ struct BundleImporter: View {
                                 }
                             } catch {
                                 await MainActor.run {
-                                    importError = "❌ Import failed: \(error.localizedDescription)"
+                                    importError = LF("bundle_importer.ui.import_failed", error.localizedDescription)
                                 }
                             }
                         }
                     }
                 case .failure(let error):
-                    importError = "❌ Failed to import: \(error.localizedDescription)"
+                    importError = LF("bundle_importer.ui.failed_to_import", error.localizedDescription)
                 }
             }
 
             if let extracted = extractedFolderURL {
-                Text("✅ Bundle extracted to: \(extracted.lastPathComponent)")
+                Text(LF("bundle_importer.ui.extracted_to", extracted.lastPathComponent))
                     .font(.caption)
                     .foregroundColor(.green)
             }
@@ -432,7 +463,7 @@ func ensureParentNotesColumn(dbPath: String) throws {
     if sqlite3_open(dbPath, &db) != SQLITE_OK {
         let err = db != nil ? String(cString: sqlite3_errmsg(db)) : "unknown"
         if db != nil { sqlite3_close(db) }
-        throw NSError(domain: "BundleImporter", code: 6, userInfo: [NSLocalizedDescriptionKey: "Unable to open DB for migration: \(err)"])
+        throw NSError(domain: "BundleImporter", code: 6, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.open_db_for_migration", err)])
     }
     // Avoid transient "database is locked" during quick migrations
     _ = sqlite3_busy_timeout(db, 2000)
@@ -457,7 +488,7 @@ func ensureParentNotesColumn(dbPath: String) throws {
         let alterSQL = "ALTER TABLE patients ADD COLUMN parent_notes TEXT NOT NULL DEFAULT '';"
         if sqlite3_exec(db, alterSQL, nil, nil, nil) != SQLITE_OK {
             let errMsg = String(cString: sqlite3_errmsg(db))
-            throw NSError(domain: "BundleImporter", code: 7, userInfo: [NSLocalizedDescriptionKey: "Failed adding parent_notes column: \(errMsg)"])
+            throw NSError(domain: "BundleImporter", code: 7, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.add_parent_notes_failed", errMsg)])
         } else {
             log.debug("Added missing parent_notes column at \(dbPath, privacy: .public)")
         }
@@ -489,7 +520,7 @@ func readAliasAndDOB(fromDBAt dbPath: String) throws -> (String, String) {
             }
         }
     } else {
-        throw NSError(domain: "BundleImporter", code: 4, userInfo: [NSLocalizedDescriptionKey: "Unable to open DB at \(dbPath)"])
+        throw NSError(domain: "BundleImporter", code: 4, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.unable_open_db_at_path", dbPath)])
     }
     log.debug("Read alias: \(alias, privacy: .public), dob: \(dob, privacy: .public)")
     return (alias, dob)
@@ -507,7 +538,7 @@ func runIntegrityCheckOrThrow(dbPath: String) throws {
     if sqlite3_open(dbPath, &db) != SQLITE_OK {
         let err = db != nil ? String(cString: sqlite3_errmsg(db)) : "unknown"
         if db != nil { sqlite3_close(db) }
-        throw NSError(domain: "DBIntegrity", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to open DB for integrity_check: \(err)"])
+        throw NSError(domain: "DBIntegrity", code: 1, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.open_db_for_integrity", err)])
     }
     // Avoid transient "database is locked" while checking integrity
     _ = sqlite3_busy_timeout(db, 2000)
@@ -516,7 +547,7 @@ func runIntegrityCheckOrThrow(dbPath: String) throws {
     var stmt: OpaquePointer?
     if sqlite3_prepare_v2(db, "PRAGMA integrity_check;", -1, &stmt, nil) != SQLITE_OK {
         let err = String(cString: sqlite3_errmsg(db))
-        throw NSError(domain: "DBIntegrity", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to run integrity_check: \(err)"])
+        throw NSError(domain: "DBIntegrity", code: 2, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.prepare_integrity_check_failed", err)])
     }
     defer { sqlite3_finalize(stmt) }
 
@@ -530,6 +561,6 @@ func runIntegrityCheckOrThrow(dbPath: String) throws {
     // Successful integrity_check returns exactly one row: "ok"
     if results.count != 1 || results.first?.lowercased() != "ok" {
         let msg = results.isEmpty ? "unknown error" : results.joined(separator: "; ")
-        throw NSError(domain: "DBIntegrity", code: 3, userInfo: [NSLocalizedDescriptionKey: "integrity_check failed: \(msg)"])
+        throw NSError(domain: "DBIntegrity", code: 3, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.integrity_check_failed_details", msg)])
     }
 }

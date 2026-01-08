@@ -115,8 +115,13 @@ final class AppLockManager: ObservableObject {
     /// - Parameters:
     ///   - reason: The localized reason shown in the system auth dialog.
     ///   - completion: Called on the main actor with true on success.
-    func unlockWithBiometrics(reason: String = "Unlock Patient Viewer",
-                              completion: @escaping (Bool) -> Void) {
+    func unlockWithBiometrics(
+        reason: String = NSLocalizedString(
+            "app_lock.biometrics.reason.unlock",
+            comment: "Reason shown in the system Face ID/Touch ID prompt"
+        ),
+        completion: @escaping (Bool) -> Void
+    ) {
         // If no lock is configured, treat as unlocked.
         guard isLockEnabled else {
             isLocked = false
@@ -125,7 +130,10 @@ final class AppLockManager: ObservableObject {
         }
 
         let context = LAContext()
-        context.localizedCancelTitle = "Cancel"
+        context.localizedCancelTitle = NSLocalizedString(
+            "common.cancel",
+            comment: "Cancel button title"
+        )
 
         var authError: NSError?
         if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &authError) {
@@ -171,7 +179,15 @@ final class AppLockManager: ObservableObject {
             throw NSError(
                 domain: "AppLock.Keychain",
                 code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: "Failed to store password hash (status \(status))"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: String(
+                        format: NSLocalizedString(
+                            "app_lock.keychain.store_failed",
+                            comment: "Error when storing password hash in Keychain; parameter is OSStatus"
+                        ),
+                        status
+                    )
+                ]
             )
         }
     }

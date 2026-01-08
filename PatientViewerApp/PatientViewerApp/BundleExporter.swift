@@ -19,7 +19,16 @@ struct BundleExporter {
     /// Compute SHA-256 hex digest of a file on disk (streaming).
     private static func sha256Hex(ofFile url: URL) throws -> String {
         guard let stream = InputStream(url: url) else {
-            throw NSError(domain: "BundleExport", code: 1001, userInfo: [NSLocalizedDescriptionKey: "Unable to open input stream for \(url.path)"])
+            throw NSError(
+                domain: "BundleExport",
+                code: 1001,
+                userInfo: [
+                    NSLocalizedDescriptionKey: String(
+                        format: NSLocalizedString("bundle_exporter.error.open_input_stream", comment: "Unable to open input stream for a file"),
+                        url.lastPathComponent
+                    )
+                ]
+            )
         }
         stream.open()
         defer { stream.close() }
@@ -31,7 +40,16 @@ struct BundleExporter {
         while stream.hasBytesAvailable {
             let read = stream.read(&buffer, maxLength: buffer.count)
             if read < 0 {
-                throw stream.streamError ?? NSError(domain: "BundleExport", code: 1002, userInfo: [NSLocalizedDescriptionKey: "Stream read error for \(url.path)"])
+                throw stream.streamError ?? NSError(
+                    domain: "BundleExport",
+                    code: 1002,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: String(
+                            format: NSLocalizedString("bundle_exporter.error.stream_read", comment: "Stream read error for a file"),
+                            url.lastPathComponent
+                        )
+                    ]
+                )
             }
             if read == 0 { break }
             hasher.update(data: Data(buffer[0..<read]))
@@ -218,7 +236,11 @@ struct BundleExporter {
         }
 
         guard let pid = patientID else {
-            throw NSError(domain: "BundleExport", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing patient ID"])
+            throw NSError(
+                domain: "BundleExport",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("bundle_exporter.error.missing_patient_id", comment: "Export failed because patient ID is missing")]
+            )
         }
 
         let safeAlias = sanitizedSlug(aliasLabel)
@@ -240,7 +262,11 @@ struct BundleExporter {
             BundleExporter.log.warning("integrity_check failed on export copy — attempting VACUUM repair…")
             attemptRepair(dbPath: dbFileInBundle.path)
             guard integrityCheckOK(dbPath: dbFileInBundle.path) else {
-                throw NSError(domain: "BundleExport", code: 2, userInfo: [NSLocalizedDescriptionKey: "SQLite integrity_check failed for export copy."])
+                throw NSError(
+                    domain: "BundleExport",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("bundle_exporter.error.integrity_check_failed", comment: "SQLite integrity_check failed")]
+                )
             }
         }
         
@@ -249,7 +275,11 @@ struct BundleExporter {
         // Also validate foreign key consistency — this catches orphan rows missed by integrity_check
         if !foreignKeyCheckOK(dbPath: dbFileInBundle.path) {
             BundleExporter.log.error("foreign_key_check failed for export copy — aborting export.")
-            throw NSError(domain: "BundleExport", code: 3, userInfo: [NSLocalizedDescriptionKey: "SQLite foreign_key_check failed for export copy."])
+            throw NSError(
+                domain: "BundleExport",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("bundle_exporter.error.foreign_key_check_failed", comment: "SQLite foreign_key_check failed")]
+            )
         }
 
         // NEW: Encrypt the DB for transport if our crypto layer is enabled for this app.
@@ -258,9 +288,11 @@ struct BundleExporter {
             try BundleCrypto.encryptDatabaseIfNeeded(at: bundleFolder)
         } catch {
             BundleExporter.log.error("Encryption step failed; aborting export: \(error.localizedDescription, privacy: .public)")
-            throw NSError(domain: "BundleExport",
-                          code: 4,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to encrypt database for export."])
+            throw NSError(
+                domain: "BundleExport",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("bundle_exporter.error.encrypt_failed", comment: "Export failed because DB encryption failed")]
+            )
         }
 
         // Decide which file we hash for integrity: prefer plaintext if it still exists,
@@ -273,9 +305,11 @@ struct BundleExporter {
         } else if fm.fileExists(atPath: encryptedDBURL.path) {
             dbFileToHash = encryptedDBURL
         } else {
-            throw NSError(domain: "BundleExport",
-                          code: 5,
-                          userInfo: [NSLocalizedDescriptionKey: "Neither db.sqlite nor db.sqlite.enc found in export bundle."])
+            throw NSError(
+                domain: "BundleExport",
+                code: 5,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("bundle_exporter.error.missing_db_files", comment: "Export failed because expected DB files are missing")]
+            )
         }
 
         // Compute DB hash for manifest after normalization/encryption
