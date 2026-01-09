@@ -195,7 +195,7 @@
 "patient_viewer.growth_chart.empty_bmi.message" = "Add a weight and height measurement to see the BMI chart.";
 
 "patient_viewer.growth_chart.empty.title" = "No measurements yet";
-"patient_viewer.growth_chart.empty.message" = "Add a measurement to see the %@ chart.";
+
 
 "patient_viewer.growth_chart.reference_unavailable.title" = "Reference curves unavailable";
 "patient_viewer.growth_chart.reference_unavailable.message" = "Missing WHO reference for “%@”. The chart will appear once curves are available.";
@@ -204,13 +204,8 @@
 "patient_viewer.growth_chart.axis.value" = "Value";
 "patient_viewer.growth_chart.axis.curve" = "Curve";
 
-"patient_viewer.growth_chart.empty.title" = "No growth data yet";
-"patient_viewer.growth_chart.empty.message" = "Add a measurement to see the chart.";
 
-"patient_viewer.growth_chart.title.weight_for_age" = "Weight-for-Age";
-"patient_viewer.growth_chart.title.length_for_age" = "Length-for-Age";
 "patient_viewer.growth_chart.title.hc_for_age" = "Head Circumference-for-Age";
-"patient_viewer.growth_chart.title.bmi_for_age" = "BMI-for-Age";
 "patient_viewer.growth_chart.title.generic" = "Growth Chart";
 
 "patient_viewer.growth_chart.y_axis.weight" = "Weight (kg)";
@@ -447,8 +442,6 @@
 "well_report.feeding.fmt.estimated_total_intake_ml_per_24h" = "Estimated total intake: %.0f ml/24h";
 "well_report.feeding.fmt.estimated_intake_ml_per_kg_24h" = "Estimated intake: %.0f ml/kg/24h";
 "well_report.feeding.fmt.dairy_cups_or_bottles" = "Dairy intake daily: %@ cup(s) or bottle(s)";
-/* Perinatal Summary section */
-"well_report.section.perinatal_summary" = "Perinatal Summary";
 
 /* Perinatal Summary – content labels */
 "well_report.perinatal.label.pregnancy" = "Pregnancy";
@@ -457,7 +450,7 @@
 "well_report.perinatal.label.infection_risk" = "Infection Risk";
 "well_report.perinatal.label.feeding_in_maternity" = "Feeding";
 "well_report.perinatal.label.maternity_vaccinations" = "Vaccinations";
-"well_report.perinatal.label.maternity_stay_events" = "Events";
+"well_report.perinatal.label.maternity_stay_events" = "Events during maternity stay";
 "well_report.perinatal.label.hearing_screening" = "Hearing";
 "well_report.perinatal.label.heart_screening" = "Heart";
 "well_report.perinatal.label.metabolic_screening" = "Metabolic";
@@ -542,23 +535,18 @@
 "patient_viewer.growth_chart.title.length_for_age" = "Length-for-Age (0–60m)";
 "patient_viewer.growth_chart.title.head_circumference_for_age" = "Head Circumference-for-Age (0–60m)";
 "patient_viewer.growth_chart.title.bmi_for_age" = "BMI-for-Age (0–60m)";
-"patient_viewer.growth_chart.title.generic" = "Growth chart";
 
-/* Axis labels */
-"patient_viewer.growth_chart.axis.age_months" = "Age (months)";
-"patient_viewer.growth_chart.axis.value" = "Value";
-"patient_viewer.growth_chart.axis.curve" = "Curve";
+
+
 
 /* Empty state */
-"patient_viewer.growth_chart.empty.title" = "No growth data";
+
 "patient_viewer.growth_chart.empty.message" = "No patient measurements available for this chart.";
 
 /* Y axis labels */
 "patient_viewer.growth_chart.y_axis.weight" = "Weight (kg)";
 "patient_viewer.growth_chart.y_axis.height" = "Length/Height (cm)";
 "patient_viewer.growth_chart.y_axis.head_circ" = "Head circumference (cm)";
-"patient_viewer.growth_chart.y_axis.bmi" = "BMI";
-"patient_viewer.growth_chart.y_axis.generic" = "Value";
 
 /* Measurements */
 "well_report.measurements.line.weight_measured_on_fmt" = "Weight: %.2f kg (measured on %@)";
@@ -711,8 +699,6 @@
 /* AppLock biometrics prompt reason */
 "app_lock.biometrics.reason.unlock" = "Unlock Patient Viewer";
 
-/* Generic cancel */
-"common.cancel" = "Cancel";
 
 /* Keychain storage failure (OSStatus code) */
 "app_lock.keychain.store_failed" = "Failed to store password hash (status %d)";
@@ -740,3 +726,18 @@
 
 /* Legend label for percentile/SD reference curves */
 "growth.chart.legend.percentile" = "Percentile";
+
+/* Perinatal – additional fields (line formats) */
+"well_report.perinatal.fmt.vitamin_k" = "Vitamin K: %@";
+"well_report.perinatal.fmt.meconium_24h" = "Meconium 24h: %@";
+"well_report.perinatal.fmt.urination_24h" = "Urination 24h: %@";
+"well_report.perinatal.fmt.family_vaccinations" = "Family vaccinations: %@";
+"well_report.perinatal.fmt.maternity_discharge_date" = "Discharge date: %@";
+"well_report.perinatal.fmt.nicu_stay" = "NICU stay: %@";
+
+/* Vaccination tokens */
+"well_report.enum.vaccination.none" = "None";
+"well_report.enum.vaccination.dtap" = "dTaP";
+"well_report.enum.vaccination.flu" = "Flu";
+"well_report.enum.vaccination.covid" = "COVID";
+"well_report.enum.vaccination.rsv" = "RSV";

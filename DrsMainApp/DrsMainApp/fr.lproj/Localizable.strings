@@ -336,7 +336,7 @@
 
 "perinatal.field.mother_vaccinations" = "Vaccinations de la mère";
 "perinatal.field.family_vaccinations" = "Vaccinations de la famille";
-"perinatal.field.illnesses_after_birth" = "Maladies après la naissance";
+"perinatal.field.illnesses_after_birth" = "Maladie néonatale";
 "perinatal.field.evolution_since_maternity" = "Évolution depuis la maternité";
 
 
@@ -1894,11 +1894,11 @@
 "report.perinatal.mother_vaccinations" = "Vaccins maternels : %@";
 "report.perinatal.family_vaccinations" = "Vaccins familiaux : %@";
 
-"report.perinatal.maternity_discharge_date" = "Date de sortie : %@";
+"report.perinatal.maternity_discharge_date" = "Date de sortie de maternité : %@";
 "report.perinatal.discharge_weight_g" = "Poids de sortie : %@ g";
 
-"report.perinatal.illnesses_after_birth" = "Après la naissance : %@";
-"report.perinatal.evolution_since_maternity" = "Depuis la sortie : %@";
+"report.perinatal.illnesses_after_birth" = "Maladie en période néonatale : %@";
+"report.perinatal.evolution_since_maternity" = "Évolution depuis la sortie de maternité : %@";
 
 /* Well - Development */
 "report.dev.mchat" = "M-CHAT";

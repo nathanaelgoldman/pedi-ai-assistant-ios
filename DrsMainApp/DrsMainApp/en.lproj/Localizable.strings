@@ -1892,7 +1892,7 @@
 "report.perinatal.birth_head_circumference_cm" = "HC: %@ cm";
 
 "report.perinatal.maternity_stay_events" = "Maternity stay: %@";
-"report.perinatal.maternity_vaccinations" = "Maternity vacc: %@";
+"report.perinatal.maternity_vaccinations" = "Maternity vaccinations: %@";
 "report.perinatal.vitamin_k" = "Vitamin K: %@";
 "report.perinatal.feeding_in_maternity" = "Feeding: %@";
 "report.perinatal.meconium_24h" = "Meconium 24h: %@";
@@ -1902,14 +1902,14 @@
 "report.perinatal.metabolic_screening" = "Metabolic: %@";
 "report.perinatal.hearing_screening" = "Hearing: %@";
 
-"report.perinatal.mother_vaccinations" = "Mother vacc: %@";
-"report.perinatal.family_vaccinations" = "Family vacc: %@";
+"report.perinatal.mother_vaccinations" = "Mother vaccinations: %@";
+"report.perinatal.family_vaccinations" = "Family vaccinations: %@";
 
-"report.perinatal.maternity_discharge_date" = "Discharge date: %@";
+"report.perinatal.maternity_discharge_date" = "Maternity Discharge date: %@";
 "report.perinatal.discharge_weight_g" = "Discharge Wt: %@ g";
 
-"report.perinatal.illnesses_after_birth" = "After birth: %@";
-"report.perinatal.evolution_since_maternity" = "Since discharge: %@";
+"report.perinatal.illnesses_after_birth" = "Neonatal ilness: %@";
+"report.perinatal.evolution_since_maternity" = "Evolution since discharge: %@";
 
 /* Well - Development */
 "report.dev.mchat" = "M-CHAT";

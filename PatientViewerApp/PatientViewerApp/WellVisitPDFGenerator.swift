@@ -44,15 +44,6 @@ struct WellVisitPDFGenerator {
         let visitMap: [String: String] = [
             // Newborn / post-maternity first visit
             "newborn_first": WellVisitPDFGenerator.L(
-                "well_report.visit_type.newborn_first",
-                "First visit after maternity"
-            ),
-            // Common aliases (in case older DB rows used different keys)
-            "post_maternity_first": WellVisitPDFGenerator.L(
-                "well_report.visit_type.first_visit_after_maternity",
-                "First visit after maternity"
-            ),
-            "first_after_maternity": WellVisitPDFGenerator.L(
                 "well_report.visit_type.first_visit_after_maternity",
                 "First visit after maternity"
             ),
@@ -430,8 +421,9 @@ struct WellVisitPDFGenerator {
             let titleFont = UIFont.boldSystemFont(ofSize: 20)
             let subFont = UIFont.systemFont(ofSize: 14)
 
-            drawText(WellVisitPDFGenerator.L("well_report.title", "Well Visit Report"), font: titleFont)
-            drawText("\(WellVisitPDFGenerator.L("well_report.generated", "Report Generated")): \(WellVisitPDFGenerator.formatDate(Date()))", font: subFont)
+            drawText(WellVisitPDFGenerator.L("pdf.well.title", "Well Visit Report"), font: titleFont)
+            let fmtGenerated = WellVisitPDFGenerator.L("pdf.well.generated.fmt", "Report Generated: %@")
+            drawText(String(format: fmtGenerated, WellVisitPDFGenerator.formatDate(Date())), font: subFont)
 
             let dbPath = dbURL.appendingPathComponent("db.sqlite").path
             WellVisitPDFGenerator.log.debug("Opening SQLite at path=\(dbPath, privacy: .public)")
@@ -509,14 +501,14 @@ struct WellVisitPDFGenerator {
                 let ageDaysDB = visitRow[Expression<Int?>("age_days")]
 
                 // Localized patient/visit header labels
-                let hdrAlias = WellVisitPDFGenerator.L("well_report.header.alias", "Alias")
-                let hdrName = WellVisitPDFGenerator.L("well_report.header.name", "Name")
-                let hdrDOB = WellVisitPDFGenerator.L("well_report.header.dob", "DOB")
-                let hdrSex = WellVisitPDFGenerator.L("well_report.header.sex", "Sex")
-                let hdrMRN = WellVisitPDFGenerator.L("well_report.header.mrn", "MRN")
-                let hdrAgeAtVisit = WellVisitPDFGenerator.L("well_report.header.age_at_visit", "Age at Visit")
-                let hdrVisitDate = WellVisitPDFGenerator.L("well_report.header.visit_date", "Visit Date")
-                let hdrVisitType = WellVisitPDFGenerator.L("well_report.header.visit_type", "Visit Type")
+                let hdrAlias = WellVisitPDFGenerator.L("pdf.well.patient.alias", "Alias")
+                let hdrName = WellVisitPDFGenerator.L("pdf.well.patient.name", "Name")
+                let hdrDOB = WellVisitPDFGenerator.L("pdf.well.patient.dob", "DOB")
+                let hdrSex = WellVisitPDFGenerator.L("pdf.well.patient.sex", "Sex")
+                let hdrMRN = WellVisitPDFGenerator.L("pdf.well.patient.mrn", "MRN")
+                let hdrAgeAtVisit = WellVisitPDFGenerator.L("pdf.well.patient.ageAtVisit", "Age at Visit")
+                let hdrVisitDate = WellVisitPDFGenerator.L("pdf.well.patient.visitDate", "Visit Date")
+                let hdrVisitType = WellVisitPDFGenerator.L("pdf.well.patient.visitType", "Visit Type")
                 let unitDays = WellVisitPDFGenerator.L("well_report.unit.days", "days")
 
                 drawText("\(hdrAlias): \(aliasText)", font: subFont)
@@ -566,12 +558,12 @@ struct WellVisitPDFGenerator {
                 if let userIdVal = visitRow[userID] {
                     if let userRow = try? db.pluck(users.filter(Expression<Int64>("id") == userIdVal)) {
                         let clinicianName = "\(userRow[firstNameUser]) \(userRow[lastNameUser])"
-                        let hdrClinician = WellVisitPDFGenerator.L("well_report.header.clinician", "Clinician")
+                        let hdrClinician = WellVisitPDFGenerator.L("pdf.well.patient.clinician", "Clinician")
                         drawText("\(hdrClinician): \(clinicianName)", font: subFont)
                     }
                 } else {
                     // Optionally, you could show something here:
-                    // let hdrClinician = WellVisitPDFGenerator.L("well_report.header.clinician", "Clinician")
+                    // let hdrClinician = WellVisitPDFGenerator.L("pdf.well.patient.clinician", "Clinician")
                     // drawText("\(hdrClinician): —", font: subFont)
                 }
                 
@@ -597,6 +589,12 @@ struct WellVisitPDFGenerator {
                 let metabolic = Expression<String?>("metabolic_screening")
                 let afterBirth = Expression<String?>("illnesses_after_birth")
                 let motherVacc = Expression<String?>("mother_vaccinations")
+                let vitK = Expression<Int?>("vit_k")
+                let passedMeconium24h = Expression<Int?>("passed_meconium_24h")
+                let urination24h = Expression<Int?>("urination_24h")
+                let nicuStay = Expression<Int?>("nicu_stay")
+                let maternityDischargeDate = Expression<String?>("maternity_discharge_date")
+                let familyVacc = Expression<String?>("family_vaccinations")
 
                 // Localized content labels (Perinatal Summary)
                 let periLblPregnancy = WellVisitPDFGenerator.L("well_report.perinatal.label.pregnancy", "Pregnancy")
@@ -612,6 +610,16 @@ struct WellVisitPDFGenerator {
                 let periLblIllnessesAfterBirth = WellVisitPDFGenerator.L("well_report.perinatal.label.illnesses_after_birth", "After birth")
                 let periLblMotherVaccinations = WellVisitPDFGenerator.L("well_report.perinatal.label.mother_vaccinations", "Mother Vacc")
 
+                let valYes = WellVisitPDFGenerator.L("well_report.value.yes", "Yes")
+                let valNo  = WellVisitPDFGenerator.L("well_report.value.no", "No")
+
+                let periFmtVitaminK = WellVisitPDFGenerator.L("well_report.perinatal.fmt.vitamin_k", "Vitamin K: %@")
+                let periFmtMeconium24h = WellVisitPDFGenerator.L("well_report.perinatal.fmt.meconium_24h", "Meconium 24h: %@")
+                let periFmtUrination24h = WellVisitPDFGenerator.L("well_report.perinatal.fmt.urination_24h", "Urination 24h: %@")
+                let periFmtNICUStay = WellVisitPDFGenerator.L("well_report.perinatal.fmt.nicu_stay", "NICU stay: %@")
+                let periFmtMaternityDischargeDate = WellVisitPDFGenerator.L("well_report.perinatal.fmt.maternity_discharge_date", "Discharge date: %@")
+                let periFmtFamilyVaccinations = WellVisitPDFGenerator.L("well_report.perinatal.fmt.family_vaccinations", "Family vaccinations: %@")
+
                 // Localized formatted fields (Perinatal Summary)
                 let periFmtGAWeeks = WellVisitPDFGenerator.L("well_report.perinatal.fmt.ga_weeks", "GA: %d w")
                 let periFmtBirthWeightG = WellVisitPDFGenerator.L("well_report.perinatal.fmt.birth_weight_g", "BW: %d g")
@@ -621,6 +629,31 @@ struct WellVisitPDFGenerator {
 
                 if let peri = try? db.pluck(perinatal.filter(Expression<Int64>("patient_id") == pid)) {
                     var parts: [String] = []
+
+                    func localizeVaccinationTokenList(_ raw: String) -> String {
+                        let tokens = raw
+                            .split(separator: ",")
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                            .filter { !$0.isEmpty }
+
+                        guard !tokens.isEmpty else { return "" }
+
+                        // If there are specific vaccines listed, drop "none".
+                        let hasReal = tokens.contains { $0 != "none" }
+                        let normalized = hasReal ? tokens.filter { $0 != "none" } : tokens
+
+                        func loc(_ t: String) -> String {
+                            // Safe fallback if a localization is missing
+                            let key = "well_report.enum.vaccination.\(t)"
+                            let localized = WellVisitPDFGenerator.L(key, "")
+                            if localized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                return t
+                            }
+                            return localized
+                        }
+
+                        return normalized.map(loc).joined(separator: ", ")
+                    }
 
                     if let v = try? peri.get(pregnancyRisk) {
                         let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -661,10 +694,33 @@ struct WellVisitPDFGenerator {
                     if let dw = ((try? peri.get(dischargeWeight)) ?? nil) {
                         parts.append(String(format: periFmtDischargeWeightG, dw))
                     }
+                    if let v = try? peri.get(maternityDischargeDate) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { parts.append(String(format: periFmtMaternityDischargeDate, WellVisitPDFGenerator.formatDate(t))) }
+                    }
 
                     if let v = try? peri.get(feeding) {
                         let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !t.isEmpty { parts.append("\(periLblFeedingInMaternity): \(t)") }
+                    }
+                    if let v = ((try? peri.get(vitK)) ?? nil) {
+                        let text = (v == 1) ? valYes : valNo
+                        parts.append(String(format: periFmtVitaminK, text))
+                    }
+
+                    if let v = ((try? peri.get(passedMeconium24h)) ?? nil) {
+                        let text = (v == 1) ? valYes : valNo
+                        parts.append(String(format: periFmtMeconium24h, text))
+                    }
+
+                    if let v = ((try? peri.get(urination24h)) ?? nil) {
+                        let text = (v == 1) ? valYes : valNo
+                        parts.append(String(format: periFmtUrination24h, text))
+                    }
+
+                    if let v = ((try? peri.get(nicuStay)) ?? nil) {
+                        let text = (v == 1) ? valYes : valNo
+                        parts.append(String(format: periFmtNICUStay, text))
                     }
 
                     if let v = try? peri.get(vaccinations) {
@@ -699,7 +755,13 @@ struct WellVisitPDFGenerator {
 
                     if let v = try? peri.get(motherVacc) {
                         let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !t.isEmpty { parts.append("\(periLblMotherVaccinations): \(t)") }
+                        let pretty = t.isEmpty ? "" : localizeVaccinationTokenList(t)
+                        if !pretty.isEmpty { parts.append("\(periLblMotherVaccinations): \(pretty)") }
+                    }
+                    if let v = try? peri.get(familyVacc) {
+                        let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let pretty = t.isEmpty ? "" : localizeVaccinationTokenList(t)
+                        if !pretty.isEmpty { parts.append(String(format: periFmtFamilyVaccinations, pretty)) }
                     }
 
                     if !parts.isEmpty {
@@ -816,9 +878,7 @@ struct WellVisitPDFGenerator {
 
                 var feedingLines: [String] = []
 
-                // Localized content labels (Feeding)
-                let valYes = WellVisitPDFGenerator.L("well_report.value.yes", "Yes")
-                let valNo  = WellVisitPDFGenerator.L("well_report.value.no", "No")
+                // Reuse valYes/valNo localized above
 
                 let lblMilk = WellVisitPDFGenerator.L("well_report.feeding.label.milk", "Milk")
                 let lblRegurgitation = WellVisitPDFGenerator.L("well_report.feeding.label.regurgitation", "Regurgitation")
@@ -1269,7 +1329,7 @@ struct WellVisitPDFGenerator {
                 let milestonesTable = Table("well_visit_milestones")
                 _ = Expression<String>("code")
                 let label = Expression<String>("label")
-                let status = Expression<String>("status")
+                let status = Expression<String?>("status")
 
                 let milestoneRows = try? db.prepare(milestonesTable.filter(Expression<Int64>("visit_id") == visit.id))
 
@@ -1278,24 +1338,45 @@ struct WellVisitPDFGenerator {
                 var flags: [String] = []
 
                 if let rows = milestoneRows {
+                    // Normalize statuses aggressively so we don't silently miss flags due to
+                    // whitespace / NBSP / legacy variants.
+                    func normalizeStatus(_ raw: String) -> String {
+                        // Replace NBSP with regular space, trim, collapse whitespace, lowercase.
+                        let nbFixed = raw.replacingOccurrences(of: "\u{00A0}", with: " ")
+                        let trimmed = nbFixed.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let collapsed = trimmed
+                            .split(whereSeparator: { $0.isWhitespace })
+                            .joined(separator: " ")
+                        return collapsed.lowercased()
+                    }
+
                     for row in rows {
-                        let stat = row[status]
+                        let statRaw = row[status] ?? ""
+                        let statNorm = normalizeStatus(statRaw)
+
                         totalCount += 1
-                        if stat == "achieved" {
+
+                        // Anything not explicitly achieved is considered a flag.
+                        if statNorm == "achieved" {
                             achievedCount += 1
-                        } else if stat == "uncertain" || stat == "not yet" {
-                            let itemLabel = row[label]
-                            let statDisplay: String
-                            switch stat {
-                            case "uncertain":
-                                statDisplay = statUncertain
-                            case "not yet":
-                                statDisplay = statNotYet
-                            default:
-                                statDisplay = stat
-                            }
-                            flags.append("\(itemLabel): \(statDisplay)")
+                            continue
                         }
+
+                        let itemLabel = row[label]
+                        let statDisplay: String
+
+                        switch statNorm {
+                        case "uncertain":
+                            statDisplay = statUncertain
+                        case "not yet", "not_yet":
+                            statDisplay = statNotYet
+                        default:
+                            // Fail-open: show the raw status if present; otherwise a dash.
+                            let rawTrimmed = statRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                            statDisplay = rawTrimmed.isEmpty ? placeholderDash : rawTrimmed
+                        }
+
+                        flags.append("\(itemLabel): \(statDisplay)")
                     }
                 }
 
