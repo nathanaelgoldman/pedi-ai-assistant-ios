@@ -302,14 +302,21 @@ final class ReportDataLoader {
                 return solidStarted ? formatKey(key, value: nil) : nil
 
             case "well_visit_form.problem_listing.feeding.solids_quality":
-                return formatKey(key, value: solidQuality)
+                if let sq = solidQuality, !sq.isEmpty {
+                    // Do not flag the normal state (appears_good)
+                    if isAppearsGoodCode(sq) { return nil }
+                    return formatKey(key, value: localizedWellSharedCode(sq))
+                }
+                return nil
 
             case "well_visit_form.problem_listing.feeding.solids_comment":
                 return formatKey(key, value: solidComment)
 
             case "well_visit_form.problem_listing.feeding.food_variety":
-                if let fv = foodVariety, !fv.isEmpty, fv.lowercased() != "appears good" {
-                    return formatKey(key, value: fv)
+                if let fv = foodVariety, !fv.isEmpty {
+                    // Do not flag the normal state (appears_good)
+                    if isAppearsGoodCode(fv) { return nil }
+                    return formatKey(key, value: localizedWellSharedCode(fv))
                 }
                 return nil
 
@@ -383,6 +390,26 @@ final class ReportDataLoader {
     private func localizedStringIfExists(_ key: String) -> String? {
         let v = NSLocalizedString(key, comment: "")
         return (v == key) ? nil : v
+    }
+    
+    // Canonical "good" state for quality fields (stored as a stable code).
+    private func isAppearsGoodCode(_ raw: String) -> Bool {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "appears_good"
+    }
+    
+    // Localize stable quality codes rendered via `well_visit_form.shared.<code>`.
+    // Falls back to generic choice localization and finally to the raw token.
+    private func localizedWellSharedCode(_ rawCode: String) -> String {
+        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { return rawCode }
+
+        let key = "well_visit_form.shared.\(code)"
+        if let v = localizedStringIfExists(key) {
+            return v
+        }
+
+        // Fallback: try the general choice localization pipeline.
+        return reportLocalizedWellChoiceToken(code)
     }
 
     private func slugifyToken(_ s: String) -> String {
@@ -537,9 +564,13 @@ final class ReportDataLoader {
             items.append(L("well_visit_form.problem_listing.feeding.solids_started"))
         }
 
-        if let solidQuality = nonEmpty(stringFromRow(row, keys: ["solid_food_quality","solids_quality","solidFoodQuality"])) {
-            let fmt = L("well_visit_form.problem_listing.feeding.solids_quality")
-            items.append(String(format: fmt, locale: .current, solidQuality))
+        if let solidQualityRaw = nonEmpty(stringFromRow(row, keys: ["solid_food_quality","solids_quality","solidFoodQuality"])) {
+            // Do not flag the normal state (appears_good)
+            if !isAppearsGoodCode(solidQualityRaw) {
+                let solidQuality = localizedWellSharedCode(solidQualityRaw)
+                let fmt = L("well_visit_form.problem_listing.feeding.solids_quality")
+                items.append(String(format: fmt, locale: .current, solidQuality))
+            }
         }
 
         if let solidComment = nonEmpty(stringFromRow(row, keys: ["solid_food_comment","solids_comment","solidFoodComment"])) {
@@ -548,10 +579,10 @@ final class ReportDataLoader {
         }
 
         // Food variety: only if NOT "appears good" (also treat "appears_good" as good)
+        // Food variety: only if NOT "appears_good"
         if let fvRaw = nonEmpty(stringFromRow(row, keys: ["food_variety_quality","food_variety","foodVarietyQuality"])) {
-            let fvNorm = fvRaw.lowercased().replacingOccurrences(of: "_", with: " ")
-            if fvNorm != "appears good" {
-                let fv = reportLocalizedWellChoiceToken(fvRaw)
+            if !isAppearsGoodCode(fvRaw) {
+                let fv = localizedWellSharedCode(fvRaw)
                 let fmt = L("well_visit_form.problem_listing.feeding.food_variety")
                 items.append(String(format: fmt, locale: .current, fv))
             }
@@ -3986,6 +4017,18 @@ extension ReportDataLoader {
                             ?? nonEmpty(row["milestone"])
                             ?? nonEmpty(row["title"])
                         visitType = readableVisitType(vtRaw) ?? vtRaw
+                        
+                        // Raw visit type ID is used for report-side branching (do not localize it).
+                        let rawVisitTypeID = (vtRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        let olderFeedingTypes: Set<String> = [
+                            "twelve_month",
+                            "fifteen_month",
+                            "eighteen_month",
+                            "twentyfour_month",
+                            "thirty_month",
+                            "thirtysix_month"
+                        ]
+                        let isOlderFeedingVisit = olderFeedingTypes.contains(rawVisitTypeID)
 
                         // Parents' concerns (also not age-gated)
                         parents = nonEmpty(row["parents_concerns"])
@@ -4084,22 +4127,21 @@ extension ReportDataLoader {
                                 // Prefer an explicit mapping for known sleep enums; otherwise try localization keys; else raw.
                                 let lc = t.lowercased()
 
-                                // Sleep regularity is stored as tokens like "regular" / "irregular".
+                                // Sleep regularity is stored as canonical tokens: "regular" / "irregular".
+                                // Localize via `well_visit_form.shared.<token>` (consistent with Feeding quality codes).
                                 if dbKey == "sleep_regular" {
-                                    let lang = (Locale.current.languageCode ?? "en").lowercased()
-                                    switch lc {
-                                    case "regular":
-                                        return (lang.hasPrefix("fr")) ? "régulier" : "regular"
-                                    case "irregular":
-                                        return (lang.hasPrefix("fr")) ? "irrégulier" : "irregular"
-                                    default:
-                                        break
+                                    if lc == "regular" || lc == "irregular" {
+                                        let key = "well_visit_form.shared.\(lc)"
+                                        let localized = L(key)
+                                        return (localized == key) ? t : localized
                                     }
                                 }
 
-                                if ["regular","irregular","poor","good","excellent"].contains(lc) {
-                                    let probe = NSLocalizedString(lc, comment: "")
-                                    return (probe == lc) ? t : probe
+                                // Sleep quality may be stored as simple tokens in some bundles.
+                                if ["poor","good","excellent"].contains(lc) {
+                                    let key = "well_visit_form.shared.\(lc)"
+                                    let localized = L(key)
+                                    return (localized == key) ? t : localized
                                 }
 
                                 // Default: no normalization applied.
@@ -4141,6 +4183,17 @@ extension ReportDataLoader {
                                         if probe != t { rendered = probe }
                                     }
 
+                                case "solid_food_quality", "solids_quality":
+                                    // Stored as a stable code (e.g. "appears_good"/"uncertain"/"probably_limited")
+                                    // or sometimes as a full localization key ("well_visit_form.shared.appears_good").
+                                    // Always render as a localized label in the report Feeding section.
+                                    let t = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if t.hasPrefix("well_visit_form.shared.") {
+                                        rendered = L(t)
+                                    } else {
+                                        rendered = localizedWellSharedCode(t)
+                                    }
+
                                 case "milk_types":
                                     // This field may be stored as a short token (e.g. "breast") or as a localization key.
                                     // Localize known tokens and also support multiple values separated by commas/newlines.
@@ -4171,6 +4224,13 @@ extension ReportDataLoader {
                                             return L("well_visit_form.feeding.milk_type.breastmilk")
                                         }
 
+                                        // Normalize legacy "both" into a localized pair.
+                                        if lc == "both" {
+                                            let a = L("well_visit_form.feeding.milk_type.breastmilk")
+                                            let b = L("well_visit_form.feeding.milk_type.formula")
+                                            return "\(a), \(b)"
+                                        }
+
                                         // Generic: try the canonical milk-type key pattern.
                                         let candidate = "well_visit_form.feeding.milk_type.\(lc)"
                                         let localized = L(candidate)
@@ -4197,6 +4257,38 @@ extension ReportDataLoader {
                                 supplementation[mapping.prettyKey] = rendered
                             case .sleep:
                                 sleep[mapping.prettyKey] = rendered
+                            }
+                        }
+                        
+                        // Older feeding visits: show a dedicated "Still breastfeeding" line.
+                        // We derive this from the canonical stored token(s) in `milk_types`.
+                        if isOlderFeedingVisit {
+                            let rawMilk = (row["milk_types"] ?? row["milkTypes"] ?? "")
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                                .lowercased()
+
+                            if !rawMilk.isEmpty {
+                                // Accept legacy separators and legacy spellings.
+                                let cleaned = rawMilk.replacingOccurrences(of: "•", with: "")
+                                let parts = cleaned
+                                    .split(whereSeparator: { ch in
+                                        ch == "," || ch == ";" || ch == "\n" || ch == "\r"
+                                    })
+                                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                                    .filter { !$0.isEmpty }
+
+                                let hasBreast = parts.contains(where: { p in
+                                    let lc = p.lowercased()
+                                    // raw token forms
+                                    if lc == "breast" || lc == "breastmilk" || lc == "breast_milk" { return true }
+                                    // localization-key forms
+                                    if lc.contains("breast") { return true }
+                                    return false
+                                })
+
+                                if hasBreast {
+                                    feeding[L("well_visit_form.feeding_older.still_breastfeeding")] = L("common.yes")
+                                }
                             }
                         }
                     }

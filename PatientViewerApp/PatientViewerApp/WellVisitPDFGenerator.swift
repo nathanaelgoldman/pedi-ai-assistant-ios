@@ -643,11 +643,16 @@ struct WellVisitPDFGenerator {
                         let normalized = hasReal ? tokens.filter { $0 != "none" } : tokens
 
                         func loc(_ t: String) -> String {
-                            // Safe fallback if a localization is missing
-                            let key = "well_report.enum.vaccination.\(t)"
-                            let localized = WellVisitPDFGenerator.L(key, "")
-                            if localized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                return t
+                            let token = t.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                            guard !token.isEmpty else { return "" }
+
+                            let key = "well_report.enum.vaccination.\(token)"
+
+                            // If the key is missing, NSLocalizedString typically returns the key itself.
+                            // So we pass the key as the fallback and compare.
+                            let localized = WellVisitPDFGenerator.L(key, key)
+                            if localized == key {
+                                return token
                             }
                             return localized
                         }

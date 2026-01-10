@@ -995,15 +995,15 @@ struct WellVisitForm: View {
                                         }
                                     }
 
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(L10nWVF.k("well_visit_form.sleep.regularity.label"))
-                                            .font(.subheadline)
-                                        Picker(L10nWVF.k("well_visit_form.sleep.regularity.picker"), selection: $sleepRegular) {
-                                            Text(L10nWVF.k("well_visit_form.sleep.regularity.option.regular")).tag("regular")
-                                            Text(L10nWVF.k("well_visit_form.sleep.regularity.option.irregular")).tag("irregular")
-                                        }
-                                        .pickerStyle(.segmented)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(L10nWVF.k("well_visit_form.sleep.regularity.label"))
+                                        .font(.subheadline)
+                                    Picker(L10nWVF.k("well_visit_form.sleep.regularity.picker"), selection: $sleepRegular) {
+                                        Text(L10nWVF.k("well_visit_form.shared.regular")).tag("regular")
+                                        Text(L10nWVF.k("well_visit_form.shared.irregular")).tag("irregular")
                                     }
+                                    .pickerStyle(.segmented)
+                                }
 
                                     Toggle(L10nWVF.k("well_visit_form.sleep.snoring.toggle"), isOn: $sleepSnoring)
                                         .toggleStyle(.switch)
@@ -2370,6 +2370,16 @@ struct WellVisitForm: View {
         return c
     }
     
+    // Sleep regularity UI: keep storing canonical tokens (regular/irregular/uncertain),
+    // but always display a localized label.
+    private func sleepRegularityDisplayLabel(_ raw: String) -> String {
+        let code = normalizeSleepRegularCode(raw)
+        return localizedLabel(for: code, prefixes: [
+            "well_visit_form.sleep.regularity",
+            "well_visit_form.shared"
+        ])
+    }
+    
     private func localizedIfExists(_ key: String) -> String? {
         let s = NSLocalizedString(key, comment: "")
         return (s == key) ? nil : s
@@ -2686,6 +2696,18 @@ struct WellVisitForm: View {
             if regurgitationPresent {
                 addKey("well_visit_form.problem_listing.feeding.regurgitation")
             }
+
+            // IMPORTANT: In early milk-only visits, clinicians may still use `feeding_comment`.
+            // Include it in the problem listing when non-empty.
+            let feedingTrim = feeding.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !feedingTrim.isEmpty {
+                addKey(
+                    "well_visit_form.problem_listing.feeding.diet",
+                    tokenArgs: [feedingTrim],
+                    formatArgs: [feedingTrim]
+                )
+            }
+
             let feedingIssueTrim = feedingIssue.trimmingCharacters(in: .whitespacesAndNewlines)
             if !feedingIssueTrim.isEmpty {
                 addKey(
@@ -2704,12 +2726,28 @@ struct WellVisitForm: View {
                 )
             }
 
+            // Regurgitation can remain clinically relevant beyond early milk-only visits.
+            if regurgitationPresent {
+                addKey("well_visit_form.problem_listing.feeding.regurgitation")
+            }
+
+            // Add feedingIssue in non-early visits if present
+            let feedingIssueTrim = feedingIssue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !feedingIssueTrim.isEmpty {
+                addKey(
+                    "well_visit_form.problem_listing.feeding.difficulty",
+                    tokenArgs: [feedingIssueTrim],
+                    formatArgs: [feedingIssueTrim]
+                )
+            }
+
             if solidFoodStarted {
                 addKey("well_visit_form.problem_listing.feeding.solids_started")
 
                 let solidsQualityRaw = solidFoodQuality.trimmingCharacters(in: .whitespacesAndNewlines)
                 let solidsQualityCode = normalizeQualityCode(solidsQualityRaw)
-                if !solidsQualityCode.isEmpty {
+                // Solids quality: only flag if NOT "appears_good"
+                if !solidsQualityCode.isEmpty && solidsQualityCode != "appears_good" {
                     // Store the stable code in the token; render as a localized label.
                     let labelKey = "well_visit_form.shared.\(solidsQualityCode)"
                     let label = L(labelKey)
@@ -2719,15 +2757,16 @@ struct WellVisitForm: View {
                         formatArgs: [label]
                     )
                 }
+            }
 
-                let solidsCommentTrim = solidFoodComment.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !solidsCommentTrim.isEmpty {
-                    addKey(
-                        "well_visit_form.problem_listing.feeding.solids_comment",
-                        tokenArgs: [solidsCommentTrim],
-                        formatArgs: [solidsCommentTrim]
-                    )
-                }
+            // IMPORTANT: Always include solids comment when present, even if `solidFoodStarted` was never toggled.
+            let solidsCommentTrim = solidFoodComment.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !solidsCommentTrim.isEmpty {
+                addKey(
+                    "well_visit_form.problem_listing.feeding.solids_comment",
+                    tokenArgs: [solidsCommentTrim],
+                    formatArgs: [solidsCommentTrim]
+                )
             }
 
             // Food variety: only if NOT "appears_good" (stored tags are appears_good/uncertain/probably_limited)

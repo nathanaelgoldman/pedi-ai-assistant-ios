@@ -599,7 +599,7 @@
 "well_visit_form.feeding_older.dairy_intake.2" = "2 cups or bottles";
 "well_visit_form.feeding_older.dairy_intake.3" = "3 cups or bottles";
 "well_visit_form.feeding_older.dairy_intake.4" = "4 cups or bottles";
-"well_visit_form.feeding_older.still_breastfeeding" = "Still breastfeeding";
+"well_visit_form.feeding_older.still_breastfeeding" = "Current breastfeeding";
 
 "well_visit_form.ai.title" = "AI Assistant";
 "well_visit_form.ai.run" = "Run AI summary";
@@ -2679,3 +2679,8 @@
 "report.chart.caption.bmi_for_age" = "BMI-for-Age";
 
 "appstate.manifest.build_files_list.enumerate_failed_format" = "buildFilesList: failed to enumerate bundle root %@";
+
+"well_visit_form.solids.comment.label" = "Feeding Comments";
+
+"well_visit_form.shared.regular" = "regular";
+"well_visit_form.shared.irregular" = "irregular";

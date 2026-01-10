@@ -454,7 +454,7 @@
 "well_report.perinatal.label.hearing_screening" = "Audition";
 "well_report.perinatal.label.heart_screening" = "Cœur";
 "well_report.perinatal.label.metabolic_screening" = "Métabolique";
-"well_report.perinatal.label.illnesses_after_birth" = "Post-natal";
+"well_report.perinatal.label.illnesses_after_birth" = "Maladies en période néonatale";
 "well_report.perinatal.label.mother_vaccinations" = "Vaccinations de la maman";
 
 /* Perinatal Summary – formatted fields */
@@ -740,7 +740,7 @@
 "well_report.perinatal.fmt.nicu_stay" = "Séjour en néonat/NICU : %@";
 
 "well_report.enum.vaccination.none" = "Aucune";
-"well_report.enum.vaccination.dtap" = "dTcaP";
+"well_report.enum.vaccination.dtap" = "dTaP";
 "well_report.enum.vaccination.flu" = "Grippe";
 "well_report.enum.vaccination.covid" = "COVID";
 "well_report.enum.vaccination.rsv" = "VRS";

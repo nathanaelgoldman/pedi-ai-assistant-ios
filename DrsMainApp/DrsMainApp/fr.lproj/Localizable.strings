@@ -597,7 +597,7 @@
 "well_visit_form.feeding_older.dairy_intake.2" = "2 tasses ou biberons";
 "well_visit_form.feeding_older.dairy_intake.3" = "3 tasses ou biberons";
 "well_visit_form.feeding_older.dairy_intake.4" = "4 tasses ou biberons";
-"well_visit_form.feeding_older.still_breastfeeding" = "Allaite encore";
+"well_visit_form.feeding_older.still_breastfeeding" = "Allaitement actuel";
 
 "well_visit_form.ai.title" = "Assistant IA";
 "well_visit_form.ai.run" = "Exécuter le résumé IA";
@@ -2671,3 +2671,7 @@
 "report.chart.caption.bmi_for_age" = "IMC pour l'Âge";
 
 "appstate.manifest.build_files_list.enumerate_failed_format" = "buildFilesList: failed to enumerate bundle root %@";
+
+"well_visit_form.solids.comment.label" = "Commentaires sur l'alimentation";
+"well_visit_form.shared.regular" = "régulier";
+"well_visit_form.shared.irregular" = "irrégulier";
