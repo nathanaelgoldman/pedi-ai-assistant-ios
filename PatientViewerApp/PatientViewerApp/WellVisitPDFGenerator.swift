@@ -1203,15 +1203,41 @@ struct WellVisitPDFGenerator {
                     guard !trimmed.isEmpty else { return trimmed }
 
                     // Known structured token: wakes_per_night=<int>
+                    // Some bundles store extra free text after the number, e.g. "wakes_per_night=1\nse reveille.".
+                    // Parse only the leading integer and keep any remaining text.
                     if trimmed.hasPrefix("wakes_per_night=") {
-                        let nStr = trimmed.replacingOccurrences(of: "wakes_per_night=", with: "")
-                        if let n = Int(nStr) {
+                        let tail = trimmed.replacingOccurrences(of: "wakes_per_night=", with: "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        // Extract leading digits only (stop at first non-digit).
+                        var digits = ""
+                        var remainderStartIdx = tail.startIndex
+                        for ch in tail {
+                            if ch.isNumber {
+                                digits.append(ch)
+                                remainderStartIdx = tail.index(after: remainderStartIdx)
+                            } else {
+                                break
+                            }
+                        }
+
+                        if let n = Int(digits) {
                             let fmtWakesPerNight = WellVisitPDFGenerator.L(
                                 "well_report.sleep.issue.wakes_per_night_fmt",
                                 "Wakes per night: %d"
                             )
-                            return String(format: fmtWakesPerNight, n)
+
+                            var out = String(format: fmtWakesPerNight, n)
+
+                            let remainder = String(tail.replacingOccurrences(of: digits, with: "", options: [.anchored], range: tail.startIndex..<tail.endIndex))
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !remainder.isEmpty {
+                                out += " — \(remainder)"
+                            }
+
+                            return out
                         }
+
                         // If parsing fails, fall back to raw token.
                         return trimmed
                     }
