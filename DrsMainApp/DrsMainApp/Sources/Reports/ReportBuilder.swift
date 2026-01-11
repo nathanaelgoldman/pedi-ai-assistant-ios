@@ -245,10 +245,22 @@ final class ReportBuilder {
     fileprivate func assembleAttributedWell_BodyOnly(data: WellReportData, visitID: Int) -> NSAttributedString {
         let content = NSMutableAttributedString()
 
-        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
-            content.append(NSAttributedString(string: text + "\n",
-                                              attributes: [.font: font, .foregroundColor: color]))
+        func para(_ text: String,
+                  font: NSFont,
+                  color: NSColor = .labelColor,
+                  background: NSColor? = nil) {
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: color
+            ]
+            if let bg = background {
+                attrs[.backgroundColor] = bg
+            }
+            content.append(NSAttributedString(string: text + "\n", attributes: attrs))
         }
+        
+        let titleBG   = NSColor(calibratedRed: 0.18, green: 0.45, blue: 0.80, alpha: 1.0)  // darker blue
+        let sectionBG = NSColor(calibratedRed: 0.88, green: 0.94, blue: 1.00, alpha: 1.0)  // pale blue
 
         // Localized display labels for stored dictionary keys (keep storage keys stable).
         func feedingLabel(_ storageKey: String) -> String {
@@ -403,7 +415,9 @@ final class ReportBuilder {
 
         // Header block (Well)
         para(L("report.well.title", comment: "Well visit report main title"),
-             font: .systemFont(ofSize: 20, weight: .semibold))
+             font: .systemFont(ofSize: 20, weight: .semibold),
+             color: .white,
+             background: titleBG)
         let triadFormat = L("report.header.triad_format",
                             comment: "Header line with created/edited/generated timestamps")
         let triad = String(format: triadFormat,
@@ -443,7 +457,7 @@ final class ReportBuilder {
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
         // Perinatal Summary must always be present (never age‑gated or suppressed)
-        para(L("report.well.section.perinatal_summary", comment: "Section title: perinatal summary"), font: headerFont)
+        para(L("report.well.section.perinatal_summary", comment: "Section title: perinatal summary"), font: headerFont, background: sectionBG)
         let periText = (data.perinatalSummary?
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? data.perinatalSummary!
@@ -452,7 +466,7 @@ final class ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         if !data.previousVisitFindings.isEmpty {
-            para(L("report.well.section.previous_findings", comment: "Section title: findings from previous well visits"), font: headerFont)
+            para(L("report.well.section.previous_findings", comment: "Section title: findings from previous well visits"), font: headerFont, background: sectionBG)
             for item in data.previousVisitFindings {
                 var sub = item.title
                 let rawDate = item.date.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -512,12 +526,12 @@ final class ReportBuilder {
         let _currentTitle = data.currentVisitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if !_currentTitle.isEmpty {
             let currentVisitFormat = L("report.well.current_visit_title_format", comment: "Title for current visit section, with visit type appended")
-            para(String(format: currentVisitFormat, _currentTitle), font: headerFont)
+            para(String(format: currentVisitFormat, _currentTitle), font: headerFont, background: sectionBG)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showParentsConcerns ?? true {
-            para(L("report.well.section.parents_concerns", comment: "Section title: parents' concerns"), font: headerFont)
+            para(L("report.well.section.parents_concerns", comment: "Section title: parents' concerns"), font: headerFont, background: sectionBG)
             let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
                 ? data.parentsConcerns!
                 : "—"
@@ -526,7 +540,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showFeeding ?? true {
-            para(L("report.well.section.feeding", comment: "Section title: feeding"), font: headerFont)
+            para(L("report.well.section.feeding", comment: "Section title: feeding"), font: headerFont, background: sectionBG)
             if DEBUG_REPORT_EXPORT {
                 let keys = data.feeding.keys.sorted()
                 if let profile = visibility?.profile {
@@ -565,7 +579,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showSupplementation ?? true {
-            para(L("report.well.section.supplementation", comment: "Section title: supplementation"), font: headerFont)
+            para(L("report.well.section.supplementation", comment: "Section title: supplementation"), font: headerFont, background: sectionBG)
             if data.supplementation.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -588,7 +602,7 @@ final class ReportBuilder {
         }
         
         // Stool (always shown; uses dictionary from WellReportData)
-        para(L("report.well.section.stool", comment: "Section title: stool"), font: headerFont)
+        para(L("report.well.section.stool", comment: "Section title: stool"), font: headerFont, background: sectionBG)
         if data.stool.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -616,7 +630,7 @@ final class ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
 if visibility?.showSleep ?? true {
-    para(L("report.well.section.sleep", comment: "Section title: sleep"), font: headerFont)
+    para(L("report.well.section.sleep", comment: "Section title: sleep"), font: headerFont, background: sectionBG)
 
     // Sleep notes sometimes carry stable key/value tokens (e.g. "wakes_per_night=1")
     // which must be rendered through Localizable strings instead of printed verbatim.
@@ -714,7 +728,7 @@ if visibility?.showSleep ?? true {
 }
 
         if visibility?.showDevelopment ?? true {
-            para(L("report.well.section.development", comment: "Section title: developmental evaluation"), font: headerFont)
+            para(L("report.well.section.development", comment: "Section title: developmental evaluation"), font: headerFont, background: sectionBG)
             if data.developmental.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -741,7 +755,8 @@ if visibility?.showSleep ?? true {
 
 if visibility?.showMilestones ?? true {
     para(L("well_visit_form.problem_listing.milestones.header", comment: "Section title: age-specific milestones"),
-         font: headerFont)
+         font: headerFont,
+         background: sectionBG)
 
     let achieved = data.milestonesAchieved.0
     let total = data.milestonesAchieved.1
@@ -774,7 +789,7 @@ if visibility?.showMilestones ?? true {
 }
 
         if visibility?.showMeasurements ?? true {
-            para(L("report.well.section.measurements", comment: "Section title: measurements"), font: headerFont)
+            para(L("report.well.section.measurements", comment: "Section title: measurements"), font: headerFont, background: sectionBG)
             if data.measurements.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -797,7 +812,7 @@ if visibility?.showMilestones ?? true {
         }
 
         if visibility?.showPhysicalExam ?? true {
-            para(L("report.well.section.physical_exam", comment: "Section title: physical examination"), font: headerFont)
+            para(L("report.well.section.physical_exam", comment: "Section title: physical examination"), font: headerFont, background: sectionBG)
             if data.physicalExamGroups.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -818,7 +833,7 @@ if visibility?.showMilestones ?? true {
         }
 
         if visibility?.showProblemListing ?? true {
-            para(L("report.well.section.problem_listing", comment: "Section title: problem listing"), font: headerFont)
+            para(L("report.well.section.problem_listing", comment: "Section title: problem listing"), font: headerFont, background: sectionBG)
 
             let rendered = renderProblemListing(tokens: data.problemListingTokens,
                                                 fallback: data.problemListing)
@@ -829,28 +844,28 @@ if visibility?.showMilestones ?? true {
         }
 
         if visibility?.showConclusions ?? true {
-            para(L("report.well.section.conclusions", comment: "Section title: conclusions"), font: headerFont)
+            para(L("report.well.section.conclusions", comment: "Section title: conclusions"), font: headerFont, background: sectionBG)
             let _conclusions = data.conclusions?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_conclusions?.isEmpty == false ? _conclusions! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showAnticipatoryGuidance ?? true {
-            para(L("report.well.section.anticipatory_guidance", comment: "Section title: anticipatory guidance"), font: headerFont)
+            para(L("report.well.section.anticipatory_guidance", comment: "Section title: anticipatory guidance"), font: headerFont, background: sectionBG)
             let _ag = data.anticipatoryGuidance?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_ag?.isEmpty == false ? _ag! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showClinicianComments ?? true {
-            para(L("report.well.section.clinician_comments", comment: "Section title: clinician comments"), font: headerFont)
+            para(L("report.well.section.clinician_comments", comment: "Section title: clinician comments"), font: headerFont, background: sectionBG)
             let _cc = data.clinicianComments?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_cc?.isEmpty == false ? _cc! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showNextVisit ?? true {
-            para(L("report.well.section.next_visit_date", comment: "Section title: next visit date"), font: headerFont)
+            para(L("report.well.section.next_visit_date", comment: "Section title: next visit date"), font: headerFont, background: sectionBG)
             if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines),
                !rawNext.isEmpty {
                 para(humanDateOnly(rawNext) ?? rawNext, font: bodyFont)
@@ -863,7 +878,8 @@ if visibility?.showMilestones ?? true {
         // AI Assistant – latest model response for this WELL visit (if any)
         if let ai = dataLoader.loadLatestAIInputForWell(visitID) {
             para(L("report.ai_assistant.title", comment: "Section title: AI Assistant"),
-                 font: headerFont)
+                 font: headerFont,
+                 background: sectionBG)
 
             let modelLine = String(format: L("report.ai_assistant.model_format",
                                             comment: "AI assistant meta line: model name"),
@@ -2050,12 +2066,25 @@ extension ReportBuilder {
     func assembleAttributed(meta: [String:String], sections: [Section]) -> NSAttributedString {
         let content = NSMutableAttributedString()
 
-        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
-            content.append(NSAttributedString(string: text + "\n",
-                                              attributes: [.font: font, .foregroundColor: color]))
+        func para(_ text: String,
+                  font: NSFont,
+                  color: NSColor = .labelColor,
+                  background: NSColor? = nil) {
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: color
+            ]
+            if let bg = background {
+                attrs[.backgroundColor] = bg
+            }
+            content.append(NSAttributedString(string: text + "\n", attributes: attrs))
         }
 
-        para(L("report.title.clinical_report", comment: "Report title: clinical report"), font: .systemFont(ofSize: 20, weight: .semibold))
+        let titleBG = NSColor(calibratedRed: 0.18, green: 0.45, blue: 0.80, alpha: 1.0)
+        para(L("report.title.clinical_report", comment: "Report title: clinical report"),
+             font: .systemFont(ofSize: 20, weight: .semibold),
+             color: .white,
+             background: titleBG)
         func metaLabel(_ key: String) -> String {
             switch key {
             case "Patient":   return L("report.meta.patient", comment: "Report meta label: patient")
@@ -2089,7 +2118,11 @@ extension ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
         for s in sections {
-            para(s.title, font: .systemFont(ofSize: 14, weight: .semibold))
+            let sectionBG = NSColor(calibratedRed: 0.88, green: 0.94, blue: 1.00, alpha: 1.0)
+            para(s.title,
+                 font: .systemFont(ofSize: 14, weight: .semibold),
+                 color: .labelColor,
+                 background: sectionBG)
             // If this is the previous well visit summary section, normalize it.
             let isPrevWellVisitSection =
                 s.title == L("report.section.problem_listing", comment: "Generic section title: problem listing") ||

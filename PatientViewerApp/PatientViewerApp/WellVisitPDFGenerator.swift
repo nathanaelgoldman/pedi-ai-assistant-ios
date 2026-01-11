@@ -417,11 +417,84 @@ struct WellVisitPDFGenerator {
                 attrString.draw(in: textRect)
                 y += ceil(boundingBox.height) + 6
             }
+            
+            // Section header drawing with a pale background (for visual separation)
+            let sectionHeaderBgColor = UIColor.systemBlue.withAlphaComponent(0.12)
+
+            func drawSectionTitle(_ text: String, font: UIFont) {
+                let padX: CGFloat = 8
+                let padY: CGFloat = 4
+
+                let blockHeight = ceil(font.lineHeight + 2 * padY)
+                ensureSpace(for: blockHeight + 6)
+
+                // Background
+                let bgRect = CGRect(x: margin, y: y, width: contentWidth, height: blockHeight)
+                let cornerRadius: CGFloat = 6
+
+                context.cgContext.saveGState()
+                context.cgContext.setFillColor(sectionHeaderBgColor.cgColor)
+
+                let path = UIBezierPath(roundedRect: bgRect, cornerRadius: cornerRadius)
+                context.cgContext.addPath(path.cgPath)
+                context.cgContext.fillPath()
+
+                context.cgContext.restoreGState()
+
+                // Text
+                let attributes: [NSAttributedString.Key: Any] = [.font: font]
+                let attrString = NSAttributedString(string: text, attributes: attributes)
+                let textRect = CGRect(
+                    x: margin + padX,
+                    y: y + padY,
+                    width: contentWidth - 2 * padX,
+                    height: blockHeight - 2 * padY
+                )
+                attrString.draw(in: textRect)
+
+                y += blockHeight + 6
+            }
+
+            // Report title banner (slightly darker blue than section headers)
+            let reportTitleBgColor = UIColor.systemBlue.withAlphaComponent(0.45)
+
+            func drawReportTitle(_ text: String, font: UIFont) {
+                let padX: CGFloat = 12
+                let padY: CGFloat = 10
+
+                let blockHeight = ceil(font.lineHeight + 2 * padY)
+                ensureSpace(for: blockHeight + 8)
+
+                let bgRect = CGRect(x: margin, y: y, width: contentWidth, height: blockHeight)
+                let cornerRadius: CGFloat = 10
+
+                context.cgContext.saveGState()
+                context.cgContext.setFillColor(reportTitleBgColor.cgColor)
+                let path = UIBezierPath(roundedRect: bgRect, cornerRadius: cornerRadius)
+                context.cgContext.addPath(path.cgPath)
+                context.cgContext.fillPath()
+                context.cgContext.restoreGState()
+
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: UIColor.label
+                ]
+                let attrString = NSAttributedString(string: text, attributes: attributes)
+                let textRect = CGRect(
+                    x: margin + padX,
+                    y: y + padY,
+                    width: contentWidth - 2 * padX,
+                    height: blockHeight - 2 * padY
+                )
+                attrString.draw(in: textRect)
+
+                y += blockHeight + 8
+            }
 
             let titleFont = UIFont.boldSystemFont(ofSize: 20)
             let subFont = UIFont.systemFont(ofSize: 14)
 
-            drawText(WellVisitPDFGenerator.L("pdf.well.title", "Well Visit Report"), font: titleFont)
+            drawReportTitle(WellVisitPDFGenerator.L("pdf.well.title", "Well Visit Report"), font: titleFont)
             let fmtGenerated = WellVisitPDFGenerator.L("pdf.well.generated.fmt", "Report Generated: %@")
             drawText(String(format: fmtGenerated, WellVisitPDFGenerator.formatDate(Date())), font: subFont)
 
@@ -569,7 +642,7 @@ struct WellVisitPDFGenerator {
                 
                 // MARK: - Perinatal Summary
                 y += 12
-                drawText(secPerinatalSummary, font: UIFont.boldSystemFont(ofSize: 16))
+                drawSectionTitle(secPerinatalSummary, font: UIFont.boldSystemFont(ofSize: 16))
 
                 let perinatal = Table("perinatal_history")
                 let pregnancyRisk = Expression<String?>("pregnancy_risk")
@@ -781,7 +854,7 @@ struct WellVisitPDFGenerator {
 
                 // MARK: - Findings from Previous Well Visits
                 y += 12
-                drawText(secPreviousWellVisits, font: UIFont.boldSystemFont(ofSize: 16))
+                drawSectionTitle(secPreviousWellVisits, font: UIFont.boldSystemFont(ofSize: 16))
 
                 let allVisits = Table("well_visits")
                 let problemListing = Expression<String?>("problem_listing")
@@ -795,6 +868,8 @@ struct WellVisitPDFGenerator {
                         .filter(patientID == pid && visitID != visit.id && visitDateCol < visitDate)
                         .order(visitDateCol.asc)
                 )
+
+                let prevVisitHeaderFont = UIFont.boldSystemFont(ofSize: 14)
 
                 for v in previousVisits {
                     let vTypeRaw = v[visitTypeCol]
@@ -810,7 +885,7 @@ struct WellVisitPDFGenerator {
                     let formattedDate = WellVisitPDFGenerator.formatDate(displayDate)
                     let findings = v[problemListing]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-                    drawText("\(vTitle) — \(formattedDate)", font: subFont)
+                    drawText("\(vTitle) — \(formattedDate)", font: prevVisitHeaderFont)
 
                     func stripLeadingListMarker(_ raw: String) -> String {
                         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -855,7 +930,7 @@ struct WellVisitPDFGenerator {
                 // MARK: - Current Visit Section
                 y += 12
                 ensureSpace(for: 20)
-                drawText(secCurrentVisit, font: UIFont.boldSystemFont(ofSize: 16))
+                drawSectionTitle(secCurrentVisit, font: UIFont.boldSystemFont(ofSize: 16))
 
                 let visitTypeRaw = visitRow[Expression<String>("visit_type")]
                 let visitTypeKeyCurrent = visitTypeRaw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2242,7 +2317,7 @@ struct WellVisitPDFGenerator {
                     y = margin
 
                     // Draw chart title at top of page
-                    drawText(title, font: UIFont.boldSystemFont(ofSize: 16))
+                    drawSectionTitle(title, font: UIFont.boldSystemFont(ofSize: 16))
 
                     // Validate image size to avoid NaN aspect ratios
                     guard chartImage.size.width > 0, chartImage.size.height > 0 else {
