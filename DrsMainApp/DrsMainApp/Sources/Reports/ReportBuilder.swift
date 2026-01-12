@@ -260,7 +260,8 @@ final class ReportBuilder {
         }
         
         let titleBG   = NSColor(calibratedRed: 0.18, green: 0.45, blue: 0.80, alpha: 1.0)  // darker blue
-        let sectionBG = NSColor(calibratedRed: 0.88, green: 0.94, blue: 1.00, alpha: 1.0)  // pale blue
+        let sectionBG = NSColor(calibratedRed: 0.68, green: 0.84, blue: 1.00, alpha: 1.0)  // pale blue
+        let subSectionBG = NSColor(calibratedRed: 0.94, green: 0.97, blue: 1.00, alpha: 1.0)  // even paler (current-visit subsections)
 
         // Localized display labels for stored dictionary keys (keep storage keys stable).
         func feedingLabel(_ storageKey: String) -> String {
@@ -531,7 +532,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showParentsConcerns ?? true {
-            para(L("report.well.section.parents_concerns", comment: "Section title: parents' concerns"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.parents_concerns", comment: "Section title: parents' concerns"), font: headerFont, background: subSectionBG)
             let parentsText = (data.parentsConcerns?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
                 ? data.parentsConcerns!
                 : "—"
@@ -540,7 +541,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showFeeding ?? true {
-            para(L("report.well.section.feeding", comment: "Section title: feeding"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.feeding", comment: "Section title: feeding"), font: headerFont, background: subSectionBG)
             if DEBUG_REPORT_EXPORT {
                 let keys = data.feeding.keys.sorted()
                 if let profile = visibility?.profile {
@@ -579,7 +580,7 @@ final class ReportBuilder {
         }
 
         if visibility?.showSupplementation ?? true {
-            para(L("report.well.section.supplementation", comment: "Section title: supplementation"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.supplementation", comment: "Section title: supplementation"), font: headerFont, background: subSectionBG)
             if data.supplementation.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -602,7 +603,7 @@ final class ReportBuilder {
         }
         
         // Stool (always shown; uses dictionary from WellReportData)
-        para(L("report.well.section.stool", comment: "Section title: stool"), font: headerFont, background: sectionBG)
+        para(L("report.well.section.stool", comment: "Section title: stool"), font: headerFont, background: subSectionBG)
         if data.stool.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -630,7 +631,7 @@ final class ReportBuilder {
         content.append(NSAttributedString(string: "\n"))
 
 if visibility?.showSleep ?? true {
-    para(L("report.well.section.sleep", comment: "Section title: sleep"), font: headerFont, background: sectionBG)
+    para(L("report.well.section.sleep", comment: "Section title: sleep"), font: headerFont, background: subSectionBG)
 
     // Sleep notes sometimes carry stable key/value tokens (e.g. "wakes_per_night=1")
     // which must be rendered through Localizable strings instead of printed verbatim.
@@ -728,7 +729,7 @@ if visibility?.showSleep ?? true {
 }
 
         if visibility?.showDevelopment ?? true {
-            para(L("report.well.section.development", comment: "Section title: developmental evaluation"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.development", comment: "Section title: developmental evaluation"), font: headerFont, background: subSectionBG)
             if data.developmental.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -756,7 +757,7 @@ if visibility?.showSleep ?? true {
 if visibility?.showMilestones ?? true {
     para(L("well_visit_form.problem_listing.milestones.header", comment: "Section title: age-specific milestones"),
          font: headerFont,
-         background: sectionBG)
+         background: subSectionBG)
 
     let achieved = data.milestonesAchieved.0
     let total = data.milestonesAchieved.1
@@ -789,7 +790,7 @@ if visibility?.showMilestones ?? true {
 }
 
         if visibility?.showMeasurements ?? true {
-            para(L("report.well.section.measurements", comment: "Section title: measurements"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.measurements", comment: "Section title: measurements"), font: headerFont, background: subSectionBG)
             if data.measurements.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -812,7 +813,7 @@ if visibility?.showMilestones ?? true {
         }
 
         if visibility?.showPhysicalExam ?? true {
-            para(L("report.well.section.physical_exam", comment: "Section title: physical examination"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.physical_exam", comment: "Section title: physical examination"), font: headerFont, background: subSectionBG)
             if data.physicalExamGroups.isEmpty {
                 para("—", font: bodyFont)
             } else {
@@ -833,7 +834,7 @@ if visibility?.showMilestones ?? true {
         }
 
         if visibility?.showProblemListing ?? true {
-            para(L("report.well.section.problem_listing", comment: "Section title: problem listing"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.problem_listing", comment: "Section title: problem listing"), font: headerFont, background: subSectionBG)
 
             let rendered = renderProblemListing(tokens: data.problemListingTokens,
                                                 fallback: data.problemListing)
@@ -844,28 +845,28 @@ if visibility?.showMilestones ?? true {
         }
 
         if visibility?.showConclusions ?? true {
-            para(L("report.well.section.conclusions", comment: "Section title: conclusions"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.conclusions", comment: "Section title: conclusions"), font: headerFont, background: subSectionBG)
             let _conclusions = data.conclusions?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_conclusions?.isEmpty == false ? _conclusions! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showAnticipatoryGuidance ?? true {
-            para(L("report.well.section.anticipatory_guidance", comment: "Section title: anticipatory guidance"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.anticipatory_guidance", comment: "Section title: anticipatory guidance"), font: headerFont, background: subSectionBG)
             let _ag = data.anticipatoryGuidance?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_ag?.isEmpty == false ? _ag! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showClinicianComments ?? true {
-            para(L("report.well.section.clinician_comments", comment: "Section title: clinician comments"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.clinician_comments", comment: "Section title: clinician comments"), font: headerFont, background: subSectionBG)
             let _cc = data.clinicianComments?.trimmingCharacters(in: .whitespacesAndNewlines)
             para((_cc?.isEmpty == false ? _cc! : "—"), font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
         if visibility?.showNextVisit ?? true {
-            para(L("report.well.section.next_visit_date", comment: "Section title: next visit date"), font: headerFont, background: sectionBG)
+            para(L("report.well.section.next_visit_date", comment: "Section title: next visit date"), font: headerFont, background: subSectionBG)
             if let rawNext = data.nextVisitDate?.trimmingCharacters(in: .whitespacesAndNewlines),
                !rawNext.isEmpty {
                 para(humanDateOnly(rawNext) ?? rawNext, font: bodyFont)
@@ -879,7 +880,7 @@ if visibility?.showMilestones ?? true {
         if let ai = dataLoader.loadLatestAIInputForWell(visitID) {
             para(L("report.ai_assistant.title", comment: "Section title: AI Assistant"),
                  font: headerFont,
-                 background: sectionBG)
+                 background: subSectionBG)
 
             let modelLine = String(format: L("report.ai_assistant.model_format",
                                             comment: "AI assistant meta line: model name"),
@@ -2243,14 +2244,29 @@ extension ReportBuilder {
     func assembleAttributedSick(data: SickReportData, fallbackSections: [Section], episodeID: Int) -> NSAttributedString {
         let content = NSMutableAttributedString()
 
-        func para(_ text: String, font: NSFont, color: NSColor = .labelColor) {
-            content.append(NSAttributedString(string: text + "\n",
-                                              attributes: [.font: font, .foregroundColor: color]))
+        func para(_ text: String,
+                  font: NSFont,
+                  color: NSColor = .labelColor,
+                  background: NSColor? = nil) {
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: color
+            ]
+            if let bg = background {
+                attrs[.backgroundColor] = bg
+            }
+            content.append(NSAttributedString(string: text + "\n", attributes: attrs))
         }
+        
+        let titleBG   = NSColor(calibratedRed: 0.18, green: 0.45, blue: 0.80, alpha: 1.0)  // darker blue
+        let sectionBG = NSColor(calibratedRed: 0.68, green: 0.84, blue: 1.00, alpha: 1.0)  // pale blue
         
 
         // Header block (Sick)
-        para(L("report.sick.title", comment: "Sick report title"), font: .systemFont(ofSize: 20, weight: .semibold))
+        para(L("report.sick.title", comment: "..."),
+             font: .systemFont(ofSize: 20, weight: .semibold),
+             color: .white,
+             background: titleBG)
         let triadFmt = L("report.sick.meta.triad_format", comment: "Sick report header triad")
         let triad = String(format: triadFmt,
                            humanDateTime(data.meta.createdAtISO) ?? "—",
@@ -2284,7 +2300,7 @@ extension ReportBuilder {
         let bodyFont = NSFont.systemFont(ofSize: 12)
 
         func section(_ title: String, _ body: String?) {
-            para(title, font: headerFont)
+            para(title, font: headerFont, background: sectionBG)
             let text = (body?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? body! : "—"
             para(text, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
@@ -2298,7 +2314,7 @@ extension ReportBuilder {
         section(L("report.sick.section.duration", comment: "Sick section title: duration"), data.duration)
         // 11) Basics (Feeding · Urination · Breathing · Pain · Context)
         if !data.basics.isEmpty {
-            para(L("report.sick.section.basics", comment: "Sick section title: basics"), font: headerFont)
+            para(L("report.sick.section.basics", comment: "Sick section title: basics"), font: headerFont, background: sectionBG)
             let order = ["Feeding","Urination","Breathing","Pain","Context"]
             func basicsLabel(_ key: String) -> String {
                 switch key {
@@ -2321,7 +2337,7 @@ extension ReportBuilder {
         if data.perinatalSummary != nil {
             // When we have (or had) a perinatal summary for this age band:
             // render PMH as two subsections and use "—" for whichever is empty.
-            para(L("report.sick.section.pmh", comment: "Sick section title: past medical history"), font: headerFont)
+            para(L("report.sick.section.pmh", comment: "Sick section title: past medical history"), font: headerFont, background: sectionBG)
 
             let peri = data.perinatalSummary?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -2354,7 +2370,7 @@ extension ReportBuilder {
         section(L("report.sick.section.vaccination", comment: "Sick section title: vaccination"), data.vaccination)
 
         // 14) Vitals (full block from vitalsSummary)
-        para(L("report.sick.section.vitals", comment: "Sick section title: vitals"), font: headerFont)
+        para(L("report.sick.section.vitals", comment: "Sick section title: vitals"), font: headerFont, background: sectionBG)
         if data.vitalsSummary.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -2430,7 +2446,7 @@ extension ReportBuilder {
             let localizedValue = localizeChoiceIfPossible(value)
             return "\(label): \(localizedValue)"
         }
-        para(L("report.sick.section.physical_exam", comment: "Sick section title: physical examination"), font: headerFont)
+        para(L("report.sick.section.physical_exam", comment: "Sick section title: physical examination"), font: headerFont, background: sectionBG)
         if data.physicalExamGroups.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -2447,7 +2463,7 @@ extension ReportBuilder {
         section(L("report.sick.section.problem_listing", comment: "Sick section title: problem listing"), data.problemListing)
 
         // 17) Investigations
-        para(L("report.sick.section.investigations", comment: "Sick section title: investigations"), font: headerFont)
+        para(L("report.sick.section.investigations", comment: "Sick section title: investigations"), font: headerFont, background: sectionBG)
         if data.investigations.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -2477,7 +2493,7 @@ extension ReportBuilder {
         section(L("report.sick.section.plan_guidance", comment: "Sick section title: plan and anticipatory guidance"), data.planGuidance)
 
         // 21) Medications
-        para(L("report.sick.section.medications", comment: "Sick section title: medications"), font: headerFont)
+        para(L("report.sick.section.medications", comment: "Sick section title: medications"), font: headerFont, background: sectionBG)
         if data.medications.isEmpty {
             para("—", font: bodyFont)
         } else {
@@ -2495,7 +2511,7 @@ extension ReportBuilder {
         
         // 24) AI Assistant – latest model response (if any)
         if let ai = dataLoader.loadLatestAIInputForEpisode(episodeID) {
-            para("AI Assistant", font: headerFont)
+            para("AI Assistant", font: headerFont, background: sectionBG)
             
             var metaLine = "Model: \(ai.model)"
             let ts = ai.createdAt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3438,6 +3454,69 @@ extension ReportBuilder {
             <w:rPr><w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica" w:cs="Helvetica"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
             <w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr>
           </w:style>
+          <w:style w:type="paragraph" w:styleId="PediReportTitle">
+            <w:name w:val="Pedi Report Title"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:shd w:val="clear" w:color="auto" w:fill="2E73CC"/>
+              <w:spacing w:before="120" w:after="120"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="40"/><w:szCs w:val="40"/>
+              <w:color w:val="FFFFFF"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediSectionHeader">
+            <w:name w:val="Pedi Section Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:shd w:val="clear" w:color="auto" w:fill="E0F0FF"/>
+              <w:spacing w:before="140" w:after="60"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="28"/><w:szCs w:val="28"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediSubSectionHeader">
+            <w:name w:val="Pedi Subsection Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:shd w:val="clear" w:color="auto" w:fill="F0F7FF"/>
+              <w:spacing w:before="120" w:after="60"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="26"/><w:szCs w:val="26"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediPEGroupHeader">
+            <w:name w:val="Pedi PE Group Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:spacing w:before="80" w:after="40"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="24"/><w:szCs w:val="24"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediPrevVisitHeader">
+            <w:name w:val="Pedi Previous Visit Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:spacing w:before="120" w:after="60"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="24"/><w:szCs w:val="24"/>
+            </w:rPr>
+          </w:style>
         </w:styles>
         """
         try stylesXML.data(using: .utf8)!.write(to: wordDir.appendingPathComponent("styles.xml"))
@@ -3447,7 +3526,7 @@ extension ReportBuilder {
         // Title paragraph (use Title style)
         body += """
         <w:p>
-          <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+          <w:pPr><w:pStyle w:val="PediReportTitle"/></w:pPr>
           <w:r><w:t>\(docxEscapeXML(title))</w:t></w:r>
         </w:p>
         """
@@ -3691,6 +3770,69 @@ extension ReportBuilder {
               <w:spacing w:before="80" w:after="80"/>
             </w:pPr>
           </w:style>
+          <w:style w:type="paragraph" w:styleId="PediReportTitle">
+            <w:name w:val="Pedi Report Title"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:shd w:val="clear" w:color="auto" w:fill="2E73CC"/>
+              <w:spacing w:before="120" w:after="120"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="40"/><w:szCs w:val="40"/>
+              <w:color w:val="FFFFFF"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediSectionHeader">
+            <w:name w:val="Pedi Section Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:shd w:val="clear" w:color="auto" w:fill="E0F0FF"/>
+              <w:spacing w:before="140" w:after="60"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="28"/><w:szCs w:val="28"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediSubSectionHeader">
+            <w:name w:val="Pedi Subsection Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:shd w:val="clear" w:color="auto" w:fill="F0F7FF"/>
+              <w:spacing w:before="120" w:after="60"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="26"/><w:szCs w:val="26"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediPEGroupHeader">
+            <w:name w:val="Pedi PE Group Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:spacing w:before="80" w:after="40"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="24"/><w:szCs w:val="24"/>
+            </w:rPr>
+          </w:style>
+
+          <w:style w:type="paragraph" w:styleId="PediPrevVisitHeader">
+            <w:name w:val="Pedi Previous Visit Header"/>
+            <w:qFormat/>
+            <w:pPr>
+              <w:spacing w:before="120" w:after="60"/>
+            </w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="24"/><w:szCs w:val="24"/>
+            </w:rPr>
+          </w:style>
         </w:styles>
         """
         try stylesXML.data(using: .utf8)!.write(to: wordDir.appendingPathComponent("styles.xml"))
@@ -3700,7 +3842,7 @@ extension ReportBuilder {
         // Title paragraph (use Title style)
         body += """
         <w:p>
-          <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+          <w:pPr><w:pStyle w:val="PediReportTitle"/></w:pPr>
           <w:r><w:t>\(docxEscapeXML(title))</w:t></w:r>
         </w:p>
         """
@@ -3840,6 +3982,13 @@ extension ReportBuilder {
             L("report.docx.heading.medications", comment: "DOCX heading detection: Medications"),
             L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit")
         ]
+        // Top-level headings use the stronger section header background.
+        let topHeadingSet: Set<String> = [
+            L("report.docx.heading.well_visit_summary", comment: "DOCX heading detection: Well Visit Summary"),
+            L("report.docx.heading.perinatal_summary", comment: "DOCX heading detection: Perinatal Summary"),
+            L("report.docx.heading.findings_previous_well_visits", comment: "DOCX heading detection: Findings from Previous Well Visits"),
+            L("report.docx.heading.sick_visit_report", comment: "DOCX heading detection: Sick Visit Report")
+        ]
 
         // Problem Listing milestone formatting (shared text pipeline step)
         let problemListingHeading = L(
@@ -3853,13 +4002,111 @@ extension ReportBuilder {
 
         var styledParagraphs: [(text: String, style: String?)] = []
 
-        // Each non-empty line becomes a paragraph; only section headings / current visit line are Heading1.
+        // Normalize headings for robust detection
+        func normalizeHeading(_ t: String) -> String {
+            var x = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            while x.hasSuffix(":") || x.hasSuffix("：") {
+                x.removeLast()
+                x = x.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return x
+        }
+
+        let headingSetNorm = Set(headingSet.map(normalizeHeading))
+        let topHeadingSetNorm = Set(topHeadingSet.map(normalizeHeading))
+
+        // Sick report: we want the same strong section-header styling as the PDF version
+        // (i.e., all sick section titles get the section header background, not the lighter subsection shade).
+        let sickSectionHeadingSet: Set<String> = [
+            L("report.docx.heading.main_complaint", comment: "DOCX heading detection: Main Complaint"),
+            L("report.docx.heading.hpi", comment: "DOCX heading detection: History of Present Illness"),
+            L("report.docx.heading.duration", comment: "DOCX heading detection: Duration"),
+            L("report.docx.heading.basics", comment: "DOCX heading detection: Basics"),
+            L("report.docx.heading.past_medical_history", comment: "DOCX heading detection: Past Medical History"),
+            L("report.docx.heading.vaccination", comment: "DOCX heading detection: Vaccination"),
+            L("report.docx.heading.vitals", comment: "DOCX heading detection: Vitals"),
+            // Physical exam heading often shares the same localized label as the well visit.
+            L("report.docx.heading.physical_examination", comment: "DOCX heading detection: Physical Examination"),
+            L("report.docx.heading.investigations", comment: "DOCX heading detection: Investigations"),
+            L("report.docx.heading.working_diagnosis", comment: "DOCX heading detection: Working Diagnosis"),
+            L("report.docx.heading.icd10", comment: "DOCX heading detection: ICD-10"),
+            L("report.docx.heading.plan_anticipatory", comment: "DOCX heading detection: Plan & Anticipatory Guidance"),
+            L("report.docx.heading.medications", comment: "DOCX heading detection: Medications"),
+            L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit")
+        ]
+        let sickSectionHeadingSetNorm = Set(sickSectionHeadingSet.map(normalizeHeading))
+
+        let isSickDocx: Bool = {
+            if case .sick = kind { return true }
+            return false
+        }()
+
+        // Track when we are inside the Sick "Physical Examination" section so we can style
+        // system subheaders like "Général", "ORL", etc.
+        let physicalExamHeadingNorm = normalizeHeading(
+            L("report.docx.heading.physical_examination", comment: "DOCX heading detection: Physical Examination")
+        )
+        var inSickPhysicalExamSection = false
+
+        // Each non-empty line becomes a paragraph; use PediSectionHeader/PediSubSectionHeader for headings.
         for line in bodyTextForDocx.components(separatedBy: .newlines) {
             let s = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !s.isEmpty else { continue }
 
-            if s.hasPrefix(currentVisitLinePrefix) || headingSet.contains(s) {
-                styledParagraphs.append((s, "Heading1"))
+            let sNorm = normalizeHeading(s)
+            let lc = sNorm.lowercased()
+
+            if isSickDocx {
+                // Enter/exit the Physical Examination section based on section headings.
+                if sNorm == physicalExamHeadingNorm {
+                    inSickPhysicalExamSection = true
+                } else if inSickPhysicalExamSection {
+                    // Any other section heading ends the PE section.
+                    if topHeadingSetNorm.contains(sNorm) || sickSectionHeadingSetNorm.contains(sNorm) {
+                        inSickPhysicalExamSection = false
+                    }
+                }
+            }
+
+            // Heuristic for previous-visit header lines like:
+            // "25 avr. 2028 · Visite de 30 mois · Âge 2a 6m"
+            let looksLikePreviousVisitHeader = sNorm.contains("·") &&
+                (lc.contains("visite") || lc.contains("visit")) &&
+                (lc.contains("âge") || lc.contains("age"))
+
+            if s.hasPrefix(currentVisitLinePrefix) || topHeadingSetNorm.contains(sNorm)
+                // Fallback for locales/wording drift: previous visits findings header
+                || (lc.contains("visites de suivi") && (lc.contains("préc") || lc.contains("preced")))
+                || (lc.contains("previous") && lc.contains("visit")) {
+                styledParagraphs.append((s, "PediSectionHeader"))
+
+            } else if sickSectionHeadingSetNorm.contains(sNorm) || lc == "ai assistant" {
+                // Sick report section titles: keep them visually strong (same as PDF)
+                styledParagraphs.append((s, "PediSectionHeader"))
+
+            } else if isSickDocx && inSickPhysicalExamSection {
+                // Sick PE group subheaders (e.g. "Général", "ORL", "Heart", etc.)
+                // They are standalone lines (no bullet, no colon).
+                let candidate = sNorm
+                let isStandalone = !candidate.isEmpty
+                    && !candidate.hasPrefix("•")
+                    && !candidate.contains(":")
+                    && !candidate.contains("·")
+                    && !candidate.contains("—")
+                    && !candidate.contains("–")
+
+                if isStandalone {
+                    styledParagraphs.append((s, "PediPEGroupHeader"))
+                } else {
+                    styledParagraphs.append((s, nil))
+                }
+
+            } else if looksLikePreviousVisitHeader {
+                styledParagraphs.append((s, "PediPrevVisitHeader"))
+
+            } else if headingSetNorm.contains(sNorm) {
+                styledParagraphs.append((s, "PediSubSectionHeader"))
+
             } else {
                 styledParagraphs.append((s, nil))
             }

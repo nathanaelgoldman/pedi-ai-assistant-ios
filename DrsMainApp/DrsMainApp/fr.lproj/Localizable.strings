@@ -46,14 +46,14 @@
 
 /* Bundle Detail – buttons */
 "bundleDetail.button.revealInFinder" = "Afficher dans le Finder";
-"bundleDetail.button.openDB" = "Ouvrir la base";
+"bundleDetail.button.openDB" = "Ouvrir la base de donnée";
 
 /* Bundle Detail – field labels */
 "bundleDetail.field.alias" = "Alias";
 "bundleDetail.field.fullName" = "Nom complet";
 "bundleDetail.field.dob" = "Date de naissance";
 "bundleDetail.field.sex" = "Sexe";
-"bundleDetail.field.patientID" = "Identifiant patient";
+"bundleDetail.field.patientID" = "Identifiant du patient";
 
 /* Bundle Detail – no patient in DB */
 "bundleDetail.noPatient" = "Aucun patient trouvé dans ce dossier.";
@@ -103,7 +103,7 @@
 "patient.header.vaccination-status" = "Statut vaccinal…";
 "patient.header.growth" = "Croissance…";
 "patient.header.growth-charts" = "Courbes de croissance…";
-"patient.header.export-bundle" = "Exporter le bundle peMR…";
+"patient.header.export-bundle" = "Exporter le dossier peMR…";
 "patient.header.new-well-visit" = "Nouvelle visite de suivi…";
 "patient.header.new-sick-episode" = "Nouvel épisode malade…";
 
@@ -128,7 +128,7 @@
 "patient.grid.patient-id.label" = "Identifiant patient";
 "patient.grid.dob.label" = "Date de naissance";
 "patient.grid.sex.label" = "Sexe";
-"patient.grid.bundle.label" = "Bundle";
+"patient.grid.bundle.label" = "Dossier";
 
 /* Patient visits section */
 "patient.visits.title" = "Visites";
@@ -191,7 +191,7 @@
 /* Errors */
 "docs.error.list-failed" = "Impossible de lister les documents : %@";
 "docs.error.copy-failed" = "Impossible de copier le fichier : %@";
-"docs.error.delete-outside-docs" = "Seuls les fichiers situés dans le dossier « docs » du bundle peuvent être supprimés.";
+"docs.error.delete-outside-docs" = "Seuls les fichiers situés dans le dossier « docs » du dossier peuvent être supprimés.";
 "docs.error.delete-failed" = "Impossible de supprimer : %@";
 "docs.error.text-load-failed" = "Impossible de charger le texte : %@";
 
@@ -967,8 +967,8 @@
 "sick_episode_form.ai.cannot_build_prompt" = "Impossible de construire le prompt IA : veuillez vérifier qu’un patient et un épisode sauvegardé sont sélectionnés, et que la liste de problèmes et les examens complémentaires sont remplis si nécessaire.";
 
 /* CONTENTVIEW */
-"content_view.empty.no_bundle_title" = "Aucun bundle sélectionné";
-"content_view.empty.no_bundle_message" = "Utilisez « Ajouter des bundles… » pour importer un .peMR zip ou choisissez un dossier de bundle.";
+"content_view.empty.no_bundle_title" = "Aucun dossier sélectionné";
+"content_view.empty.no_bundle_message" = "Utilisez « Ajouter des dossiers… » pour importer un .peMR ou choisissez un dossier.";
 
 /* DRSMAINAPPAPP */
 /* Toolbar clinician menu */
@@ -1154,7 +1154,7 @@
 "appstate.profile.perinatal.birth_mode_format" = "Mode d’accouchement : %@";
 "appstate.profile.perinatal.term_weeks_format" = "Terme : %d semaines";
 "appstate.profile.perinatal.resuscitation_format" = "Réanimation : %@";
-"appstate.profile.perinatal.nicu_stay_days_format" = "Séjour en néonat : %d jours";
+"appstate.profile.perinatal.nicu_stay_format" = "Sejour en néonatologie: %@";
 "appstate.profile.perinatal.infection_risk_format" = "Risque infectieux : %@";
 "appstate.profile.perinatal.birth_weight_g_format" = "Poids de naissance : %d g";
 "appstate.profile.perinatal.birth_length_cm_format" = "Taille de naissance : %.1f cm";
@@ -1366,13 +1366,13 @@
 "appstate.users_mirror.insert_step_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers : échec de l’exécution de INSERT : %@";
 
 /* Log when a clinician is inserted into the bundle users table; %d is the clinician id. */
-"appstate.users_mirror.inserted_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers : utilisateur %d inséré dans la table users du bundle";
+"appstate.users_mirror.inserted_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers : utilisateur %d inséré dans la table users du dossier";
 
 /* Log when addGrowthPointManual is called without an active bundle DB URL. */
 "appstate.growth.add_manual.no_current_db_url" = "addGrowthPointManual : aucun DB URL courant";
 
 /* Error shown when there is no active bundle DB for a growth write operation. */
-"appstate.growth.no_active_bundle_db" = "Aucune base de données de bundle active";
+"appstate.growth.no_active_bundle_db" = "Aucune base de données de dossier active";
 
 /* Log when deleteGrowthPointIfManual is called with a non-manual growth source. %@ is the source string. */
 "appstate.growth.delete_manual.ignored_non_manual_source_format" = "deleteGrowthPointIfManual : source non manuelle ignorée=%@";
@@ -1384,25 +1384,25 @@
 "appstate.zip_import.no_db_found_under_format" = "Import ZIP : aucun db.sqlite trouvé sous %@";
 
 /* Log when bundle integrity validation fails during ZIP import. %@ is the bundle root path. */
-"appstate.zip_import.integrity_check_failed_format" = "Import ZIP : vérification d’intégrité échouée pour le bundle à %@ ; ignoré.";
+"appstate.zip_import.integrity_check_failed_format" = "Import ZIP : vérification d’intégrité échouée pour le dossier à %@ ; ignoré.";
 
 /* Log when no patient identity can be extracted during ZIP import. %@ is the bundle root path. */
 "appstate.zip_import.no_identity_found_format" = "Import ZIP : aucune identité (manifest/db) trouvée sous %@ — enregistrement comme anonyme ; détection des doublons ignorée.";
 
 /* Log when an existing bundle is replaced during import. First %@ is the identity string, second %@ is the final path. */
-"appstate.zip_import.replaced_existing_bundle_format" = "Bundle existant remplacé pour %@ à %@";
+"appstate.zip_import.replaced_existing_bundle_format" = "Dossier existant remplacé pour %@ à %@";
 
 /* Log when replacing an existing bundle fails during import. %@ is the identity string. */
-"appstate.zip_import.failed_to_replace_existing_bundle_format" = "Échec du remplacement du bundle existant pour %@";
+"appstate.zip_import.failed_to_replace_existing_bundle_format" = "Échec du remplacement du dossier existant pour %@";
 
 /* Log when keeping both bundles during import. First %@ is the identity string, second %@ is the new bundle path. */
-"appstate.zip_import.kept_both_bundles_format" = "Les deux bundles ont été conservés pour %@. Nouveau à %@";
+"appstate.zip_import.kept_both_bundles_format" = "Les deux dossiers ont été conservés pour %@. Nouveau à %@";
 
 /* Log when the user cancels a ZIP import conflict. %@ is the identity string. */
 "appstate.zip_import.cancelled_import_format" = "Import annulé pour %@";
 
 /* Log when a new bundle is imported without auto-selecting it. First %@ is the identity string, second %@ is the bundle path. */
-"appstate.zip_import.imported_new_bundle_no_autoselect_format" = "Nouveau bundle importé (sans auto-sélection) : %@ à %@";
+"appstate.zip_import.imported_new_bundle_no_autoselect_format" = "Nouveau dossier importé (sans auto-sélection) : %@ à %@";
 
 /* Log when a ZIP import fails. First %@ is the zip path, second %@ is the error description. */
 "appstate.zip_import.failed_for_zip_format" = "Échec de l’import ZIP pour %@ : %@";
@@ -1411,21 +1411,21 @@
 "appstate.import_conflict.alert_title" = "Le patient existe déjà";
 
 /* Message for the import conflict alert. %@ is the patient identity string. */
-"appstate.import_conflict.alert_message_format" = "Un bundle existant a été trouvé pour %@.\nQue souhaitez-vous faire ?";
+"appstate.import_conflict.alert_message_format" = "Un dossier existant a été trouvé pour %@.\nQue souhaitez-vous faire ?";
 
 /* Button title to replace the existing patient bundle during import. */
 "appstate.import_conflict.button_replace" = "Remplacer";
 
 /* Button title to keep both bundles during import. */
-"appstate.import_conflict.button_keep_both" = "Conserver les deux";
+"appstate.import_conflict.button_keep_both" = "Conserver les deux dossiers";
 
 /* Button title to cancel the import. */
 "appstate.import_conflict.button_cancel" = "Annuler";
 
 "appstate.archive_and_replace.failed_format" = "archiveAndReplace : échec : %@";
 "appstate.new_patient.default_alias" = "Nouveau patient";
-"appstate.new_patient.created_bundle_format" = "Nouveau bundle créé pour %@ à %@";
-"appstate.golden_db.not_found_in_bundle" = "golden.db introuvable dans le bundle";
+"appstate.new_patient.created_bundle_format" = "Nouveau dossier créé pour %@ à %@";
+"appstate.golden_db.not_found_in_bundle" = "golden.db introuvable dans le dossier";
 "appstate.db.open_failed_at_path_format" = "Impossible d’ouvrir la base de données à %@";
 "appstate.db.schema_init_failed_format" = "Échec de l’initialisation du schéma : %@";
 "appstate.db.prepare_failed_format" = "Préparation échouée : %@";
@@ -1434,23 +1434,23 @@
 /* Growth writes */
 "appstate.growth.add_manual.no_current_db_url" = "addGrowthPointManual : aucun DB URL courant";
 "appstate.growth.delete_manual.no_current_db_url" = "deleteGrowthPointIfManual : aucun DB URL courant";
-"appstate.growth.no_active_bundle_db" = "Aucune base de données de bundle active";
+"appstate.growth.no_active_bundle_db" = "Aucune base de données de dossier active";
 "appstate.growth.delete_manual.ignored_non_manual_source_format" = "deleteGrowthPointIfManual : source non manuelle ignorée=%@";
 
 /* ZIP import */
 "appstate.zip_import.no_db_found_under_format" = "Import ZIP : aucun db.sqlite trouvé sous %@";
-"appstate.zip_import.integrity_check_failed_format" = "Import ZIP : vérification d’intégrité échouée pour le bundle à %@ ; ignoré.";
+"appstate.zip_import.integrity_check_failed_format" = "Import ZIP : vérification d’intégrité échouée pour le dossier à %@ ; ignoré.";
 "appstate.zip_import.no_identity_found_format" = "Import ZIP : aucune identité (manifest/db) trouvée sous %@ — enregistrement comme anonyme ; détection des doublons ignorée.";
-"appstate.zip_import.replaced_existing_bundle_format" = "Bundle existant remplacé pour %@ à %@";
-"appstate.zip_import.failed_to_replace_existing_bundle_format" = "Échec du remplacement du bundle existant pour %@";
-"appstate.zip_import.kept_both_bundles_format" = "Les deux bundles ont été conservés pour %@. Nouveau à %@";
+"appstate.zip_import.replaced_existing_bundle_format" = "Dossier existant remplacé pour %@ à %@";
+"appstate.zip_import.failed_to_replace_existing_bundle_format" = "Échec du remplacement du dossier existant pour %@";
+"appstate.zip_import.kept_both_bundles_format" = "Les deux dossiers ont été conservés pour %@. Nouveau à %@";
 "appstate.zip_import.cancelled_import_format" = "Import annulé pour %@";
-"appstate.zip_import.imported_new_bundle_no_autoselect_format" = "Nouveau bundle importé (sans auto-sélection) : %@ à %@";
+"appstate.zip_import.imported_new_bundle_no_autoselect_format" = "Nouveau dossier importé (sans auto-sélection) : %@ à %@";
 "appstate.zip_import.failed_for_zip_format" = "Échec de l’import ZIP pour %@ : %@";
 
 /* Import conflict alert (macOS) */
 "appstate.import_conflict.alert_title" = "Le patient existe déjà";
-"appstate.import_conflict.alert_message_format" = "Un bundle existant a été trouvé pour %@.\nQue souhaitez-vous faire ?";
+"appstate.import_conflict.alert_message_format" = "Un dossier existant a été trouvé pour %@.\nQue souhaitez-vous faire ?";
 "appstate.import_conflict.button_replace" = "Remplacer";
 "appstate.import_conflict.button_keep_both" = "Conserver les deux";
 "appstate.import_conflict.button_cancel" = "Annuler";
@@ -1460,10 +1460,10 @@
 
 /* New patient / bundle creation */
 "appstate.new_patient.default_alias" = "Nouveau patient";
-"appstate.new_patient.created_bundle_format" = "Nouveau bundle créé pour %@ à %@";
+"appstate.new_patient.created_bundle_format" = "Nouveau dossier créé pour %@ à %@";
 
 /* Golden DB */
-"appstate.golden_db.not_found_in_bundle" = "golden.db introuvable dans le bundle";
+"appstate.golden_db.not_found_in_bundle" = "golden.db introuvable dans le dossier";
 
 /* SQLite errors */
 "appstate.db.schema_init_failed_format" = "Échec de l’initialisation du schéma : %@";
@@ -2110,7 +2110,7 @@
 
 /* MacBundleExporter */
 "exporter.mac.error.no_active_bundle" = "Aucun dossier patient actif n’est ouvert pour l’export.";
-"exporter.mac.savepanel.title" = "Exporter le bundle peMR";
+"exporter.mac.savepanel.title" = "Exporter le dossier peMR";
 
 /* BundleExporter */
 /* Bundle zip error: source is not a directory */
@@ -2218,7 +2218,7 @@
 "report.section.supplementation" = "Supplémentation";
 
 /*WellVisitReportRules */
-"log.well_visit_report_rules.csv_not_found_fallback" = "⚠️ WellVisitReportRules : impossible de trouver well_visit_age_mapping.csv dans le bundle, retour aux règles historiques codées en dur.";
+"log.well_visit_report_rules.csv_not_found_fallback" = "⚠️ WellVisitReportRules : impossible de trouver well_visit_age_mapping.csv dans le dossier, retour aux règles historiques codées en dur.";
 "log.well_visit_report_rules.csv_read_failed_fallback" = "⚠️ WellVisitReportRules : échec de lecture de well_visit_age_mapping.csv, retour aux règles historiques codées en dur.";
 "log.well_visit_report_rules.csv_empty_fallback" = "⚠️ WellVisitReportRules : le CSV semble vide, retour aux règles historiques codées en dur.";
 "log.well_visit_report_rules.csv_missing_columns_fallback" = "⚠️ WellVisitReportRules : l’en-tête du CSV ne contient pas les colonnes requises, retour aux règles historiques codées en dur.";
@@ -2675,3 +2675,21 @@
 "well_visit_form.solids.comment.label" = "Commentaires sur l'alimentation";
 "well_visit_form.shared.regular" = "régulier";
 "well_visit_form.shared.irregular" = "irrégulier";
+
+/* Sidebar – Confirm bundle deletion (title) */
+"sidebar.bundles.delete.confirm.title" = "Supprimer ce dossier ?";
+
+/* Sidebar – Confirm bundle deletion (destructive button) */
+"sidebar.bundles.delete.confirm.delete" = "Supprimer";
+
+/* Sidebar – Confirm bundle deletion (cancel button) */
+"sidebar.bundles.delete.confirm.cancel" = "Annuler";
+
+/* Sidebar – Delete bundle action (swipe/context menu) */
+"sidebar.bundles.delete" = "Supprimer le dossier";
+
+/* Titres des groupes (en-tête patient) */
+"patient.header.group.profile" = "Informations patient";
+"patient.header.group.measurements" = "Mesures";
+"patient.header.group.documents" = "Documents";
+"patient.header.group.new_items" = "Nouveaux éléments";

@@ -1152,7 +1152,7 @@
 "appstate.profile.perinatal.birth_mode_format" = "Birth mode: %@";
 "appstate.profile.perinatal.term_weeks_format" = "Term: %d weeks";
 "appstate.profile.perinatal.resuscitation_format" = "Resuscitation: %@";
-"appstate.profile.perinatal.nicu_stay_days_format" = "NICU stay: %d days";
+"appstate.profile.perinatal.nicu_stay_format" = "NICU stay: %@";
 "appstate.profile.perinatal.infection_risk_format" = "Infection risk: %@";
 "appstate.profile.perinatal.birth_weight_g_format" = "Birth weight: %d g";
 "appstate.profile.perinatal.birth_length_cm_format" = "Birth length: %.1f cm";
@@ -2684,3 +2684,21 @@
 
 "well_visit_form.shared.regular" = "regular";
 "well_visit_form.shared.irregular" = "irregular";
+
+/* Delete bundle confirm title */
+"sidebar.bundles.delete.confirm.title" = "Delete this bundle?";
+
+/* Confirm delete bundle */
+"sidebar.bundles.delete.confirm.delete" = "Delete";
+
+/* Cancel delete bundle */
+"sidebar.bundles.delete.confirm.cancel" = "Cancel";
+
+/* Delete bundle action (swipe/context menu) */
+"sidebar.bundles.delete" = "Delete bundle";
+
+/* Patient header group titles */
+"patient.header.group.profile" = "Patient info";
+"patient.header.group.measurements" = "Measurements";
+"patient.header.group.documents" = "Documents";
+"patient.header.group.new_items" = "New items";

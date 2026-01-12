@@ -521,6 +521,25 @@ final class AppState: ObservableObject {
     private func loadRecentBundles() {
         let paths = UserDefaults.standard.stringArray(forKey: recentsKey) ?? []
         recentBundles = paths.compactMap { URL(fileURLWithPath: $0) }
+
+        // 👻 Kill ghosts at the source: remove dead/non-bundle entries immediately
+        pruneRecentBundlesInPlace()
+        persistRecentBundles()
+    }
+
+    private func refreshRecentBundlesFromDefaults() {
+        let paths = UserDefaults.standard.stringArray(forKey: recentsKey) ?? []
+        recentBundles = paths.compactMap { URL(fileURLWithPath: $0) }
+
+        // 👻 Same rule here: every refresh must prune + persist
+        pruneRecentBundlesInPlace()
+        persistRecentBundles()
+    }
+
+    // If you don't already have it:
+    private func persistRecentBundles() {
+        let paths = recentBundles.map { $0.standardizedFileURL.resolvingSymlinksInPath().path }
+        UserDefaults.standard.set(paths, forKey: recentsKey)
     }
 
     // MARK: - Init
@@ -675,7 +694,12 @@ final class AppState: ObservableObject {
                     if let v = str(1)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.birth_mode_format", comment: "Perinatal badge line: birth mode"), v)) }
                     if let v = intOpt(2) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.term_weeks_format", comment: "Perinatal badge line: term in weeks"), v)) }
                     if let v = str(3)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.resuscitation_format", comment: "Perinatal badge line: resuscitation"), v)) }
-                    if let v = intOpt(4) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.nicu_stay_days_format", comment: "Perinatal badge line: NICU stay in days"), v)) }
+                    if let v = yn(4) {
+                        parts.append(String(format: NSLocalizedString(
+                            "appstate.profile.perinatal.nicu_stay_format",
+                            comment: "Perinatal badge line: NICU stay (yes/no)"
+                        ), v))
+                    }
                     if let v = str(5)  { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.infection_risk_format", comment: "Perinatal badge line: infection risk"), v)) }
                     if let v = intOpt(6) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.birth_weight_g_format", comment: "Perinatal badge line: birth weight in grams"), v)) }
                     if let v = realOpt(7) { parts.append(String(format: NSLocalizedString("appstate.profile.perinatal.birth_length_cm_format", comment: "Perinatal badge line: birth length in cm"), v)) }
@@ -727,21 +751,42 @@ final class AppState: ObservableObject {
             }
             importZipBundles(from: zips) // This will not change currentBundleURL or selectedPatientID
         }
-        // MARK: - Selection / Recents
-        func selectBundle(_ url: URL) {
-            addToRecents(url)
-            currentBundleURL = url
-            // Apply golden schema idempotently (column-level) to keep selected bundles aligned
-            if let dbURL = dbURLForCurrentBundle() {
-                applyGoldenSchemaIdempotent(to: dbURL)
-                ensureGrowthUnificationSchema(at: dbURL)
-            }
-            selectedPatientID = nil
-            patients = []
-            visits = []
-            reloadPatients()
-            reloadDocuments()
+    // MARK: - Selection / Recents
+    func selectBundle(_ url: URL) {
+        refreshRecentBundlesFromDefaults()
+
+        let fm = FileManager.default
+        let standardized = url.standardizedFileURL.resolvingSymlinksInPath()
+
+        guard fm.fileExists(atPath: standardized.path),
+              let chosen = canonicalBundleRoot(at: standardized)?
+                .standardizedFileURL
+                .resolvingSymlinksInPath()
+        else {
+            self.log.info("selectBundle: dropping missing/non-bundle url \(standardized.path, privacy: .public)")
+            self.recentBundles.removeAll { $0.standardizedFileURL.resolvingSymlinksInPath().path == standardized.path }
+            pruneRecentBundlesInPlace()
+            persistRecentBundles()
+            return
         }
+
+        // ✅ Persist the canonical bundle root (not a wrapper folder)
+        addToRecents(chosen)
+
+        // ✅ Use canonical root everywhere
+        currentBundleURL = chosen
+
+        if let dbURL = dbURLForCurrentBundle() {
+            applyGoldenSchemaIdempotent(to: dbURL)
+            ensureGrowthUnificationSchema(at: dbURL)
+        }
+
+        selectedPatientID = nil
+        patients = []
+        visits = []
+        reloadPatients()
+        reloadDocuments()
+    }
         
         private func addToRecents(_ url: URL) {
             var paths = UserDefaults.standard.stringArray(forKey: recentsKey) ?? []
@@ -5980,6 +6025,185 @@ final class AppState: ObservableObject {
     
     
 extension AppState {
+    // MARK: - Bundle deletion (remove stored bundle from app container)
+    /// Deletes a stored bundle folder from the app's container and removes it from recents.
+    /// Note: This does NOT delete a patient row from the bundle DB; it removes the whole bundle.
+    @MainActor
+    func deleteBundle(_ url: URL) {
+        let fm = FileManager.default
+
+        // Resolve wrapper -> canonical (best-effort). Always operate on standardized, symlink-resolved paths.
+        let canonical0 = canonicalBundleRoot(at: url) ?? url
+        let canonical = canonical0.standardizedFileURL.resolvingSymlinksInPath()
+        let wrapper   = url.standardizedFileURL.resolvingSymlinksInPath()
+
+        let canonicalPath = canonical.path
+        let wrapperPath   = wrapper.path
+
+        // Capture parents BEFORE deletion so we can remove empty wrapper folders afterwards.
+        let canonicalParent = canonical.deletingLastPathComponent()
+        let wrapperParent   = wrapper.deletingLastPathComponent()
+
+        self.log.info("deleteBundle: requested=\(wrapperPath, privacy: .public) canonical=\(canonicalPath, privacy: .public)")
+
+        // 1) Delete canonical folder (real bundle root)
+        if fm.fileExists(atPath: canonical.path) {
+            do {
+                try fm.removeItem(at: canonical)
+                self.log.info("deleteBundle: removed canonical \(canonicalPath, privacy: .public)")
+            } catch {
+                self.log.error("deleteBundle: failed removing canonical \(canonicalPath, privacy: .public) — \(String(describing: error), privacy: .public)")
+            }
+        } else {
+            self.log.info("deleteBundle: canonical already missing \(canonicalPath, privacy: .public)")
+        }
+
+        // 2) Delete wrapper folder too (if different)
+        if wrapperPath != canonicalPath {
+            if fm.fileExists(atPath: wrapper.path) {
+                do {
+                    try fm.removeItem(at: wrapper)
+                    self.log.info("deleteBundle: removed wrapper \(wrapperPath, privacy: .public)")
+                } catch {
+                    self.log.error("deleteBundle: failed removing wrapper \(wrapperPath, privacy: .public) — \(String(describing: error), privacy: .public)")
+                }
+            } else {
+                self.log.info("deleteBundle: wrapper already missing \(wrapperPath, privacy: .public)")
+            }
+        }
+
+        // 3) Remove now-empty wrapper parents (common source of “ghost folders”).
+        cleanupEmptyParents(startingAt: canonicalParent)
+        cleanupEmptyParents(startingAt: wrapperParent)
+
+        // 4) Remove ALL recent/location entries that resolve to the same canonical root or wrapper.
+        recentBundles.removeAll { u in
+            let su = u.standardizedFileURL.resolvingSymlinksInPath()
+            let uCanon = (canonicalBundleRoot(at: su) ?? su).standardizedFileURL.resolvingSymlinksInPath()
+            return uCanon.path == canonicalPath || su.path == canonicalPath || su.path == wrapperPath
+        }
+
+        bundleLocations.removeAll { u in
+            let su = u.standardizedFileURL.resolvingSymlinksInPath()
+            let uCanon = (canonicalBundleRoot(at: su) ?? su).standardizedFileURL.resolvingSymlinksInPath()
+            return uCanon.path == canonicalPath || su.path == canonicalPath || su.path == wrapperPath
+        }
+
+        // 5) If we just deleted the active one, clear selection.
+        if let cur = currentBundleURL {
+            let sc = cur.standardizedFileURL.resolvingSymlinksInPath()
+            let curCanon = (canonicalBundleRoot(at: sc) ?? sc).standardizedFileURL.resolvingSymlinksInPath()
+            if curCanon.path == canonicalPath || sc.path == canonicalPath || sc.path == wrapperPath {
+                currentBundleURL = nil
+                selectedPatientID = nil
+                patients = []
+            }
+        }
+
+        // 6) Final sanity sweep.
+        pruneRecentBundlesInPlace()
+        persistRecentBundles()
+    }
+
+private func pruneRecentBundlesInPlace() {
+    let fm = FileManager.default
+
+    // Normalize every entry to its canonical bundle root (e.g., unwrap wrapper folders)
+    // and drop entries that no longer exist or no longer contain a DB payload.
+    var normalized: [URL] = []
+    normalized.reserveCapacity(self.recentBundles.count)
+
+    for u in self.recentBundles {
+        // If the path itself is gone, drop it immediately.
+        guard fm.fileExists(atPath: u.path) else { continue }
+
+        // Resolve wrapper -> canonical root (must contain db.sqlite or db.sqlite.enc).
+        guard let canonical = canonicalBundleRoot(at: u) else { continue }
+
+        normalized.append(canonical.standardizedFileURL)
+    }
+
+    // De-duplicate by canonical path
+    var seen = Set<String>()
+    self.recentBundles = normalized.filter { u in
+        let p = u.path
+        if seen.contains(p) { return false }
+        seen.insert(p)
+        return true
+    }
+}
+
+
+
+// Find the function that adds items to recents.
+// For the purposes of this patch, let's handle a typical addToRecents(_:) function.
+// Insert after the last mutation of recentBundles:
+
+// --- PATCH INSERTION START ---
+// (This is a search/replace patch; insert the following lines after mutating recentBundles in addToRecents(_:))
+// pruneRecentBundlesInPlace()
+// persistRecentBundles()
+// --- PATCH INSERTION END ---
+
+private func cleanupEmptyParents(startingAt url: URL) {
+    let fm = FileManager.default
+
+    // Application Support/DrsMainApp root (safety boundary)
+    let appRoot: URL? = (try? fm.url(for: .applicationSupportDirectory,
+                                     in: .userDomainMask,
+                                     appropriateFor: nil,
+                                     create: true))
+        .map { $0.appendingPathComponent("DrsMainApp", isDirectory: true).standardizedFileURL }
+
+    // If caller passed a path that doesn't exist (common after deleting the leaf),
+    // start from its parent.
+    var cur = url.standardizedFileURL.resolvingSymlinksInPath()
+    if !fm.fileExists(atPath: cur.path) {
+        cur = cur.deletingLastPathComponent()
+    }
+
+    // Don’t climb forever; just enough to remove typical wrappers/staging folders.
+    for _ in 0..<6 {
+        // Never remove the app root itself.
+        if let root = appRoot, cur.standardizedFileURL.path == root.path { break }
+
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: cur.path, isDirectory: &isDir), isDir.boolValue else { break }
+
+        do {
+            let contents = try fm.contentsOfDirectory(
+                at: cur,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+
+            if contents.isEmpty {
+                try fm.removeItem(at: cur)
+                self.log.info("cleanupEmptyParents: removed empty folder \(cur.path, privacy: .public)")
+                cur = cur.deletingLastPathComponent()
+            } else {
+                break
+            }
+        } catch {
+            break
+        }
+    }
+}
+
+    /// Returns true if `url` is inside Application Support/DrsMainApp (our managed bundle container).
+    private func isManagedBundleURL(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        guard let appSupport = try? fm.url(for: .applicationSupportDirectory,
+                                          in: .userDomainMask,
+                                          appropriateFor: nil,
+                                          create: true)
+            .appendingPathComponent("DrsMainApp", isDirectory: true)
+            .standardizedFileURL else {
+            return false
+        }
+        return url.standardizedFileURL.path.hasPrefix(appSupport.path)
+    }
+
     @MainActor
     func importBundles(from urls: [URL]) {
         // Legacy wrapper: funnel all imports (ZIP or .peMR) through the MRN-aware, prompt-enabled path.
@@ -5993,22 +6217,31 @@ extension AppState {
         
         private func canonicalBundleRoot(at url: URL) -> URL? {
             let fm = FileManager.default
-            let db = url.appendingPathComponent("db.sqlite")
-            if fm.fileExists(atPath: db.path) { return url }
-            
-            if let contents = try? fm.contentsOfDirectory(
+
+            func hasDBPayload(_ dir: URL) -> Bool {
+                fm.fileExists(atPath: dir.appendingPathComponent("db.sqlite").path)
+                || fm.fileExists(atPath: dir.appendingPathComponent("db.sqlite.enc").path)
+            }
+
+            // If this folder itself contains the DB payload, it's canonical.
+            if hasDBPayload(url) { return url }
+
+            // Otherwise, allow a wrapper folder that contains exactly one directory child
+            // holding the DB payload. Ignore files like manifest.json.
+            guard let children = try? fm.contentsOfDirectory(
                 at: url,
                 includingPropertiesForKeys: [.isDirectoryKey],
                 options: [.skipsHiddenFiles]
-            ), contents.count == 1, let only = contents.first {
-                var isDir: ObjCBool = false
-                if fm.fileExists(atPath: only.path, isDirectory: &isDir), isDir.boolValue {
-                    if fm.fileExists(atPath: only.appendingPathComponent("db.sqlite").path) {
-                        return only
-                    }
-                }
+            ) else {
+                return nil
             }
-            return nil
+
+            let dirs = children.filter { child in
+                (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            }
+
+            let candidates = dirs.filter { hasDBPayload($0) }
+            return (candidates.count == 1) ? candidates[0] : nil
         }
         
         private func extractZipBundle(_ zipURL: URL) -> URL? {
@@ -6155,3 +6388,6 @@ extension VisitRow {
         }
     }
 }
+
+// If there is code that restores recentBundles from UserDefaults, ensure it ends with:
+// pruneRecentBundlesInPlace()

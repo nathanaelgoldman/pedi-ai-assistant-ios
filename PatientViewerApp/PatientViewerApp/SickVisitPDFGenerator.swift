@@ -262,8 +262,66 @@ struct SickVisitPDFGenerator {
             let titleFont = UIFont.boldSystemFont(ofSize: 20)
             let subFont = UIFont.systemFont(ofSize: 14)
 
+            // --- Styling colors (match WellVisitPDFGenerator look) ---
+            let titleBG   = UIColor(red: 0.18, green: 0.45, blue: 0.80, alpha: 1.0) // darker blue
+            let sectionBG = UIColor(red: 0.88, green: 0.94, blue: 1.00, alpha: 1.0) // pale blue
+
+            func drawHeaderBox(
+                _ text: String,
+                font: UIFont,
+                background: UIColor,
+                textColor: UIColor,
+                cornerRadius: CGFloat = 8,
+                paddingX: CGFloat = 10,
+                paddingY: CGFloat = 6
+            ) {
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.lineBreakMode = .byWordWrapping
+
+                let attr = NSAttributedString(
+                    string: text,
+                    attributes: [
+                        .font: font,
+                        .foregroundColor: textColor,
+                        .paragraphStyle: paragraphStyle
+                    ]
+                )
+
+                let maxTextWidth = contentWidth - 2 * paddingX
+                let bb = attr.boundingRect(
+                    with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                )
+
+                let boxHeight = ceil(bb.height) + 2 * paddingY
+                ensureSpace(for: boxHeight)
+
+                let boxRect = CGRect(x: margin, y: y, width: contentWidth, height: boxHeight)
+                let path = UIBezierPath(roundedRect: boxRect, cornerRadius: cornerRadius)
+                rendererContext.cgContext.saveGState()
+                rendererContext.cgContext.setFillColor(background.cgColor)
+                rendererContext.cgContext.addPath(path.cgPath)
+                rendererContext.cgContext.fillPath()
+                rendererContext.cgContext.restoreGState()
+
+                let textRect = CGRect(
+                    x: boxRect.minX + paddingX,
+                    y: boxRect.minY + paddingY,
+                    width: contentWidth - 2 * paddingX,
+                    height: ceil(bb.height)
+                )
+                attr.draw(in: textRect)
+
+                y += boxHeight + 10
+            }
+
+            func drawSectionHeader(_ key: String) {
+                drawHeaderBox(L(key), font: UIFont.boldSystemFont(ofSize: 16), background: sectionBG, textColor: .black)
+            }
+
             // Title
-            drawText(L("pdf.sick.title"), font: titleFont)
+            drawHeaderBox(L("pdf.sick.title"), font: titleFont, background: titleBG, textColor: .white, cornerRadius: 10, paddingX: 12, paddingY: 8)
 
             // Visit date
             let formattedVisitDate = formatDate(visit.date)
@@ -321,7 +379,7 @@ struct SickVisitPDFGenerator {
 
                 // 3. Render
                 y += 12
-                drawText(L("pdf.sick.section.patientInfo"), font: UIFont.boldSystemFont(ofSize: 16))
+                drawSectionHeader("pdf.sick.section.patientInfo")
                 drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.alias"), aliasText), font: subFont)
                 drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.name"), name), font: subFont)
                 drawText(LF("pdf.sick.labelValue.fmt", L("pdf.sick.patient.dob"), dobText), font: subFont)
@@ -341,7 +399,7 @@ struct SickVisitPDFGenerator {
 
                 // Chief Complaint & History section
                 y += 12
-                drawText(L("pdf.sick.section.chiefComplaintHistory"), font: UIFont.boldSystemFont(ofSize: 16))
+                drawSectionHeader("pdf.sick.section.chiefComplaintHistory")
 
                 let mainComplaint = Expression<String?>("main_complaint")
                 let hpi = Expression<String?>("hpi")
@@ -374,7 +432,7 @@ struct SickVisitPDFGenerator {
                     let vaccStatus = patientRow[vaccinationStatus]
                     if let status = vaccStatus, !status.isEmpty {
                         y += 12
-                        drawText(L("pdf.sick.section.vaccinationStatus"), font: UIFont.boldSystemFont(ofSize: 16))
+                        drawSectionHeader("pdf.sick.section.vaccinationStatus")
                         drawText(status, font: subFont)
                     }
 
@@ -461,13 +519,13 @@ struct SickVisitPDFGenerator {
 
                     // Always render Past Medical History section with explicit placeholders
                     y += 12
-                    drawText(L("pdf.sick.section.pastMedicalHistory"), font: UIFont.boldSystemFont(ofSize: 16))
+                    drawSectionHeader("pdf.sick.section.pastMedicalHistory")
                     drawWrappedText(perinatalLine, font: subFont, in: pageRect, at: &y, using: rendererContext)
                     drawWrappedText(pmhLine, font: subFont, in: pageRect, at: &y, using: rendererContext)
 
                     // MARK: - Vitals
                     y += 12
-                    drawText(L("pdf.sick.section.vitals"), font: UIFont.boldSystemFont(ofSize: 16))
+                    drawSectionHeader("pdf.sick.section.vitals")
 
                     let vitals = Table("vitals")
                     let vEpisodeID = Expression<Int64>("episode_id")
@@ -530,7 +588,7 @@ struct SickVisitPDFGenerator {
 
                 // MARK: - Physical Examination
                 y += 12
-                drawText(L("pdf.sick.section.physicalExam"), font: UIFont.boldSystemFont(ofSize: 16))
+                drawSectionHeader("pdf.sick.section.physicalExam")
 
                 func getPEField(_ key: String) -> String? {
                     try? episodeRow.get(Expression<String?>(key))
@@ -609,7 +667,7 @@ struct SickVisitPDFGenerator {
                 ensureSpace(for: headerHeight)
                 
                 y += 12
-                drawText(L("pdf.sick.section.problemListing"), font: headerFont)
+                drawSectionHeader("pdf.sick.section.problemListing")
 
                 let problemListing = Expression<String?>("problem_listing")
                 if let summary = try? episodeRow.get(problemListing), !summary.isEmpty {
@@ -682,7 +740,7 @@ struct SickVisitPDFGenerator {
                     ensureSpace(for: headerHeight + bodyHeight)
 
                     y += 12
-                    drawText(title, font: headerFont)
+                    drawHeaderBox(title, font: headerFont, background: sectionBG, textColor: .black)
 
                     if let text = content?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
                         drawWrappedText(text.replacingOccurrences(of: "\n", with: "; "), font: bodyFont, in: pageRect, at: &y, using: rendererContext)

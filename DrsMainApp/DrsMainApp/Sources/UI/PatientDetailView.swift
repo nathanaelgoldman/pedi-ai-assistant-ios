@@ -247,131 +247,202 @@ struct PatientDetailView: View {
             .filter { isWellCategory($0.category) && !isSickCategory($0.category) }
             .max(by: { $0.dateISO < $1.dateISO })
     }
-    // Break out header actions & report menu to ease type-checking
+    // Break out header actions into multiple group cards laid out horizontally
     @ViewBuilder
-    private func headerActionButtons() -> some View {
-        HStack {
-            Spacer()
-            Button {
-                showDocuments.toggle()
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.documents",
-                        comment: "Patient header action: open documents list"
-                    ),
-                    systemImage: "doc.on.clipboard"
-                )
+    private func headerActionGroupsGrid() -> some View {
+        // Adaptive grid: fills available width, wraps to new rows as needed
+        let columns: [GridItem] = [
+            GridItem(.adaptive(minimum: 240), spacing: 12, alignment: .top)
+        ]
+
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            // Clinical / profile editors
+            headerActionGroupCard(
+                titleKey: "patient.header.group.profile",
+                systemImage: "person.text.rectangle"
+            ) {
+                Button {
+                    perinatalPatientIDForSheet = patient.id
+                    showPerinatalHistory = true
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.perinatal-history",
+                            comment: "Patient header action: edit perinatal history"
+                        ),
+                        systemImage: "doc.text"
+                    )
+                }
+
+                Button {
+                    pmhPatientIDForSheet = patient.id
+                    showPMH = true
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.pmh",
+                            comment: "Patient header action: edit past medical history"
+                        ),
+                        systemImage: "book"
+                    )
+                }
+
+                Button {
+                    vaxPatientIDForSheet = patient.id
+                    showVaccinationStatus = true
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.vaccination-status",
+                            comment: "Patient header action: edit vaccination status"
+                        ),
+                        systemImage: "syringe"
+                    )
+                }
             }
-            Button {
-                showVitals.toggle()
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.vitals",
-                        comment: "Patient header action: open vitals table"
-                    ),
-                    systemImage: "waveform.path.ecg"
-                )
+
+            // Measurements / tables
+            headerActionGroupCard(
+                titleKey: "patient.header.group.measurements",
+                systemImage: "waveform.path.ecg"
+            ) {
+                Button {
+                    showVitals.toggle()
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.vitals",
+                            comment: "Patient header action: open vitals table"
+                        ),
+                        systemImage: "waveform.path.ecg"
+                    )
+                }
+
+                Button {
+                    showGrowth.toggle()
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.growth",
+                            comment: "Patient header action: open growth table"
+                        ),
+                        systemImage: "chart.xyaxis.line"
+                    )
+                }
+
+                Button {
+                    showGrowthCharts.toggle()
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.growth-charts",
+                            comment: "Patient header action: open growth charts"
+                        ),
+                        systemImage: "chart.bar.xaxis"
+                    )
+                }
             }
-            Button {
-                perinatalPatientIDForSheet = patient.id
-                showPerinatalHistory = true
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.perinatal-history",
-                        comment: "Patient header action: edit perinatal history"
-                    ),
-                    systemImage: "doc.text"
-                )
+
+            // Documents / export
+            headerActionGroupCard(
+                titleKey: "patient.header.group.documents",
+                systemImage: "doc.on.clipboard"
+            ) {
+                Button {
+                    showDocuments.toggle()
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.documents",
+                            comment: "Patient header action: open documents list"
+                        ),
+                        systemImage: "doc.on.clipboard"
+                    )
+                }
+
+                Button {
+                    Task { await MacBundleExporter.run(appState: appState) }
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.export-bundle",
+                            comment: "Patient header action: export peMR bundle"
+                        ),
+                        systemImage: "square.and.arrow.up"
+                    )
+                }
             }
-            Button {
-                pmhPatientIDForSheet = patient.id
-                showPMH = true
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.pmh",
-                        comment: "Patient header action: edit past medical history"
-                    ),
-                    systemImage: "book"
-                )
+
+            // New items + report
+            headerActionGroupCard(
+                titleKey: "patient.header.group.new_items",
+                systemImage: "plus.circle"
+            ) {
+                Button {
+                    editingWellVisitID = nil
+                    showWellVisitForm = true
+                    visitForDetail = nil
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.new-well-visit",
+                            comment: "Patient header action: create new well visit"
+                        ),
+                        systemImage: "checkmark.seal"
+                    )
+                }
+
+                Button {
+                    editingEpisodeID = nil
+                    showEpisodeForm = true
+                    visitForDetail = nil
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.header.new-sick-episode",
+                            comment: "Patient header action: create new sick episode"
+                        ),
+                        systemImage: "stethoscope"
+                    )
+                }
+
+                reportMenu()
             }
-            Button {
-                vaxPatientIDForSheet = patient.id
-                showVaccinationStatus = true
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.vaccination-status",
-                        comment: "Patient header action: edit vaccination status"
-                    ),
-                    systemImage: "syringe"
-                )
-            }
-            Button {
-                showGrowth.toggle()
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.growth",
-                        comment: "Patient header action: open growth table"
-                    ),
-                    systemImage: "chart.xyaxis.line"
-                )
-            }
-            Button {
-                showGrowthCharts.toggle()
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.growth-charts",
-                        comment: "Patient header action: open growth charts"
-                    ),
-                    systemImage: "chart.bar.xaxis"
-                )
-            }
-            Button {
-                Task { await MacBundleExporter.run(appState: appState) }
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.export-bundle",
-                        comment: "Patient header action: export peMR bundle"
-                    ),
-                    systemImage: "square.and.arrow.up"
-                )
-            }
-            Button {
-                editingWellVisitID = nil
-                showWellVisitForm = true
-                visitForDetail = nil
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.new-well-visit",
-                        comment: "Patient header action: create new well visit"
-                    ),
-                    systemImage: "checkmark.seal"
-                )
-            }
-            Button {
-                editingEpisodeID = nil
-                showEpisodeForm = true
-                visitForDetail = nil
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.header.new-sick-episode",
-                        comment: "Patient header action: create new sick episode"
-                    ),
-                    systemImage: "stethoscope"
-                )
-            }
-            reportMenu()
         }
-        .padding(.bottom, 4)
+        .controlSize(.small)
+        .buttonStyle(.bordered)
+    }
+
+    @ViewBuilder
+    private func headerActionGroupCard<Content: View>(
+        titleKey: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
+                Text(
+                    NSLocalizedString(
+                        titleKey,
+                        comment: "Patient header group title"
+                    )
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                content()
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
     }
 
     @ViewBuilder
@@ -520,26 +591,32 @@ struct PatientDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
-                HStack(spacing: 12) {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 40))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(
-                            patient.fullName.isEmpty
-                            ? NSLocalizedString(
-                                "patient.header.anon",
-                                comment: "Patient header title when full name is not available"
-                              )
-                            : patient.fullName
-                        )
-                        .font(.title2.bold())
-                        Text(patient.alias)
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: 40))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(
+                                patient.fullName.isEmpty
+                                ? NSLocalizedString(
+                                    "patient.header.anon",
+                                    comment: "Patient header title when full name is not available"
+                                  )
+                                : patient.fullName
+                            )
+                            .font(.title2.bold())
+
+                            Text(patient.alias)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
                     }
-                    Spacer()
+
+                    // Action groups laid out horizontally under the patient name
+                    headerActionGroupsGrid()
                 }
-                
-                headerActionButtons()
 
                 // Facts grid
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {

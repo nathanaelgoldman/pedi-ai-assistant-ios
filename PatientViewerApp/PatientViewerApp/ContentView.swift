@@ -24,6 +24,7 @@ struct ContentView: SwiftUI.View {
     @State private var extractedFolderURL: URL?
     @State private var bundleAliasLabel: String?
     @State private var bundleDOB: String?
+    @State private var bundleFullName: String?
     @State private var showingFileImporter = false
     // File export (Save As…) routing
     @State private var showFileExporter = false
@@ -55,6 +56,7 @@ struct ContentView: SwiftUI.View {
         _extractedFolderURL = State(initialValue: nil)
         _bundleAliasLabel = State(initialValue: nil)
         _bundleDOB = State(initialValue: nil)
+        _bundleFullName = State(initialValue: nil)
     }
 
     var body: some SwiftUI.View {
@@ -159,6 +161,14 @@ struct ContentView: SwiftUI.View {
                 default:
                     break
                 }
+            }
+            .onChange(of: extractedFolderURL) { _, newURL in
+                guard let url = newURL else {
+                    bundleFullName = nil
+                    return
+                }
+                let dbPath = url.appendingPathComponent("db.sqlite").path
+                bundleFullName = PatientHeaderLoader.fetchPatientFullName(dbPath: dbPath)
             }
         }
     }
@@ -297,6 +307,8 @@ struct ContentView: SwiftUI.View {
         let patientId = GrowthDataFetcher.getPatientId(from: dbPath) ?? -1
         let alias = bundleAliasLabel ?? L("patient_viewer.content.placeholder.unknown_patient", comment: "Placeholder: unknown patient")
         let dob = bundleDOB ?? L("patient_viewer.content.placeholder.unknown_dob", comment: "Placeholder: unknown date of birth")
+        let fullName = bundleFullName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = (fullName?.isEmpty == false) ? fullName! : alias
 
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -314,8 +326,17 @@ struct ContentView: SwiftUI.View {
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(alias)
+                            Text(displayName)
                                 .font(.title2.bold())
+                                .lineLimit(2)
+
+                            // Keep alias visible when we also show full name.
+                            if let fn = fullName, !fn.isEmpty {
+                                Text(alias)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+
                             Text(dob)
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
