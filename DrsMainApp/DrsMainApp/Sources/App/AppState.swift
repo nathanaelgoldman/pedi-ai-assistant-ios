@@ -2108,7 +2108,22 @@ final class AppState: ObservableObject {
         /// Convenience wrapper for AI context: return the patient's perinatal summary
         /// (if present) without mutating any UI state.
         func perinatalSummaryForSelectedPatient() -> String? {
-            return patientSummary?.perinatal
+            // 1) Prefer the legacy summary string if it exists and is non-empty.
+            if let s = patientSummary?.perinatal?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !s.isEmpty {
+                return s
+            }
+
+            // 2) Otherwise, fall back to the structured perinatal cache (if loaded).
+            // We intentionally use a best-effort string representation here to avoid
+            // duplicating formatting logic; if PerinatalHistory later gains a dedicated
+            // `summary`/`text` field, we can switch to that.
+            if let hist = perinatalHistory {
+                let s = String(describing: hist).trimmingCharacters(in: .whitespacesAndNewlines)
+                return s.isEmpty ? nil : s
+            }
+
+            return nil
         }
 
         /// Build a lightweight, human-readable PMH summary for AI/guideline use.
