@@ -144,12 +144,47 @@ enum BundleIO {
             }
         }
 
-        // Heuristic to pick the correct extracted root that actually contains the bundle (db.sqlite + docs)
+        // Heuristic to pick the correct extracted root that actually contains the bundle (db.sqlite/db.sqlite.enc + manifest)
         private static func findExtractedRoot(in tempDir: URL, zipURL: URL) -> URL {
             let fm = FileManager.default
 
-            // 0) If db.sqlite is directly under tempDir, use tempDir
-            if fm.fileExists(atPath: tempDir.appendingPathComponent("db.sqlite").path) {
+            // Treat these as "docs folders" that must never be chosen as the bundle root.
+            func isDocsFolder(_ url: URL) -> Bool {
+                let name = url.lastPathComponent.lowercased()
+                return name == "docs" || name == "doc" || name == "documents"
+            }
+
+            // Signals that a directory is the bundle root (covers encrypted bundles where manifest is under docs/).
+            func looksLikeBundleRoot(_ url: URL) -> Bool {
+                let hasPlainDB = fm.fileExists(atPath: url.appendingPathComponent("db.sqlite").path)
+                let hasEncDB   = fm.fileExists(atPath: url.appendingPathComponent("db.sqlite.enc").path)
+                let hasDB = hasPlainDB || hasEncDB
+
+                let hasManifestAtRoot = fm.fileExists(atPath: url.appendingPathComponent("manifest.json").path)
+                let hasManifestInDocs = fm.fileExists(atPath: url.appendingPathComponent("docs").appendingPathComponent("manifest.json").path)
+                let hasDocsDir = fm.fileExists(atPath: url.appendingPathComponent("docs").path)
+
+                // Typical healthy bundle: DB at root + (manifest at root OR manifest in docs OR docs folder present)
+                if hasDB && (hasManifestAtRoot || hasManifestInDocs || hasDocsDir) {
+                    return true
+                }
+
+                // Legacy/plain fallback: DB somewhere under url
+                if !hasDB {
+                    if let e = fm.enumerator(at: url, includingPropertiesForKeys: nil) {
+                        for case let u as URL in e {
+                            if u.lastPathComponent == "db.sqlite" || u.lastPathComponent == "db.sqlite.enc" {
+                                return true
+                            }
+                        }
+                    }
+                }
+
+                return false
+            }
+
+            // 0) If the extracted tempDir itself already looks like a bundle root (encrypted or plain), use it.
+            if looksLikeBundleRoot(tempDir) {
                 return tempDir
             }
 
@@ -161,51 +196,31 @@ enum BundleIO {
             )) ?? []
             let dirs: [URL] = items.filter { ((try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false) }
 
-            // Helper to test whether a folder contains db.sqlite (plain or encrypted) or manifest.json anywhere inside it
-            func folderContainsDB(_ url: URL) -> Bool {
-                // Plain DB at this level
-                if fm.fileExists(atPath: url.appendingPathComponent("db.sqlite").path) { return true }
-
-                // Plain DB nested somewhere
-                if let e = fm.enumerator(at: url, includingPropertiesForKeys: nil) {
-                    for case let u as URL in e where u.lastPathComponent == "db.sqlite" { return true }
-                }
-
-                // NEW: treat encrypted DB / manifest as a signal that this folder is the bundle root.
-                if fm.fileExists(atPath: url.appendingPathComponent("db.sqlite.enc").path) ||
-                   fm.fileExists(atPath: url.appendingPathComponent("manifest.json").path) {
-                    return true
-                }
-
-                if let e2 = fm.enumerator(at: url, includingPropertiesForKeys: nil) {
-                    for case let u as URL in e2 where u.lastPathComponent == "db.sqlite.enc" || u.lastPathComponent == "manifest.json" {
-                        return true
-                    }
-                }
-
-                return false
-            }
-
-            // 2) Prefer a folder that actually contains db.sqlite (directly or nested)
-            if let hit = dirs.first(where: { folderContainsDB($0) }) {
+            // 2) Prefer a child folder that looks like a bundle root, but NEVER pick docs/ as the root.
+            if let hit = dirs.first(where: { !isDocsFolder($0) && looksLikeBundleRoot($0) }) {
                 return hit
             }
 
-            // 3) Prefer a folder whose name matches the zip's basename
-            let baseName = zipURL.deletingPathExtension().lastPathComponent
-            if let match = dirs.first(where: { $0.lastPathComponent.localizedCaseInsensitiveContains(baseName) }) {
-                return match
-            }
-
-            // 4) If there is exactly one directory *and* it already contains db.sqlite, take it.
-            //    (Encrypted bundles without a plain db.sqlite will skip this and fall through.)
-            if dirs.count == 1, let only = dirs.first, folderContainsDB(only) {
+            // 3) If there is exactly one directory and it looks like a bundle root, take it.
+            if dirs.count == 1, let only = dirs.first, !isDocsFolder(only), looksLikeBundleRoot(only) {
                 return only
             }
 
-            // 5) As a last resort, try to find db.sqlite anywhere under tempDir and return its parent
+            // 4) Prefer a folder whose name matches the zip's basename (again, skip docs/).
+            let baseName = zipURL.deletingPathExtension().lastPathComponent
+            if let match = dirs.first(where: { !isDocsFolder($0) && $0.lastPathComponent.localizedCaseInsensitiveContains(baseName) }) {
+                return match
+            }
+
+            // 5) As a last resort, find db.sqlite or db.sqlite.enc anywhere under tempDir and return its parent.
+            //    If the parent is docs/, return its parent instead.
             if let e = fm.enumerator(at: tempDir, includingPropertiesForKeys: nil) {
-                for case let u as URL in e where u.lastPathComponent == "db.sqlite" { return u.deletingLastPathComponent() }
+                for case let u as URL in e {
+                    if u.lastPathComponent == "db.sqlite" || u.lastPathComponent == "db.sqlite.enc" {
+                        let parent = u.deletingLastPathComponent()
+                        return isDocsFolder(parent) ? parent.deletingLastPathComponent() : parent
+                    }
+                }
             }
 
             // 6) Fallback to tempDir (validation will fail with a clear error if this is wrong)

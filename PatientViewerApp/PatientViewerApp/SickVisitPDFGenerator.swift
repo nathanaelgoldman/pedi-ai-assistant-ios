@@ -232,6 +232,22 @@ struct SickVisitPDFGenerator {
             drawWrappedAttributedText(attributed, in: rect, at: &y, using: rendererContext)
         }
 
+        // Helper to draw wrapped text while preserving paragraph breaks (better for AI output)
+        func drawWrappedTextRich(_ text: String, font: UIFont, in rect: CGRect, at y: inout CGFloat, using rendererContext: UIGraphicsPDFRendererContext) {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineBreakMode = .byWordWrapping
+            paragraphStyle.lineSpacing = 2
+            paragraphStyle.paragraphSpacing = 6
+
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            let attributed = NSAttributedString(string: text, attributes: attributes)
+            drawWrappedAttributedText(attributed, in: rect, at: &y, using: rendererContext)
+        }
+
         let data = renderer.pdfData { (rendererContext) in
             rendererContext.beginPage()
             var y: CGFloat = margin
@@ -659,6 +675,21 @@ struct SickVisitPDFGenerator {
                         )
                     }
                 }
+                    
+                    // --- Additional physical examination information (free text) ---
+                    y += 6
+                    drawText(L("pdf.sick.pe.additional_info.title"),
+                             font: UIFont.boldSystemFont(ofSize: subFont.pointSize))
+
+                    let extraPE = (try? episodeRow.get(Expression<String?>("comments"))) ?? ""
+                    
+                    let extraPETrimmed = extraPE.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    if extraPETrimmed.isEmpty {
+                        drawText(L("common.placeholder"), font: subFont)
+                    } else {
+                        drawWrappedText("• \(extraPETrimmed)", font: subFont, in: pageRect, at: &y, using: rendererContext)
+                    }
                 }
 
                 // MARK: - Problem Listing
@@ -682,7 +713,6 @@ struct SickVisitPDFGenerator {
                 let icd10 = Expression<String?>("icd10")
                 let medications = Expression<String?>("medications")
                 let anticipatory = Expression<String?>("anticipatory_guidance")
-                let comments = Expression<String?>("comments")
                 let aiNotes = Expression<String?>("ai_notes")
 
                 let aiInputs = Table("ai_inputs")
@@ -700,18 +730,27 @@ struct SickVisitPDFGenerator {
                     .limit(1)
 
                 if let aiRow = try? db.pluck(latestAIQuery),
-                   let raw = aiRow[aiResponse]?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !raw.isEmpty {
-                    aiSectionContent = raw
+                   var raw = aiRow[aiResponse] {
+                    raw = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !raw.isEmpty {
+                        // If stored with literal "\\n" sequences (common when JSON-escaping), restore real newlines.
+                        if !raw.contains("\n") && raw.contains("\\n") {
+                            raw = raw.replacingOccurrences(of: "\\n", with: "\n")
+                        }
+                        aiSectionContent = raw
+                    }
                 } else if let legacy = try? episodeRow.get(aiNotes) {
                     // 2) Fallback to legacy ai_notes column on episodes
-                    let trimmed = legacy.trimmingCharacters(in: .whitespacesAndNewlines)
+                    var trimmed = legacy.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
+                        if !trimmed.contains("\n") && trimmed.contains("\\n") {
+                            trimmed = trimmed.replacingOccurrences(of: "\\n", with: "\n")
+                        }
                         aiSectionContent = trimmed
                     }
                 }
 
-                func renderSection(title: String, content: String?) {
+                func renderSection(title: String, content: String?, preserveNewlines: Bool = false) {
                     let headerFont = UIFont.boldSystemFont(ofSize: 16)
                     let bodyFont = subFont
                     let spacing: CGFloat = 6
@@ -743,7 +782,11 @@ struct SickVisitPDFGenerator {
                     drawHeaderBox(title, font: headerFont, background: sectionBG, textColor: .black)
 
                     if let text = content?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-                        drawWrappedText(text.replacingOccurrences(of: "\n", with: "; "), font: bodyFont, in: pageRect, at: &y, using: rendererContext)
+                        if preserveNewlines {
+                            drawWrappedTextRich(text, font: bodyFont, in: pageRect, at: &y, using: rendererContext)
+                        } else {
+                            drawWrappedText(text.replacingOccurrences(of: "\n", with: "; "), font: bodyFont, in: pageRect, at: &y, using: rendererContext)
+                        }
                     } else {
                         drawText(L("common.placeholder"), font: bodyFont)
                     }
@@ -754,8 +797,7 @@ struct SickVisitPDFGenerator {
                 renderSection(title: L("pdf.sick.section.icd10"), content: try? episodeRow.get(icd10))
                 renderSection(title: L("pdf.sick.section.medications"), content: try? episodeRow.get(medications))
                 renderSection(title: L("pdf.sick.section.anticipatoryGuidance"), content: try? episodeRow.get(anticipatory))
-                renderSection(title: L("pdf.sick.section.comments"), content: try? episodeRow.get(comments))
-                renderSection(title: L("pdf.sick.section.aiAssistantInput"), content: aiSectionContent)
+                renderSection(title: L("pdf.sick.section.aiAssistantInput"), content: aiSectionContent, preserveNewlines: true)
             } catch {
                 Self.log.error("DB error while generating sick visit PDF: \(error.localizedDescription, privacy: .public)")
                 drawText(LF("pdf.sick.error.dbError.fmt", error.localizedDescription), font: subFont)

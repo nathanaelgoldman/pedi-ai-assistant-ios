@@ -19,8 +19,7 @@ protocol EpisodeAIProvider {
     ) async throws -> AppState.EpisodeAIResult
 }
 
-/// Concrete implementation that calls OpenAI's chat completions endpoint.
-/// This type is intentionally tiny and stateless; all configuration is injected.
+/// Concrete implementation that calls OpenAI's Responses API endpoint.
 final class OpenAIProvider: EpisodeAIProvider {
 
     private let apiKey: String
@@ -52,7 +51,7 @@ final class OpenAIProvider: EpisodeAIProvider {
         // For now we ignore `context` here, because `prompt` is already the fully
         // rendered text built in AppState. Keeping the parameter lets us extend
         // this later if needed (e.g. for logging or routing).
-        let url = apiBaseURL.appendingPathComponent("chat/completions")
+        let url = endpointURL(["responses"])
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -70,11 +69,9 @@ final class OpenAIProvider: EpisodeAIProvider {
             }
         }()
 
-        let body = OpenAIChatRequest(
+        let body = OpenAIResponsesRequest(
             model: model,
-            messages: [
-                .init(role: "user", content: prompt)
-            ],
+            input: prompt,
             temperature: temperature
         )
 
@@ -93,10 +90,9 @@ final class OpenAIProvider: EpisodeAIProvider {
             throw OpenAIProviderError.httpStatus(code: http.statusCode, body: snippet)
         }
 
-        let decoded = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
-        guard let content = decoded.choices.first?.message.content
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !content.isEmpty else {
+        let decoded = try JSONDecoder().decode(OpenAIResponsesResponse.self, from: data)
+        let content = decoded.outputText.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard !content.isEmpty else {
             throw OpenAIProviderError.emptyContent
         }
 
@@ -139,37 +135,79 @@ final class OpenAIProvider: EpisodeAIProvider {
         let candidate = String(text[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
         return candidate.isEmpty ? nil : candidate
     }
+
+    /// Build a stable endpoint URL under the OpenAI v1 API root.
+    ///
+    /// This hardens against misconfiguration where `apiBaseURL` is set to
+    /// something like `https://api.openai.com/v1/responses` and we then
+    /// accidentally append another path segment on top of it.
+    private func endpointURL(_ pathComponents: [String]) -> URL {
+        // If the base already contains /v1 somewhere, truncate everything after it.
+        // Otherwise, append /v1.
+        let base: URL = {
+            let comps = apiBaseURL.pathComponents
+            if let v1Index = comps.firstIndex(of: "v1") {
+                let kept = comps.prefix(v1Index + 1)
+                var c = URLComponents(url: apiBaseURL, resolvingAgainstBaseURL: false)
+                c?.path = kept.joined(separator: "/").replacingOccurrences(of: "//", with: "/")
+                return c?.url ?? apiBaseURL
+            } else {
+                return apiBaseURL.appendingPathComponent("v1")
+            }
+        }()
+
+        var url = base
+        for pc in pathComponents {
+            url.appendPathComponent(pc)
+        }
+        return url
+    }
 }
 
-// MARK: - OpenAI wire formats
+// MARK: - OpenAI wire formats (Responses API)
 
-private struct OpenAIChatRequest: Encodable {
-    struct Message: Encodable {
-        let role: String
-        let content: String
-    }
-
+private struct OpenAIResponsesRequest: Encodable {
     let model: String
-    let messages: [Message]
+    let input: String
     let temperature: Double
 }
 
-private struct OpenAIChatResponse: Decodable {
-    struct Choice: Decodable {
-        struct Message: Decodable {
-            let role: String
-            let content: String
-        }
-        let index: Int?
-        let message: Message
-        let finish_reason: String?
+private struct OpenAIResponsesResponse: Decodable {
+    struct OutputItem: Decodable {
+        let type: String
+        let role: String?
+        let status: String?
+        let content: [ContentPart]?
+    }
+
+    struct ContentPart: Decodable {
+        let type: String
+        let text: String?
     }
 
     let id: String
-    let object: String
-    let created: Int
-    let model: String
-    let choices: [Choice]
+    let object: String?
+    let created_at: Int?
+    let model: String?
+    let output: [OutputItem]
+
+    /// Extract assistant output text segments from the Responses `output` items.
+    /// We look for items of type `message` with role `assistant`, and within those,
+    /// content parts of type `output_text`.
+    var outputText: String {
+        var chunks: [String] = []
+        for item in output {
+            guard item.type == "message" else { continue }
+            guard (item.role ?? "") == "assistant" else { continue }
+            guard let parts = item.content else { continue }
+            for part in parts {
+                if part.type == "output_text", let t = part.text {
+                    chunks.append(t)
+                }
+            }
+        }
+        return chunks.joined(separator: "\n")
+    }
 }
 
 private func L(_ key: String) -> String {

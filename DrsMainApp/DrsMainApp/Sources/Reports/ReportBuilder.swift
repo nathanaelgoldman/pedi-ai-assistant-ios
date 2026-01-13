@@ -2258,6 +2258,27 @@ extension ReportBuilder {
             content.append(NSAttributedString(string: text + "\n", attributes: attrs))
         }
         
+        // Helper to render multi-paragraph text with spacing and paragraph style.
+        func paraRich(_ text: String,
+                      font: NSFont,
+                      color: NSColor = .labelColor,
+                      background: NSColor? = nil) {
+            let ps = NSMutableParagraphStyle()
+            ps.lineBreakMode = .byWordWrapping
+            ps.lineSpacing = 2
+            ps.paragraphSpacing = 6
+
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: color,
+                .paragraphStyle: ps
+            ]
+            if let bg = background {
+                attrs[.backgroundColor] = bg
+            }
+            content.append(NSAttributedString(string: text + "\n", attributes: attrs))
+        }
+        
         let titleBG   = NSColor(calibratedRed: 0.18, green: 0.45, blue: 0.80, alpha: 1.0)  // darker blue
         let sectionBG = NSColor(calibratedRed: 0.68, green: 0.84, blue: 1.00, alpha: 1.0)  // pale blue
         
@@ -2457,6 +2478,19 @@ extension ReportBuilder {
                 }
             }
         }
+        // Additional PE info (free text from the dedicated box in the sick visit form)
+        para(
+            L("report.sick.physical_exam.additional_info.title",
+              comment: "Sick PE subsection title: additional physical examination information"),
+            font: NSFont.systemFont(ofSize: 13, weight: .semibold)
+        )
+        let extraPE = (data.clinicianComments ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let extraPEBody = extraPE.isEmpty ? "—" : extraPE
+        if extraPEBody == "—" {
+            para("—", font: bodyFont)
+        } else {
+            para("• \(extraPEBody)", font: bodyFont)
+        }
         content.append(NSAttributedString(string: "\n"))
 
         // 16) Problem Listing
@@ -2503,8 +2537,7 @@ extension ReportBuilder {
         }
         content.append(NSAttributedString(string: "\n"))
 
-        // 22) Clinician Comments
-        section(L("report.sick.section.clinician_comments", comment: "Sick section title: clinician comments"), data.clinicianComments)
+        // (Clinician Comments section removed; now included in PE section)
 
         // 23) Follow-up / Next Visit
         section(L("report.sick.section.follow_up", comment: "Sick section title: follow-up / next visit"), data.nextVisitDate)
@@ -2521,12 +2554,20 @@ extension ReportBuilder {
             }
             para(metaLine, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
-            
-            let resp = ai.response.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            var resp = ai.response
+
+            // If the response was stored with literal "\\n" sequences (common when JSON-escaping),
+            // convert them back to real newlines so the report preserves the original layout.
+            if !resp.contains("\n") && resp.contains("\\n") {
+                resp = resp.replacingOccurrences(of: "\\n", with: "\n")
+            }
+
+            resp = resp.trimmingCharacters(in: .whitespacesAndNewlines)
             if resp.isEmpty {
                 para("—", font: bodyFont)
             } else {
-                para(resp, font: bodyFont)
+                paraRich(resp, font: bodyFont)
             }
             content.append(NSAttributedString(string: "\n"))
         }

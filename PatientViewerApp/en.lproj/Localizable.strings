@@ -741,3 +741,5 @@
 "well_report.enum.vaccination.flu" = "Flu";
 "well_report.enum.vaccination.covid" = "COVID";
 "well_report.enum.vaccination.rsv" = "RSV";
+
+"pdf.sick.pe.additional_info.title" = "Additional physical examination information";

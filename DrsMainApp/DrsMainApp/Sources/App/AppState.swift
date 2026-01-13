@@ -2248,6 +2248,7 @@ final class AppState: ObservableObject {
             let problemListing: String
             let complementaryInvestigations: String
             let vaccinationStatus: String?
+            let perinatalSummary: String? = nil
             let pmhSummary: String?
 
             /// Patient age in days at the time of the episode (if known).
@@ -2837,6 +2838,8 @@ final class AppState: ObservableObject {
                !pmh.isEmpty {
                 payload["past_medical_history"] = pmh
             }
+            
+            
 
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
                !vacc.isEmpty {
@@ -2879,6 +2882,13 @@ final class AppState: ObservableObject {
             if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
                !pmh.isEmpty {
                 payload["past_medical_history"] = pmh
+            }
+            
+            // ✅ Perinatal summary (prefer context field; fallback to AppState helper)
+            let perinatalRaw = (context.perinatalSummary ?? perinatalSummaryForSelectedPatient())
+            if let perinatal = perinatalRaw?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !perinatal.isEmpty {
+                payload["perinatal_summary"] = perinatal
             }
 
             // Encode as pretty-printed JSON so it is easy to read in debug/preview
@@ -2952,6 +2962,15 @@ final class AppState: ObservableObject {
                 "appstate.ai.prompt.line.pmh_not_documented",
                 comment: "Line when PMH is missing, e.g. 'Past medical history: not documented.'"
             )
+            
+            let perinatalLineFormat = NSLocalizedString(
+                "appstate.ai.prompt.line.perinatal_history_format",
+                comment: "Format for perinatal line, e.g. 'Perinatal history: %@'"
+            )
+            let perinatalNotDocumented = NSLocalizedString(
+                "appstate.ai.prompt.line.perinatal_history_not_documented",
+                comment: "Line when perinatal history is missing, e.g. 'Perinatal history: not documented.'"
+            )
 
             let structuredJsonHeader = NSLocalizedString(
                 "appstate.ai.prompt.label.structured_json_header",
@@ -2984,6 +3003,16 @@ final class AppState: ObservableObject {
             } else {
                 lines.append(vaccNotDocumented)
             }
+
+            // ✅ Perinatal history (prefer context field; fallback to AppState helper)
+            let perinatalRaw = (context.perinatalSummary ?? perinatalSummaryForSelectedPatient())
+            if let perinatal = perinatalRaw?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !perinatal.isEmpty {
+                lines.append(String(format: perinatalLineFormat, perinatal))
+            } else {
+                lines.append(perinatalNotDocumented)
+            }
+
             if let pmh = context.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
                !pmh.isEmpty {
                 lines.append(String(format: pmhLineFormat, pmh))

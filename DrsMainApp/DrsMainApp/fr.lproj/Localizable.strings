@@ -2693,3 +2693,9 @@
 "patient.header.group.measurements" = "Mesures";
 "patient.header.group.documents" = "Documents";
 "patient.header.group.new_items" = "Nouveaux éléments";
+
+"sick_episode_form.pe.additional_info.header" = "Informations supplémentaires sur l'examen clinique";
+"sick_episode_form.pe.additional_info.placeholder" = "Notes supplémentaires (examen clinique)…";
+"sick_episode_form.problem_listing.additional_pe_info" = "Examen clinique — infos supplémentaires : %@";
+
+"report.sick.physical_exam.additional_info.title" = "Informations supplémentaires sur l'examen clinique";

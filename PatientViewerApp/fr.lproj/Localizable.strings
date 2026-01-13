@@ -744,3 +744,5 @@
 "well_report.enum.vaccination.flu" = "Grippe";
 "well_report.enum.vaccination.covid" = "COVID";
 "well_report.enum.vaccination.rsv" = "VRS";
+
+"pdf.sick.pe.additional_info.title" = "Informations supplémentaires sur l’examen clinique";

@@ -316,6 +316,8 @@ struct SickEpisodeForm: View {
                                 .lineLimit(3...6)
                             TextField(NSLocalizedString("sick_episode_form.hpi.duration_hours.placeholder", comment: "Placeholder for duration in hours"), text: $duration)
                                 .textFieldStyle(.roundedBorder)
+
+                            additionalPEInfoSection()
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -370,8 +372,6 @@ struct SickEpisodeForm: View {
                             .frame(minHeight: 80)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
                         pickerRow(NSLocalizedString("sick_episode_form.plan.anticipatory_guidance.label", comment: "Label for anticipatory guidance picker"), $anticipatoryGuidance, guidanceChoices)
-                        TextField(NSLocalizedString("sick_episode_form.plan.comments.placeholder", comment: "Placeholder for comments"), text: $comments, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
                     }
                     .padding(.top, 8)
 
@@ -698,6 +698,35 @@ struct SickEpisodeForm: View {
             // (Note: `title` is already passed in as a localized string where used above.)
             WrappingChips(strings: options, selection: selection)
         }
+    }
+
+    // MARK: - Additional PE Info Field (TextEditor + localized placeholder)
+    @ViewBuilder
+    fileprivate func additionalPEInfoSection() -> some View {
+        SectionHeader(NSLocalizedString(
+            "sick_episode_form.pe.additional_info.header",
+            comment: "Section header for additional physical examination information"
+        ))
+
+        ZStack(alignment: .topLeading) {
+            if comments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(NSLocalizedString(
+                    "sick_episode_form.pe.additional_info.placeholder",
+                    comment: "Placeholder for additional physical examination information"
+                ))
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+                .padding(.leading, 6)
+            }
+
+            TextEditor(text: $comments)
+                .frame(minHeight: 110)
+                .padding(.horizontal, 2)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.25))
+        )
     }
 
     // MARK: - Choice localization (display only)
@@ -1916,9 +1945,22 @@ struct SickEpisodeForm: View {
             let joined = Array(lymphNodesSet).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
             lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.lymph_nodes", comment: "Problem list line: Lymph nodes"), joined))
         }
+        
+        // Additional PE free-text (from the dedicated box)
+        let extraPE = comments.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !extraPE.isEmpty {
+            // Keep the problem listing readable even if the notes were multi-line
+            let oneLine = extraPE.replacingOccurrences(of: "\n", with: " ")
+            lines.append(String(format: NSLocalizedString(
+                "sick_episode_form.problem_listing.additional_pe_info",
+                comment: "Problem list line: Additional physical examination information"
+            ), oneLine))
+        }
 
         problemListing = lines.joined(separator: "\n")
     }
+
+// MARK: - PE Additional Info Input UI (TextEditor replacement)
     // MARK: - ICD-10 helper
 
     /// Append a candidate ICD-10 code to the editable field, avoiding duplicates.
@@ -2630,3 +2672,4 @@ extension SickEpisodeForm {
         }
     }
 }
+

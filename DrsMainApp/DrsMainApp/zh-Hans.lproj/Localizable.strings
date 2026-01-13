@@ -2699,3 +2699,7 @@
 "patient.header.group.measurements" = "Measurements";
 "patient.header.group.documents" = "Documents";
 "patient.header.group.new_items" = "New items";
+
+"sick_episode_form.pe.additional_info.header" = "Additional physical examination information";
+"sick_episode_form.pe.additional_info.placeholder" = "Additional PE notes…";
+"sick_episode_form.problem_listing.additional_pe_info" = "Additional PE info: %@";

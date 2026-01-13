@@ -59,6 +59,7 @@
 		BBE1E2AB2EC5CAF7004C6280 /* PerinatalHistoryForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE1E2AA2EC5CAF2004C6280 /* PerinatalHistoryForm.swift */; };
 		BBE216B82ECF344D00D4C281 /* WellVisitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B72ECF344600D4C281 /* WellVisitStore.swift */; };
 		BBE216BA2ECF4A9C00D4C281 /* WellVisitForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */; };
+		E90B87422F162E4700D093D7 /* PromptRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90B87412F162E3B00D093D7 /* PromptRenderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -114,6 +115,7 @@
 		BBE1E2AA2EC5CAF2004C6280 /* PerinatalHistoryForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerinatalHistoryForm.swift; sourceTree = "<group>"; };
 		BBE216B72ECF344600D4C281 /* WellVisitStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitStore.swift; sourceTree = "<group>"; };
 		BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitForm.swift; sourceTree = "<group>"; };
+		E90B87412F162E3B00D093D7 /* PromptRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRenderer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -152,6 +154,7 @@
 		BB01DB6F2ECB53B500F412D8 /* AI */ = {
 			isa = PBXGroup;
 			children = (
+				E90B87412F162E3B00D093D7 /* PromptRenderer.swift */,
 				BB71CCE82EEE8B92000B7947 /* GeminiProvider.swift */,
 				BB71CCE62EEE8B5C000B7947 /* AnthropicProvider.swift */,
 				BB01DB702ECB542C00F412D8 /* OpenAIProvider.swift */,
@@ -434,6 +437,7 @@
 				BB96A5732EBB3A2D003F5C44 /* ReportGrowthRenderer.swift in Sources */,
 				BBE1E2AB2EC5CAF7004C6280 /* PerinatalHistoryForm.swift in Sources */,
 				BB9186852EC6E29D00A8AA8A /* PmhStore.swift in Sources */,
+				E90B87422F162E4700D093D7 /* PromptRenderer.swift in Sources */,
 				BB564AFB2EAF1A2000870007 /* FilePicker.swift in Sources */,
 				BBBB52002EEA61C100281647 /* BundleCrypto.swift in Sources */,
 				BBA6AD552EB5B5D900BDA924 /* GrowthTableView.swift in Sources */,
