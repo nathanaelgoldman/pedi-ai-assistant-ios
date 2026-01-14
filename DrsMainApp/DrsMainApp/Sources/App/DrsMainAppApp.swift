@@ -26,7 +26,7 @@ struct DrsMainAppApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("") {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(clinicianStore)
@@ -50,6 +50,15 @@ struct DrsMainAppApp: App {
                     appState.sickPromptResolver = {
                         if let uid = appState.activeUserID {
                             return clinicianStore.users.first(where: { $0.id == uid })?.aiSickPrompt
+                        }
+                        return nil
+                    }
+
+                    // Wire clinician-specific well-visit AI prompt into AppState so that
+                    // AI queries can use the active clinician's configured well prompt.
+                    appState.wellPromptResolver = {
+                        if let uid = appState.activeUserID {
+                            return clinicianStore.users.first(where: { $0.id == uid })?.aiWellPrompt
                         }
                         return nil
                     }
@@ -143,7 +152,15 @@ struct DrsMainAppApp: App {
                         }(),
                         onClose: { showClinicianProfile = false }
                     )
-                    .frame(minWidth: 640, minHeight: 760)
+                    .frame(
+                        minWidth: 1040,
+                        idealWidth: 1160,
+                        maxWidth: .infinity,
+                        minHeight: 720,
+                        idealHeight: 860,
+                        maxHeight: .infinity,
+                        alignment: .top
+                    )
                 }
                 .toolbar {
                     ToolbarItem(placement: .automatic) {
@@ -376,7 +393,7 @@ private struct ClinicianProfileForm: View {
     @ObservedObject var clinicianStore: ClinicianStore
     let user: Clinician?
     let onClose: () -> Void
-
+    
     @State private var firstName = ""
     @State private var lastName  = ""
     @State private var title     = ""
@@ -391,13 +408,13 @@ private struct ClinicianProfileForm: View {
     @State private var aiAPIKey   = ""
     @State private var aiModel    = ""
     @State private var aiProvider = "openai"
-
+    
     // Per-clinician AI prompts and JSON rules
     @State private var aiSickPrompt: String = ""
     @State private var aiWellPrompt: String = ""
     @State private var aiSickRulesJSON: String = ""
     @State private var aiWellRulesJSON: String = ""
-
+    
     // App lock (password) state
     @State private var newPassword: String = ""
     @State private var confirmPassword: String = ""
@@ -405,236 +422,316 @@ private struct ClinicianProfileForm: View {
     @State private var hasPassword: Bool = false
     @State private var removePassword: Bool = false
 
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                Form {
-                    Section("app.clinician_profile.section.identity") {
-                        TextField("app.clinician_profile.first_name", text: $firstName)
-                        TextField("app.clinician_profile.last_name",  text: $lastName)
-                        TextField("app.clinician_profile.title", text: $title)
-                    }
-                    Section("app.clinician_profile.section.contact") {
-                        TextField("app.clinician_profile.email", text: $email)
-                        TextField("app.clinician_profile.website", text: $website)
-                    }
-                    Section("app.clinician_profile.section.professional") {
-                        TextField("app.clinician_profile.societies", text: $societies)
-                    }
-                    Section("app.clinician_profile.section.social") {
-                        TextField("app.clinician_profile.twitter", text: $twitter)
-                        TextField("app.clinician_profile.wechat",    text: $wechat)
-                        TextField("app.clinician_profile.instagram", text: $instagram)
-                        TextField("app.clinician_profile.linkedin",  text: $linkedin)
-                    }
-                    Section("app.clinician_profile.section.ai_assistant") {
-                        TextField("app.clinician_profile.ai.endpoint_url", text: $aiEndpoint)
-                        TextField("app.clinician_profile.ai.model", text: $aiModel)
-                        Picker("app.clinician_profile.ai.provider", selection: $aiProvider) {
-                            Text("app.clinician_profile.ai.provider.openai").tag("openai")
-                            Text("app.clinician_profile.ai.provider.anthropic").tag("anthropic")
-                            Text("app.clinician_profile.ai.provider.gemini").tag("gemini")
-                            Text("app.clinician_profile.ai.provider.local").tag("local")
-                        }
-                        SecureField("app.clinician_profile.ai.api_key",     text: $aiAPIKey)
-                            .textContentType(.password)
-                    }
-                    Section("app.clinician_profile.section.ai_prompts_rules") {
-                        DisclosureGroup("app.clinician_profile.ai_prompts_rules.sick_group") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("app.clinician_profile.ai_prompts_rules.sick_prompt_label")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                TextEditor(text: $aiSickPrompt)
-                                    .frame(minHeight: 100)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.secondary.opacity(0.2))
-                                    )
+    private func persistAndClose() {
+        // Reset any previous password error
+        passwordError = nil
 
-                                Text("app.clinician_profile.ai_prompts_rules.sick_rules_label")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 4)
-                                TextEditor(text: $aiSickRulesJSON)
-                                    .frame(minHeight: 100)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.secondary.opacity(0.2))
-                                    )
-                            }
-                            .padding(.vertical, 4)
-                        }
+        // Determine if we have a new password to set
+        var effectiveNewPassword: String? = nil
+        if !removePassword {
+            let trimmedNew = newPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedConfirm = confirmPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedNew.isEmpty || !trimmedConfirm.isEmpty {
+                guard !trimmedNew.isEmpty, !trimmedConfirm.isEmpty else {
+                    passwordError = NSLocalizedString("app.clinician_profile.app_lock.error.enter_and_confirm", comment: "")
+                    return
+                }
+                guard trimmedNew == trimmedConfirm else {
+                    passwordError = NSLocalizedString("app.clinician_profile.app_lock.error.mismatch", comment: "")
+                    return
+                }
+                effectiveNewPassword = trimmedNew
+            }
+        }
 
-                        DisclosureGroup("app.clinician_profile.ai_prompts_rules.well_group") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("app.clinician_profile.ai_prompts_rules.well_prompt_label")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                TextEditor(text: $aiWellPrompt)
-                                    .frame(minHeight: 80)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.secondary.opacity(0.2))
-                                    )
-
-                                Text("app.clinician_profile.ai_prompts_rules.well_rules_label")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 4)
-                                TextEditor(text: $aiWellRulesJSON)
-                                    .frame(minHeight: 80)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.secondary.opacity(0.2))
-                                    )
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-
-                    // --- App lock (password) section ---
-                    Section("app.clinician_profile.section.app_lock") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let user, hasPassword {
-                                Text("app.clinician_profile.app_lock.password_set")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("app.clinician_profile.app_lock.no_password")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            SecureField("app.clinician_profile.app_lock.new_password", text: $newPassword)
-                                .textContentType(.newPassword)
-                                .disabled(removePassword)
-
-                            SecureField("app.clinician_profile.app_lock.confirm_password", text: $confirmPassword)
-                                .textContentType(.newPassword)
-                                .disabled(removePassword)
-
-                            if let user, hasPassword {
-                                Toggle("app.clinician_profile.app_lock.remove_existing", isOn: $removePassword)
-                            }
-
-                            if let passwordError {
-                                Text(passwordError)
-                                    .font(.footnote)
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                    }
-
-                    Section {
-                        HStack {
-                            Spacer()
-                            Button("app.common.close") { onClose() }
-                            Button(user == nil ? "app.common.create" : "app.common.save") {
-                                // Reset any previous password error
-                                passwordError = nil
-
-                                // Determine if we have a new password to set
-                                var effectiveNewPassword: String? = nil
-                                if !removePassword {
-                                    let trimmedNew = newPassword.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    let trimmedConfirm = confirmPassword.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if !trimmedNew.isEmpty || !trimmedConfirm.isEmpty {
-                                        guard !trimmedNew.isEmpty, !trimmedConfirm.isEmpty else {
-                                            passwordError = NSLocalizedString("app.clinician_profile.app_lock.error.enter_and_confirm", comment: "")
-                                            return
-                                        }
-                                        guard trimmedNew == trimmedConfirm else {
-                                            passwordError = NSLocalizedString("app.clinician_profile.app_lock.error.mismatch", comment: "")
-                                            return
-                                        }
-                                        effectiveNewPassword = trimmedNew
-                                    }
-                                }
-
-                                if let u = user {
-                                    // Update existing clinician
-                                    clinicianStore.updateUser(
-                                        id: u.id,
-                                        firstName: firstName.isEmpty ? nil : firstName,
-                                        lastName:  lastName.isEmpty  ? nil : lastName,
-                                        title:     title,
-                                        email:     email,
-                                        societies: societies,
-                                        website:   website,
-                                        twitter:   twitter,
-                                        wechat:    wechat,
-                                        instagram: instagram,
-                                        linkedin:  linkedin
-                                    )
-                                    clinicianStore.updateAISettings(
-                                        id: u.id,
-                                        endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
-                                        apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
-                                        model:    aiModel.isEmpty    ? nil : aiModel,
-                                        provider: aiProvider
-                                    )
-                                    clinicianStore.updateAIPromptsAndRules(
-                                        id: u.id,
-                                        sickPrompt: aiSickPrompt.isEmpty ? nil : aiSickPrompt,
-                                        wellPrompt: aiWellPrompt.isEmpty ? nil : aiWellPrompt,
-                                        sickRulesJSON: aiSickRulesJSON.isEmpty ? nil : aiSickRulesJSON,
-                                        wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
-                                    )
-                                    // Handle password changes for existing clinician
-                                    if let newPwd = effectiveNewPassword {
-                                        clinicianStore.setPassword(newPwd, forUserID: u.id)
-                                        hasPassword = true
-                                    } else if removePassword {
-                                        clinicianStore.clearPassword(forUserID: u.id)
-                                        hasPassword = false
-                                    }
-                                } else {
-                                    // Create new clinician
-                                    if let new = clinicianStore.createUser(
-                                        firstName: firstName,
-                                        lastName:  lastName,
-                                        title:     title,
-                                        email:     email,
-                                        societies: societies,
-                                        website:   website,
-                                        twitter:   twitter,
-                                        wechat:    wechat,
-                                        instagram: instagram,
-                                        linkedin:  linkedin
-                                    ) {
-                                        clinicianStore.updateAISettings(
-                                            id: new.id,
-                                            endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
-                                            apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
-                                            model:    aiModel.isEmpty    ? nil : aiModel,
-                                            provider: aiProvider
-                                        )
-                                        clinicianStore.updateAIPromptsAndRules(
-                                            id: new.id,
-                                            sickPrompt: aiSickPrompt.isEmpty ? nil : aiSickPrompt,
-                                            wellPrompt: aiWellPrompt.isEmpty ? nil : aiWellPrompt,
-                                            sickRulesJSON: aiSickRulesJSON.isEmpty ? nil : aiSickRulesJSON,
-                                            wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
-                                        )
-                                        clinicianStore.setActiveUser(new)
-                                        // Handle password for newly created clinician
-                                        if let newPwd = effectiveNewPassword {
-                                            clinicianStore.setPassword(newPwd, forUserID: new.id)
-                                            hasPassword = true
-                                        } else {
-                                            hasPassword = false
-                                        }
-                                    }
-                                }
-                                onClose()
-                            }
-                            .keyboardShortcut(.defaultAction)
-                            Spacer()
-                        }
-                    }
+        if let u = user {
+            // Update existing clinician
+            clinicianStore.updateUser(
+                id: u.id,
+                firstName: firstName.isEmpty ? nil : firstName,
+                lastName:  lastName.isEmpty  ? nil : lastName,
+                title:     title,
+                email:     email,
+                societies: societies,
+                website:   website,
+                twitter:   twitter,
+                wechat:    wechat,
+                instagram: instagram,
+                linkedin:  linkedin
+            )
+            clinicianStore.updateAISettings(
+                id: u.id,
+                endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
+                apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
+                model:    aiModel.isEmpty    ? nil : aiModel,
+                provider: aiProvider
+            )
+            clinicianStore.updateAIPromptsAndRules(
+                id: u.id,
+                sickPrompt: aiSickPrompt.isEmpty ? nil : aiSickPrompt,
+                wellPrompt: aiWellPrompt.isEmpty ? nil : aiWellPrompt,
+                sickRulesJSON: aiSickRulesJSON.isEmpty ? nil : aiSickRulesJSON,
+                wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
+            )
+            // Handle password changes for existing clinician
+            if let newPwd = effectiveNewPassword {
+                clinicianStore.setPassword(newPwd, forUserID: u.id)
+                hasPassword = true
+            } else if removePassword {
+                clinicianStore.clearPassword(forUserID: u.id)
+                hasPassword = false
+            }
+        } else {
+            // Create new clinician
+            if let new = clinicianStore.createUser(
+                firstName: firstName,
+                lastName:  lastName,
+                title:     title,
+                email:     email,
+                societies: societies,
+                website:   website,
+                twitter:   twitter,
+                wechat:    wechat,
+                instagram: instagram,
+                linkedin:  linkedin
+            ) {
+                clinicianStore.updateAISettings(
+                    id: new.id,
+                    endpoint: aiEndpoint.isEmpty ? nil : aiEndpoint,
+                    apiKey:   aiAPIKey.isEmpty   ? nil : aiAPIKey,
+                    model:    aiModel.isEmpty    ? nil : aiModel,
+                    provider: aiProvider
+                )
+                clinicianStore.updateAIPromptsAndRules(
+                    id: new.id,
+                    sickPrompt: aiSickPrompt.isEmpty ? nil : aiSickPrompt,
+                    wellPrompt: aiWellPrompt.isEmpty ? nil : aiWellPrompt,
+                    sickRulesJSON: aiSickRulesJSON.isEmpty ? nil : aiSickRulesJSON,
+                    wellRulesJSON: aiWellRulesJSON.isEmpty ? nil : aiWellRulesJSON
+                )
+                clinicianStore.setActiveUser(new)
+                // Handle password for newly created clinician
+                if let newPwd = effectiveNewPassword {
+                    clinicianStore.setPassword(newPwd, forUserID: new.id)
+                    hasPassword = true
+                } else {
+                    hasPassword = false
                 }
             }
+        }
+
+        onClose()
+    }
+
+    var body: some View {
+        NavigationView {
+            HStack {
+                Spacer(minLength: 0)
+                VStack(spacing: 0) {
+                ScrollView {
+                    HStack(alignment: .top, spacing: 24) {
+                        // LEFT COLUMN
+                        VStack(alignment: .leading, spacing: 16) {
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    TextField("app.clinician_profile.first_name", text: $firstName)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("app.clinician_profile.last_name",  text: $lastName)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("app.clinician_profile.title", text: $title)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                .padding(.top, 2)
+                            } label: {
+                                Text("app.clinician_profile.section.identity")
+                            }
+
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    TextField("app.clinician_profile.email", text: $email)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("app.clinician_profile.website", text: $website)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                .padding(.top, 2)
+                            } label: {
+                                Text("app.clinician_profile.section.contact")
+                            }
+
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    TextField("app.clinician_profile.societies", text: $societies)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                .padding(.top, 2)
+                            } label: {
+                                Text("app.clinician_profile.section.professional")
+                            }
+
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    TextField("app.clinician_profile.twitter", text: $twitter)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("app.clinician_profile.wechat",    text: $wechat)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("app.clinician_profile.instagram", text: $instagram)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("app.clinician_profile.linkedin",  text: $linkedin)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                .padding(.top, 2)
+                            } label: {
+                                Text("app.clinician_profile.section.social")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                        // RIGHT COLUMN
+                        VStack(alignment: .leading, spacing: 16) {
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    TextField("app.clinician_profile.ai.endpoint_url", text: $aiEndpoint)
+                                        .textFieldStyle(.roundedBorder)
+                                    TextField("app.clinician_profile.ai.model", text: $aiModel)
+                                        .textFieldStyle(.roundedBorder)
+
+                                    Picker("app.clinician_profile.ai.provider", selection: $aiProvider) {
+                                        Text("app.clinician_profile.ai.provider.openai").tag("openai")
+                                        Text("app.clinician_profile.ai.provider.anthropic").tag("anthropic")
+                                        Text("app.clinician_profile.ai.provider.gemini").tag("gemini")
+                                        Text("app.clinician_profile.ai.provider.local").tag("local")
+                                    }
+                                    .pickerStyle(.menu)
+
+                                    SecureField("app.clinician_profile.ai.api_key", text: $aiAPIKey)
+                                        .textContentType(.password)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                .padding(.top, 2)
+                            } label: {
+                                Text("app.clinician_profile.section.ai_assistant")
+                            }
+
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    DisclosureGroup("app.clinician_profile.ai_prompts_rules.sick_group") {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Text("app.clinician_profile.ai_prompts_rules.sick_prompt_label")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            TextEditor(text: $aiSickPrompt)
+                                                .frame(minHeight: 120)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.secondary.opacity(0.2))
+                                                )
+
+                                            Text("app.clinician_profile.ai_prompts_rules.sick_rules_label")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.top, 4)
+                                            TextEditor(text: $aiSickRulesJSON)
+                                                .frame(minHeight: 120)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.secondary.opacity(0.2))
+                                                )
+                                        }
+                                        .padding(.vertical, 4)
+                                    }
+
+                                    DisclosureGroup("app.clinician_profile.ai_prompts_rules.well_group") {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Text("app.clinician_profile.ai_prompts_rules.well_prompt_label")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            TextEditor(text: $aiWellPrompt)
+                                                .frame(minHeight: 110)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.secondary.opacity(0.2))
+                                                )
+
+                                            Text("app.clinician_profile.ai_prompts_rules.well_rules_label")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.top, 4)
+                                            TextEditor(text: $aiWellRulesJSON)
+                                                .frame(minHeight: 110)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.secondary.opacity(0.2))
+                                                )
+                                        }
+                                        .padding(.vertical, 4)
+                                    }
+                                }
+                                .padding(.top, 2)
+                            } label: {
+                                Text("app.clinician_profile.section.ai_prompts_rules")
+                            }
+
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    if let user, hasPassword {
+                                        Text("app.clinician_profile.app_lock.password_set")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        Text("app.clinician_profile.app_lock.no_password")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    SecureField("app.clinician_profile.app_lock.new_password", text: $newPassword)
+                                        .textContentType(.newPassword)
+                                        .textFieldStyle(.roundedBorder)
+                                        .disabled(removePassword)
+
+                                    SecureField("app.clinician_profile.app_lock.confirm_password", text: $confirmPassword)
+                                        .textContentType(.newPassword)
+                                        .textFieldStyle(.roundedBorder)
+                                        .disabled(removePassword)
+
+                                    if let user, hasPassword {
+                                        Toggle("app.clinician_profile.app_lock.remove_existing", isOn: $removePassword)
+                                    }
+
+                                    if let passwordError {
+                                        Text(passwordError)
+                                            .font(.footnote)
+                                            .foregroundStyle(.red)
+                                    }
+                                }
+                                .padding(.top, 2)
+                            } label: {
+                                Text("app.clinician_profile.section.app_lock")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                }
+
+                Divider()
+
+                HStack {
+                    Spacer()
+                    Button("app.common.close") { onClose() }
+                    Button(user == nil ? "app.common.create" : "app.common.save") {
+                        persistAndClose()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                }
+                .frame(maxWidth: 1160)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 8)
             .navigationTitle(user == nil ? "app.clinician_profile.nav_title.create" : "app.clinician_profile.nav_title.edit")
         }
         .onAppear {

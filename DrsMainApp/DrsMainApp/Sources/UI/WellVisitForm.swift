@@ -1766,11 +1766,21 @@ struct WellVisitForm: View {
         }
 
         func cleanDate(_ raw: String) -> String {
-            if raw.isEmpty { return "" }
-            if let space = raw.firstIndex(of: " ") {
-                return String(raw[..<space])
+            let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if s.isEmpty { return "" }
+
+            // ISO8601: 2025-12-29T09:30:41Z  →  2025-12-29
+            if let t = s.firstIndex(of: "T") {
+                return String(s[..<t])
             }
-            return raw
+
+            // Legacy: 2025-12-29 09:30:41  →  2025-12-29
+            if let space = s.firstIndex(of: " ") {
+                return String(s[..<space])
+            }
+
+            // Already date-only
+            return s
         }
 
         let latest = points[0]
@@ -1803,18 +1813,40 @@ struct WellVisitForm: View {
         let rawLatest = latest.dateStr
         let rawPrevious = previous.dateStr
 
-        let dateTimeFormatter = DateFormatter()
-        dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateTimeFormatter.timeZone = TimeZone(secondsFromGMT: 0)
-        dateTimeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        func parseVisitDate(_ raw: String) -> Date? {
+            let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !s.isEmpty else { return nil }
 
-        let dateOnlyFormatter = DateFormatter()
-        dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateOnlyFormatter.timeZone = TimeZone(secondsFromGMT: 0)
-        dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+            // 1) ISO 8601 (e.g., 2025-12-29T09:30:41Z or with fractional seconds)
+            let iso = ISO8601DateFormatter()
+            iso.timeZone = TimeZone(secondsFromGMT: 0)
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = iso.date(from: s) { return d }
 
-        let dLatest = dateTimeFormatter.date(from: rawLatest) ?? dateOnlyFormatter.date(from: rawLatest)
-        let dPrevious = dateTimeFormatter.date(from: rawPrevious) ?? dateOnlyFormatter.date(from: rawPrevious)
+            // Some sources omit fractional seconds; try again without it.
+            let isoNoFrac = ISO8601DateFormatter()
+            isoNoFrac.timeZone = TimeZone(secondsFromGMT: 0)
+            isoNoFrac.formatOptions = [.withInternetDateTime]
+            if let d = isoNoFrac.date(from: s) { return d }
+
+            // 2) Legacy formats used elsewhere in the app.
+            let dateTimeFormatter = DateFormatter()
+            dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateTimeFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+            dateTimeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            if let d = dateTimeFormatter.date(from: s) { return d }
+
+            let dateOnlyFormatter = DateFormatter()
+            dateOnlyFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateOnlyFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+            dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+            if let d = dateOnlyFormatter.date(from: s) { return d }
+
+            return nil
+        }
+
+        let dLatest = parseVisitDate(rawLatest)
+        let dPrevious = parseVisitDate(rawPrevious)
 
         guard let start = dPrevious, let end = dLatest else {
             deltaWeightPerDaySummary = ""

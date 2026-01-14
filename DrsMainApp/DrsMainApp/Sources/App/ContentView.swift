@@ -43,5 +43,25 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Text("CareFlow")
+                        .fontWeight(.semibold)
+                    Text("Kids")
+                        .italic()
+                        .foregroundStyle(Color.accentColor)
+                }
+                .font(.title3)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule().fill(Color.accentColor.opacity(0.12))
+                )
+                .overlay(
+                    Capsule().strokeBorder(Color.accentColor.opacity(0.20), lineWidth: 1)
+                )
+            }
+        }
     }
 }

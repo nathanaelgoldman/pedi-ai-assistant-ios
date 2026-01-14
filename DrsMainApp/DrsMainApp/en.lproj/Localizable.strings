@@ -7,7 +7,7 @@
 */
 /* SIDEBAR */
 /* Sidebar – Header */
-"sidebar.header.title"    = "CareFlow Kids — The Doctor's App";
+"sidebar.header.title"    = "Patients Charts";
 "sidebar.header.active"   = "Active: %@";
 "sidebar.header.inactive" = "No active bundle";
 

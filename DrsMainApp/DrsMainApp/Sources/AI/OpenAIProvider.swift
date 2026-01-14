@@ -41,6 +41,51 @@ final class OpenAIProvider: EpisodeAIProvider {
         self.model = model
         self.apiBaseURL = apiBaseURL
     }
+    
+    private lazy var session: URLSession = {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 120      // seconds (request/response)
+        cfg.timeoutIntervalForResource = 240     // seconds (overall)
+        return URLSession(configuration: cfg)
+    }()
+
+    /// Retry transient network errors (timeouts, network connection lost, offline) with exponential backoff.
+    private func dataWithRetry(for request: URLRequest,
+                              maxAttempts: Int = 3,
+                              initialBackoffSeconds: Double = 1.0) async throws -> (Data, URLResponse) {
+        var attempt = 0
+        var backoff = initialBackoffSeconds
+
+        while true {
+            attempt += 1
+            do {
+                return try await session.data(for: request)
+            } catch {
+                // Only retry a small set of transient URL errors.
+                let nsErr = error as NSError
+                let isURLError = (nsErr.domain == NSURLErrorDomain)
+                let code = nsErr.code
+                let transientCodes: Set<Int> = [
+                    NSURLErrorTimedOut,                // -1001
+                    NSURLErrorNetworkConnectionLost,    // -1005
+                    NSURLErrorNotConnectedToInternet,   // -1009
+                    NSURLErrorCannotConnectToHost,      // -1004
+                    NSURLErrorDNSLookupFailed           // -1006
+                ]
+
+                if isURLError, transientCodes.contains(code), attempt < maxAttempts {
+                    log.warning("OpenAIProvider: transient network error (code=\(code, privacy: .public)) attempt \(attempt, privacy: .public)/\(maxAttempts, privacy: .public); retrying in \(backoff, privacy: .public)s")
+                    let nanos = UInt64(backoff * 1_000_000_000)
+                    try await Task.sleep(nanoseconds: nanos)
+                    backoff = min(backoff * 2.0, 8.0)
+                    continue
+                }
+
+                // Not transient or out of attempts.
+                throw error
+            }
+        }
+    }
 
     // MARK: - Public API
 
@@ -79,7 +124,7 @@ final class OpenAIProvider: EpisodeAIProvider {
 
         log.info("OpenAIProvider: calling \(url.absoluteString, privacy: .public) with model \(self.model, privacy: .public)")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await dataWithRetry(for: request)
 
         guard let http = response as? HTTPURLResponse else {
             throw OpenAIProviderError.invalidResponse

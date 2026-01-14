@@ -7,7 +7,7 @@
 */
 /* SIDEBAR */
 /* Sidebar – Header */
-"sidebar.header.title"    = "CareFlow Kids — L'appli du Médecin";
+"sidebar.header.title"    = "Dossiers des patients";
 "sidebar.header.active"   = "Actif : %@";
 "sidebar.header.inactive" = "Aucun dossier actif";
 
@@ -1172,9 +1172,9 @@
 "appstate.profile.perinatal.family_vaccinations_format" = "Vaccins famille : %@";
 "appstate.profile.perinatal.discharge_date_format" = "Date de sortie : %@";
 "appstate.profile.perinatal.discharge_weight_g_format" = "Poids de sortie : %d g";
-"appstate.profile.perinatal.illnesses_after_birth_format" = "Maladies après naissance : %@";
+"appstate.profile.perinatal.illnesses_after_birth_format" = "Maladies néonatales : %@";
 "appstate.profile.perinatal.updated_at_format" = "Mis à jour à : %@";
-"appstate.profile.perinatal.evolution_since_maternity_format" = "Évolution depuis la maternité : %@";
+"appstate.profile.perinatal.evolution_since_maternity_format" = "Évolution depuis la sortie de maternité : %@";
 
 /* Patient summary: perinatal item like 'birth_weight: 3200' */
 "appstate.summary.perinatal.kv_format" = "%@%@%@";
@@ -1357,7 +1357,7 @@
 "appstate.users_mirror.update_step_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers : échec de l’exécution de UPDATE : %@";
 
 /* Log when a clinician is updated in the bundle users table; %d is the clinician id. */
-"appstate.users_mirror.updated_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers : utilisateur %d mis à jour dans la table users du bundle";
+"appstate.users_mirror.updated_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers : utilisateur %d mis à jour dans la table users du dossier";
 
 /* Log when preparing INSERT users fails; %@ is the sqlite error. */
 "appstate.users_mirror.insert_prepare_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers : échec de préparation de INSERT : %@";
@@ -1475,7 +1475,7 @@
 "appstate.manifest.validate.no_db_sha256_skip" = "validateBundleIntegrity : le manifest n’a pas de db_sha256 ; vérification du hash DB ignorée.";
 "appstate.manifest.validate.no_db_files_found_under_format" = "validateBundleIntegrity : aucun db.sqlite ni db.sqlite.enc trouvé sous %@";
 "appstate.manifest.validate.failed_to_compute_db_hash_format" = "validateBundleIntegrity : échec du calcul du hash DB pour %@";
-"appstate.manifest.validate.db_hash_mismatch_format" = "validateBundleIntegrity : mismatch du hash DB pour le bundle à %@. attendu=%@ actuel=%@";
+"appstate.manifest.validate.db_hash_mismatch_format" = "validateBundleIntegrity : mismatch du hash DB pour le dossier à %@. attendu=%@ actuel=%@";
 "appstate.manifest.validate.docs_entry_missing_format" = "validateBundleIntegrity : entrée docs manquante sur disque → %@";
 "appstate.manifest.validate.docs_hash_mismatch_format" = "validateBundleIntegrity : mismatch du hash docs pour %@. attendu=%@ actuel=%@";
 "appstate.manifest.validate.read_parse_failed_format" = "validateBundleIntegrity : échec de lecture/analyse du manifest à %@ : %@";
@@ -2670,7 +2670,7 @@
 "growth.charts.tab.bmi" = "IMC";
 "report.chart.caption.bmi_for_age" = "IMC pour l'Âge";
 
-"appstate.manifest.build_files_list.enumerate_failed_format" = "buildFilesList: failed to enumerate bundle root %@";
+"appstate.manifest.build_files_list.enumerate_failed_format" = "buildFilesList : impossible de lister le dossier racine du dossier %@";
 
 "well_visit_form.solids.comment.label" = "Commentaires sur l'alimentation";
 "well_visit_form.shared.regular" = "régulier";
