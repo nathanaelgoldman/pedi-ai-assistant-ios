@@ -2703,3 +2703,43 @@
 "sick_episode_form.pe.additional_info.header" = "Additional physical examination information";
 "sick_episode_form.pe.additional_info.placeholder" = "Additional PE notes…";
 "sick_episode_form.problem_listing.additional_pe_info" = "Additional PE info: %@";
+
+/* EN — Localizable.strings */
+"generic.datepicker.pick_date" = "Pick a date";
+"generic.datepicker.date" = "Date";
+"generic.button.clear" = "Clear";
+
+/* Well visit types */
+"well_visit_form.visit_type.four_year" = "4-year visit";
+"well_visit_form.visit_type.five_year" = "5-year visit";
+
+/* EN */
+"well_visit_form.milestone.knows_first_last_name" = "Knows first and last name";
+"well_visit_form.milestone.can_tell_stories" = "Can tell stories";
+"well_visit_form.milestone.sentences_4plus_words" = "Uses sentences with 4+ words";
+"well_visit_form.milestone.prefers_play_with_others" = "Prefers to play with others than alone";
+"well_visit_form.milestone.cooperates_with_children" = "Cooperates with other children";
+"well_visit_form.milestone.confuses_real_vs_makebelieve" = "Often can't tell what's real vs make-believe";
+"well_visit_form.milestone.names_colors_and_numbers" = "Names some colors and numbers";
+"well_visit_form.milestone.starts_to_understand_time" = "Starts to understand time";
+"well_visit_form.milestone.draws_person_2_to_4_parts" = "Draws a person with 2–4 body parts";
+"well_visit_form.milestone.hops_one_foot_2_seconds" = "Hops and stands on one foot up to 2 seconds";
+"well_visit_form.milestone.catches_bounced_ball" = "Catches a bounced ball";
+"well_visit_form.milestone.uses_scissors_draws_shapes" = "Uses scissors; can draw circles/squares";
+
+"well_visit_form.milestone.speaks_clearly" = "Speaks clearly";
+"well_visit_form.milestone.tells_simple_story_full_sentences" = "Tells a simple story using full sentences";
+"well_visit_form.milestone.uses_future_tense" = "Uses future tense";
+"well_visit_form.milestone.wants_to_please_be_like_friends" = "Wants to please and be like friends";
+"well_visit_form.milestone.likes_to_sing_dance_act" = "Likes to sing, dance, and act";
+"well_visit_form.milestone.distinguishes_real_vs_makebelieve" = "Can distinguish between real and make-believe";
+"well_visit_form.milestone.counts_10_or_more" = "Can count 10+ things";
+"well_visit_form.milestone.draws_person_6_parts" = "Can draw a person with at least 6 body parts";
+"well_visit_form.milestone.knows_everyday_things" = "Knows about everyday things (e.g., money, food)";
+"well_visit_form.milestone.hops_may_skip" = "Hops; may be able to skip";
+"well_visit_form.milestone.uses_fork_and_spoon_well" = "Uses fork and spoon well";
+"well_visit_form.milestone.dresses_undresses_without_help" = "Can dress/undress without help";
+
+/* Visit type */
+"visit.type.four_year" = "4-year visit";
+"visit.type.five_year" = "5-year visit";

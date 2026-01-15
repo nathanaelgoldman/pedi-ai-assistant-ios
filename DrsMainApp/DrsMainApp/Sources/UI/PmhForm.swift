@@ -21,46 +21,58 @@ struct PmhForm: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Two-column layout, comfy padding
-                    Grid(horizontalSpacing: 24, verticalSpacing: 16) {
-                        GridRow {
-                            Toggle(String(localized: "pmh.toggle.asthma"), isOn: $asthma)
-                            Toggle(String(localized: "pmh.toggle.recurrent_otitis"), isOn: $otitis)
+                VStack {
+                    VStack(spacing: 16) {
+                        // Two-column layout, comfy padding
+                        Grid(horizontalSpacing: 24, verticalSpacing: 16) {
+                            GridRow {
+                                Toggle(String(localized: "pmh.toggle.asthma"), isOn: $asthma)
+                                Toggle(String(localized: "pmh.toggle.recurrent_otitis"), isOn: $otitis)
+                            }
+                            GridRow {
+                                Toggle(String(localized: "pmh.toggle.recurrent_uti"), isOn: $uti)
+                                Toggle(String(localized: "pmh.toggle.allergies"), isOn: $allergies)
+                            }
                         }
-                        GridRow {
-                            Toggle(String(localized: "pmh.toggle.recurrent_uti"), isOn: $uti)
-                            Toggle(String(localized: "pmh.toggle.allergies"), isOn: $allergies)
+                        .padding(.horizontal)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(localized: "pmh.label.allergy_details"))
+                                .font(.headline)
+                            TextField(String(localized: "pmh.placeholder.allergy_example"), text: $allergyDetails, axis: .vertical)
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(3...6)
+                                .disabled(!allergies)
+                                .opacity(allergies ? 1 : 0.5)
                         }
-                    }
-                    .padding(.horizontal)
+                        .padding(.horizontal)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "pmh.label.allergy_details"))
-                            .font(.headline)
-                        TextField(String(localized: "pmh.placeholder.allergy_example"), text: $allergyDetails, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
-                            .lineLimit(3...6)
-                            .disabled(!allergies)
-                            .opacity(allergies ? 1 : 0.5)
-                    }
-                    .padding(.horizontal)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(localized: "pmh.label.other_pmh"))
+                                .font(.headline)
+                            TextEditor(text: $other)
+                                .frame(minHeight: 120)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(.secondary.opacity(0.3))
+                                )
+                        }
+                        .padding(.horizontal)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "pmh.label.other_pmh"))
-                            .font(.headline)
-                        TextEditor(text: $other)
-                            .frame(minHeight: 120)
+                        Spacer(minLength: 8)
+                    }
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.background)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(.secondary.opacity(0.3))
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(.quaternary)
                             )
-                    }
-                    .padding(.horizontal)
-
-                    Spacer(minLength: 8)
+                    )
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
-                .padding(.top, 12)
             }
             .navigationTitle(String(localized: "pmh.nav.title"))
             .toolbar {

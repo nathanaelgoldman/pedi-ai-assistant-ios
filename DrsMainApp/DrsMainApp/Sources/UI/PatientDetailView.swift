@@ -66,6 +66,14 @@ fileprivate func prettyCategory(_ raw: String) -> String {
             "patient.visit-category.thirtysix-month",
             comment: "Visit type label: 36‑month well visit"
         ),
+        "four_year": NSLocalizedString(
+            "patient.visit-category.four-year",
+            comment: "Visit type label: 4‑year well visit"
+        ),
+        "five_year": NSLocalizedString(
+            "patient.visit-category.five-year",
+            comment: "Visit type label: 5‑year well visit"
+        ),
         "newborn_first": NSLocalizedString(
             "patient.visit-category.newborn-first",
             comment: "Visit type label: first newborn visit after maternity"
@@ -124,6 +132,7 @@ fileprivate func isWellCategory(_ raw: String) -> Bool {
         "one_month","two_month","four_month","six_month","nine_month",
         "twelve_month","fifteen_month","eighteen_month","twentyfour_month",
         "twenty_four_month","thirty_month","thirtysix_month","thirty_six_month",
+        "four_year","five_year",
         "newborn_first"
     ]
     if wellKeys.contains(k) { return true }
@@ -143,6 +152,67 @@ fileprivate func isSickCategory(_ raw: String) -> Bool {
 
 /// Right-pane details for a selected patient from the sidebar list.
 struct PatientDetailView: View {
+
+    // Compact patient/bundle meta shown next to the patient name (moved up from the old Facts grid)
+    @ViewBuilder
+    private var patientHeaderMeta: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            LabeledContent {
+                Text("\(patient.id)")
+            } label: {
+                Text(
+                    NSLocalizedString(
+                        "patient.grid.patient-id.label",
+                        comment: "Label for patient ID in patient details grid"
+                    )
+                )
+                .foregroundStyle(.secondary)
+            }
+
+            LabeledContent {
+                Text(dobFormatted)
+            } label: {
+                Text(
+                    NSLocalizedString(
+                        "patient.grid.dob.label",
+                        comment: "Label for date of birth in patient details grid"
+                    )
+                )
+                .foregroundStyle(.secondary)
+            }
+
+            LabeledContent {
+                Text(patient.sex)
+            } label: {
+                Text(
+                    NSLocalizedString(
+                        "patient.grid.sex.label",
+                        comment: "Label for sex in patient details grid"
+                    )
+                )
+                .foregroundStyle(.secondary)
+            }
+
+            if let bundle = appState.currentBundleURL {
+                LabeledContent {
+                    Text(bundle.lastPathComponent)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(bundle.lastPathComponent)
+                } label: {
+                    Text(
+                        NSLocalizedString(
+                            "patient.grid.bundle.label",
+                            comment: "Label for bundle filename in patient details grid"
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .font(.caption)
+        .frame(minWidth: 260, maxWidth: 520, alignment: .leading)
+    }
     @EnvironmentObject var appState: AppState
     let patient: PatientRow   // ← match AppState.selectedPatient type
     @State private var visitForDetail: VisitRow? = nil
@@ -612,58 +682,12 @@ struct PatientDetailView: View {
                         }
 
                         Spacer()
+
+                        patientHeaderMeta
                     }
 
                     // Action groups laid out horizontally under the patient name
                     headerActionGroupsGrid()
-                }
-
-                // Facts grid
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                    GridRow {
-                        Text(
-                            NSLocalizedString(
-                                "patient.grid.patient-id.label",
-                                comment: "Label for patient ID in patient details grid"
-                            )
-                        )
-                        .foregroundStyle(.secondary)
-                        Text("\(patient.id)")
-                    }
-                    GridRow {
-                        Text(
-                            NSLocalizedString(
-                                "patient.grid.dob.label",
-                                comment: "Label for date of birth in patient details grid"
-                            )
-                        )
-                        .foregroundStyle(.secondary)
-                        Text(dobFormatted)
-                    }
-                    GridRow {
-                        Text(
-                            NSLocalizedString(
-                                "patient.grid.sex.label",
-                                comment: "Label for sex in patient details grid"
-                            )
-                        )
-                        .foregroundStyle(.secondary)
-                        Text(patient.sex)
-                    }
-                    if let bundle = appState.currentBundleURL {
-                        GridRow {
-                            Text(
-                                NSLocalizedString(
-                                    "patient.grid.bundle.label",
-                                    comment: "Label for bundle filename in patient details grid"
-                                )
-                            )
-                            .foregroundStyle(.secondary)
-                            Text(bundle.lastPathComponent)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
                 }
 
                 // --- Patient Summary card (perinatal / PMH / vaccination) ---

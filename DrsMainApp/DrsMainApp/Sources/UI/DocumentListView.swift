@@ -59,6 +59,7 @@ struct DocumentListView: View {
                         }
                     }
                     .listStyle(.inset)
+                    .scrollContentBackground(.hidden)
                     .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
                 }
 
@@ -80,6 +81,16 @@ struct DocumentListView: View {
                 .frame(minWidth: 420, idealWidth: 560, maxWidth: .infinity,
                        minHeight: 400, idealHeight: 520, maxHeight: .infinity)
             }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(nsColor: .windowBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+            )
+            .padding(20)
             .task { loadFiles() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

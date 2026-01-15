@@ -153,13 +153,13 @@ struct DrsMainAppApp: App {
                         onClose: { showClinicianProfile = false }
                     )
                     .frame(
-                        minWidth: 1040,
-                        idealWidth: 1160,
-                        maxWidth: .infinity,
+                        minWidth: 1100,
+                        idealWidth: 1400,
+                        maxWidth: 1600,
                         minHeight: 720,
                         idealHeight: 860,
-                        maxHeight: .infinity,
-                        alignment: .top
+                        maxHeight: 1000,
+                        alignment: .center
                     )
                 }
                 .toolbar {
@@ -523,11 +523,11 @@ private struct ClinicianProfileForm: View {
         onClose()
     }
 
-    var body: some View {
-        NavigationView {
-            HStack {
-                Spacer(minLength: 0)
-                VStack(spacing: 0) {
+    @ViewBuilder
+    private var formContent: some View {
+        HStack {
+            Spacer(minLength: 0)
+            VStack(spacing: 0) {
                 ScrollView {
                     HStack(alignment: .top, spacing: 24) {
                         // LEFT COLUMN
@@ -727,12 +727,29 @@ private struct ClinicianProfileForm: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
-                }
-                .frame(maxWidth: 1160)
-                Spacer(minLength: 0)
             }
-            .padding(.top, 8)
-            .navigationTitle(user == nil ? "app.clinician_profile.nav_title.create" : "app.clinician_profile.nav_title.edit")
+            // Let the form be wider (and therefore more legible) while still staying centered.
+            .frame(minWidth: 1100, idealWidth: 1400, maxWidth: 1600)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 8)
+    }
+
+    var body: some View {
+        // On macOS, NavigationView can behave like a split view and visually "stick" content to the left.
+        // Using NavigationStack keeps this screen as a single, centered content area.
+        Group {
+            #if os(macOS)
+            NavigationStack {
+                formContent
+                    .navigationTitle(user == nil ? "app.clinician_profile.nav_title.create" : "app.clinician_profile.nav_title.edit")
+            }
+            #else
+            NavigationView {
+                formContent
+                    .navigationTitle(user == nil ? "app.clinician_profile.nav_title.create" : "app.clinician_profile.nav_title.edit")
+            }
+            #endif
         }
         .onAppear {
             if let u = user {

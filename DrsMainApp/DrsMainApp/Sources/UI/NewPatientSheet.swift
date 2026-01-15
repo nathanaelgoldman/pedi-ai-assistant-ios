@@ -8,7 +8,6 @@
 // DrsMainApp/Sources/UI/NewPatientSheet.swift
 import SwiftUI
 import Foundation
-import PediaShared
 
 struct NewPatientSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -28,15 +27,6 @@ struct NewPatientSheet: View {
 
     // MRN preview (read-only)
     @State private var mrnPreview = ""
-
-    // Default save location
-    @State private var parentDir: URL = {
-        let base = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/Pedia/Bundles", isDirectory: true)
-        // Ensure the default exists
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
-    }()
 
     @State private var errorMessage: String?
 
@@ -113,15 +103,10 @@ struct NewPatientSheet: View {
             HStack(alignment: .center) {
                 Text(NSLocalizedString("new_patient_sheet.field.save_to", comment: "Label for save-to folder row"))
                     .frame(width: 120, alignment: .trailing)
-                Text(parentDir.path)
+                Text(appState.bundlesRoot.path)
                     .font(.callout).foregroundColor(.secondary)
                     .lineLimit(2)
                 Spacer()
-                Button(NSLocalizedString("new_patient_sheet.button.choose_folder", comment: "Button to choose the parent folder for saving")) {
-                    if let url = PediaBundlePicker.selectBundleDirectory() {
-                        parentDir = url
-                    }
-                }
             }
 
             if let errorMessage {
@@ -141,7 +126,6 @@ struct NewPatientSheet: View {
         .padding(20)
         .frame(width: 560)
         .onAppear {
-            parentDir = appState.bundlesRoot
             // Seed alias & MRN on open
             if aliasLabel.isEmpty { regenerateAlias() }
             recomputeMRN()
@@ -164,7 +148,7 @@ struct NewPatientSheet: View {
 
         do {
             let url = try appState.createNewPatient(
-                into: parentDir,
+                into: appState.bundlesRoot,
                 alias: aliasLabel,                // for folder label friendliness
                 firstName: f.isEmpty ? nil : f,
                 lastName: l.isEmpty ? nil : l,

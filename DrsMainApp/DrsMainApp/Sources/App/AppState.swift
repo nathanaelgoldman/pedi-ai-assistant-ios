@@ -1157,7 +1157,9 @@ final class AppState: ObservableObject {
             "thirty_month",
             "thirtysix_month",
             // Already used by the app even if not in VISIT_TITLES yet.
-            "newborn_first"
+            "newborn_first",
+            "four_year",
+            "five_year"
         ]
 
         /// True if the list-category string should be treated as coming from `well_visits`.
@@ -1165,6 +1167,7 @@ final class AppState: ObservableObject {
         private func looksLikeWellVisitCategory(_ cat: String) -> Bool {
             if wellVisitTypeKeys.contains(cat) { return true }
             if cat.hasSuffix("_month") { return true }
+            if cat.hasSuffix("_year") { return true }
             return false
         }
         // MARK: - Summaries (patient + visit)

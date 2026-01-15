@@ -75,6 +75,8 @@ fileprivate func readableVisitType(_ raw: String?) -> String? {
     case "twentyfour_month": return L("visit.type.twentyfour_month")
     case "thirty_month": return L("visit.type.thirty_month")
     case "thirtysix_month": return L("visit.type.thirtysix_month")
+    case "four_year": return L("visit.type.four_year")
+    case "five_year": return L("visit.type.five_year")
     case "newborn_1st_after_maternity": return L("visit.type.newborn_1st_after_maternity")
     case "episode": return L("visit.type.episode")
     default:
@@ -102,6 +104,8 @@ private let VISIT_TITLES: [String:String] = [
     "twentyfour_month": L("visit.type.twentyfour_month"),
     "thirty_month": L("visit.type.thirty_month"),
     "thirtysix_month": L("visit.type.thirtysix_month"),
+    "four_year": L("visit.type.four_year"),
+    "five_year": L("visit.type.five_year"),
     "newborn_1st_after_maternity": L("visit.type.newborn_1st_after_maternity"),
     "episode": L("visit.type.episode")
 ]

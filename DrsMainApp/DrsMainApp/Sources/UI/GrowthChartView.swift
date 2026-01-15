@@ -78,162 +78,201 @@ struct GrowthChartView: View {
         let headCircumferenceCm: Double?
     }
 
+    private var outerBackground: Color {
+#if os(macOS)
+        return Color(nsColor: .windowBackgroundColor)
+#else
+        return Color(.systemGroupedBackground)
+#endif
+    }
+
+    private var panelBackground: Color {
+#if os(macOS)
+        return Color(nsColor: .controlBackgroundColor)
+#else
+        return Color(.systemBackground)
+#endif
+    }
+
+    private var panelBorder: Color {
+#if os(macOS)
+        return Color(nsColor: .separatorColor)
+#else
+        return Color(.separator)
+#endif
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                Picker(
-                    NSLocalizedString(
-                        "growth.charts.picker.label",
-                        comment: "Accessibility label for growth chart type picker"
-                    ),
-                    selection: $selectedTab
-                ) {
-                    ForEach(Tab.allCases) { t in
-                        Text(t.localizedTitle).tag(t)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
+            ZStack {
+                outerBackground
+                    .ignoresSafeArea()
 
-                let series = makeSeries(points: points, tab: selectedTab)
-                if series.isEmpty {
-                    Text(
+                VStack(spacing: 12) {
+                    Picker(
                         NSLocalizedString(
-                            "growth.charts.empty",
-                            comment: "Shown when there is no data to plot for the current growth chart"
+                            "growth.charts.picker.label",
+                            comment: "Accessibility label for growth chart type picker"
+                        ),
+                        selection: $selectedTab
+                    ) {
+                        ForEach(Tab.allCases) { t in
+                            Text(t.localizedTitle).tag(t)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    let series = makeSeries(points: points, tab: selectedTab)
+                    if series.isEmpty {
+                        Text(
+                            NSLocalizedString(
+                                "growth.charts.empty",
+                                comment: "Shown when there is no data to plot for the current growth chart"
+                            )
                         )
-                    )
-                    .foregroundStyle(.secondary)
-                    .padding()
-                } else {
-                    if let bd = birthDate {
-                        Chart {
-                            // Patient data (points only; no connecting lines)
-                            ForEach(series) { p in
-                                PointMark(
-                                    x: .value(
-                                        NSLocalizedString(
-                                            "growth.charts.axis.x.age-short",
-                                            comment: "X-axis dimension label for age in months (short form)"
-                                        ),
-                                        monthsBetween(bd, p.date)
-                                    ),
-                                    y: .value(selectedTab.localizedYAxisLabel, p.value)
-                                )
-                                .zIndex(2)
-                            }
-                            // WHO reference overlays
-                            ForEach(whoCurves, id: \.label) { curve in
-                                ForEach(curve.points) { q in
-                                    LineMark(
+                        .foregroundStyle(.secondary)
+                        .padding()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    } else {
+                        if let bd = birthDate {
+                            Chart {
+                                // Patient data (points only; no connecting lines)
+                                ForEach(series) { p in
+                                    PointMark(
                                         x: .value(
                                             NSLocalizedString(
                                                 "growth.charts.axis.x.age-short",
                                                 comment: "X-axis dimension label for age in months (short form)"
                                             ),
-                                            monthsBetween(bd, q.date)
+                                            monthsBetween(bd, p.date)
                                         ),
-                                        y: .value(
-                                            NSLocalizedString(
-                                                "growth.charts.axis.y.value",
-                                                comment: "Generic y-axis dimension label for WHO reference curves"
-                                            ),
-                                            q.value
-                                        )
+                                        y: .value(selectedTab.localizedYAxisLabel, p.value)
                                     )
-                                    .foregroundStyle(by: .value("WHO", curve.label))
-                                    .interpolationMethod(.monotone)
-                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                                    .opacity(0.9)
-                                    .zIndex(1)
+                                    .zIndex(2)
                                 }
-                            }
-                        }
-                        .chartXAxis {
-                            AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                                AxisGridLine()
-                                AxisTick()
-                                AxisValueLabel {
-                                    if let v = value.as(Double.self) {
-                                        Text(String(format: "%.0f", v))
+                                // WHO reference overlays
+                                ForEach(whoCurves, id: \.label) { curve in
+                                    ForEach(curve.points) { q in
+                                        LineMark(
+                                            x: .value(
+                                                NSLocalizedString(
+                                                    "growth.charts.axis.x.age-short",
+                                                    comment: "X-axis dimension label for age in months (short form)"
+                                                ),
+                                                monthsBetween(bd, q.date)
+                                            ),
+                                            y: .value(
+                                                NSLocalizedString(
+                                                    "growth.charts.axis.y.value",
+                                                    comment: "Generic y-axis dimension label for WHO reference curves"
+                                                ),
+                                                q.value
+                                            )
+                                        )
+                                        .foregroundStyle(by: .value("WHO", curve.label))
+                                        .interpolationMethod(.monotone)
+                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                                        .opacity(0.9)
+                                        .zIndex(1)
                                     }
                                 }
                             }
-                        }
-                        .chartYAxis { AxisMarks() }
-                        .chartLegend(position: .top, alignment: .leading, spacing: 8)
-                        .chartXAxisLabel(
-                            NSLocalizedString(
-                                "growth.charts.axis.x.age-long",
-                                comment: "X-axis label: Age in months"
-                            )
-                        )
-                        .chartYAxisLabel(selectedTab.localizedYAxisLabel)
-                        .padding(.horizontal)
-                        .frame(minHeight: 360)
-                    } else {
-                        // Fallback to date axis if DOB is unknown
-                        Chart {
-                            ForEach(series) { p in
-                                PointMark(
-                                    x: .value(
-                                        NSLocalizedString(
-                                            "growth.charts.axis.x.date-dimension",
-                                            comment: "X-axis dimension label for date-based growth chart"
-                                        ),
-                                        p.date
-                                    ),
-                                    y: .value(selectedTab.localizedYAxisLabel, p.value)
-                                )
-                                .zIndex(2)
+                            .chartXAxis {
+                                AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                                    AxisGridLine()
+                                    AxisTick()
+                                    AxisValueLabel {
+                                        if let v = value.as(Double.self) {
+                                            Text(String(format: "%.0f", v))
+                                        }
+                                    }
+                                }
                             }
-                            ForEach(whoCurves, id: \.label) { curve in
-                                ForEach(curve.points) { q in
-                                    LineMark(
+                            .chartYAxis { AxisMarks() }
+                            .chartLegend(position: .top, alignment: .leading, spacing: 8)
+                            .chartXAxisLabel(
+                                NSLocalizedString(
+                                    "growth.charts.axis.x.age-long",
+                                    comment: "X-axis label: Age in months"
+                                )
+                            )
+                            .chartYAxisLabel(selectedTab.localizedYAxisLabel)
+                            .frame(minHeight: 360)
+                        } else {
+                            // Fallback to date axis if DOB is unknown
+                            Chart {
+                                ForEach(series) { p in
+                                    PointMark(
                                         x: .value(
                                             NSLocalizedString(
                                                 "growth.charts.axis.x.date-dimension",
                                                 comment: "X-axis dimension label for date-based growth chart"
                                             ),
-                                            q.date
+                                            p.date
                                         ),
-                                        y: .value(
-                                            NSLocalizedString(
-                                                "growth.charts.axis.y.value",
-                                                comment: "Generic y-axis dimension label for WHO reference curves"
-                                            ),
-                                            q.value
-                                        )
+                                        y: .value(selectedTab.localizedYAxisLabel, p.value)
                                     )
-                                    .foregroundStyle(by: .value("WHO", curve.label))
-                                    .interpolationMethod(.monotone)
-                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                                    .opacity(0.9)
-                                    .zIndex(1)
+                                    .zIndex(2)
+                                }
+                                ForEach(whoCurves, id: \.label) { curve in
+                                    ForEach(curve.points) { q in
+                                        LineMark(
+                                            x: .value(
+                                                NSLocalizedString(
+                                                    "growth.charts.axis.x.date-dimension",
+                                                    comment: "X-axis dimension label for date-based growth chart"
+                                                ),
+                                                q.date
+                                            ),
+                                            y: .value(
+                                                NSLocalizedString(
+                                                    "growth.charts.axis.y.value",
+                                                    comment: "Generic y-axis dimension label for WHO reference curves"
+                                                ),
+                                                q.value
+                                            )
+                                        )
+                                        .foregroundStyle(by: .value("WHO", curve.label))
+                                        .interpolationMethod(.monotone)
+                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                                        .opacity(0.9)
+                                        .zIndex(1)
+                                    }
                                 }
                             }
-                        }
-                        .chartXAxis {
-                            AxisMarks(values: .automatic(desiredCount: 6)) { _ in
-                                AxisGridLine()
-                                AxisTick()
-                                AxisValueLabel(format: .dateTime.year().month().day())
+                            .chartXAxis {
+                                AxisMarks(values: .automatic(desiredCount: 6)) { _ in
+                                    AxisGridLine()
+                                    AxisTick()
+                                    AxisValueLabel(format: .dateTime.year().month().day())
+                                }
                             }
-                        }
-                        .chartYAxis { AxisMarks() }
-                        .chartLegend(position: .top, alignment: .leading, spacing: 8)
-                        .chartXAxisLabel(
-                            NSLocalizedString(
-                                "growth.charts.axis.x.date-label",
-                                comment: "X-axis label: Date"
+                            .chartYAxis { AxisMarks() }
+                            .chartLegend(position: .top, alignment: .leading, spacing: 8)
+                            .chartXAxisLabel(
+                                NSLocalizedString(
+                                    "growth.charts.axis.x.date-label",
+                                    comment: "X-axis label: Date"
+                                )
                             )
-                        )
-                        .chartYAxisLabel(selectedTab.localizedYAxisLabel)
-                        .padding(.horizontal)
-                        .frame(minHeight: 360)
+                            .chartYAxisLabel(selectedTab.localizedYAxisLabel)
+                            .frame(minHeight: 360)
+                        }
                     }
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(panelBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(panelBorder, lineWidth: 1)
+                )
+                .padding(20)
             }
+            .frame(minWidth: 720, minHeight: 520)
             .navigationTitle(
                 NSLocalizedString(
                     "growth.charts.nav.title",
@@ -269,7 +308,6 @@ struct GrowthChartView: View {
             .onChange(of: selectedTab) { _, _ in
                 reloadWHO()
             }
-            .frame(minWidth: 720, minHeight: 520)
         }
     }
 

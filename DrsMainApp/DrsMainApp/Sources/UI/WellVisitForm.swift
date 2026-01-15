@@ -179,7 +179,35 @@ private let WELL_VISIT_MILESTONES: [String: [MilestoneDescriptor]] = [
         .init(code: "speaks_sentences",         labelKey: "well_visit_form.milestone.uses_3_word_sentences"),
         .init(code: "colors_names",             labelKey: "well_visit_form.milestone.names_colors_pictures"),
         .init(code: "interactive_play",         labelKey: "well_visit_form.milestone.engages_interactive_play"),
-    ]
+    ],
+    "four_year": [
+        .init(code: "knows_first_last_name",           labelKey: "well_visit_form.milestone.knows_first_last_name"),
+        .init(code: "can_tell_stories",               labelKey: "well_visit_form.milestone.can_tell_stories"),
+        .init(code: "sentences_4plus_words",          labelKey: "well_visit_form.milestone.sentences_4plus_words"),
+        .init(code: "prefers_play_with_others",       labelKey: "well_visit_form.milestone.prefers_play_with_others"),
+        .init(code: "cooperates_with_children",       labelKey: "well_visit_form.milestone.cooperates_with_children"),
+        .init(code: "confuses_real_makebelieve",      labelKey: "well_visit_form.milestone.confuses_real_vs_makebelieve"),
+        .init(code: "names_colors_numbers",           labelKey: "well_visit_form.milestone.names_colors_and_numbers"),
+        .init(code: "understands_time_starting",      labelKey: "well_visit_form.milestone.starts_to_understand_time"),
+        .init(code: "draws_person_2_4_parts",         labelKey: "well_visit_form.milestone.draws_person_2_to_4_parts"),
+        .init(code: "hops_one_foot_2s",               labelKey: "well_visit_form.milestone.hops_one_foot_2_seconds"),
+        .init(code: "catches_bounced_ball",           labelKey: "well_visit_form.milestone.catches_bounced_ball"),
+        .init(code: "uses_scissors_draw_shapes",      labelKey: "well_visit_form.milestone.uses_scissors_draws_shapes"),
+    ],
+    "five_year": [
+        .init(code: "speaks_clearly",                 labelKey: "well_visit_form.milestone.speaks_clearly"),
+        .init(code: "tells_simple_story_full_sentences", labelKey: "well_visit_form.milestone.tells_simple_story_full_sentences"),
+        .init(code: "uses_future_tense",              labelKey: "well_visit_form.milestone.uses_future_tense"),
+        .init(code: "wants_to_please_be_like_friends", labelKey: "well_visit_form.milestone.wants_to_please_be_like_friends"),
+        .init(code: "likes_sing_dance_act",           labelKey: "well_visit_form.milestone.likes_to_sing_dance_act"),
+        .init(code: "distinguishes_real_makebelieve", labelKey: "well_visit_form.milestone.distinguishes_real_vs_makebelieve"),
+        .init(code: "counts_10_plus",                 labelKey: "well_visit_form.milestone.counts_10_or_more"),
+        .init(code: "draws_person_6_parts",           labelKey: "well_visit_form.milestone.draws_person_6_parts"),
+        .init(code: "knows_everyday_things",          labelKey: "well_visit_form.milestone.knows_everyday_things"),
+        .init(code: "hops_may_skip",                  labelKey: "well_visit_form.milestone.hops_may_skip"),
+        .init(code: "uses_fork_spoon_well",           labelKey: "well_visit_form.milestone.uses_fork_and_spoon_well"),
+        .init(code: "dresses_undresses_self",         labelKey: "well_visit_form.milestone.dresses_undresses_without_help"),
+    ],
 ]
 
 // Visit type list for the picker
@@ -205,6 +233,8 @@ private let WELL_VISIT_TYPES: [WellVisitType] = [
     .init(id: "twentyfour_month", titleKey: "well_visit_form.visit_type.twentyfour_month"),
     .init(id: "thirty_month",     titleKey: "well_visit_form.visit_type.thirty_month"),
     .init(id: "thirtysix_month",  titleKey: "well_visit_form.visit_type.thirtysix_month"),
+    .init(id: "four_year",        titleKey: "well_visit_form.visit_type.four_year"),
+    .init(id: "five_year",        titleKey: "well_visit_form.visit_type.five_year"),
 ]
 
 // Logical age groups for visit-type–specific layouts and reporting.
@@ -230,7 +260,7 @@ func ageGroupForVisitType(_ id: String) -> WellVisitAgeGroup {
     case "fifteen_month", "eighteen_month", "twentyfour_month":
         return .toddler
 
-    case "thirty_month", "thirtysix_month":
+    case "thirty_month", "thirtysix_month", "four_year", "five_year":
         return .preschool
 
     default:

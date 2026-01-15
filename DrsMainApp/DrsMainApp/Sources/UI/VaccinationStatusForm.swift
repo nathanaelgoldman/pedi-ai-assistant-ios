@@ -62,6 +62,15 @@ struct VaccinationStatusForm: View {
             }
         }
         .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.quaternary, lineWidth: 1)
+        )
+        .padding(20)
         .frame(minWidth: 460, idealWidth: 520, maxWidth: 560,
                minHeight: 180, idealHeight: 220, maxHeight: 240)
         .onAppear {

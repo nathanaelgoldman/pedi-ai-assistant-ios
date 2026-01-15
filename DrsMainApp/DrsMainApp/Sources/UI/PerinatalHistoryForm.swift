@@ -35,6 +35,8 @@ struct PerinatalHistoryForm: View {
     @State private var motherVaccinations = ""
     @State private var familyVaccinations = ""
     @State private var maternityDischargeDate = ""  // ISO yyyy-MM-dd preferred
+    @State private var showDischargeDatePicker = false
+    @State private var dischargeDateTemp = Date()
     @State private var dischargeWeightG = ""
     @State private var illnessesAfterBirth = ""
     @State private var evolutionSinceMaternity = ""
@@ -145,35 +147,38 @@ struct PerinatalHistoryForm: View {
     @State private var motherVaccinationsSet: Set<String> = []
     @State private var familyVaccinationsSet: Set<String> = []
 
-    var body: some View {
-        Form {
-            GeometryReader { geo in
-                let useTwoCols = geo.size.width >= 700
-                if useTwoCols {
-                    HStack(alignment: .top, spacing: 24) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            columnLeft
+    // Keep the UI container separate so we can wrap it in a NavigationStack on macOS.
+    private var formContent: some View {
+        HStack {
+            Spacer(minLength: 0)
+
+            VStack(spacing: 0) {
+                ScrollView {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 24) {
+                            VStack(alignment: .leading, spacing: 16) {
+                                columnLeft
+                            }
+                            VStack(alignment: .leading, spacing: 16) {
+                                columnRight
+                            }
                         }
-                        VStack(alignment: .leading, spacing: 12) {
+
+                        // Fallback to single column on narrow widths
+                        VStack(alignment: .leading, spacing: 16) {
+                            columnLeft
                             columnRight
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                } else {
-                    // Fallback to single column on narrow widths (e.g., iPhone portrait)
-                    VStack(alignment: .leading, spacing: 12) {
-                        columnLeft
-                        columnRight
-                    }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
             }
-            .frame(minHeight: 400) // keep a pleasant minimum height
+            .frame(minWidth: 900, idealWidth: 1050, maxWidth: 1400, minHeight: 560, alignment: .top)
+
+            Spacer(minLength: 0)
         }
+        .padding(.top, 8)
         .onAppear {
             if app.perinatalHistory == nil {
                 // Proactively fetch from DB if not already loaded
@@ -232,10 +237,26 @@ struct PerinatalHistoryForm: View {
                     .padding(.bottom, 12)
             }
         }
-        .frame(minWidth: 900, idealWidth: 1050, maxWidth: 1400, minHeight: 560)
+    }
+
+    var body: some View {
+        Group {
 #if os(macOS)
-        .presentationSizing(.fitted)
+            // Ensure a proper title bar + toolbar area on macOS sheets/windows.
+            NavigationStack {
+                formContent
+            }
+            // Give the sheet enough room so the navigation title/toolbar aren’t clipped.
+            .frame(minWidth: 980, idealWidth: 1150, maxWidth: 1500,
+                   minHeight: 680, idealHeight: 860, maxHeight: 1100,
+                   alignment: .top)
+            .presentationSizing(.fitted)
+#else
+            NavigationView {
+                formContent
+            }
 #endif
+        }
     }
 
     // MARK: - Load/Save
@@ -263,6 +284,9 @@ struct PerinatalHistoryForm: View {
         motherVaccinations = h?.motherVaccinations ?? ""
         familyVaccinations = h?.familyVaccinations ?? ""
         maternityDischargeDate = h?.maternityDischargeDate ?? ""
+        if let d = parseISODate(maternityDischargeDate) {
+            dischargeDateTemp = d
+        }
         dischargeWeightG = h?.dischargeWeightG.map(String.init) ?? ""
         illnessesAfterBirth = h?.illnessesAfterBirth ?? ""
         evolutionSinceMaternity = h?.evolutionSinceMaternity ?? ""
@@ -485,14 +509,28 @@ struct PerinatalHistoryForm: View {
             HStack {
                 Text(title)
                 Spacer()
-                Text({
-                    let csv = setToCSV(selection.wrappedValue)
-                    return csv.isEmpty ? String(localized: "generic.placeholder.none") : csv
-                }())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                let csv = setToCSV(selection.wrappedValue)
+                Text(csv.isEmpty ? String(localized: "generic.placeholder.none") : csv)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func unitTextField(_ label: String, text: Binding<String>, unit: String) -> some View {
+        LabeledContent {
+            HStack(spacing: 8) {
+                TextField("", text: text)
+                    .textFieldStyle(.roundedBorder)
+
+                Text(unit)
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 24, alignment: .leading)
+            }
+        } label: {
+            Text(label)
         }
     }
 
@@ -500,143 +538,263 @@ struct PerinatalHistoryForm: View {
 
     @ViewBuilder
     private var columnLeft: some View {
-        Section(header: Text(String(localized: "perinatal.section.birth_pregnancy"))) {
-            // Multi-select pregnancy issues
-            multiSelectMenu(
-                title: String(localized: "perinatal.field.pregnancy_issues"),
-                options: Self.CH_PREGNANCY,
-                selection: $pregnancyRiskSet
-            )
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                // Multi-select pregnancy issues
+                multiSelectMenu(
+                    title: String(localized: "perinatal.field.pregnancy_issues"),
+                    options: Self.CH_PREGNANCY,
+                    selection: $pregnancyRiskSet
+                )
 
-            // Single-choice pickers
-            Picker(String(localized: "perinatal.field.birth_mode"), selection: $birthMode) {
-                Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                ForEach(Self.CH_BIRTH_MODE, id: \.self) { Text($0) }
+                // Single-choice pickers
+                Picker(String(localized: "perinatal.field.birth_mode"), selection: $birthMode) {
+                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
+                    ForEach(Self.CH_BIRTH_MODE, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.menu)
+
+                let termLU = labelAndUnitFromFormatKey("appstate.profile.perinatal.term_weeks_format")
+                unitTextField(termLU.label.isEmpty ? String(localized: "perinatal.field.gestational_age_weeks") : termLU.label,
+                              text: $birthTermWeeks,
+                              unit: termLU.unit.isEmpty ? "w" : termLU.unit)
+#if os(iOS)
+                    .keyboardType(.numberPad)
+#endif
+
+                Picker(String(localized: "perinatal.field.resuscitation_at_birth"), selection: $resuscitation) {
+                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
+                    ForEach(Self.CH_RESUSC, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.menu)
+
+                Toggle(String(localized: "perinatal.field.nicu_stay"), isOn: $nicuStay)
+
+                // Infection risk multi-select
+                multiSelectMenu(
+                    title: String(localized: "perinatal.field.infection_risk_factors"),
+                    options: Self.CH_INF_RISK,
+                    selection: $infectionRiskSet
+                )
             }
-            .pickerStyle(.menu)
-
-            TextField(
-                String(localized: "perinatal.field.gestational_age_weeks"),
-                text: $birthTermWeeks
-            )
-
-            Picker(String(localized: "perinatal.field.resuscitation_at_birth"), selection: $resuscitation) {
-                Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                ForEach(Self.CH_RESUSC, id: \.self) { Text($0) }
-            }
-            .pickerStyle(.menu)
-
-            Toggle(String(localized: "perinatal.field.nicu_stay"), isOn: $nicuStay)
-
-            // Infection risk multi-select
-            multiSelectMenu(
-                title: String(localized: "perinatal.field.infection_risk_factors"),
-                options: Self.CH_INF_RISK,
-                selection: $infectionRiskSet
-            )
+            .padding(.top, 2)
+        } label: {
+            Text(String(localized: "perinatal.section.birth_pregnancy"))
         }
 
-        Section(header: Text(String(localized: "perinatal.section.measurements_birth"))) {
-            TextField(
-                String(localized: "perinatal.field.birth_weight_g"),
-                text: $birthWeightG
-            )
-            TextField(
-                String(localized: "perinatal.field.birth_length_cm"),
-                text: $birthLengthCm
-            )
-            TextField(
-                String(localized: "perinatal.field.head_circumference_cm"),
-                text: $birthHeadCircumferenceCm
-            )
-            TextField(
-                String(localized: "perinatal.field.discharge_weight_g"),
-                text: $dischargeWeightG
-            )
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                unitTextField(
+                    String(localized: "perinatal.field.birth_weight_g"),
+                    text: $birthWeightG,
+                    unit: "g"
+                )
+
+                unitTextField(
+                    String(localized: "perinatal.field.birth_length_cm"),
+                    text: $birthLengthCm,
+                    unit: "cm"
+                )
+
+                unitTextField(
+                    String(localized: "perinatal.field.head_circumference_cm"),
+                    text: $birthHeadCircumferenceCm,
+                    unit: "cm"
+                )
+
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        TextField("", text: $maternityDischargeDate)
+                            .textFieldStyle(.roundedBorder)
+
+                        Button {
+                            // Seed the picker with the current value if possible
+                            if let d = parseISODate(maternityDischargeDate) {
+                                dischargeDateTemp = d
+                            }
+                            showDischargeDatePicker.toggle()
+                        } label: {
+                            Image(systemName: "calendar")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(String(localized: "generic.datepicker.pick_date"))
+                        .popover(isPresented: $showDischargeDatePicker) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                DatePicker(
+                                    String(localized: "generic.datepicker.date"),
+                                    selection: $dischargeDateTemp,
+                                    displayedComponents: [.date]
+                                )
+                                .datePickerStyle(.graphical)
+
+                                HStack {
+                                    Button(String(localized: "generic.button.clear")) {
+                                        maternityDischargeDate = ""
+                                        showDischargeDatePicker = false
+                                    }
+
+                                    Spacer()
+
+                                    Button(String(localized: "generic.button.done")) {
+                                        maternityDischargeDate = formatISODate(dischargeDateTemp)
+                                        showDischargeDatePicker = false
+                                    }
+                                    .keyboardShortcut(.defaultAction)
+                                }
+                            }
+                            .padding(14)
+                            .frame(minWidth: 320)
+                        }
+                    }
+                } label: {
+                    Text(
+                        String(
+                            format: NSLocalizedString("appstate.profile.perinatal.discharge_date_format", comment: ""),
+                            ""
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
+                }
+
+                unitTextField(
+                    String(localized: "perinatal.field.discharge_weight_g"),
+                    text: $dischargeWeightG,
+                    unit: "g"
+                )
+            }
+            .padding(.top, 2)
+        } label: {
+            Text(String(localized: "perinatal.section.measurements_birth"))
         }
     }
 
     @ViewBuilder
     private var columnRight: some View {
-        Section(header: Text(String(localized: "perinatal.section.maternity_stay"))) {
-            multiSelectMenu(
-                title: String(localized: "perinatal.field.maternity_events"),
-                options: Self.CH_MAT_STAY_EVENTS,
-                selection: $maternityStayEventsSet
-            )
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                multiSelectMenu(
+                    title: String(localized: "perinatal.field.maternity_events"),
+                    options: Self.CH_MAT_STAY_EVENTS,
+                    selection: $maternityStayEventsSet
+                )
 
-            multiSelectMenu(
-                title: String(localized: "perinatal.field.vaccinations_maternity"),
-                options: Self.CH_VACCINATIONS_MAT,
-                selection: $maternityVaccinationsSet
-            )
+                multiSelectMenu(
+                    title: String(localized: "perinatal.field.vaccinations_maternity"),
+                    options: Self.CH_VACCINATIONS_MAT,
+                    selection: $maternityVaccinationsSet
+                )
 
-            Toggle(String(localized: "perinatal.field.vitamin_k_given"), isOn: $vitaminK)
+                Toggle(String(localized: "perinatal.field.vitamin_k_given"), isOn: $vitaminK)
 
-            Picker(String(localized: "perinatal.field.feeding_maternity"), selection: $feedingInMaternity) {
-                Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                ForEach(Self.CH_FEEDING, id: \.self) { Text($0) }
+                Picker(String(localized: "perinatal.field.feeding_maternity"), selection: $feedingInMaternity) {
+                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
+                    ForEach(Self.CH_FEEDING, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.menu)
+
+                Toggle(String(localized: "perinatal.field.passed_meconium_24h"), isOn: $passedMeconium24h)
+                Toggle(String(localized: "perinatal.field.urination_24h"), isOn: $urination24h)
             }
-            .pickerStyle(.menu)
-
-            Toggle(String(localized: "perinatal.field.passed_meconium_24h"), isOn: $passedMeconium24h)
-            Toggle(String(localized: "perinatal.field.urination_24h"), isOn: $urination24h)
-
-            TextField(
-                String(localized: "perinatal.field.discharge_date"),
-                text: $maternityDischargeDate
-            )
-            TextField(
-                String(localized: "perinatal.field.discharge_weight_g"),
-                text: $dischargeWeightG
-            )
+            .padding(.top, 2)
+        } label: {
+            Text(String(localized: "perinatal.section.maternity_stay"))
         }
 
-        Section(header: Text(String(localized: "perinatal.section.screenings"))) {
-            Picker(String(localized: "perinatal.field.heart_screening"), selection: $heartScreening) {
-                Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                ForEach(Self.CH_HEART, id: \.self) { Text($0) }
-            }
-            .pickerStyle(.menu)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker(String(localized: "perinatal.field.heart_screening"), selection: $heartScreening) {
+                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
+                    ForEach(Self.CH_HEART, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.menu)
 
-            Picker(String(localized: "perinatal.field.metabolic_screening"), selection: $metabolicScreening) {
-                Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                ForEach(Self.CH_METAB, id: \.self) { Text($0) }
-            }
-            .pickerStyle(.menu)
+                Picker(String(localized: "perinatal.field.metabolic_screening"), selection: $metabolicScreening) {
+                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
+                    ForEach(Self.CH_METAB, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.menu)
 
-            Picker(String(localized: "perinatal.field.hearing_screening"), selection: $hearingScreening) {
-                Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                ForEach(Self.CH_HEARING, id: \.self) { Text($0) }
+                Picker(String(localized: "perinatal.field.hearing_screening"), selection: $hearingScreening) {
+                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
+                    ForEach(Self.CH_HEARING, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.menu)
             }
-            .pickerStyle(.menu)
+            .padding(.top, 2)
+        } label: {
+            Text(String(localized: "perinatal.section.screenings"))
         }
 
-        Section(header: Text(String(localized: "perinatal.section.family_aftercare"))) {
-            multiSelectMenu(
-                title: String(localized: "perinatal.field.mother_vaccinations"),
-                options: Self.CH_MOTHER_VAX,
-                selection: $motherVaccinationsSet
-            )
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                multiSelectMenu(
+                    title: String(localized: "perinatal.field.mother_vaccinations"),
+                    options: Self.CH_MOTHER_VAX,
+                    selection: $motherVaccinationsSet
+                )
 
-            multiSelectMenu(
-                title: String(localized: "perinatal.field.family_vaccinations"),
-                options: Self.CH_FAMILY_VAX,
-                selection: $familyVaccinationsSet
-            )
+                multiSelectMenu(
+                    title: String(localized: "perinatal.field.family_vaccinations"),
+                    options: Self.CH_FAMILY_VAX,
+                    selection: $familyVaccinationsSet
+                )
 
-            TextField(
-                String(localized: "perinatal.field.illnesses_after_birth"),
-                text: $illnessesAfterBirth
-            )
-            TextField(
-                String(localized: "perinatal.field.evolution_since_maternity"),
-                text: $evolutionSinceMaternity
-            )
+                LabeledContent {
+                    TextField("", text: $illnessesAfterBirth)
+                        .textFieldStyle(.roundedBorder)
+                } label: {
+                    Text(
+                        String(
+                            format: NSLocalizedString("appstate.profile.perinatal.illnesses_after_birth_format", comment: ""),
+                            ""
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
+                }
+
+                LabeledContent {
+                    TextField("", text: $evolutionSinceMaternity)
+                        .textFieldStyle(.roundedBorder)
+                } label: {
+                    Text(
+                        String(
+                            format: NSLocalizedString("appstate.profile.perinatal.evolution_since_maternity_format", comment: ""),
+                            ""
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
+                }
+            }
+            .padding(.top, 2)
+        } label: {
+            Text(String(localized: "perinatal.section.family_aftercare"))
         }
     }
 
     // MARK: - Helpers
+
+    /// Some legacy keys are *format* strings (e.g. "Term: %d weeks").
+    /// In the form UI we only want a stable label + a trailing unit, without formatting.
+    /// This avoids undefined behavior when the format expects an Int/Double.
+    private func labelAndUnitFromFormatKey(_ key: String) -> (label: String, unit: String) {
+        let raw = NSLocalizedString(key, comment: "")
+        // Strip common printf-style placeholders like %@, %d, %ld, %.2f, etc.
+        let pattern = "%[-+0-9\\.#]*l?[A-Za-z@]"
+        let stripped: String = {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { return raw }
+            let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+            return re.stringByReplacingMatches(in: raw, options: [], range: range, withTemplate: "")
+        }()
+        // Now split label vs unit using ':' if present (works for EN/FR "Label:  unit").
+        let parts = stripped.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        if parts.count == 2 {
+            let label = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let unit = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            return (label.isEmpty ? stripped.trimmingCharacters(in: .whitespacesAndNewlines) : label,
+                    unit)
+        }
+        return (stripped.trimmingCharacters(in: .whitespacesAndNewlines), "")
+    }
 
     private func coerceSelectionsToValid() {
         // Clamp single-choice pickers to valid vocab (fallback to first option)
@@ -678,6 +836,26 @@ struct PerinatalHistoryForm: View {
         let s = String(format: "%.2f", d)
         return s.replacingOccurrences(of: #"(\.0+)$"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: #"(,\0+)$"#, with: "", options: .regularExpression)
+    }
+
+    private func parseISODate(_ s: String) -> Date? {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: t)
+    }
+
+    private func formatISODate(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: d)
     }
 
     private func parseDouble(_ s: String) -> Double? {

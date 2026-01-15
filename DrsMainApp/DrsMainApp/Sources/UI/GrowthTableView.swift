@@ -19,6 +19,15 @@ private extension View {
         self
         #endif
     }
+
+    @ViewBuilder
+    func hideListBackgroundIfAvailable() -> some View {
+        if #available(macOS 13.0, iOS 16.0, *) {
+            self.scrollContentBackground(.hidden)
+        } else {
+            self
+        }
+    }
 }
 
 /// Read-only table that lists unified growth points for the currently selected patient.
@@ -30,174 +39,202 @@ struct GrowthTableView: View {
     @State private var showAddSheet = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header row
-            HStack {
-                Text(
-                    NSLocalizedString(
-                        "growth.header.date",
-                        comment: "Growth table header: date column"
+        NavigationStack {
+            // Keep the table from feeling glued to the sheet edges.
+            VStack(alignment: .leading, spacing: 0) {
+                // Header row
+                HStack {
+                    Text(
+                        NSLocalizedString(
+                            "growth.header.date",
+                            comment: "Growth table header: date column"
+                        )
                     )
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(width: 120, alignment: .leading)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 120, alignment: .leading)
 
-                Text(
-                    NSLocalizedString(
-                        "growth.header.weight-kg",
-                        comment: "Growth table header: weight (kg) column"
+                    Text(
+                        NSLocalizedString(
+                            "growth.header.weight-kg",
+                            comment: "Growth table header: weight (kg) column"
+                        )
                     )
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(width: 100, alignment: .trailing)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 100, alignment: .trailing)
 
-                Text(
-                    NSLocalizedString(
-                        "growth.header.height-cm",
-                        comment: "Growth table header: height (cm) column"
+                    Text(
+                        NSLocalizedString(
+                            "growth.header.height-cm",
+                            comment: "Growth table header: height (cm) column"
+                        )
                     )
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(width: 100, alignment: .trailing)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 100, alignment: .trailing)
 
-                Text(
-                    NSLocalizedString(
-                        "growth.header.headc-cm",
-                        comment: "Growth table header: head circumference (cm) column"
+                    Text(
+                        NSLocalizedString(
+                            "growth.header.headc-cm",
+                            comment: "Growth table header: head circumference (cm) column"
+                        )
                     )
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(width: 110, alignment: .trailing)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 110, alignment: .trailing)
 
-                Text(
-                    NSLocalizedString(
-                        "growth.header.source",
-                        comment: "Growth table header: source column"
+                    Text(
+                        NSLocalizedString(
+                            "growth.header.source",
+                            comment: "Growth table header: source column"
+                        )
                     )
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
+                Divider()
+
+                // Rows
+                List(rows, id: \.id) { p in
+                    GrowthRowView(
+                        p: p,
+                        formatDate: formatDate,
+                        formatNumber: formatNumber,
+                        onDelete: {
+                            do {
+                                try appState.deleteGrowthPointIfManual(p)
+                                scheduleReload()
+                            } catch {
+                                print("deleteGrowthPointIfManual error: \(error)")
+                            }
+                        }
+                    )
+                }
+                .listStyle(.inset)
+                .hideListBackgroundIfAvailable()
+                .frame(minHeight: 240)
+
+                // Empty state
+                if rows.isEmpty {
+                    Text(
+                        NSLocalizedString(
+                            "growth.empty",
+                            comment: "Shown when no growth records are found for the selected patient"
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 12)
+                    .padding(.horizontal, 12)
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            Divider()
-
-            // Rows
-            List(rows, id: \.id) { p in
-                GrowthRowView(
-                    p: p,
-                    formatDate: formatDate,
-                    formatNumber: formatNumber,
-                    onDelete: {
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.secondary.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.18))
+            )
+            .padding(.horizontal, 24)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .onAppear { scheduleReload() }
+            .onChange(of: appState.selectedPatientID) { _, _ in
+                scheduleReload()
+            }
+            .onChange(of: appState.currentBundleURL) { _, _ in
+                scheduleReload()
+            }
+            .navigationTitle(
+                NSLocalizedString(
+                    "growth.nav.title",
+                    comment: "Navigation title for the growth table window"
+                )
+            )
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(
+                        NSLocalizedString(
+                            "generic.button.close",
+                            comment: "Toolbar button to close a sheet or window"
+                        )
+                    ) {
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                }
+                ToolbarItem(placement: .automatic) {
+                    Button { scheduleReload() } label: {
+                        Label(
+                            NSLocalizedString(
+                                "growth.toolbar.refresh",
+                                comment: "Toolbar button to refresh growth records"
+                            ),
+                            systemImage: "arrow.clockwise"
+                        )
+                    }
+                    .keyboardShortcut("r", modifiers: [.command])
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showAddSheet = true
+                    } label: {
+                        Label(
+                            NSLocalizedString(
+                                "growth.toolbar.add",
+                                comment: "Toolbar button to add a manual growth point"
+                            ),
+                            systemImage: "plus"
+                        )
+                    }
+                    .help(
+                        NSLocalizedString(
+                            "growth.toolbar.add.help",
+                            comment: "Help text for the button that adds a manual growth point"
+                        )
+                    )
+                }
+            }
+            .sheet(isPresented: $showAddSheet) {
+                ManualGrowthForm { date, weightKg, heightCm, headC in
+                    if let pid = appState.selectedPatientID {
+                        var df = ISO8601DateFormatter()
+                        df.formatOptions = [.withFullDate]
+                        let iso = df.string(from: date)
                         do {
-                            try appState.deleteGrowthPointIfManual(p)
+                            try appState.addGrowthPointManual(
+                                patientID: pid,
+                                recordedAtISO: iso,
+                                weightKg: weightKg,
+                                heightCm: heightCm,
+                                headCircumferenceCm: headC,
+                                episodeID: nil
+                            )
                             scheduleReload()
                         } catch {
-                            print("deleteGrowthPointIfManual error: \(error)")
+                            print("addGrowthPointManual error: \(error)")
                         }
                     }
-                )
-            }
-            .listStyle(.inset)
-            .frame(minHeight: 240)
-
-            // Empty state (kept INSIDE the VStack so modifiers below apply to the whole view)
-            if rows.isEmpty {
-                Text(
-                    NSLocalizedString(
-                        "growth.empty",
-                        comment: "Shown when no growth records are found for the selected patient"
-                    )
-                )
-                .foregroundStyle(.secondary)
-                .padding(.top, 12)
+                }
             }
         }
-        .frame(minWidth: 720, minHeight: 420)
-        .onAppear { scheduleReload() }
-        .onChange(of: appState.selectedPatientID) { _, _ in
-            scheduleReload()
-        }
-        .onChange(of: appState.currentBundleURL) { _, _ in
-            scheduleReload()
-        }
-        .navigationTitle(
-            NSLocalizedString(
-                "growth.nav.title",
-                comment: "Navigation title for the growth table window"
-            )
+        #if os(macOS)
+        .frame(
+            minWidth: 980,
+            idealWidth: 1080,
+            maxWidth: 1300,
+            minHeight: 520,
+            idealHeight: 680,
+            maxHeight: 900,
+            alignment: .top
         )
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(
-                    NSLocalizedString(
-                        "generic.button.close",
-                        comment: "Toolbar button to close a sheet or window"
-                    )
-                ) {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-            }
-            ToolbarItem(placement: .automatic) {
-                Button { scheduleReload() } label: {
-                    Label(
-                        NSLocalizedString(
-                            "growth.toolbar.refresh",
-                            comment: "Toolbar button to refresh growth records"
-                        ),
-                        systemImage: "arrow.clockwise"
-                    )
-                }
-                .keyboardShortcut("r", modifiers: [.command])
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showAddSheet = true
-                } label: {
-                    Label(
-                        NSLocalizedString(
-                            "growth.toolbar.add",
-                            comment: "Toolbar button to add a manual growth point"
-                        ),
-                        systemImage: "plus"
-                    )
-                }
-                .help(
-                    NSLocalizedString(
-                        "growth.toolbar.add.help",
-                        comment: "Help text for the button that adds a manual growth point"
-                    )
-                )
-            }
-        }
-        .sheet(isPresented: $showAddSheet) {
-            ManualGrowthForm { date, weightKg, heightCm, headC in
-                if let pid = appState.selectedPatientID {
-                    var df = ISO8601DateFormatter()
-                    df.formatOptions = [.withFullDate]
-                    let iso = df.string(from: date)
-                    do {
-                        try appState.addGrowthPointManual(
-                            patientID: pid,
-                            recordedAtISO: iso,
-                            weightKg: weightKg,
-                            heightCm: heightCm,
-                            headCircumferenceCm: headC,
-                            episodeID: nil
-                        )
-                        scheduleReload()
-                    } catch {
-                        print("addGrowthPointManual error: \(error)")
-                    }
-                }
-            }
-        }
+        #endif
     }
 
     /// Schedule a reload on the next runloop turn to avoid layout-time state mutations.
@@ -307,65 +344,78 @@ private struct ManualGrowthForm: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section(
-                    NSLocalizedString(
-                        "growth.form.section.date",
-                        comment: "Section title for selecting the growth record date"
-                    )
-                ) {
-                    DatePicker(
-                        NSLocalizedString(
-                            "growth.form.label.recorded-date",
-                            comment: "Label for the date picker in the growth form"
-                        ),
-                        selection: $date,
-                        displayedComponents: .date
-                    )
-                }
-                Section(
-                    NSLocalizedString(
-                        "growth.form.section.measurements",
-                        comment: "Section title for entering growth measurements"
-                    )
-                ) {
-                    TextField(
-                        NSLocalizedString(
-                            "growth.form.field.weight-kg",
-                            comment: "Text field placeholder for weight in kilograms"
-                        ),
-                        text: $weightText
-                    )
-                    .decimalKeyboardIfAvailable()
+            HStack {
+                Spacer(minLength: 0)
 
-                    TextField(
+                Form {
+                    Section(
                         NSLocalizedString(
-                            "growth.form.field.height-cm",
-                            comment: "Text field placeholder for height in centimeters"
-                        ),
-                        text: $heightText
-                    )
-                    .decimalKeyboardIfAvailable()
-
-                    TextField(
-                        NSLocalizedString(
-                            "growth.form.field.headc-cm",
-                            comment: "Text field placeholder for head circumference in centimeters"
-                        ),
-                        text: $headText
-                    )
-                    .decimalKeyboardIfAvailable()
-
-                    Text(
-                        NSLocalizedString(
-                            "growth.form.hint.optional-fields",
-                            comment: "Hint explaining that growth fields can be left blank to skip"
+                            "growth.form.section.date",
+                            comment: "Section title for selecting the growth record date"
                         )
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    ) {
+                        DatePicker(
+                            NSLocalizedString(
+                                "growth.form.label.recorded-date",
+                                comment: "Label for the date picker in the growth form"
+                            ),
+                            selection: $date,
+                            displayedComponents: .date
+                        )
+                    }
+
+                    Section(
+                        NSLocalizedString(
+                            "growth.form.section.measurements",
+                            comment: "Section title for entering growth measurements"
+                        )
+                    ) {
+                        TextField(
+                            NSLocalizedString(
+                                "growth.form.field.weight-kg",
+                                comment: "Text field placeholder for weight in kilograms"
+                            ),
+                            text: $weightText
+                        )
+                        .decimalKeyboardIfAvailable()
+
+                        TextField(
+                            NSLocalizedString(
+                                "growth.form.field.height-cm",
+                                comment: "Text field placeholder for height in centimeters"
+                            ),
+                            text: $heightText
+                        )
+                        .decimalKeyboardIfAvailable()
+
+                        TextField(
+                            NSLocalizedString(
+                                "growth.form.field.headc-cm",
+                                comment: "Text field placeholder for head circumference in centimeters"
+                            ),
+                            text: $headText
+                        )
+                        .decimalKeyboardIfAvailable()
+
+                        Text(
+                            NSLocalizedString(
+                                "growth.form.hint.optional-fields",
+                                comment: "Hint explaining that growth fields can be left blank to skip"
+                            )
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
                 }
+                // Keep a readable max width, but allow the sheet to be wider so long labels don't clip.
+                .frame(maxWidth: 680, alignment: .topLeading)
+
+                Spacer(minLength: 0)
             }
+            // Add breathing room so the form isn't flush against the sheet edges.
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
             .navigationTitle(
                 NSLocalizedString(
                     "growth.form.title",
@@ -408,6 +458,16 @@ private struct ManualGrowthForm: View {
                 }
             }
         }
+        // macOS sheet sizing: wide enough for long labels, but not overly tall.
+        .frame(
+            minWidth: 760,
+            idealWidth: 820,
+            maxWidth: 920,
+            minHeight: 420,
+            idealHeight: 520,
+            maxHeight: 720,
+            alignment: .top
+        )
     }
 
     /// Locale-aware decimal parsing; returns nil for empty/invalid.
