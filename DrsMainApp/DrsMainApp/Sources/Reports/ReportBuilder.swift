@@ -996,9 +996,7 @@ if visibility?.showMilestones ?? true {
         
         // Addenda (if any) – always rendered at end of report body
         if let addendaSection = makeAddendaSection(data.addenda) {
-            para(addendaSection.title,
-                 font: headerFont,
-                 background: subSectionBG)
+            para(addendaSection.title, font: headerFont, background: sectionBG)
 
             let bodyText = addendaSection.body.trimmingCharacters(in: .whitespacesAndNewlines)
             para(bodyText.isEmpty ? "—" : bodyText, font: bodyFont)
@@ -2672,7 +2670,7 @@ extension ReportBuilder {
         // Addenda (if any) – always rendered at end of report body
         if let addendaSection = makeAddendaSection(data.addenda) {
             // If your sick section titles use a background (e.g. sectionBG), feel free to add it here too.
-            para(addendaSection.title, font: headerFont /*, background: sectionBG */)
+            para(addendaSection.title, font: headerFont, background: sectionBG)
 
             let bodyText = addendaSection.body.trimmingCharacters(in: .whitespacesAndNewlines)
             para(bodyText.isEmpty ? "—" : bodyText, font: bodyFont)
@@ -4128,7 +4126,8 @@ extension ReportBuilder {
             L("report.docx.heading.icd10", comment: "DOCX heading detection: ICD-10"),
             L("report.docx.heading.plan_anticipatory", comment: "DOCX heading detection: Plan & Anticipatory Guidance"),
             L("report.docx.heading.medications", comment: "DOCX heading detection: Medications"),
-            L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit")
+            L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit"),
+            L("report.section.addenda", comment: "DOCX heading detection: Addenda")
         ]
         // Top-level headings use the stronger section header background.
         let topHeadingSet: Set<String> = [
@@ -4180,7 +4179,8 @@ extension ReportBuilder {
             L("report.docx.heading.icd10", comment: "DOCX heading detection: ICD-10"),
             L("report.docx.heading.plan_anticipatory", comment: "DOCX heading detection: Plan & Anticipatory Guidance"),
             L("report.docx.heading.medications", comment: "DOCX heading detection: Medications"),
-            L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit")
+            L("report.docx.heading.followup_next_visit", comment: "DOCX heading detection: Follow-up / Next Visit"),
+            L("report.section.addenda", comment: "DOCX heading detection: Addenda")
         ]
         let sickSectionHeadingSetNorm = Set(sickSectionHeadingSet.map(normalizeHeading))
 
@@ -4193,6 +4193,9 @@ extension ReportBuilder {
         // system subheaders like "Général", "ORL", etc.
         let physicalExamHeadingNorm = normalizeHeading(
             L("report.docx.heading.physical_examination", comment: "DOCX heading detection: Physical Examination")
+        )
+        let addendaHeadingNorm = normalizeHeading(
+            L("report.section.addenda", comment: "DOCX heading detection: Addenda")
         )
         var inSickPhysicalExamSection = false
 
@@ -4226,6 +4229,10 @@ extension ReportBuilder {
                 // Fallback for locales/wording drift: previous visits findings header
                 || (lc.contains("visites de suivi") && (lc.contains("préc") || lc.contains("preced")))
                 || (lc.contains("previous") && lc.contains("visit")) {
+                styledParagraphs.append((s, "PediSectionHeader"))
+
+            } else if sNorm == addendaHeadingNorm {
+                // Addenda should look like a real section header (same pale-blue background as other sections)
                 styledParagraphs.append((s, "PediSectionHeader"))
 
             } else if sickSectionHeadingSetNorm.contains(sNorm) || lc == "ai assistant" {
