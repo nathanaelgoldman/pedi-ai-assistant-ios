@@ -16,7 +16,30 @@ import OSLog
 import SQLite3
 
 // SQLite helper: transient destructor pointer for sqlite3_bind_text
+
 fileprivate let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+// MARK: - Standard sheet card styling (shared look across sheets)
+fileprivate struct SheetCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.18), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Apply the standard “card in a sheet” look.
+    func sheetCardStyle() -> some View {
+        self.modifier(SheetCardStyle())
+    }
+}
 
 /// Form for creating or editing a sick episode.
 /// This version focuses on a stable UI; persistence will be wired in next.
@@ -79,6 +102,14 @@ struct SickEpisodeForm: View {
     @State private var aiPromptPreview: String = ""
     @State private var selectedAIHistoryID: Int? = nil
 
+    // MARK: - Addenda
+    @State private var addenda: [VisitAddendum] = []
+    @State private var newAddendumText: String = ""
+    @State private var addendaIsLoading: Bool = false
+    @State private var addendaErrorMessage: String? = nil
+
+    private let episodeStore = EpisodeStore()
+
     // MARK: - Vitals (UI fields)
     @State private var weightKgField: String = ""
     @State private var heightCmField: String = ""
@@ -92,6 +123,8 @@ struct SickEpisodeForm: View {
     @State private var recordedAtField: String = ""
     @State private var replacePreviousVitals: Bool = false
     @EnvironmentObject var clinicianStore: ClinicianStore
+    
+    
 
     // In-memory vitals history for the current episode
     fileprivate struct VitalsRow: Identifiable {
@@ -166,472 +199,615 @@ struct SickEpisodeForm: View {
     init(editingEpisodeID: Int? = nil) {
         self.editingEpisodeID = editingEpisodeID
     }
+    // Precomputed title text to keep `body` type-checking fast.
+    private var formTitleText: String {
+        if let id = editingEpisodeID {
+            return String(
+                format: NSLocalizedString(
+                    "sickEpisode.title.editWithID",
+                    comment: "Title for editing an existing sick episode with its numeric ID"
+                ),
+                id
+            )
+        } else {
+            return NSLocalizedString(
+                "sickEpisode.title.new",
+                comment: "Title for creating a new sick episode"
+            )
+        }
+    }
+    
+    private func vitalsBadgesRow(_ badges: [String]) -> some View {
+        HStack(spacing: 8) {
+            ForEach(badges, id: \.self) { b in
+                Text(b)
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(.bottom, 4)
+    }
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+
+    // MARK: - View sections (split up to help the compiler type-check faster)
+
+    private var headerView: some View {
+        HStack {
+            Image(systemName: "stethoscope")
+                .font(.system(size: 22))
+            Text(formTitleText)
+                .font(.title2.bold())
+            Spacer()
+        }
+    }
+
+    private var vitalsBadgesList: [String] {
+        vitalsBadges()
+    }
+
+    private var vitalsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(NSLocalizedString("sick_episode_form.vitals.section_title", comment: "Section header for vitals"))
+
+            // Live vitals classification badges
+            let badges = vitalsBadgesList
+            if !badges.isEmpty {
+                vitalsBadgesRow(badges)
+            }
+
+            if activeEpisodeID == nil {
+                Text(NSLocalizedString("sick_episode_form.vitals.save_episode_first_hint", comment: "Hint explaining that vitals entry is available only after saving the episode"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+                    GridRow {
+                        TextField(NSLocalizedString("sick_episode_form.vitals.weight_kg.placeholder", comment: "Placeholder for weight in kilograms"), text: $weightKgField)
+                            .textFieldStyle(.roundedBorder)
+                        TextField(NSLocalizedString("sick_episode_form.vitals.height_cm.placeholder", comment: "Placeholder for height in centimeters"), text: $heightCmField)
+                            .textFieldStyle(.roundedBorder)
+                        TextField(NSLocalizedString("sick_episode_form.vitals.head_circ_cm.placeholder", comment: "Placeholder for head circumference in centimeters"), text: $headCircumferenceField)
+                            .textFieldStyle(.roundedBorder)
+                        TextField(NSLocalizedString("sick_episode_form.vitals.temperature_c.placeholder", comment: "Placeholder for temperature in Celsius"), text: $temperatureCField)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        TextField(NSLocalizedString("sick_episode_form.vitals.hr_bpm.placeholder", comment: "Placeholder for heart rate in beats per minute"), text: $heartRateField)
+                            .textFieldStyle(.roundedBorder)
+                        TextField(NSLocalizedString("sick_episode_form.vitals.rr_per_min.placeholder", comment: "Placeholder for respiratory rate per minute"), text: $respiratoryRateField)
+                            .textFieldStyle(.roundedBorder)
+                        TextField(NSLocalizedString("sick_episode_form.vitals.spo2_percent.placeholder", comment: "Placeholder for oxygen saturation in percent"), text: $spo2Field)
+                            .textFieldStyle(.roundedBorder)
+                        HStack {
+                            TextField(NSLocalizedString("sick_episode_form.vitals.bp_systolic.placeholder", comment: "Placeholder for systolic blood pressure"), text: $bpSysField)
+                                .textFieldStyle(.roundedBorder)
+                            TextField(NSLocalizedString("sick_episode_form.vitals.bp_diastolic.placeholder", comment: "Placeholder for diastolic blood pressure"), text: $bpDiaField)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    GridRow {
+                        TextField(NSLocalizedString("sick_episode_form.vitals.recorded_at_iso8601.placeholder", comment: "Placeholder for recorded-at timestamp"), text: $recordedAtField)
+                            .textFieldStyle(.roundedBorder)
+                            .help(NSLocalizedString("sick_episode_form.vitals.recorded_at_iso8601.help", comment: "Help text for recorded-at field"))
+                        Toggle(NSLocalizedString("sick_episode_form.vitals.replace_previous_toggle", comment: "Option to replace existing vitals for this episode"), isOn: $replacePreviousVitals)
+                            .toggleStyle(.switch)
+                            .gridCellColumns(3)
+                    }
+                }
+
+                HStack {
+                    Button {
+                        saveVitalsTapped()
+                    } label: {
+                        Label(NSLocalizedString("sick_episode_form.vitals.save_button", comment: "Button to save vitals"), systemImage: "heart.text.square")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(activeEpisodeID == nil)
+
+                    Spacer()
+                }
+
+                if !vitalsHistory.isEmpty {
+                    Divider()
+                    Text(NSLocalizedString("sick_episode_form.vitals.history_title", comment: "Header for vitals history list"))
+                        .font(.subheadline.bold())
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(vitalsHistory) { row in
+                            HStack {
+                                Text(row.recordedAt)
+                                    .font(.caption.monospaced())
+                                Spacer()
+                                Text(summary(for: row))
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                    HStack {
+                        Picker(NSLocalizedString("sick_episode_form.vitals.delete_picker.title", comment: "Title for the vitals row deletion picker"), selection: $vitalsDeleteSelection) {
+                            Text(NSLocalizedString("sick_episode_form.vitals.delete_picker.none", comment: "Placeholder option for no vitals row selected"))
+                                .tag(Int64?.none)
+                            ForEach(vitalsHistory) { row in
+                                Text("\(row.recordedAt)")
+                                    .tag(Optional(row.id))
+                            }
+                        }
+                        .labelsHidden()
+
+                        Button(role: .destructive) {
+                            deleteSelectedVitals()
+                        } label: {
+                            Label(NSLocalizedString("sick_episode_form.vitals.delete_button", comment: "Button label to delete the selected vitals row"), systemImage: "trash")
+                        }
+                        .disabled(vitalsDeleteSelection == nil)
+                    }
+                } else {
+                    Text(NSLocalizedString("sick_episode_form.vitals.none_message", comment: "Message when no vitals have been recorded"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    private var twoColumnSection: some View {
+        HStack(alignment: .top, spacing: 20) {
+            // Column A (left)
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(NSLocalizedString("sick_episode_form.section.main_complaint", comment: "Section header for main complaint"))
+                complaintBlock
+
+                SectionHeader(NSLocalizedString("sick_episode_form.section.hpi", comment: "Section header for HPI"))
+                pickerRow(NSLocalizedString("sick_episode_form.hpi.appearance.label", comment: "Label for appearance picker"), $appearance, appearanceChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.hpi.feeding.label", comment: "Label for feeding picker"), $feeding, feedingChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.hpi.breathing.label", comment: "Label for breathing picker"), $breathing, breathingChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.hpi.urination.label", comment: "Label for urination picker"), $urination, urinationChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.hpi.pain.label", comment: "Label for pain picker"), $pain, painChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.hpi.stools.label", comment: "Label for stools picker"), $stools, stoolsChoices)
+                multiSelectChips(title: NSLocalizedString("sick_episode_form.hpi.context.label", comment: "Label for context multiselect"), options: contextChoices, selection: $context)
+                TextField(NSLocalizedString("sick_episode_form.hpi.summary.placeholder", comment: "Placeholder for HPI summary"), text: $hpi, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(3...6)
+                TextField(NSLocalizedString("sick_episode_form.hpi.duration_hours.placeholder", comment: "Placeholder for duration in hours"), text: $duration)
+                    .textFieldStyle(.roundedBorder)
+
+                additionalPEInfoSection()
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            // Column B (right)
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(NSLocalizedString("sick_episode_form.section.physical_exam", comment: "Section header for physical exam"))
+                pickerRow(NSLocalizedString("sick_episode_form.pe.general_appearance.label", comment: "Label for general appearance picker"), $generalAppearance, generalChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.hydration.label", comment: "Label for hydration picker"), $hydration, hydrationChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.color_hemodynamics.label", comment: "Label for color/hemodynamics picker"), $color, colorChoices)
+                multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.skin.label", comment: "Label for skin multiselect"), options: skinOptionsMulti, selection: $skinSet)
+                multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.ent.label", comment: "Label for ENT multiselect"), options: entChoices, selection: $ent)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.right_ear.label", comment: "Label for right ear picker"), $rightEar, earChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.left_ear.label", comment: "Label for left ear picker"), $leftEar, earChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.right_eye.label", comment: "Label for right eye picker"), $rightEye, eyeChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.left_eye.label", comment: "Label for left eye picker"), $leftEye, eyeChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.heart.label", comment: "Label for heart picker"), $heart, heartChoices)
+                multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.lungs.label", comment: "Label for lungs multiselect"), options: lungsOptionsMulti, selection: $lungsSet)
+                multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.abdomen.label", comment: "Label for abdomen multiselect"), options: abdomenOptionsMulti, selection: $abdomenSet)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.peristalsis.label", comment: "Label for peristalsis picker"), $peristalsis, peristalsisChoices)
+                multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.genitalia.label", comment: "Label for genitalia multiselect"), options: genitaliaOptionsMulti, selection: $genitaliaSet)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.neurological.label", comment: "Label for neurological picker"), $neurological, neuroChoices)
+                pickerRow(NSLocalizedString("sick_episode_form.pe.musculoskeletal.label", comment: "Label for musculoskeletal picker"), $musculoskeletal, mskChoices)
+                multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.lymph_nodes.label", comment: "Label for lymph nodes multiselect"), options: nodesOptionsMulti, selection: $lymphNodesSet)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var planSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(NSLocalizedString("sick_episode_form.section.problem_listing", comment: "Section header for problem listing"))
+            HStack {
+                Button {
+                    generateProblemList()
+                } label: {
+                    Label(NSLocalizedString("sick_episode_form.problem_listing.generate_button", comment: "Button to generate problem listing"), systemImage: "brain.head.profile")
+                }
+                .buttonStyle(.borderedProminent)
+                .help(NSLocalizedString("sick_episode_form.problem_listing.generate_help", comment: "Help for generating problem listing"))
+                Spacer()
+            }
+            TextEditor(text: $problemListing)
+                .frame(minHeight: 120)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+            TextField(NSLocalizedString("sick_episode_form.problem_listing.complementary_investigations.placeholder", comment: "Placeholder for complementary investigations"), text: $complementaryInvestigations, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+            TextField(NSLocalizedString("sick_episode_form.problem_listing.working_diagnosis.placeholder", comment: "Placeholder for working diagnosis"), text: $diagnosis)
+                .textFieldStyle(.roundedBorder)
+            TextField(NSLocalizedString("sick_episode_form.problem_listing.icd10.placeholder", comment: "Placeholder for ICD-10 code(s)"), text: $icd10)
+                .textFieldStyle(.roundedBorder)
+            SectionHeader(NSLocalizedString("sick_episode_form.section.plan", comment: "Section header for plan"))
+            TextEditor(text: $medications)
+                .frame(minHeight: 80)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+            pickerRow(NSLocalizedString("sick_episode_form.plan.anticipatory_guidance.label", comment: "Label for anticipatory guidance picker"), $anticipatoryGuidance, guidanceChoices)
+        }
+        .padding(.top, 8)
+    }
+
+    private var aiSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(NSLocalizedString("sick_episode_form.section.ai_assistance", comment: "Section header for AI assistance"))
+            Text(NSLocalizedString("sick_episode_form.ai_assistance.description", comment: "Description of AI assistance behavior"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button {
+                    triggerGuidelineFlags()
+                } label: {
+                    Label(NSLocalizedString("sick_episode_form.ai_assistance.check_guideline_flags.button", comment: "Button to check JSON guideline flags"), systemImage: "exclamationmark.triangle")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    triggerAIForEpisode()
+                } label: {
+                    if aiIsRunning {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .padding(.trailing, 4)
+                        Text(NSLocalizedString("sick_episode_form.ai_assistance.asking_ai.status", comment: "Status text while AI is running"))
+                    } else {
+                        Label(NSLocalizedString("sick_episode_form.ai_assistance.ask_ai.button", comment: "Button to send query to AI"), systemImage: "sparkles")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(aiIsRunning)
+
+                Button {
+                    previewAIPrompt()
+                } label: {
+                    Label(NSLocalizedString("sick_episode_form.ai_assistance.preview_ai_json.button", comment: "Button to preview AI JSON payload"), systemImage: "doc.plaintext")
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+            }
+
+            // --- keep the rest of the existing AI UI exactly as-is, but moved here ---
+            
+            // ICD-10 suggestion UI (AI Assistance)
+            if let icdSuggestion = appState.icd10SuggestionForActiveEpisode,
+               !icdSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("sick_episode_form.ai_assistance.suggested_icd10.header", comment: "Header for suggested ICD-10 code"))
+                        .font(.subheadline.bold())
+                    Text(icdSuggestion)
+                        .font(.caption)
+                        .textSelection(.enabled)
 
                     HStack {
-                        Image(systemName: "stethoscope")
-                            .font(.system(size: 22))
-                        Text(
-                            editingEpisodeID == nil
-                            ? NSLocalizedString("sickEpisode.title.new", comment: "Title for creating a new sick episode")
-                            : String(
-                                format: NSLocalizedString("sickEpisode.title.editWithID", comment: "Title for editing an existing sick episode with its numeric ID"),
-                                editingEpisodeID!
-                              )
-                        )
-                        .font(.title2.bold())
+                        Button {
+                            icd10 = icdSuggestion
+                        } label: {
+                            Label(NSLocalizedString("sick_episode_form.ai_assistance.apply_to_icd10.button", comment: "Button label to apply suggested ICD-10"), systemImage: "arrow.down.doc")
+                        }
+                        .buttonStyle(.bordered)
+
+                        if !icd10.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_replace_warning", comment: "Warning about replacing current ICD-10 field"))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
                         Spacer()
                     }
+                }
+                .padding(8)
+                .background(Color.green.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
 
-                  // Vitals (moved to top)
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(NSLocalizedString("sick_episode_form.vitals.section_title", comment: "Section header for vitals"))
-                        // Live vitals classification badges
-                        let badges = vitalsBadges()
-                        if !badges.isEmpty {
-                            HStack(spacing: 8) {
-                                ForEach(badges, id: \.self) { b in
-                                    Text(b)
-                                        .font(.caption2)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(Color.secondary.opacity(0.12))
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                }
+            // All ICD-10-like codes detected in the latest AI note
+            if !appState.aiICD10CandidatesForActiveEpisode.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_candidates.header", comment: "Header for ICD-10 codes found in AI note"))
+                        .font(.subheadline.bold())
+
+                    Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_candidates.instruction", comment: "Instruction for using ICD-10 candidate buttons"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 70), spacing: 8)],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
+                        ForEach(appState.aiICD10CandidatesForActiveEpisode, id: \.self) { code in
+                            Button {
+                                appendICD10Code(code)
+                            } label: {
+                                Text(code)
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
                             }
-                            .padding(.bottom, 4)
+                            .buttonStyle(.bordered)
                         }
-                        if activeEpisodeID == nil {
-                            Text(NSLocalizedString("sick_episode_form.vitals.save_episode_first_hint", comment: "Hint explaining that vitals entry is available only after saving the episode"))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
-                                GridRow {
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.weight_kg.placeholder", comment: "Placeholder for weight in kilograms"), text: $weightKgField)
-                                        .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.height_cm.placeholder", comment: "Placeholder for height in centimeters"), text: $heightCmField)
-                                        .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.head_circ_cm.placeholder", comment: "Placeholder for head circumference in centimeters"), text: $headCircumferenceField)
-                                        .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.temperature_c.placeholder", comment: "Placeholder for temperature in Celsius"), text: $temperatureCField)
-                                        .textFieldStyle(.roundedBorder)
-                                }
-                                GridRow {
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.hr_bpm.placeholder", comment: "Placeholder for heart rate in beats per minute"), text: $heartRateField)
-                                        .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.rr_per_min.placeholder", comment: "Placeholder for respiratory rate per minute"), text: $respiratoryRateField)
-                                        .textFieldStyle(.roundedBorder)
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.spo2_percent.placeholder", comment: "Placeholder for oxygen saturation in percent"), text: $spo2Field)
-                                        .textFieldStyle(.roundedBorder)
-                                    HStack {
-                                        TextField(NSLocalizedString("sick_episode_form.vitals.bp_systolic.placeholder", comment: "Placeholder for systolic blood pressure"), text: $bpSysField)
-                                            .textFieldStyle(.roundedBorder)
-                                        TextField(NSLocalizedString("sick_episode_form.vitals.bp_diastolic.placeholder", comment: "Placeholder for diastolic blood pressure"), text: $bpDiaField)
-                                            .textFieldStyle(.roundedBorder)
-                                    }
-                                }
-                                GridRow {
-                                    TextField(NSLocalizedString("sick_episode_form.vitals.recorded_at_iso8601.placeholder", comment: "Placeholder for recorded-at timestamp"), text: $recordedAtField)
-                                        .textFieldStyle(.roundedBorder)
-                                        .help(NSLocalizedString("sick_episode_form.vitals.recorded_at_iso8601.help", comment: "Help text for recorded-at field"))
-                                    Toggle(NSLocalizedString("sick_episode_form.vitals.replace_previous_toggle", comment: "Option to replace existing vitals for this episode"), isOn: $replacePreviousVitals)
-                                        .toggleStyle(.switch)
-                                        .gridCellColumns(3)
-                                }
-                            }
+                    }
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
 
-                            HStack {
-                                Button {
-                                    saveVitalsTapped()
-                                } label: {
-                                    Label(NSLocalizedString("sick_episode_form.vitals.save_button", comment: "Button to save vitals"), systemImage: "heart.text.square")
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(activeEpisodeID == nil)
+            if !appState.aiGuidelineFlagsForActiveEpisode.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("sick_episode_form.ai_assistance.guideline_flags.header", comment: "Header for guideline flags from local JSON"))
+                        .font(.subheadline.bold())
+                    ForEach(appState.aiGuidelineFlagsForActiveEpisode, id: \.self) { flag in
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "info.circle")
+                                .foregroundStyle(.yellow)
+                            Text(flag)
+                                .font(.caption)
+                        }
+                    }
+                }
+                .padding(8)
+                .background(Color.yellow.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
 
-                                Spacer()
-                            }
-
-                            if !vitalsHistory.isEmpty {
-                                Divider()
-                                Text(NSLocalizedString("sick_episode_form.vitals.history_title", comment: "Header for vitals history list")).font(.subheadline.bold())
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ForEach(vitalsHistory) { row in
-                                        HStack {
-                                            Text(row.recordedAt).font(.caption.monospaced())
-                                            Spacer()
-                                            Text(summary(for: row)).font(.caption)
-                                        }
-                                    }
-                                }
-                          HStack {
-                              Picker(NSLocalizedString("sick_episode_form.vitals.delete_picker.title", comment: "Title for the vitals row deletion picker"), selection: $vitalsDeleteSelection) {
-                                  Text(NSLocalizedString("sick_episode_form.vitals.delete_picker.none", comment: "Placeholder option for no vitals row selected")).tag(Int64?.none)
-                                  ForEach(vitalsHistory) { row in
-                                      Text("\(row.recordedAt)").tag(Optional(row.id))
-                                  }
-                              }
-                              .labelsHidden()
-
-                              Button(role: .destructive) {
-                                  deleteSelectedVitals()
-                              } label: {
-                                  Label(NSLocalizedString("sick_episode_form.vitals.delete_button", comment: "Button label to delete the selected vitals row"), systemImage: "trash")
-                              }
-                              .disabled(vitalsDeleteSelection == nil)
-                          }
-                            } else {
-                                Text(NSLocalizedString("sick_episode_form.vitals.none_message", comment: "Message when no vitals have been recorded"))
-                                    .font(.caption)
+            if !appState.aiSummariesForActiveEpisode.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("sick_episode_form.ai_assistance.ai_notes.header", comment: "Header for AI notes per provider"))
+                        .font(.subheadline.bold())
+                    ForEach(appState.aiSummariesForActiveEpisode.keys.sorted(), id: \.self) { provider in
+                        if let text = appState.aiSummariesForActiveEpisode[provider] {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(provider == "local-stub"
+                                     ? NSLocalizedString("sick_episode_form.ai_assistance.ai_stub.label", comment: "Label for local stub AI provider")
+                                     : provider)
+                                    .font(.caption.bold())
                                     .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(.top, 8)
-
-                    Divider()
-
-                    // Two columns using HStack (forces top alignment)
-                    HStack(alignment: .top, spacing: 20) {
-                        // Column A (left)
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(NSLocalizedString("sick_episode_form.section.main_complaint", comment: "Section header for main complaint"))
-                            complaintBlock
-
-                            SectionHeader(NSLocalizedString("sick_episode_form.section.hpi", comment: "Section header for HPI"))
-                            pickerRow(NSLocalizedString("sick_episode_form.hpi.appearance.label", comment: "Label for appearance picker"), $appearance, appearanceChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.hpi.feeding.label", comment: "Label for feeding picker"), $feeding, feedingChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.hpi.breathing.label", comment: "Label for breathing picker"), $breathing, breathingChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.hpi.urination.label", comment: "Label for urination picker"), $urination, urinationChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.hpi.pain.label", comment: "Label for pain picker"), $pain, painChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.hpi.stools.label", comment: "Label for stools picker"), $stools, stoolsChoices)
-                            multiSelectChips(title: NSLocalizedString("sick_episode_form.hpi.context.label", comment: "Label for context multiselect"), options: contextChoices, selection: $context)
-                            TextField(NSLocalizedString("sick_episode_form.hpi.summary.placeholder", comment: "Placeholder for HPI summary"), text: $hpi, axis: .vertical)
-                                .textFieldStyle(.roundedBorder)
-                                .lineLimit(3...6)
-                            TextField(NSLocalizedString("sick_episode_form.hpi.duration_hours.placeholder", comment: "Placeholder for duration in hours"), text: $duration)
-                                .textFieldStyle(.roundedBorder)
-
-                            additionalPEInfoSection()
-                        }
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                        // Column B (right)
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(NSLocalizedString("sick_episode_form.section.physical_exam", comment: "Section header for physical exam"))
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.general_appearance.label", comment: "Label for general appearance picker"), $generalAppearance, generalChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.hydration.label", comment: "Label for hydration picker"), $hydration, hydrationChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.color_hemodynamics.label", comment: "Label for color/hemodynamics picker"), $color, colorChoices)
-                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.skin.label", comment: "Label for skin multiselect"), options: skinOptionsMulti, selection: $skinSet)
-                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.ent.label", comment: "Label for ENT multiselect"), options: entChoices, selection: $ent)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.right_ear.label", comment: "Label for right ear picker"), $rightEar, earChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.left_ear.label", comment: "Label for left ear picker"), $leftEar, earChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.right_eye.label", comment: "Label for right eye picker"), $rightEye, eyeChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.left_eye.label", comment: "Label for left eye picker"), $leftEye, eyeChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.heart.label", comment: "Label for heart picker"), $heart, heartChoices)
-                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.lungs.label", comment: "Label for lungs multiselect"), options: lungsOptionsMulti, selection: $lungsSet)
-                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.abdomen.label", comment: "Label for abdomen multiselect"), options: abdomenOptionsMulti, selection: $abdomenSet)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.peristalsis.label", comment: "Label for peristalsis picker"), $peristalsis, peristalsisChoices)
-                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.genitalia.label", comment: "Label for genitalia multiselect"), options: genitaliaOptionsMulti, selection: $genitaliaSet)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.neurological.label", comment: "Label for neurological picker"), $neurological, neuroChoices)
-                            pickerRow(NSLocalizedString("sick_episode_form.pe.musculoskeletal.label", comment: "Label for musculoskeletal picker"), $musculoskeletal, mskChoices)
-                            multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.lymph_nodes.label", comment: "Label for lymph nodes multiselect"), options: nodesOptionsMulti, selection: $lymphNodesSet)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                    }
-
-                    // Plan
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(NSLocalizedString("sick_episode_form.section.problem_listing", comment: "Section header for problem listing"))
-                        HStack {
-                            Button {
-                                generateProblemList()
-                            } label: {
-                                Label(NSLocalizedString("sick_episode_form.problem_listing.generate_button", comment: "Button to generate problem listing"), systemImage: "brain.head.profile")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .help(NSLocalizedString("sick_episode_form.problem_listing.generate_help", comment: "Help for generating problem listing"))
-                            Spacer()
-                        }
-                        TextEditor(text: $problemListing)
-                            .frame(minHeight: 120)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-                        TextField(NSLocalizedString("sick_episode_form.problem_listing.complementary_investigations.placeholder", comment: "Placeholder for complementary investigations"), text: $complementaryInvestigations, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
-                        TextField(NSLocalizedString("sick_episode_form.problem_listing.working_diagnosis.placeholder", comment: "Placeholder for working diagnosis"), text: $diagnosis)
-                            .textFieldStyle(.roundedBorder)
-                        TextField(NSLocalizedString("sick_episode_form.problem_listing.icd10.placeholder", comment: "Placeholder for ICD-10 code(s)"), text: $icd10)
-                            .textFieldStyle(.roundedBorder)
-                        SectionHeader(NSLocalizedString("sick_episode_form.section.plan", comment: "Section header for plan"))
-                        TextEditor(text: $medications)
-                            .frame(minHeight: 80)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-                        pickerRow(NSLocalizedString("sick_episode_form.plan.anticipatory_guidance.label", comment: "Label for anticipatory guidance picker"), $anticipatoryGuidance, guidanceChoices)
-                    }
-                    .padding(.top, 8)
-
-                    // AI assistance (JSON flags + API – stubbed for now)
-                    VStack(alignment: .leading, spacing: 10) {
-                        SectionHeader(NSLocalizedString("sick_episode_form.section.ai_assistance", comment: "Section header for AI assistance"))
-                        Text(NSLocalizedString("sick_episode_form.ai_assistance.description", comment: "Description of AI assistance behavior"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        HStack {
-                            Button {
-                                triggerGuidelineFlags()
-                            } label: {
-                                Label(NSLocalizedString("sick_episode_form.ai_assistance.check_guideline_flags.button", comment: "Button to check JSON guideline flags"), systemImage: "exclamationmark.triangle")
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button {
-                                triggerAIForEpisode()
-                            } label: {
-                                if aiIsRunning {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                        .padding(.trailing, 4)
-                                    Text(NSLocalizedString("sick_episode_form.ai_assistance.asking_ai.status", comment: "Status text while AI is running"))
-                                } else {
-                                    Label(NSLocalizedString("sick_episode_form.ai_assistance.ask_ai.button", comment: "Button to send query to AI"), systemImage: "sparkles")
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(aiIsRunning)
-
-                            Button {
-                                previewAIPrompt()
-                            } label: {
-                                Label(NSLocalizedString("sick_episode_form.ai_assistance.preview_ai_json.button", comment: "Button to preview AI JSON payload"), systemImage: "doc.plaintext")
-                            }
-                            .buttonStyle(.bordered)
-
-                            Spacer()
-                        }
-
-                        // ICD-10 suggestion UI (AI Assistance)
-                        if let icdSuggestion = appState.icd10SuggestionForActiveEpisode,
-                           !icdSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(NSLocalizedString("sick_episode_form.ai_assistance.suggested_icd10.header", comment: "Header for suggested ICD-10 code"))
-                                    .font(.subheadline.bold())
-                                Text(icdSuggestion)
+                                Text(text)
                                     .font(.caption)
-                                    .textSelection(.enabled)
+                            }
+                            .padding(6)
+                            .background(Color.blue.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                    }
+                }
+                .padding(8)
+                .background(Color.blue.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
 
-                                HStack {
-                                    Button {
-                                        // Apply the suggestion into the editable ICD-10 field.
-                                        icd10 = icdSuggestion
-                                    } label: {
-                                        Label(NSLocalizedString("sick_episode_form.ai_assistance.apply_to_icd10.button", comment: "Button label to apply suggested ICD-10"), systemImage: "arrow.down.doc")
-                                    }
-                                    .buttonStyle(.bordered)
-
-                                    if !icd10.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_replace_warning", comment: "Warning about replacing current ICD-10 field"))
+            if !appState.aiInputsForActiveEpisode.isEmpty {
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(appState.aiInputsForActiveEpisode) { row in
+                            Button {
+                                selectedAIHistoryID = row.id
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text(row.createdAtISO.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.time_na", comment: "Fallback when timestamp is not available") : row.createdAtISO)
+                                            .font(.caption2.monospaced())
+                                        Spacer()
+                                        Text(row.model.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.provider_unknown", comment: "Fallback when AI provider is unknown") : row.model)
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
-
-                                    Spacer()
+                                    Text(row.responsePreview.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.no_response_stored", comment: "Fallback when no AI response is stored") : row.responsePreview)
+                                        .font(.caption)
+                                        .lineLimit(2)
                                 }
+                                .padding(6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    (selectedAIHistoryID == row.id
+                                     ? Color.gray.opacity(0.12)
+                                     : Color.gray.opacity(0.04))
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
-                            .padding(8)
-                            .background(Color.green.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        
-                        // All ICD-10-like codes detected in the latest AI note
-                        if !appState.aiICD10CandidatesForActiveEpisode.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_candidates.header", comment: "Header for ICD-10 codes found in AI note"))
-                                    .font(.subheadline.bold())
-
-                                Text(NSLocalizedString("sick_episode_form.ai_assistance.icd10_candidates.instruction", comment: "Instruction for using ICD-10 candidate buttons"))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-
-                                // Simple adaptive grid of code buttons
-                                LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 70), spacing: 8)],
-                                    alignment: .leading,
-                                    spacing: 8
-                                ) {
-                                    ForEach(appState.aiICD10CandidatesForActiveEpisode, id: \.self) { code in
-                                        Button {
-                                            appendICD10Code(code)
-                                        } label: {
-                                            Text(code)
-                                                .font(.caption.bold())
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                        }
-                                        .buttonStyle(.bordered)
-                                    }
-                                }
-                            }
-                            .padding(8)
-                            .background(Color.orange.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .buttonStyle(.plain)
                         }
 
-                        if !appState.aiGuidelineFlagsForActiveEpisode.isEmpty {
+                        if let selectedID = selectedAIHistoryID,
+                           let selectedRow = appState.aiInputsForActiveEpisode.first(where: { $0.id == selectedID }) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(NSLocalizedString("sick_episode_form.ai_assistance.guideline_flags.header", comment: "Header for guideline flags from local JSON"))
+                                Text(NSLocalizedString("sick_episode_form.ai_assistance.history.selected_response.header", comment: "Header for selected AI response viewer"))
                                     .font(.subheadline.bold())
-                                ForEach(appState.aiGuidelineFlagsForActiveEpisode, id: \.self) { flag in
-                                    HStack(alignment: .top, spacing: 6) {
-                                        Image(systemName: "info.circle")
-                                            .foregroundStyle(.yellow)
-                                        Text(flag)
-                                            .font(.caption)
-                                    }
+                                ScrollView {
+                                    Text(selectedRow.fullResponse.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.no_response_stored", comment: "Fallback when no AI response is stored") : selectedRow.fullResponse)
+                                        .font(.caption)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
+                                .frame(minHeight: 120, maxHeight: 260)
+                                .padding(6)
+                                .background(Color.gray.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
-                            .padding(8)
-                            .background(Color.yellow.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
+                            .padding(.top, 8)
 
-                        if !appState.aiSummariesForActiveEpisode.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(NSLocalizedString("sick_episode_form.ai_assistance.ai_notes.header", comment: "Header for AI notes per provider"))
-                                    .font(.subheadline.bold())
-                                ForEach(appState.aiSummariesForActiveEpisode.keys.sorted(), id: \.self) { provider in
-                                    if let text = appState.aiSummariesForActiveEpisode[provider] {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(provider == "local-stub"
-                                                 ? NSLocalizedString("sick_episode_form.ai_assistance.ai_stub.label", comment: "Label for local stub AI provider")
-                                                 : provider)
-                                                .font(.caption.bold())
-                                                .foregroundStyle(.secondary)
-                                            Text(text)
-                                                .font(.caption)
-                                        }
-                                        .padding(6)
-                                        .background(Color.blue.opacity(0.04))
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    }
-                                }
-                            }
-                            .padding(8)
-                            .background(Color.blue.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-
-                        if !appState.aiInputsForActiveEpisode.isEmpty {
-                            DisclosureGroup {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    // Simple chronological list, newest → oldest (already sorted in AppState)
-                                    ForEach(appState.aiInputsForActiveEpisode) { row in
-                                        Button {
-                                            selectedAIHistoryID = row.id
-                                        } label: {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                HStack {
-                                                    Text(row.createdAtISO.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.time_na", comment: "Fallback when timestamp is not available") : row.createdAtISO)
-                                                        .font(.caption2.monospaced())
-                                                    Spacer()
-                                                    Text(row.model.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.provider_unknown", comment: "Fallback when AI provider is unknown") : row.model)
-                                                        .font(.caption2)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                                Text(row.responsePreview.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.no_response_stored", comment: "Fallback when no AI response is stored") : row.responsePreview)
-                                                    .font(.caption)
-                                                    .lineLimit(2)
-                                            }
-                                            .padding(6)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .background(
-                                                (selectedAIHistoryID == row.id
-                                                 ? Color.gray.opacity(0.12)
-                                                 : Color.gray.opacity(0.04))
-                                            )
-                                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-
-                                    // Full-response viewer for the selected history entry
-                                    if let selectedID = selectedAIHistoryID,
-                                       let selectedRow = appState.aiInputsForActiveEpisode.first(where: { $0.id == selectedID }) {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(NSLocalizedString("sick_episode_form.ai_assistance.history.selected_response.header", comment: "Header for selected AI response viewer"))
-                                                .font(.subheadline.bold())
-                                            ScrollView {
-                                                Text(selectedRow.fullResponse.isEmpty ? NSLocalizedString("sick_episode_form.ai_assistance.history.no_response_stored", comment: "Fallback when no AI response is stored") : selectedRow.fullResponse)
-                                                    .font(.caption)
-                                                    .textSelection(.enabled)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                            }
-                                            .frame(minHeight: 120, maxHeight: 260)
-                                            .padding(6)
-                                            .background(Color.gray.opacity(0.06))
-                                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                                        }
-                                        .padding(.top, 8)
-                                        // Deletion controls for the selected AI history entry
-                                        if let selectedID = selectedAIHistoryID {
-                                            HStack {
-                                                Spacer()
-                                                Button(role: .destructive) {
-                                                    deleteSelectedAIHistory()
-                                                } label: {
-                                                    Label(NSLocalizedString("sick_episode_form.ai_assistance.history.delete_entry.button", comment: "Button to delete selected AI history entry"), systemImage: "trash")
-                                                }
-                                            }
-                                            .padding(.top, 4)
-                                        }
+                            if let _ = selectedAIHistoryID {
+                                HStack {
+                                    Spacer()
+                                    Button(role: .destructive) {
+                                        deleteSelectedAIHistory()
+                                    } label: {
+                                        Label(NSLocalizedString("sick_episode_form.ai_assistance.history.delete_entry.button", comment: "Button to delete selected AI history entry"), systemImage: "trash")
                                     }
                                 }
                                 .padding(.top, 4)
-                            } label: {
-                                Text(NSLocalizedString("sick_episode_form.ai_assistance.history.header", comment: "Header for AI history list"))
-                                    .font(.subheadline.bold())
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                } label: {
+                    Text(NSLocalizedString("sick_episode_form.ai_assistance.history.header", comment: "Header for AI history list"))
+                        .font(.subheadline.bold())
+                }
+                .padding(8)
+                .background(Color.gray.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            if !aiPromptPreview.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("sick_episode_form.ai_assistance.structured_json_debug.header", comment: "Header for structured episode JSON debug view"))
+                        .font(.subheadline.bold())
+                    ScrollView {
+                        Text(aiPromptPreview)
+                            .font(.caption.monospacedDigit())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(minHeight: 120)
+                    .padding(6)
+                    .background(Color.gray.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .padding(8)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var addendaSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(NSLocalizedString("sick_episode_form.section.addenda", comment: "Section header for visit addenda"))
+
+            if activeEpisodeID == nil {
+                Text(NSLocalizedString("sick_episode_form.addenda.save_episode_first_hint", comment: "Hint explaining that addenda are available only after saving the episode"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                if let err = addendaErrorMessage, !err.isEmpty {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    Button {
+                        loadAddenda()
+                    } label: {
+                        Label(NSLocalizedString("sick_episode_form.addenda.refresh_button", comment: "Refresh addenda list button"), systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    if addendaIsLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                }
+
+                if addenda.isEmpty {
+                    Text(NSLocalizedString("sick_episode_form.addenda.none_message", comment: "Message when no addenda exist"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(addenda) { a in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(a.createdAtISO ?? NSLocalizedString("sick_episode_form.ai_assistance.history.time_na", comment: "Fallback when timestamp is not available"))
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                }
+                                Text(a.text)
+                                    .font(.caption)
+                                    .textSelection(.enabled)
                             }
                             .padding(8)
                             .background(Color.gray.opacity(0.05))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
-
-                        if !aiPromptPreview.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(NSLocalizedString("sick_episode_form.ai_assistance.structured_json_debug.header", comment: "Header for structured episode JSON debug view"))
-                                    .font(.subheadline.bold())
-                                ScrollView {
-                                    Text(aiPromptPreview)
-                                        .font(.caption.monospacedDigit())
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .frame(minHeight: 120)
-                                .padding(6)
-                                .background(Color.gray.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .padding(8)
-                        }
                     }
-                    .padding(.horizontal, 20)
-
-                    // Inline Done button so the user can close the form after saving without relying on the toolbar
-                    HStack {
-                        Spacer()
-                        Button(NSLocalizedString("common.done", comment: "Button to close the form")) {
-                            dismiss()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .padding(.top, 8)
                 }
-                .padding(20)
+
+                Divider().padding(.vertical, 4)
+
+                Text(NSLocalizedString("sick_episode_form.addenda.new_addendum.header", comment: "Header for new addendum editor"))
+                    .font(.subheadline.bold())
+
+                ZStack(alignment: .topLeading) {
+                    if newAddendumText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(NSLocalizedString("sick_episode_form.addenda.new_addendum.placeholder", comment: "Placeholder for new addendum text"))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                            .padding(.leading, 6)
+                    }
+
+                    TextEditor(text: $newAddendumText)
+                        .frame(minHeight: 90)
+                        .padding(.horizontal, 2)
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.25))
+                )
+
+                HStack {
+                    Spacer()
+                    Button {
+                        addAddendumTapped()
+                    } label: {
+                        Label(NSLocalizedString("sick_episode_form.addenda.add_button", comment: "Button to add an addendum"), systemImage: "plus.bubble")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(activeEpisodeID == nil || newAddendumText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || addendaIsLoading)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var doneRow: some View {
+        HStack {
+            Spacer()
+            Button(NSLocalizedString("common.done", comment: "Button to close the form")) {
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.top, 8)
+    }
+
+    private var mainScrollContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            headerView
+            vitalsSection
+            Divider()
+            twoColumnSection
+            planSection
+            aiSection
+            addendaSection
+            doneRow
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    mainScrollContent
+                        .padding(20)
+                        .sheetCardStyle()
+                        .padding(16)
+                }
             }
             .frame(minWidth: 860, idealWidth: 980, maxWidth: .infinity,
                    minHeight: 580, idealHeight: 720, maxHeight: .infinity)
@@ -657,8 +833,60 @@ struct SickEpisodeForm: View {
                 loadEditingIfNeeded()
                 prefillVitalsIfEditing()
                 loadVitalsHistory()
+                loadAddenda()
             }
         }
+    }
+
+    // MARK: - Addenda actions
+
+    private func loadAddenda() {
+        guard let episodeID = activeEpisodeID else { return }
+        guard let dbURL = appState.bundleDBURL else {
+            addendaErrorMessage = NSLocalizedString("sick_episode_form.addenda.db_missing_error", comment: "Error when DB URL is missing")
+            return
+        }
+
+        addendaIsLoading = true
+        addendaErrorMessage = nil
+
+        do {
+            let rows = try episodeStore.fetchAddendaForEpisode(dbURL: dbURL, episodeID: episodeID)
+            addenda = rows
+        } catch {
+            addendaErrorMessage = error.localizedDescription
+        }
+
+        addendaIsLoading = false
+    }
+
+    private func addAddendumTapped() {
+        guard let episodeID = activeEpisodeID else { return }
+        let text = newAddendumText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        guard let dbURL = appState.bundleDBURL else {
+            addendaErrorMessage = NSLocalizedString("sick_episode_form.addenda.db_missing_error", comment: "Error when DB URL is missing")
+            return
+        }
+
+        addendaIsLoading = true
+        addendaErrorMessage = nil
+
+        do {
+            _ = try episodeStore.insertAddendumForEpisode(
+                dbURL: dbURL,
+                episodeID: episodeID,
+                userID: appState.activeUserID.map(Int64.init),
+                text: text
+            )
+            newAddendumText = ""
+            loadAddenda()
+        } catch {
+            addendaErrorMessage = error.localizedDescription
+        }
+
+        addendaIsLoading = false
     }
 
     // MARK: - Subviews

@@ -375,6 +375,7 @@ CREATE TABLE IF NOT EXISTS ai_inputs (
   FOREIGN KEY (episode_id) REFERENCES episodes(id)
 );
 
+
 CREATE TABLE IF NOT EXISTS well_ai_inputs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   well_visit_id INTEGER,
@@ -385,12 +386,39 @@ CREATE TABLE IF NOT EXISTS well_ai_inputs (
   FOREIGN KEY (well_visit_id) REFERENCES well_visits(id)
 );
 
+CREATE TABLE IF NOT EXISTS visit_addenda (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  -- Exactly one of these must be set.
+  episode_id INTEGER,
+  well_visit_id INTEGER,
+
+  -- Optional author (single-user app can leave NULL)
+  user_id INTEGER,
+
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT,
+  addendum_text TEXT NOT NULL,
+
+  CHECK (
+    (episode_id IS NOT NULL AND well_visit_id IS NULL) OR
+    (episode_id IS NULL AND well_visit_id IS NOT NULL)
+  ),
+
+  FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE,
+  FOREIGN KEY (well_visit_id) REFERENCES well_visits(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- ========== INDEXES (optional but helpful) ==========
 
 CREATE INDEX IF NOT EXISTS idx_patients_mrn ON patients(mrn);
 CREATE INDEX IF NOT EXISTS idx_vitals_patient_time ON vitals(patient_id, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_episodes_patient ON episodes(patient_id);
+
 CREATE INDEX IF NOT EXISTS idx_well_visits_patient ON well_visits(patient_id);
+CREATE INDEX IF NOT EXISTS idx_visit_addenda_episode ON visit_addenda(episode_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_visit_addenda_well_visit ON visit_addenda(well_visit_id, created_at);
 
 -- ========== TRIGGERS (growth mirroring from vitals) ==========
 

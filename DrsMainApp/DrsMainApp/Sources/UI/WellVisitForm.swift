@@ -512,6 +512,12 @@ struct WellVisitForm: View {
     @State private var saveErrorMessage: String? = nil
     @State private var showErrorAlert: Bool = false
 
+    // MARK: - Addenda (well visits)
+    @State private var wellAddenda: [WellVisitAddendum] = []
+    @State private var addendaAreLoading: Bool = false
+    @State private var newWellAddendumText: String = ""
+    @State private var wellAddendumEditTexts: [Int64: String] = [:]
+
     // Date formatter (yyyy-MM-dd)
     private static let isoDateOnly: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -800,6 +806,204 @@ struct WellVisitForm: View {
         }
     }
 
+
+    // MARK: - Addenda helpers (well visits)
+
+    private func reloadWellAddendaIfNeeded() {
+        guard let wid = editingVisitID else { return }
+        guard let dbURL = appState.currentDBURL else { return }
+
+        addendaAreLoading = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let store = WellVisitStore()
+                let rows = try store.fetchAddendaForWellVisit(dbURL: dbURL, wellVisitID: Int64(wid))
+                DispatchQueue.main.async {
+                    self.wellAddenda = rows
+                    // Seed edit buffers with current texts
+                    var buffers: [Int64: String] = self.wellAddendumEditTexts
+                    for a in rows {
+                        buffers[a.id] = buffers[a.id] ?? a.text
+                    }
+                    self.wellAddendumEditTexts = buffers
+                    self.addendaAreLoading = false
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.addendaAreLoading = false
+                    self.saveErrorMessage = error.localizedDescription
+                    self.showErrorAlert = true
+                }
+            }
+        }
+    }
+
+    private func addWellAddendum() {
+        guard let wid = editingVisitID else { return }
+        guard let dbURL = appState.currentDBURL else { return }
+
+        let trimmed = newWellAddendumText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let uid: Int64? = appState.activeUserID.map(Int64.init)
+
+        addendaAreLoading = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let store = WellVisitStore()
+                _ = try store.insertAddendumForWellVisit(
+                    dbURL: dbURL,
+                    wellVisitID: Int64(wid),
+                    userID: uid,
+                    text: trimmed
+                )
+                DispatchQueue.main.async {
+                    self.newWellAddendumText = ""
+                    self.addendaAreLoading = false
+                    self.reloadWellAddendaIfNeeded()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.addendaAreLoading = false
+                    self.saveErrorMessage = error.localizedDescription
+                    self.showErrorAlert = true
+                }
+            }
+        }
+    }
+
+    private func saveWellAddendum(addendumID: Int64) {
+        guard let dbURL = appState.currentDBURL else { return }
+        let newText = (wellAddendumEditTexts[addendumID] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        addendaAreLoading = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let store = WellVisitStore()
+                _ = try store.updateWellVisitAddendum(dbURL: dbURL, addendumID: addendumID, newText: newText)
+                DispatchQueue.main.async {
+                    self.addendaAreLoading = false
+                    self.reloadWellAddendaIfNeeded()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.addendaAreLoading = false
+                    self.saveErrorMessage = error.localizedDescription
+                    self.showErrorAlert = true
+                }
+            }
+        }
+    }
+
+    private func deleteWellAddendum(addendumID: Int64) {
+        guard let dbURL = appState.currentDBURL else { return }
+
+        addendaAreLoading = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let store = WellVisitStore()
+                _ = try store.deleteWellVisitAddendum(dbURL: dbURL, addendumID: addendumID)
+                DispatchQueue.main.async {
+                    self.addendaAreLoading = false
+                    self.reloadWellAddendaIfNeeded()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.addendaAreLoading = false
+                    self.saveErrorMessage = error.localizedDescription
+                    self.showErrorAlert = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var wellAddendaSection: some View {
+        GroupBox(L10nWVF.k("well_visit_form.addenda.title")) {
+            VStack(alignment: .leading, spacing: 12) {
+                if addendaAreLoading {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(L10nWVF.k("well_visit_form.addenda.loading"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if wellAddenda.isEmpty {
+                    Text(L10nWVF.k("well_visit_form.addenda.empty"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(wellAddenda) { a in
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let created = a.createdAtISO, !created.isEmpty {
+                                Text(created)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            TextEditor(text: Binding(
+                                get: { wellAddendumEditTexts[a.id] ?? a.text },
+                                set: { wellAddendumEditTexts[a.id] = $0 }
+                            ))
+                            .frame(minHeight: 90)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.secondary.opacity(0.25))
+                            )
+
+                            HStack(spacing: 12) {
+                                Button {
+                                    saveWellAddendum(addendumID: a.id)
+                                } label: {
+                                    Label(L10nWVF.k("well_visit_form.addenda.save"), systemImage: "checkmark")
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button(role: .destructive) {
+                                    deleteWellAddendum(addendumID: a.id)
+                                } label: {
+                                    Label(L10nWVF.k("well_visit_form.addenda.delete"), systemImage: "trash")
+                                }
+                                .buttonStyle(.bordered)
+
+                                Spacer()
+                            }
+                        }
+                        .padding(.vertical, 6)
+
+                        Divider()
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10nWVF.k("well_visit_form.addenda.new.title"))
+                        .font(.subheadline.bold())
+
+                    TextEditor(text: $newWellAddendumText)
+                        .frame(minHeight: 90)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(Color.secondary.opacity(0.25))
+                        )
+
+                    HStack {
+                        Spacer()
+                        Button {
+                            addWellAddendum()
+                        } label: {
+                            Label(L10nWVF.k("well_visit_form.addenda.add"), systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(newWellAddendumText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
     init(editingVisitID: Int? = nil) {
         self.editingVisitID = editingVisitID
     }
@@ -810,6 +1014,13 @@ struct WellVisitForm: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    Color.clear
+                        .onAppear {
+                            // Only meaningful when editing an existing visit
+                            if editingVisitID != nil {
+                                reloadWellAddendaIfNeeded()
+                            }
+                        }
                     // Visit info
                     GroupBox(L10nWVF.k("well_visit_form.section.visit_info.title")) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -871,6 +1082,8 @@ struct WellVisitForm: View {
                             }
                         }
                     }
+
+                    
 
                     // Parent's concerns  → parent_concerns
                     GroupBox(L10nWVF.k("well_visit_form.section.parents_concerns.title")) {
@@ -1585,6 +1798,11 @@ struct WellVisitForm: View {
                     // AI assistant (well visits)
                     if showsAISection {
                         aiAssistantSection
+                    }
+                    
+                    // Addenda (only when editing an existing well visit)
+                    if editingVisitID != nil {
+                        wellAddendaSection
                     }
                 }
                 .padding(20)

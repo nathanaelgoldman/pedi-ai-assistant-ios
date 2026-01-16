@@ -889,7 +889,7 @@ struct PatientDetailView: View {
             .buttonStyle(.bordered)
 
             if isSickCategory(v.category) {
-                // Sick episode editing (24h window)
+                // Sick episode editing (no time restriction)
                 Button(
                     NSLocalizedString(
                         "patient.visit-row.edit-button",
@@ -900,7 +900,6 @@ struct PatientDetailView: View {
                     showEpisodeForm = true
                 }
                 .buttonStyle(.bordered)
-                .disabled(!isWithin24Hours(v.dateISO))
             } else if isWellCategory(v.category) {
                 // Well-visit editing – no time restriction for now
                 Button(

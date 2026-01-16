@@ -41,6 +41,16 @@ struct ReportMeta {
     let generatedAtISO: String       // now()
 }
 
+/// Addendum attached to a visit (sick episode or well visit).
+/// Loaded by ReportDataLoader and rendered by ReportBuilder.
+struct ReportAddendum: Identifiable {
+    let id: Int64
+    let createdAtISO: String?
+    let updatedAtISO: String?
+    let authorName: String?
+    let text: String
+}
+
 // MARK: - Well Visit
 
 struct WellReportData {
@@ -66,6 +76,7 @@ struct WellReportData {
     let anticipatoryGuidance: String?
     let clinicianComments: String?
     let nextVisitDate: String?
+    let addenda: [ReportAddendum]
     let growthCharts: [(title: String, imagePath: URL?)]
     let visibility: WellVisitReportRules.WellVisitVisibility?
 }
@@ -91,5 +102,6 @@ struct SickReportData {
     let planGuidance: String?
     let medications: [String]
     let clinicianComments: String?
+    let addenda: [ReportAddendum]
     let nextVisitDate: String?
 }

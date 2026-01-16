@@ -110,9 +110,189 @@ public struct EpisodePayload: Equatable {
     public var comments: String? = nil
 }
 
+/// Addendum record attached to either an episode (sick visit) or a well visit.
+/// For sick-visit UI we currently use the episode_id path.
+public struct VisitAddendum: Identifiable, Equatable {
+    public let id: Int64
+    public let episodeID: Int64?
+    public let wellVisitID: Int64?
+    public let userID: Int64?
+    public let createdAtISO: String?
+    public let updatedAtISO: String?
+    public var text: String
+}
+
 /// Data access for the `episodes` table. Mirrors the schema you shared.
 /// NOTE: This layer does NOT create tables; it assumes the schema exists.
 public struct EpisodeStore {
+
+    // MARK: - Addenda (visit_addenda)
+
+    /// Ensure the addenda table exists for older bundles that predate this feature.
+    /// This keeps the UI resilient if a user opens an older DB that hasn't had schema.sql re-applied.
+    private func ensureVisitAddendaSchema(_ db: OpaquePointer?) throws {
+        let sql = """
+        CREATE TABLE IF NOT EXISTS visit_addenda (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Exactly one of these must be set.
+          episode_id INTEGER,
+          well_visit_id INTEGER,
+
+          -- Optional author (single-user app can leave NULL)
+          user_id INTEGER,
+
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT,
+          addendum_text TEXT NOT NULL,
+
+          CHECK (
+            (episode_id IS NOT NULL AND well_visit_id IS NULL) OR
+            (episode_id IS NULL AND well_visit_id IS NOT NULL)
+          ),
+
+          FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE,
+          FOREIGN KEY (well_visit_id) REFERENCES well_visits(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_visit_addenda_episode ON visit_addenda(episode_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_visit_addenda_well_visit ON visit_addenda(well_visit_id, created_at);
+        """
+
+        var errMsg: UnsafeMutablePointer<Int8>? = nil
+        let rc = sqlite3_exec(db, sql, nil, nil, &errMsg)
+        if rc != SQLITE_OK {
+            let msg = errMsg.flatMap { String(cString: $0) } ?? "unknown"
+            if errMsg != nil { sqlite3_free(errMsg) }
+            throw sqliteError(db, context: "visit_addenda schema init failed: \(msg)")
+        }
+    }
+
+    /// Fetch addenda for a sick visit (episode), oldest-first.
+    public func fetchAddendaForEpisode(dbURL: URL, episodeID: Int64) throws -> [VisitAddendum] {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+        try ensureVisitAddendaSchema(db)
+
+        let sql = """
+        SELECT id, episode_id, well_visit_id, user_id, created_at, updated_at, addendum_text
+        FROM visit_addenda
+        WHERE episode_id = ?
+        ORDER BY datetime(COALESCE(created_at, '1970-01-01T00:00:00')) ASC, id ASC;
+        """
+
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        try bindInt64(stmt, index: 1, value: episodeID)
+
+        var items: [VisitAddendum] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = sqlite3_column_int64(stmt, 0)
+            let epID = sqlite3_column_type(stmt, 1) == SQLITE_NULL ? nil : sqlite3_column_int64(stmt, 1)
+            let wvID = sqlite3_column_type(stmt, 2) == SQLITE_NULL ? nil : sqlite3_column_int64(stmt, 2)
+            let uID  = sqlite3_column_type(stmt, 3) == SQLITE_NULL ? nil : sqlite3_column_int64(stmt, 3)
+            let created = columnText(stmt, 4)
+            let updated = columnText(stmt, 5)
+            let text = columnText(stmt, 6) ?? ""
+
+            items.append(
+                VisitAddendum(
+                    id: id,
+                    episodeID: epID,
+                    wellVisitID: wvID,
+                    userID: uID,
+                    createdAtISO: created,
+                    updatedAtISO: updated,
+                    text: text
+                )
+            )
+        }
+        return items
+    }
+
+    /// Insert a new addendum for a sick visit (episode). Returns new addendum row id.
+    public func insertAddendumForEpisode(dbURL: URL,
+                                        episodeID: Int64,
+                                        userID: Int64? = nil,
+                                        text: String) throws -> Int64 {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+        try ensureVisitAddendaSchema(db)
+
+        let sql = """
+        INSERT INTO visit_addenda (episode_id, well_visit_id, user_id, addendum_text)
+        VALUES (?, NULL, ?, ?);
+        """
+
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        var idx: Int32 = 1
+        try bindInt64(stmt, index: idx, value: episodeID); idx += 1
+
+        if let uid = userID {
+            try bindInt64(stmt, index: idx, value: uid)
+        } else {
+            sqlite3_bind_null(stmt, idx)
+        }
+        idx += 1
+
+        bindText(stmt, index: idx, value: text)
+
+        try stepDone(stmt)
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    /// Update an existing addendum's text and updated_at.
+    public func updateAddendum(dbURL: URL, addendumID: Int64, newText: String) throws -> Bool {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+        try ensureVisitAddendaSchema(db)
+
+        let sql = """
+        UPDATE visit_addenda
+        SET addendum_text = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?;
+        """
+
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        bindText(stmt, index: 1, value: newText)
+        try bindInt64(stmt, index: 2, value: addendumID)
+
+        let rc = sqlite3_step(stmt)
+        if rc != SQLITE_DONE {
+            throw sqliteError(db, context: "visit_addenda update step rc=\(rc)")
+        }
+        return sqlite3_changes(db) > 0
+    }
+
+    /// Delete an addendum.
+    public func deleteAddendum(dbURL: URL, addendumID: Int64) throws -> Bool {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+        try ensureVisitAddendaSchema(db)
+
+        let sql = "DELETE FROM visit_addenda WHERE id = ?;"
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        try bindInt64(stmt, index: 1, value: addendumID)
+
+        let rc = sqlite3_step(stmt)
+        if rc != SQLITE_DONE {
+            throw sqliteError(db, context: "visit_addenda delete step rc=\(rc)")
+        }
+        return sqlite3_changes(db) > 0
+    }
 
     // MARK: - Public API
 
@@ -441,7 +621,7 @@ public struct EpisodeStore {
     private func prepare(_ db: OpaquePointer?, _ sql: String, _ stmt: inout OpaquePointer?) throws {
         let rc = sqlite3_prepare_v2(db, sql, -1, &stmt, nil)
         if rc != SQLITE_OK {
-            throw sqliteError(db, context: "prepare: \(sql)")
+            throw sqliteError(db, context: "prepare failed")
         }
     }
 

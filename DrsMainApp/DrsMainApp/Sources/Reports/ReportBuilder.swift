@@ -221,12 +221,86 @@ final class ReportBuilder {
             throw error
         }
     }
+    
+    /// Builds the final “Addenda” section appended at the end of the report body.
+    private func makeAddendaSection(_ addenda: [ReportAddendum]) -> Section? {
+        guard !addenda.isEmpty else { return nil }
+
+        var lines: [String] = []
+
+        func clean(_ s: String?) -> String? {
+            guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+            return s
+        }
+
+        for a in addenda {
+            let created = clean(a.createdAtISO)
+            let updated = clean(a.updatedAtISO)
+            let author  = clean(a.authorName)
+
+            var header = ""
+            if let c = created, let u = updated, c != u {
+                header = "\(c) (updated \(u))"
+            } else if let c = created {
+                header = c
+            } else if let u = updated {
+                header = u
+            }
+
+            if let author = author {
+                header = header.isEmpty ? author : "\(header) — \(author)"
+            }
+
+            if !header.isEmpty {
+                lines.append(header)
+            }
+
+            let parts = a.text
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+                .components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            if parts.isEmpty {
+                lines.append("• ")
+            } else {
+                for p in parts {
+                    lines.append("• \(p)")
+                }
+            }
+
+            // spacer line between addenda blocks
+            lines.append("")
+        }
+
+        // trim trailing empty spacers
+        while let last = lines.last, last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.removeLast()
+        }
+
+        return Section(
+            title: L("report.section.addenda", comment: "Report section title: Addenda"),
+            body: lines.joined(separator: "\n")
+        )
+    }
     // Build split attributed content: body (no charts) + charts-only (if applicable)
     func buildAttributedReportParts(for kind: VisitKind) throws -> (body: NSAttributedString, charts: NSAttributedString?) {
         switch kind {
         case .well(let visitID):
             let data = try dataLoader.loadWell(visitID: visitID)
-
+            if DEBUG_REPORT_EXPORT {
+                NSLog("[ReportBuilder] well addenda count visitID=%d: %d", visitID, data.addenda.count)
+                if let first = data.addenda.first {
+                    let preview = first.text.prefix(80)
+                    NSLog("[ReportBuilder] well addenda first id=%lld author=%@ created=%@ updated=%@ text=\"%@\"",
+                          first.id,
+                          first.authorName ?? "—",
+                          first.createdAtISO ?? "—",
+                          first.updatedAtISO ?? "—",
+                          String(preview))
+                }
+            }
             // Age-gating hook: compute numeric age at visit (in months).
             // This will be used by later steps to decide which sections/charts to show per age band.
             // Reuse body-only layout (Steps 1–12: header, perinatal, feeding, sleep, etc.)
@@ -236,6 +310,18 @@ final class ReportBuilder {
 
         case .sick(let episodeID):
             let data = try dataLoader.loadSick(episodeID: episodeID)
+            if DEBUG_REPORT_EXPORT {
+                NSLog("[ReportBuilder] sick addenda count episodeID=%d: %d", episodeID, data.addenda.count)
+                if let first = data.addenda.first {
+                    let preview = first.text.prefix(80)
+                    NSLog("[ReportBuilder] sick addenda first id=%lld author=%@ created=%@ updated=%@ text=\"%@\"",
+                          first.id,
+                          first.authorName ?? "—",
+                          first.createdAtISO ?? "—",
+                          first.updatedAtISO ?? "—",
+                          String(preview))
+                }
+            }
             // We now rely entirely on SickReportData-driven layout; no need for buildContent fallback.
             let body = assembleAttributedSick(data: data, fallbackSections: [], episodeID: episodeID)
             return (body, nil)
@@ -905,6 +991,17 @@ if visibility?.showMilestones ?? true {
             } else {
                 para(resp, font: bodyFont)
             }
+            content.append(NSAttributedString(string: "\n"))
+        }
+        
+        // Addenda (if any) – always rendered at end of report body
+        if let addendaSection = makeAddendaSection(data.addenda) {
+            para(addendaSection.title,
+                 font: headerFont,
+                 background: subSectionBG)
+
+            let bodyText = addendaSection.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            para(bodyText.isEmpty ? "—" : bodyText, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
@@ -2569,6 +2666,16 @@ extension ReportBuilder {
             } else {
                 paraRich(resp, font: bodyFont)
             }
+            content.append(NSAttributedString(string: "\n"))
+        }
+        
+        // Addenda (if any) – always rendered at end of report body
+        if let addendaSection = makeAddendaSection(data.addenda) {
+            // If your sick section titles use a background (e.g. sectionBG), feel free to add it here too.
+            para(addendaSection.title, font: headerFont /*, background: sectionBG */)
+
+            let bodyText = addendaSection.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            para(bodyText.isEmpty ? "—" : bodyText, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 

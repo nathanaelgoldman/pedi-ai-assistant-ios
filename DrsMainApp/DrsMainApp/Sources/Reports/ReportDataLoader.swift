@@ -17,8 +17,20 @@
 
 
 
+
 import Foundation
 import SQLite3
+
+// MARK: - Debug toggles
+// Keep this local to the Reports module; ReportBuilder also has its own debug prints.
+// Flip to `true` temporarily when diagnosing report export issues.
+fileprivate let DEBUG_REPORT_EXPORT: Bool = {
+    #if DEBUG
+    return false
+    #else
+    return false
+    #endif
+}()
 
 // SQLite helper: transient destructor pointer for sqlite3_bind_text
 fileprivate let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -201,6 +213,16 @@ final class ReportDataLoader {
         let clinicianComments = pePack.comments
         let nextVisitDate = pePack.nextVisitDate
 
+        // Addenda (loaded from visit_addenda)
+        let addenda = loadReportAddendaForWellVisit(Int64(visitID))
+        if DEBUG_REPORT_EXPORT {
+            print("[ReportDataLoader] well addenda count visitID=\(visitID): \(addenda.count)")
+            if let first = addenda.first {
+                let preview = first.text.prefix(60)
+                print("[ReportDataLoader] well addenda first id=\(first.id) author=\(first.authorName ?? "—") created=\(first.createdAtISO ?? "—") text='\(preview)'…")
+            }
+        }
+
         // Header + perinatal summary stay untouched; ReportDataLoader does
         // no additional gating here, it simply forwards the gated data.
         return WellReportData(
@@ -224,6 +246,7 @@ final class ReportDataLoader {
             anticipatoryGuidance: anticipatoryGuidance,
             clinicianComments: clinicianComments,
             nextVisitDate: nextVisitDate,
+            addenda: addenda,
             growthCharts: [],
             visibility: visibility
         )
@@ -1941,7 +1964,9 @@ final class ReportDataLoader {
             planGuidance: planGuidance,
             medications: meds,
             clinicianComments: clinicianComments,
+            addenda: loadReportAddendaForEpisode(Int64(episodeID)),
             nextVisitDate: nextVisitDate
+            
         )
     }
     
@@ -2632,6 +2657,222 @@ final class ReportDataLoader {
     
 // MARK: - Helpers
 
+    // MARK: - Addenda (Report)
+
+    /// Minimal addendum model used by the report.
+    /// (Must match whatever your ReportDataModels expects. If you already have `ReportAddendum`,
+    /// delete this struct and keep only the loader functions below.)
+    
+
+    private func tableExists(_ db: OpaquePointer?, name: String) -> Bool {
+        let sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return false }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, name, -1, SQLITE_TRANSIENT)
+        return sqlite3_step(stmt) == SQLITE_ROW
+    }
+
+    private func columns(in db: OpaquePointer?, table: String) -> Set<String> {
+        var out = Set<String>()
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA table_info(\(table));", -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            return out
+        }
+        defer { sqlite3_finalize(stmt) }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let c = sqlite3_column_text(stmt, 1) { out.insert(String(cString: c)) }
+        }
+        return out
+    }
+
+    private func colText(_ stmt: OpaquePointer?, _ idx: Int32) -> String? {
+        guard sqlite3_column_type(stmt, idx) != SQLITE_NULL,
+              let c = sqlite3_column_text(stmt, idx) else { return nil }
+        let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? nil : s
+    }
+
+    /// Fetch addenda for a WELL visit from `visit_addenda`.
+    private func loadReportAddendaForWellVisit(_ wellVisitID: Int64) -> [ReportAddendum] {
+        do {
+            let dbPath = try currentBundleDBPath()
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { return [] }
+            defer { sqlite3_close(db) }
+
+            guard tableExists(db, name: "visit_addenda") else { return [] }
+
+            let cols = columns(in: db, table: "visit_addenda")
+            let fk = ["well_visit_id", "wellVisit_id", "wellVisitID", "visit_id", "visitID"]
+                .first(where: { cols.contains($0) })
+            guard let fk else { return [] }
+
+            let idCol = cols.contains("id") ? "id" : "rowid"
+
+            guard let textCol = ["text", "content", "note", "addendum_text"].first(where: { cols.contains($0) }) else {
+                return []
+            }
+
+            let createdCol = ["created_at", "createdAt", "created_iso"].first(where: { cols.contains($0) })
+            let updatedCol = ["updated_at", "updatedAt", "updated_iso"].first(where: { cols.contains($0) })
+
+            // Prefer a direct author name column if present; otherwise try a user FK -> users join.
+            let authorDirectCol = ["author_name", "clinician_name", "provider_name", "user_name"].first(where: { cols.contains($0) })
+            let authorUserFK = [
+                "author_user_id", "clinician_user_id", "user_id", "provider_id", "doctor_user_id"
+            ].first(where: { cols.contains($0) })
+
+            let idSel = "a.\(idCol)"
+            let textSel = "a.\(textCol)"
+            let createdSel = createdCol != nil ? "a.\(createdCol!)" : "NULL"
+            let updatedSel = updatedCol != nil ? "a.\(updatedCol!)" : "NULL"
+
+            let (authorSel, joinUsers): (String, String) = {
+                if let c = authorDirectCol {
+                    return ("a.\(c)", "")
+                }
+                if let fk = authorUserFK {
+                    let sel = "trim(coalesce(u.first_name,'') || ' ' || coalesce(u.last_name,''))"
+                    let join = "LEFT JOIN users u ON u.id = a.\(fk)"
+                    return (sel, join)
+                }
+                return ("NULL", "")
+            }()
+
+            let orderExpr: String = {
+                if let c = createdCol { return "datetime(a.\(c))" }
+                return idSel
+            }()
+
+            let sql = """
+            SELECT \(idSel), \(textSel), \(createdSel), \(updatedSel), \(authorSel)
+            FROM visit_addenda a
+            \(joinUsers)
+            WHERE a.\(fk) = ?
+            ORDER BY \(orderExpr) ASC, \(idSel) ASC;
+            """
+
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_int64(stmt, 1, wellVisitID)
+
+            var out: [ReportAddendum] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                let id = sqlite3_column_int64(stmt, 0)
+                let text = colText(stmt, 1) ?? ""
+                let created = colText(stmt, 2)
+                let updated = colText(stmt, 3)
+                let author = colText(stmt, 4)
+
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    out.append(ReportAddendum(
+                        id: id,
+                        createdAtISO: created,
+                        updatedAtISO: updated,
+                        authorName: author,
+                        text: text
+                    ))
+                }
+            }
+            return out
+        } catch {
+            return []
+        }
+    }
+
+    /// Fetch addenda for a SICK episode from `visit_addenda`.
+    private func loadReportAddendaForEpisode(_ episodeID: Int64) -> [ReportAddendum] {
+        do {
+            let dbPath = try currentBundleDBPath()
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { return [] }
+            defer { sqlite3_close(db) }
+
+            guard tableExists(db, name: "visit_addenda") else { return [] }
+
+            let cols = columns(in: db, table: "visit_addenda")
+            let fk = ["episode_id", "episodeId", "episodeID", "visit_id", "visitID"]
+                .first(where: { cols.contains($0) })
+            guard let fk else { return [] }
+
+            let idCol = cols.contains("id") ? "id" : "rowid"
+
+            guard let textCol = ["text", "content", "note", "addendum_text"].first(where: { cols.contains($0) }) else {
+                return []
+            }
+
+            let createdCol = ["created_at", "createdAt", "created_iso"].first(where: { cols.contains($0) })
+            let updatedCol = ["updated_at", "updatedAt", "updated_iso"].first(where: { cols.contains($0) })
+
+            // Prefer a direct author name column if present; otherwise try a user FK -> users join.
+            let authorDirectCol = ["author_name", "clinician_name", "provider_name", "user_name"].first(where: { cols.contains($0) })
+            let authorUserFK = [
+                "author_user_id", "clinician_user_id", "user_id", "provider_id", "doctor_user_id"
+            ].first(where: { cols.contains($0) })
+
+            let idSel = "a.\(idCol)"
+            let textSel = "a.\(textCol)"
+            let createdSel = createdCol != nil ? "a.\(createdCol!)" : "NULL"
+            let updatedSel = updatedCol != nil ? "a.\(updatedCol!)" : "NULL"
+
+            let (authorSel, joinUsers): (String, String) = {
+                if let c = authorDirectCol {
+                    return ("a.\(c)", "")
+                }
+                if let fk = authorUserFK {
+                    let sel = "trim(coalesce(u.first_name,'') || ' ' || coalesce(u.last_name,''))"
+                    let join = "LEFT JOIN users u ON u.id = a.\(fk)"
+                    return (sel, join)
+                }
+                return ("NULL", "")
+            }()
+
+            let orderExpr: String = {
+                if let c = createdCol { return "datetime(a.\(c))" }
+                return idSel
+            }()
+
+            let sql = """
+            SELECT \(idSel), \(textSel), \(createdSel), \(updatedSel), \(authorSel)
+            FROM visit_addenda a
+            \(joinUsers)
+            WHERE a.\(fk) = ?
+            ORDER BY \(orderExpr) ASC, \(idSel) ASC;
+            """
+
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_int64(stmt, 1, episodeID)
+
+            var out: [ReportAddendum] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                let id = sqlite3_column_int64(stmt, 0)
+                let text = colText(stmt, 1) ?? ""
+                let created = colText(stmt, 2)
+                let updated = colText(stmt, 3)
+                let author = colText(stmt, 4)
+
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    out.append(ReportAddendum(
+                        id: id,
+                        createdAtISO: created,
+                        updatedAtISO: updated,
+                        authorName: author,
+                        text: text
+                    ))
+                }
+            }
+            return out
+        } catch {
+            return []
+        }
+    }
+    
     /// Previous-well rows often store multi-line bullet lists (and sometimes legacy EN labels).
     /// For report rendering we want a single-line, bullet-separated string.
     private func flattenBulletsForReport(_ text: String) -> String {

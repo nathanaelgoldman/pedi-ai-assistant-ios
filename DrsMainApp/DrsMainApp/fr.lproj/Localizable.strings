@@ -2742,3 +2742,27 @@
 
 "patient.visit-category.four-year" = "Visite des 4 ans";
 "patient.visit-category.five-year" = "Visite des 5 ans";
+
+
+/* SickEpisodeForm — Addenda */
+"sick_episode_form.addenda.refresh_button" = "Actualiser";
+"sick_episode_form.addenda.none_message" = "Aucun addendum pour cet épisode pour l’instant.";
+"sick_episode_form.addenda.new_addendum.header" = "Nouvel addendum";
+"sick_episode_form.addenda.add_button" = "Ajouter l’addendum";
+"sick_episode_form.section.addenda" = "Addendum";
+"sick_episode_form.addenda.save_episode_first_hint" = "Enregistrez d’abord l’épisode pour ajouter un addendum.";
+
+/* well visit addendum*/
+"wellVisitStore.error.addendaUpdateStep" = "Échec de la mise à jour de l’addendum (rc=%@).";
+"wellVisitStore.error.addendaDeleteStep" = "Échec de la suppression de l’addendum (rc=%@).";
+
+/* Visite de suivi – Addendum */
+"well_visit_form.addenda.title" = "Addendum";
+"well_visit_form.addenda.empty" = "Aucun addendum pour cette visite pour l’instant.";
+"well_visit_form.addenda.new.title" = "Nouvel addendum";
+"well_visit_form.addenda.add" = "Ajouter l’addendum";
+
+"well_visit_form.addenda.save" = "Enregistrer";
+"well_visit_form.addenda.delete" = "Supprimer";
+
+"report.section.addenda" = "Addenda";

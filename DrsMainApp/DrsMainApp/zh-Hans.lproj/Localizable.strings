@@ -2743,3 +2743,10 @@
 /* Visit type */
 "visit.type.four_year" = "4-year visit";
 "visit.type.five_year" = "5-year visit";
+
+"sick_episode_form.section.addenda" = "Addendum";
+"sick_episode_form.addenda.save_episode_first_hint" = "Save the episode first to add an addendum.";
+
+/* well visit addendum*/
+"wellVisitStore.error.addendaUpdateStep" = "Failed to update addendum (rc=%@).";
+"wellVisitStore.error.addendaDeleteStep" = "Failed to delete addendum (rc=%@).";

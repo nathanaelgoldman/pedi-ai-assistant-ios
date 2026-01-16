@@ -2749,3 +2749,30 @@
 
 "patient.visit-category.four-year" = "4-year visit";
 "patient.visit-category.five-year" = "5-year visit";
+
+"sick_episode_form.section.addenda" = "Addendum";
+"sick_episode_form.addenda.save_episode_first_hint" = "Save the episode first to add an addendum.";
+
+/* SickEpisodeForm — Addenda */
+"sick_episode_form.section.addenda" = "Addendum";
+"sick_episode_form.addenda.save_episode_first_hint" = "Save the episode first to add an addendum.";
+
+"sick_episode_form.addenda.refresh_button" = "Refresh";
+"sick_episode_form.addenda.none_message" = "No addenda for this episode yet.";
+"sick_episode_form.addenda.new_addendum.header" = "New addendum";
+"sick_episode_form.addenda.add_button" = "Add addendum";
+
+/* well visit addendum*/
+"wellVisitStore.error.addendaUpdateStep" = "Failed to update addendum (rc=%@).";
+"wellVisitStore.error.addendaDeleteStep" = "Failed to delete addendum (rc=%@).";
+
+/* Well visit – Addendum section */
+"well_visit_form.addenda.title" = "Addendum";
+"well_visit_form.addenda.empty" = "No addendum for this visit yet.";
+"well_visit_form.addenda.new.title" = "New addendum";
+"well_visit_form.addenda.add" = "Add addendum";
+
+"well_visit_form.addenda.save" = "Save";
+"well_visit_form.addenda.delete" = "Delete";
+
+"report.section.addenda" = "Addenda";

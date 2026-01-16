@@ -4053,58 +4053,13 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Return true if the episode can still be edited (within 24 hours of `created_at`).
-    /// Falls back to allowing edit when `created_at` is missing or unparsable.
+    /// Return true if the episode can be edited.
+    ///
+    /// We no longer enforce a time-based edit window for sick episodes.
+    /// Any post-visit notes should be captured via addenda (e.g., `visit_addenda`) so
+    /// reports can reflect amendments without blocking edits.
     func canEditEpisode(_ episodeID: Int) -> Bool {
-        guard let dbURL = currentDBURL,
-              FileManager.default.fileExists(atPath: dbURL.path) else { return false }
-
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
-            return false
-        }
-        defer { sqlite3_close(db) }
-
-        var stmt: OpaquePointer?
-        defer { sqlite3_finalize(stmt) }
-        let sql = "SELECT COALESCE(created_at, '') FROM episodes WHERE id=? LIMIT 1;"
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
-        sqlite3_bind_int64(stmt, 1, sqlite3_int64(episodeID))
-
-        var createdISO: String = ""
-        if sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) {
-            createdISO = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if createdISO.isEmpty {
-            // No timestamp → allow edit (we cannot enforce the window)
-            return true
-        }
-
-        // Try to parse common ISO-8601 variants
-        func parseISO(_ s: String) -> Date? {
-            let iso = ISO8601DateFormatter()
-            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let d = iso.date(from: s) { return d }
-            // Retry without fractional seconds
-            let iso2 = ISO8601DateFormatter()
-            iso2.formatOptions = [.withInternetDateTime]
-            if let d = iso2.date(from: s) { return d }
-            // Fallback to common SQLite CURRENT_TIMESTAMP format
-            let df = DateFormatter()
-            df.locale = Locale(identifier: "en_US_POSIX")
-            df.timeZone = TimeZone(secondsFromGMT: 0)
-            df.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            return df.date(from: s)
-        }
-
-        guard let createdAt = parseISO(createdISO) else {
-            // Unparsable → allow edit rather than blocking
-            return true
-        }
-
-        let elapsed = Date().timeIntervalSince(createdAt)
-        return elapsed <= (24 * 60 * 60)
+        return true
     }
 
     /// Create a minimal new episode row for the currently selected patient.
@@ -5332,6 +5287,216 @@ final class AppState: ObservableObject {
             PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
             self.loadPMHForSelectedPatient()
             return bundleURL
+        }
+
+        // MARK: - Visit Addenda (DB helpers)
+
+        /// A small, DB-backed addendum attached to either a sick visit (episode) or a well visit.
+        struct VisitAddendum: Identifiable, Hashable {
+            let id: Int
+            let episodeID: Int?
+            let wellVisitID: Int?
+            let userID: Int?
+            let createdAtRaw: String?
+            let updatedAtRaw: String?
+            let text: String
+
+            /// Best-effort parsed dates (SQLite CURRENT_TIMESTAMP is usually `yyyy-MM-dd HH:mm:ss`).
+            var createdAt: Date? { AppState.parseSQLiteDate(createdAtRaw) }
+            var updatedAt: Date? { AppState.parseSQLiteDate(updatedAtRaw) }
+        }
+
+        /// Best-effort: resolve the active *bundle* DB URL.
+        /// We prefer `currentDBURL` when available; otherwise we derive it from the bundle root.
+        private func activeBundleDBURL() -> URL? {
+            if let u = self.currentDBURL { return u }
+            guard let root = self.currentBundleURL else { return nil }
+            let plain = root.appendingPathComponent("db.sqlite")
+            if FileManager.default.fileExists(atPath: plain.path) { return plain }
+            // DrsMainApp typically works with plaintext bundle DBs, but keep a fallback.
+            let enc = root.appendingPathComponent("db.sqlite.enc")
+            if FileManager.default.fileExists(atPath: enc.path) { return enc }
+            return nil
+        }
+        
+        // Expose DB URL to views while keeping the stored property private.
+        var bundleDBURL: URL? { activeBundleDBURL() }
+
+        /// List addenda for a sick visit episode.
+        func listAddendaForEpisode(_ episodeID: Int) -> [VisitAddendum] {
+            guard let dbURL = activeBundleDBURL() else { return [] }
+            return fetchAddenda(whereSQL: "episode_id = ?", bindID: episodeID, dbURL: dbURL)
+        }
+
+        /// List addenda for a well visit.
+        func listAddendaForWellVisit(_ wellVisitID: Int) -> [VisitAddendum] {
+            guard let dbURL = activeBundleDBURL() else { return [] }
+            return fetchAddenda(whereSQL: "well_visit_id = ?", bindID: wellVisitID, dbURL: dbURL)
+        }
+
+        /// Insert an addendum for a sick visit episode.
+        /// - Returns: the inserted addendum row id, or nil on failure.
+        @discardableResult
+        func insertAddendumForEpisode(episodeID: Int, text: String, userID: Int? = nil) -> Int? {
+            guard let dbURL = activeBundleDBURL() else { return nil }
+            return insertAddendum(episodeID: episodeID, wellVisitID: nil, text: text, userID: userID, dbURL: dbURL)
+        }
+
+        /// Insert an addendum for a well visit.
+        /// - Returns: the inserted addendum row id, or nil on failure.
+        @discardableResult
+        func insertAddendumForWellVisit(wellVisitID: Int, text: String, userID: Int? = nil) -> Int? {
+            guard let dbURL = activeBundleDBURL() else { return nil }
+            return insertAddendum(episodeID: nil, wellVisitID: wellVisitID, text: text, userID: userID, dbURL: dbURL)
+        }
+
+        // MARK: - Private addenda helpers
+
+        private func fetchAddenda(whereSQL: String, bindID: Int, dbURL: URL) -> [VisitAddendum] {
+            var out: [VisitAddendum] = []
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK {
+                if let db { sqlite3_close(db) }
+                return out
+            }
+            guard let db = db else { return out }
+            defer { sqlite3_close(db) }
+
+            let sql = """
+            SELECT id, episode_id, well_visit_id, user_id, created_at, updated_at, addendum_text
+            FROM visit_addenda
+            WHERE \(whereSQL)
+            ORDER BY created_at ASC, id ASC;
+            """
+
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
+                // Table missing or schema not applied yet: treat as empty.
+                if let stmt { sqlite3_finalize(stmt) }
+                return out
+            }
+            guard let stmt = stmt else { return out }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_int64(stmt, 1, Int64(bindID))
+
+            func colText(_ i: Int32) -> String? {
+                guard let c = sqlite3_column_text(stmt, i) else { return nil }
+                let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                return s.isEmpty ? nil : s
+            }
+            func colIntOptional(_ i: Int32) -> Int? {
+                if sqlite3_column_type(stmt, i) == SQLITE_NULL { return nil }
+                return Int(sqlite3_column_int64(stmt, i))
+            }
+
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                let id = Int(sqlite3_column_int64(stmt, 0))
+                let ep = colIntOptional(1)
+                let wv = colIntOptional(2)
+                let uid = colIntOptional(3)
+                let created = colText(4)
+                let updated = colText(5)
+                let text = colText(6) ?? ""
+
+                out.append(
+                    VisitAddendum(
+                        id: id,
+                        episodeID: ep,
+                        wellVisitID: wv,
+                        userID: uid,
+                        createdAtRaw: created,
+                        updatedAtRaw: updated,
+                        text: text
+                    )
+                )
+            }
+
+            return out
+        }
+
+        private func insertAddendum(episodeID: Int?, wellVisitID: Int?, text: String, userID: Int?, dbURL: URL) -> Int? {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+                if let db { sqlite3_close(db) }
+                return nil
+            }
+            guard let db = db else { return nil }
+            defer { sqlite3_close(db) }
+
+            let sql = """
+            INSERT INTO visit_addenda (episode_id, well_visit_id, user_id, addendum_text)
+            VALUES (?, ?, ?, ?);
+            """
+
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
+                if let stmt { sqlite3_finalize(stmt) }
+                return nil
+            }
+            guard let stmt = stmt else { return nil }
+            defer { sqlite3_finalize(stmt) }
+
+            // Bind episode_id (1)
+            if let ep = episodeID {
+                sqlite3_bind_int64(stmt, 1, Int64(ep))
+            } else {
+                sqlite3_bind_null(stmt, 1)
+            }
+
+            // Bind well_visit_id (2)
+            if let wv = wellVisitID {
+                sqlite3_bind_int64(stmt, 2, Int64(wv))
+            } else {
+                sqlite3_bind_null(stmt, 2)
+            }
+
+            // Bind user_id (3)
+            if let uid = userID {
+                sqlite3_bind_int64(stmt, 3, Int64(uid))
+            } else {
+                sqlite3_bind_null(stmt, 3)
+            }
+
+            // Bind addendum_text (4)
+            _ = trimmed.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
+
+            if sqlite3_step(stmt) != SQLITE_DONE {
+                return nil
+            }
+
+            return Int(sqlite3_last_insert_rowid(db))
+        }
+
+        /// Parse a date string coming from SQLite.
+        /// Supports `yyyy-MM-dd HH:mm:ss` (CURRENT_TIMESTAMP) and ISO-8601 variants.
+        nonisolated private static func parseSQLiteDate(_ raw: String?) -> Date? {
+            guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+
+            // 1) ISO-8601 (with or without fractional seconds)
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = iso.date(from: raw) { return d }
+            let iso2 = ISO8601DateFormatter()
+            iso2.formatOptions = [.withInternetDateTime]
+            if let d = iso2.date(from: raw) { return d }
+
+            // 2) SQLite CURRENT_TIMESTAMP default
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "en_US_POSIX")
+            df.timeZone = TimeZone(secondsFromGMT: 0)
+            df.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            if let d = df.date(from: raw) { return d }
+
+            // 3) SQLite with fractional seconds
+            let df2 = DateFormatter()
+            df2.locale = Locale(identifier: "en_US_POSIX")
+            df2.timeZone = TimeZone(secondsFromGMT: 0)
+            df2.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+            return df2.date(from: raw)
         }
     // MARK: - Golden schema idempotent helper
 

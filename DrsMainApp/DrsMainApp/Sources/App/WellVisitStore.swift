@@ -79,11 +79,143 @@ public struct WellVisitPayload: Equatable {
     public var vitaminDGiven: Int? = nil
 }
 
+/// Addendum record attached to a well visit.
+public struct WellVisitAddendum: Identifiable, Equatable {
+    public let id: Int64
+    public let wellVisitID: Int64
+    public let userID: Int64?
+    public let createdAtISO: String?
+    public let updatedAtISO: String?
+    public var text: String
+}
+
 /// Data access layer for the `well_visits` table.
 /// NOTE: This layer assumes the table already exists in db.sqlite.
 public struct WellVisitStore {
 
     public init() {}
+
+    // MARK: - Addenda (visit_addenda)
+
+    /// Fetch addenda for a well visit, oldest-first.
+    public func fetchAddendaForWellVisit(dbURL: URL, wellVisitID: Int64) throws -> [WellVisitAddendum] {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT id, well_visit_id, user_id, created_at, updated_at, addendum_text
+        FROM visit_addenda
+        WHERE well_visit_id = ?
+        ORDER BY datetime(COALESCE(created_at, '1970-01-01T00:00:00')) ASC, id ASC;
+        """
+
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        try bindInt64(stmt, index: 1, value: wellVisitID)
+
+        var items: [WellVisitAddendum] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = sqlite3_column_int64(stmt, 0)
+            let wvID = sqlite3_column_int64(stmt, 1)
+            let uID  = sqlite3_column_type(stmt, 2) == SQLITE_NULL ? nil : sqlite3_column_int64(stmt, 2)
+            let created = columnText(stmt, 3)
+            let updated = columnText(stmt, 4)
+            let text = columnText(stmt, 5) ?? ""
+
+            items.append(
+                WellVisitAddendum(
+                    id: id,
+                    wellVisitID: wvID,
+                    userID: uID,
+                    createdAtISO: created,
+                    updatedAtISO: updated,
+                    text: text
+                )
+            )
+        }
+        return items
+    }
+
+    /// Insert a new addendum for a well visit. Returns new addendum row id.
+    public func insertAddendumForWellVisit(dbURL: URL,
+                                          wellVisitID: Int64,
+                                          userID: Int64? = nil,
+                                          text: String) throws -> Int64 {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        INSERT INTO visit_addenda (episode_id, well_visit_id, user_id, addendum_text)
+        VALUES (NULL, ?, ?, ?);
+        """
+
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        var idx: Int32 = 1
+        try bindInt64(stmt, index: idx, value: wellVisitID); idx += 1
+
+        if let uid = userID {
+            try bindInt64(stmt, index: idx, value: uid)
+        } else {
+            sqlite3_bind_null(stmt, idx)
+        }
+        idx += 1
+
+        bindText(stmt, index: idx, value: text)
+
+        try stepDone(stmt)
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    /// Update an existing addendum's text and updated_at.
+    public func updateWellVisitAddendum(dbURL: URL, addendumID: Int64, newText: String) throws -> Bool {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        UPDATE visit_addenda
+        SET addendum_text = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?;
+        """
+
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        bindText(stmt, index: 1, value: newText)
+        try bindInt64(stmt, index: 2, value: addendumID)
+
+        let rc = sqlite3_step(stmt)
+        if rc != SQLITE_DONE {
+            throw sqliteError(db, key: "wellVisitStore.error.addendaUpdateStep", rc)
+        }
+        return sqlite3_changes(db) > 0
+    }
+
+    /// Delete an addendum.
+    public func deleteWellVisitAddendum(dbURL: URL, addendumID: Int64) throws -> Bool {
+        let db = try openDB(dbURL)
+        defer { sqlite3_close(db) }
+
+        let sql = "DELETE FROM visit_addenda WHERE id = ?;"
+
+        var stmt: OpaquePointer?
+        try prepare(db, sql, &stmt)
+        defer { sqlite3_finalize(stmt) }
+
+        try bindInt64(stmt, index: 1, value: addendumID)
+
+        let rc = sqlite3_step(stmt)
+        if rc != SQLITE_DONE {
+            throw sqliteError(db, key: "wellVisitStore.error.addendaDeleteStep", rc)
+        }
+        return sqlite3_changes(db) > 0
+    }
 
     // MARK: - Public API
 
