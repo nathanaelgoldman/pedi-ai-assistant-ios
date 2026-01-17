@@ -151,7 +151,14 @@ fileprivate func isSickCategory(_ raw: String) -> Bool {
 }
 
 /// Right-pane details for a selected patient from the sidebar list.
+
 struct PatientDetailView: View {
+
+    // Logger for diagnosing view-driven refreshes / sheet lifecycle.
+    private static let uiLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "DrsMainApp",
+        category: "ui.patient_detail"
+    )
 
     // Compact patient/bundle meta shown next to the patient name (moved up from the old Facts grid)
     @ViewBuilder
@@ -230,8 +237,13 @@ struct PatientDetailView: View {
     @State private var vaxPatientIDForSheet: Int? = nil
     @State private var showEpisodeForm = false
     @State private var editingEpisodeID: Int? = nil
+    @State private var episodePatientIDForSheet: Int? = nil
+    @State private var episodeBundleTokenForSheet: String? = nil
+
     @State private var showWellVisitForm = false
     @State private var editingWellVisitID: Int? = nil
+    @State private var wellVisitPatientIDForSheet: Int? = nil
+    @State private var wellVisitBundleTokenForSheet: String? = nil
 
     // Formatters for visit and DOB rendering
     private static let isoFullDate: ISO8601DateFormatter = {
@@ -449,6 +461,8 @@ struct PatientDetailView: View {
                 systemImage: "plus.circle"
             ) {
                 Button {
+                    wellVisitPatientIDForSheet = patient.id
+                    wellVisitBundleTokenForSheet = appState.currentBundleURL?.path
                     editingWellVisitID = nil
                     showWellVisitForm = true
                     visitForDetail = nil
@@ -463,6 +477,8 @@ struct PatientDetailView: View {
                 }
 
                 Button {
+                    episodePatientIDForSheet = patient.id
+                    episodeBundleTokenForSheet = appState.currentBundleURL?.path
                     editingEpisodeID = nil
                     showEpisodeForm = true
                     visitForDetail = nil
@@ -657,6 +673,170 @@ struct PatientDetailView: View {
         }
     }
 
+    // MARK: - Lightweight logging & handlers (keeps SwiftUI body type-checking fast)
+
+    private func debugLog(_ message: String) {
+        // Keep logging simple to avoid heavy string interpolation in ViewBuilder closures.
+        Self.uiLog.debug("\(message, privacy: .public)")
+    }
+
+    private func handleOnAppear() {
+        // Keep AppState selection in sync with the current detail view.
+        // IMPORTANT: Do not trigger DB loads from the View; AppState.selectedPatientID didSet handles that.
+        if appState.selectedPatientID != patient.id {
+            appState.selectedPatientID = patient.id
+        }
+    }
+
+    private func handleSelectedPatientIDChange(_ newID: Int?) {
+        guard let id = newID else { return }
+
+        debugLog("PatientDetailView: selectedPatientID changed -> \(id)")
+        debugLog("Sheets open? peri=\(showPerinatalHistory) pmh=\(showPMH) vax=\(showVaccinationStatus) well=\(showWellVisitForm) episode=\(showEpisodeForm)")
+
+        // Only close sheets if they were opened for a different patient than the newly selected one
+        if showPerinatalHistory, let openID = perinatalPatientIDForSheet, openID != id {
+            showPerinatalHistory = false
+        }
+        if showPMH, let openID = pmhPatientIDForSheet, openID != id {
+            showPMH = false
+        }
+        if showVaccinationStatus, let openID = vaxPatientIDForSheet, openID != id {
+            showVaccinationStatus = false
+        }
+
+        if showEpisodeForm {
+            debugLog("PatientDetailView: dismissing SickEpisodeForm (patient context change)")
+            // Clear the sheet context BEFORE dismissing so onDismiss can detect a programmatic dismissal.
+            episodePatientIDForSheet = nil
+            editingEpisodeID = nil
+            episodeBundleTokenForSheet = nil
+            showEpisodeForm = false
+        }
+        if showWellVisitForm {
+            debugLog("PatientDetailView: dismissing WellVisitForm (patient context change)")
+            // Clear the sheet context BEFORE dismissing so onDismiss can detect a programmatic dismissal.
+            wellVisitPatientIDForSheet = nil
+            editingWellVisitID = nil
+            wellVisitBundleTokenForSheet = nil
+            showWellVisitForm = false
+        }
+
+        // Also dismiss any open visit-detail sheet when switching patient context.
+        if visitForDetail != nil {
+            visitForDetail = nil
+            reportVisitKind = nil
+        }
+
+        debugLog(
+            "PatientDetailView: after cleanup openIDs: peri=\(String(describing: perinatalPatientIDForSheet)) " +
+            "pmh=\(String(describing: pmhPatientIDForSheet)) vax=\(String(describing: vaxPatientIDForSheet)) " +
+            "well=\(String(describing: wellVisitPatientIDForSheet)) episode=\(String(describing: episodePatientIDForSheet))"
+        )
+        // No DB loads here: AppState.selectedPatientID didSet is the single source of truth.
+    }
+
+    private func handleOnDisappear() {
+        // If this view is being replaced (e.g., bundle switch) while a sheet is open,
+        // clear the sheet context first so onDismiss can detect it and skip reloads.
+        if showWellVisitForm {
+            wellVisitPatientIDForSheet = nil
+            wellVisitBundleTokenForSheet = nil
+            editingWellVisitID = nil
+            showWellVisitForm = false
+        }
+        if showEpisodeForm {
+            episodePatientIDForSheet = nil
+            episodeBundleTokenForSheet = nil
+            editingEpisodeID = nil
+            showEpisodeForm = false
+        }
+        if showPerinatalHistory {
+            perinatalPatientIDForSheet = nil
+            showPerinatalHistory = false
+        }
+        if showPMH {
+            pmhPatientIDForSheet = nil
+            showPMH = false
+        }
+        if showVaccinationStatus {
+            vaxPatientIDForSheet = nil
+            showVaccinationStatus = false
+        }
+    }
+
+    private func onDismissPerinatalSheet() {
+        let openID = perinatalPatientIDForSheet
+        showPerinatalHistory = false
+        perinatalPatientIDForSheet = nil
+        debugLog("onDismiss Perinatal: openID=\(String(describing: openID)) selected=\(String(describing: appState.selectedPatientID))")
+        if let openID, let selected = appState.selectedPatientID, openID == selected {
+            appState.loadPatientProfile(for: Int64(openID))
+        }
+    }
+
+    private func onDismissPmhSheet() {
+        let openID = pmhPatientIDForSheet
+        showPMH = false
+        pmhPatientIDForSheet = nil
+        debugLog("onDismiss PMH: openID=\(String(describing: openID)) selected=\(String(describing: appState.selectedPatientID))")
+        if let openID, let selected = appState.selectedPatientID, openID == selected {
+            appState.loadPatientProfile(for: Int64(openID))
+        }
+    }
+
+    private func onDismissVaxSheet() {
+        let openID = vaxPatientIDForSheet
+        showVaccinationStatus = false
+        vaxPatientIDForSheet = nil
+        debugLog("onDismiss Vax: openID=\(String(describing: openID)) selected=\(String(describing: appState.selectedPatientID))")
+        if let openID, let selected = appState.selectedPatientID, openID == selected {
+            appState.loadPatientProfile(for: Int64(openID))
+        }
+    }
+
+    private func onDismissWellVisitSheet() {
+        let openID = wellVisitPatientIDForSheet
+        let openToken = wellVisitBundleTokenForSheet
+        wellVisitPatientIDForSheet = nil
+        wellVisitBundleTokenForSheet = nil
+
+        let selected = appState.selectedPatientID
+        let currentToken = appState.currentBundleURL?.path
+        debugLog("onDismiss WellVisitForm: openID=\(String(describing: openID)) selected=\(String(describing: selected))")
+        debugLog("onDismiss WellVisitForm: openToken=\(String(describing: openToken)) currentToken=\(String(describing: currentToken))")
+
+        if let openID,
+           let selected,
+           openID == selected,
+           let openToken,
+           openToken == currentToken {
+            appState.loadVisits(for: selected)
+            visitTab = .all
+        }
+    }
+
+    private func onDismissEpisodeSheet() {
+        let openID = episodePatientIDForSheet
+        let openToken = episodeBundleTokenForSheet
+        episodePatientIDForSheet = nil
+        episodeBundleTokenForSheet = nil
+
+        let selected = appState.selectedPatientID
+        let currentToken = appState.currentBundleURL?.path
+        debugLog("onDismiss SickEpisodeForm: openID=\(String(describing: openID)) selected=\(String(describing: selected))")
+        debugLog("onDismiss SickEpisodeForm: openToken=\(String(describing: openToken)) currentToken=\(String(describing: currentToken))")
+
+        if let openID,
+           let selected,
+           openID == selected,
+           let openToken,
+           openToken == currentToken {
+            appState.loadVisits(for: selected)
+            visitTab = .all
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -745,36 +925,21 @@ struct PatientDetailView: View {
         }
         .id(patient.id)
         .onAppear {
-            // Ensure visit-detail loaders use the correct patient context.
-            appState.selectedPatientID = patient.id
-
-            // Load both visits and the profile
-            appState.loadVisits(for: patient.id)
-            appState.loadPatientProfile(for: Int64(patient.id))
+            handleOnAppear()
         }
-        .onChange(of: appState.selectedPatientID) { newID in
-            guard let id = newID else { return }
-            // Only close Perinatal sheet if it was opened for a different patient than the newly selected one
-            if showPerinatalHistory, let openID = perinatalPatientIDForSheet, openID != id {
-                showPerinatalHistory = false
-            }
-            if showPMH, let openID = pmhPatientIDForSheet, openID != id {
-                showPMH = false
-            }
-            if showVaccinationStatus, let openID = vaxPatientIDForSheet, openID != id {
-                showVaccinationStatus = false
-            }
-            if showEpisodeForm { showEpisodeForm = false; editingEpisodeID = nil }
-            appState.loadVisits(for: id)
-            appState.loadPatientProfile(for: Int64(id))
+        .onChange(of: appState.selectedPatientID) { _, newID in
+            handleSelectedPatientIDChange(newID)
         }
-        .onChange(of: showEpisodeForm) { open in
+        .onDisappear {
+            handleOnDisappear()
+        }
+        .onChange(of: showEpisodeForm) { _, open in
             // When the sheet closes, forget the editing target to avoid stale state on the next open
             if !open {
                 editingEpisodeID = nil
             }
         }
-        .onChange(of: showWellVisitForm) { open in
+        .onChange(of: showWellVisitForm) { _, open in
             if !open {
                 editingWellVisitID = nil
             }
@@ -796,51 +961,32 @@ struct PatientDetailView: View {
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showPerinatalHistory, onDismiss: {
-            showPerinatalHistory = false
-            if let id = appState.selectedPatientID {
-                appState.loadPatientProfile(for: Int64(id))
-            }
+            onDismissPerinatalSheet()
         }) {
             PerinatalHistoryForm()
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showPMH, onDismiss: {
-            showPMH = false
-            if let id = appState.selectedPatientID {
-                appState.loadPatientProfile(for: Int64(id))
-            }
+            onDismissPmhSheet()
         }) {
             PmhForm()
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showVaccinationStatus, onDismiss: {
-            showVaccinationStatus = false
-            if let id = appState.selectedPatientID {
-                appState.loadPatientProfile(for: Int64(id))
-            }
+            onDismissVaxSheet()
         }) {
             VaccinationStatusForm()
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showWellVisitForm, onDismiss: {
-            // Refresh visits and profile after closing the well-visit form
-            if let id = appState.selectedPatientID {
-                appState.loadVisits(for: id)
-                appState.loadPatientProfile(for: Int64(id))
-                visitTab = .all
-            }
+            onDismissWellVisitSheet()
         }) {
             WellVisitForm(editingVisitID: editingWellVisitID)
                 .id(editingWellVisitID ?? -1)
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showEpisodeForm, onDismiss: {
-            // Refresh visits and profile after closing the form
-            if let id = appState.selectedPatientID {
-                appState.loadVisits(for: id)
-                appState.loadPatientProfile(for: Int64(id))
-                visitTab = .all
-            }
+            onDismissEpisodeSheet()
         }) {
             SickEpisodeForm(editingEpisodeID: editingEpisodeID)
                 .id(editingEpisodeID ?? -1)
@@ -896,6 +1042,8 @@ struct PatientDetailView: View {
                         comment: "Button to edit a visit from patient details"
                     )
                 ) {
+                    episodePatientIDForSheet = patient.id
+                    episodeBundleTokenForSheet = appState.currentBundleURL?.path
                     editingEpisodeID = v.id
                     showEpisodeForm = true
                 }
@@ -908,6 +1056,8 @@ struct PatientDetailView: View {
                         comment: "Button to edit a visit from patient details"
                     )
                 ) {
+                    wellVisitPatientIDForSheet = patient.id
+                    wellVisitBundleTokenForSheet = appState.currentBundleURL?.path
                     editingWellVisitID = v.id
                     showWellVisitForm = true
                 }

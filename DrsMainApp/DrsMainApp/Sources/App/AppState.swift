@@ -104,18 +104,42 @@ final class AppState: ObservableObject {
     @Published var recentBundles: [URL] = []
     @Published var patients: [PatientRow] = []
     @Published var selectedPatientID: Int? {
+        willSet {
+            let oldID = self.selectedPatientID
+            let newID = newValue
+            if oldID != newID {
+                log.info("selectedPatientID willSet: \(String(describing: oldID), privacy: .public) → \(String(describing: newID), privacy: .public)")
+            }
+        }
         didSet {
+            
+            // Avoid redundant work when the value hasn't actually changed.
+            guard oldValue != selectedPatientID else {
+                log.debug("selectedPatientID didSet: unchanged (\(String(describing: self.selectedPatientID), privacy: .public))")
+                return
+            }
+            
+            selectionDrivenProfileLoadDepth += 1
+            defer { selectionDrivenProfileLoadDepth -= 1 }
+
+            let t0 = Date()
+
             self.loadPerinatalHistoryForSelectedPatient()
             self.loadPMHForSelectedPatient()
             self.clearEpisodeEditing()
+
             if let pid = self.selectedPatientID {
                 // Keep the readonly header/summary in sync with selection
                 self.loadPatientProfile(for: Int64(pid))
                 self.loadPatientSummary(pid)
                 self.reloadVisitsForSelectedPatient()
+
+                log.info("selectedPatientID didSet: loaded profile/summary/visits for pid=\(pid, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
             } else {
                 self.currentPatientProfile = nil
                 self.patientSummary = nil
+
+                log.info("selectedPatientID didSet: cleared patient-specific state in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
             }
         }
     }
@@ -140,6 +164,9 @@ final class AppState: ObservableObject {
     public var bundlesRoot: URL {
         ensureAppSupportSubdir("Bundles")
     }
+    
+    // Suppress noisy callstack logging when profile loads are triggered by patient selection.
+    private var selectionDrivenProfileLoadDepth: Int = 0
     
     private let profileLog = Logger(subsystem: "DrsMainApp", category: "PatientProfile")
     // Clinicians: injected at init so AppState and Views share the same instance
@@ -559,6 +586,16 @@ final class AppState: ObservableObject {
             return
         }
         
+        profileLog.debug("loadPatientProfile: pid=\(patientID, privacy: .public) db=\(dbURL.lastPathComponent, privacy: .public)")
+        #if DEBUG
+        // Helps detect unexpected duplicate calls triggered by views (.task/.onAppear/.onChange).
+        let stack = Thread.callStackSymbols.prefix(12).joined(separator: " | ")
+        if selectionDrivenProfileLoadDepth == 0 {
+            log.debug("loadPatientProfile callstack: \(Thread.callStackSymbols.joined(separator: " | "))")
+        }
+        #endif
+        let t0 = Date()
+        
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else {
             profileLog.error("sqlite3_open failed for \(dbURL.path, privacy: .public)")
@@ -737,6 +774,8 @@ final class AppState: ObservableObject {
             perinatalHistory: peri,
             parentNotes: (parentNotes?.isEmpty == false ? parentNotes : nil)
         )
+            profileLog.debug("loadPatientProfile: pid=\(patientID, privacy: .public) done in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
+        
             DispatchQueue.main.async { [weak self] in
                 self?.currentPatientProfile = profile
             }
@@ -754,9 +793,11 @@ final class AppState: ObservableObject {
     // MARK: - Selection / Recents
     func selectBundle(_ url: URL) {
         refreshRecentBundlesFromDefaults()
+        let t0 = Date()
 
         let fm = FileManager.default
         let standardized = url.standardizedFileURL.resolvingSymlinksInPath()
+        self.log.info("selectBundle: requested=\(standardized.lastPathComponent, privacy: .public)")
 
         guard fm.fileExists(atPath: standardized.path),
               let chosen = canonicalBundleRoot(at: standardized)?
@@ -767,6 +808,7 @@ final class AppState: ObservableObject {
             self.recentBundles.removeAll { $0.standardizedFileURL.resolvingSymlinksInPath().path == standardized.path }
             pruneRecentBundlesInPlace()
             persistRecentBundles()
+            self.log.info("selectBundle: finished (invalid selection) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
             return
         }
 
@@ -775,6 +817,7 @@ final class AppState: ObservableObject {
 
         // ✅ Use canonical root everywhere
         currentBundleURL = chosen
+        self.log.info("selectBundle: chosen=\(chosen.lastPathComponent, privacy: .public)")
 
         if let dbURL = dbURLForCurrentBundle() {
             applyGoldenSchemaIdempotent(to: dbURL)
@@ -786,6 +829,7 @@ final class AppState: ObservableObject {
         visits = []
         reloadPatients()
         reloadDocuments()
+        self.log.info("selectBundle: loaded patients=\(self.patients.count, privacy: .public) docs=\(self.documents.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
     }
         
         private func addToRecents(_ url: URL) {
@@ -801,72 +845,106 @@ final class AppState: ObservableObject {
         }
         
         
-        func reloadPatients() {
-            guard let dbURL = currentDBURL,
-                  FileManager.default.fileExists(atPath: dbURL.path) else {
-                patients = []
-                return
-            }
-            
-            var db: OpaquePointer?
-            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
-                if let db { sqlite3_close(db) }
-                patients = []
-                return
-            }
-            defer { sqlite3_close(db) }
-            
-            let sql = """
-        SELECT
-          id,
-          COALESCE(alias_label, '') AS alias,
-          TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS fullName,
-          COALESCE(dob, '')  AS dobISO,
-          COALESCE(sex, '')  AS sex
-        FROM patients
-        ORDER BY id;
-        """
-            
-            var stmt: OpaquePointer?
-            defer { sqlite3_finalize(stmt) }
-            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                let msg = String(cString: sqlite3_errmsg(db))
-                log.error("reloadPatients prepare failed: \(msg, privacy: .public)")
-                patients = []
-                return
-            }
-            
-            var rows: [PatientRow] = []
-            while sqlite3_step(stmt) == SQLITE_ROW {
-                let id = Int(sqlite3_column_int64(stmt, 0))
-                func text(_ i: Int32) -> String {
-                    if let c = sqlite3_column_text(stmt, i) { return String(cString: c) }
-                    return ""
-                }
-                let alias    = text(1)
-                let fullName = text(2)
-                let dobISO   = text(3)
-                let sex      = text(4)
-                
-                rows.append(PatientRow(id: id, alias: alias, fullName: fullName, dobISO: dobISO, sex: sex))
-            }
-            
-            self.patients = rows
-            if self.selectedPatientID == nil, let first = rows.first {
-                self.selectedPatientID = first.id
+func reloadPatients() {
+    guard let dbURL = currentDBURL,
+          FileManager.default.fileExists(atPath: dbURL.path) else {
+        patients = []
+        // If the DB disappeared, also clear selection.
+        if selectedPatientID != nil {
+            selectedPatientID = nil
+        }
+        return
+    }
+
+    let previousSelection = selectedPatientID
+    let t0 = Date()
+
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+        if let db { sqlite3_close(db) }
+        patients = []
+        if selectedPatientID != nil {
+            selectedPatientID = nil
+        }
+        return
+    }
+    defer { sqlite3_close(db) }
+
+    let sql = """
+    SELECT
+      id,
+      COALESCE(alias_label, '') AS alias,
+      TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS fullName,
+      COALESCE(dob, '')  AS dobISO,
+      COALESCE(sex, '')  AS sex
+    FROM patients
+    ORDER BY id;
+    """
+
+    var stmt: OpaquePointer?
+    defer { sqlite3_finalize(stmt) }
+    guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+        let msg = String(cString: sqlite3_errmsg(db))
+        log.error("reloadPatients prepare failed: \(msg, privacy: .public)")
+        patients = []
+        if selectedPatientID != nil {
+            selectedPatientID = nil
+        }
+        return
+    }
+
+    var rows: [PatientRow] = []
+    while sqlite3_step(stmt) == SQLITE_ROW {
+        let id = Int(sqlite3_column_int64(stmt, 0))
+        func text(_ i: Int32) -> String {
+            if let c = sqlite3_column_text(stmt, i) { return String(cString: c) }
+            return ""
+        }
+        let alias    = text(1)
+        let fullName = text(2)
+        let dobISO   = text(3)
+        let sex      = text(4)
+
+        rows.append(PatientRow(id: id, alias: alias, fullName: fullName, dobISO: dobISO, sex: sex))
+    }
+
+    self.patients = rows
+
+    // Keep selection stable:
+    // - If there was no selection, auto-select first patient (if any).
+    // - If there was a selection but it no longer exists, fall back to first (or nil).
+    if let prev = previousSelection {
+        let stillExists = rows.contains(where: { $0.id == prev })
+        if !stillExists {
+            let newSel = rows.first?.id
+            if newSel != prev {
+                self.selectedPatientID = newSel
             }
         }
+    } else {
+        if let first = rows.first {
+            self.selectedPatientID = first.id
+        } else if self.selectedPatientID != nil {
+            self.selectedPatientID = nil
+        }
+    }
+
+    log.debug("reloadPatients: rows=\(rows.count, privacy: .public) (prevSel=\(String(describing: previousSelection), privacy: .public)) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
+}
         
         // MARK: - Visits (read-only listing for current bundle)
         
         /// Reload visits for the currently selected patient (safe to call when no selection).
-        func reloadVisitsForSelectedPatient() {
-            guard let pid = selectedPatientID else {
-                visits.removeAll()
-                return
-            }
-            loadVisits(for: pid)
+    func reloadVisitsForSelectedPatient() {
+        guard let pid = selectedPatientID else {
+            visits.removeAll()
+            log.debug("reloadVisitsForSelectedPatient: no selected patient")
+            return
         }
+        let t0 = Date()
+        loadVisits(for: pid)
+        log.debug("reloadVisitsForSelectedPatient: pid=\(pid, privacy: .public) visits=\(self.visits.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
+    }
         
         /// Check if a table exists in the opened SQLite database.
         private func tableExists(_ db: OpaquePointer?, name: String) -> Bool {
@@ -911,6 +989,9 @@ final class AppState: ObservableObject {
                   FileManager.default.fileExists(atPath: dbURL.path) else {
                 return
             }
+            let t0 = Date()
+            log.debug("loadVisits: pid=\(patientID, privacy: .public) start db=\(dbURL.lastPathComponent, privacy: .public)")
+            
             
             var db: OpaquePointer?
             guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
@@ -984,6 +1065,7 @@ final class AppState: ObservableObject {
                         rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
                     }
                     self.visits = rows
+                    log.debug("loadVisits: pid=\(patientID, privacy: .public) done rows=\(rows.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
                     if rows.isEmpty {
                         log.info("visits table present but no rows for patient \(patientID)")
                     }
@@ -1026,6 +1108,7 @@ final class AppState: ObservableObject {
             }
             
             // Build UNION ALL with placeholders.
+            log.debug("loadVisits: using union over tables: \(parts.map{$0.table}.joined(separator: ","), privacy: .public)")
             let unionSQL = parts.map {
             """
             SELECT id, \($0.dateCol) AS dateISO, \($0.categoryExpr) AS category
@@ -1058,7 +1141,7 @@ final class AppState: ObservableObject {
                 rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
             }
             self.visits = rows
-            
+            log.debug("loadVisits: pid=\(patientID, privacy: .public) done rows=\(rows.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
             if rows.isEmpty {
                 let tablesStr = parts.map { $0.table }.joined(separator: ", ")
                 log.info("Visit-like tables exist but no rows matched patient \(patientID). Checked: \(tablesStr, privacy: .public)")
@@ -1223,6 +1306,8 @@ final class AppState: ObservableObject {
                 patientSummary = nil
                 return
             }
+            let t0 = Date()
+            log.debug("loadPatientSummary: pid=\(patientID, privacy: .public)")
             defer { sqlite3_close(db) }
             
             // --- Vaccination status from patients.vaccination_status (if present) ---
@@ -1328,7 +1413,7 @@ final class AppState: ObservableObject {
                     }
                 }
             }
-            
+            log.debug("loadPatientSummary: pid=\(patientID, privacy: .public) done in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
             self.patientSummary = PatientSummary(
                 vaccination: vaccination,
                 pmh: pmh,
@@ -1394,6 +1479,7 @@ final class AppState: ObservableObject {
                                 icd10: icd,
                                 conclusions: cons
                             )
+                            log.debug("loadVisits: using unified visits table")
                             return
                         }
                     }
@@ -2990,10 +3076,6 @@ final class AppState: ObservableObject {
                 comment: "Line when perinatal history is missing, e.g. 'Perinatal history: not documented.'"
             )
 
-            let structuredJsonHeader = NSLocalizedString(
-                "appstate.ai.prompt.label.structured_json_header",
-                comment: "Header label before JSON blob, e.g. 'Structured episode snapshot (JSON)'"
-            )
 
             if let bp = basePrompt, !bp.isEmpty {
                 header = bp

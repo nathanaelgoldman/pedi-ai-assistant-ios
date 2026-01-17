@@ -60,6 +60,7 @@
 		BBE216B82ECF344D00D4C281 /* WellVisitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B72ECF344600D4C281 /* WellVisitStore.swift */; };
 		BBE216BA2ECF4A9C00D4C281 /* WellVisitForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */; };
 		E90B87422F162E4700D093D7 /* PromptRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90B87412F162E3B00D093D7 /* PromptRenderer.swift */; };
+		E98BC2692F1B5EB9002A5207 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98BC2682F1B5EAC002A5207 /* AppLog.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -116,6 +117,7 @@
 		BBE216B72ECF344600D4C281 /* WellVisitStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitStore.swift; sourceTree = "<group>"; };
 		BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitForm.swift; sourceTree = "<group>"; };
 		E90B87412F162E3B00D093D7 /* PromptRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRenderer.swift; sourceTree = "<group>"; };
+		E98BC2682F1B5EAC002A5207 /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -202,6 +204,7 @@
 		BB564AED2EAE0BB900870007 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				E98BC2682F1B5EAC002A5207 /* AppLog.swift */,
 				BBE216B72ECF344600D4C281 /* WellVisitStore.swift */,
 				BB6E2F822EC858600044F225 /* VitalsStore.swift */,
 				BB91868A2EC707EF00A8AA8A /* EpisodeStore.swift */,
@@ -432,6 +435,7 @@
 				BB6E2F852EC8665C0044F225 /* VitalsRanges.swift in Sources */,
 				BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */,
 				BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */,
+				E98BC2692F1B5EB9002A5207 /* AppLog.swift in Sources */,
 				BB71CCE92EEE8B95000B7947 /* GeminiProvider.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
 				BB96A5732EBB3A2D003F5C44 /* ReportGrowthRenderer.swift in Sources */,

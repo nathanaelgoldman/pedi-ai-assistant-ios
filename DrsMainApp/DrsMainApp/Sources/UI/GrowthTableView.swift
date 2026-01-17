@@ -204,7 +204,7 @@ struct GrowthTableView: View {
             .sheet(isPresented: $showAddSheet) {
                 ManualGrowthForm { date, weightKg, heightCm, headC in
                     if let pid = appState.selectedPatientID {
-                        var df = ISO8601DateFormatter()
+                        let df = ISO8601DateFormatter()
                         df.formatOptions = [.withFullDate]
                         let iso = df.string(from: date)
                         do {

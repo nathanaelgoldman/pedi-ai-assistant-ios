@@ -851,7 +851,7 @@ final class ReportDataLoader {
                     dbg("ordering by \(orderField)")
                     var whereClause = "\(patientFK) = ?"
                     var needsDate = false
-                    if let cut = cutoffISO, cols.contains("updated_at") {
+                    if cutoffISO != nil, cols.contains("updated_at") {
                         whereClause += " AND date(updated_at) <= date(?)"
                         needsDate = true
                     }
@@ -875,7 +875,7 @@ final class ReportDataLoader {
                     let orderField = cols.contains("updated_at") ? "updated_at" : "id"
                     var whereClause = "\(patientFK) = ?"
                     var needsDate = false
-                    if let cut = cutoffISO, cols.contains("updated_at") {
+                    if cutoffISO != nil, cols.contains("updated_at") {
                         whereClause += " AND date(updated_at) <= date(?)"
                         needsDate = true
                     }

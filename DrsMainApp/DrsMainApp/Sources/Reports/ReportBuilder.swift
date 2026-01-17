@@ -3375,7 +3375,10 @@ extension ReportBuilder {
 
         // Use in‑process ZIP via Foundation.Archive (10.13+).
         if #available(macOS 10.13, *) {
-            guard let archive = Archive(url: zipFile, accessMode: .create) else {
+            let archive: Archive
+            do {
+                archive = try Archive(url: zipFile, accessMode: .create)
+            } catch {
                 throw NSError(
                     domain: "ReportExport",
                     code: 5002,
@@ -4571,7 +4574,7 @@ private extension ReportBuilder {
 
     /// Render a single problem-listing token line.
     /// This includes logic for specific keys (used for teeth, etc).
-    fileprivate func renderProblemTokenLine(token: ProblemToken) -> String {
+private func renderProblemTokenLine(token: ProblemToken) -> String {
         let key = token.key
         // ... other token keys ...
         if key == "well_visit_form.problem_listing.token.pe_teeth_V1" ||

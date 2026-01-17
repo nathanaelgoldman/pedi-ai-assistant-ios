@@ -743,3 +743,13 @@
 "well_report.enum.vaccination.rsv" = "RSV";
 
 "pdf.sick.pe.additional_info.title" = "Additional physical examination information";
+
+"pdf.section.addenda" = "Addenda";
+
+/* Well visit title */
+"patient_viewer.well_visit.title.four_year" = "4-year visit";
+"patient_viewer.well_visit.title.five_year" = "5-year visit";
+
+/* Well visit type labels */
+"well_report.visit_type.four_year" = "4-year visit";
+"well_report.visit_type.five_year" = "5-year visit";

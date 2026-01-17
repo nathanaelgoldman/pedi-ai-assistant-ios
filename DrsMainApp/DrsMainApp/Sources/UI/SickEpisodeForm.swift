@@ -1099,7 +1099,6 @@ struct SickEpisodeForm: View {
         // Lymph nodes (multi)
         case "Cervical": return NSLocalizedString("sick_episode_form.choice.cervical", comment: "SickEpisodeForm choice")
         case "Submandibular": return NSLocalizedString("sick_episode_form.choice.submandibular", comment: "SickEpisodeForm choice")
-        case "Tender": return NSLocalizedString("sick_episode_form.choice.tender", comment: "SickEpisodeForm choice")
         case "Generalized": return NSLocalizedString("sick_episode_form.choice.generalized", comment: "SickEpisodeForm choice")
 
         // Peristalsis

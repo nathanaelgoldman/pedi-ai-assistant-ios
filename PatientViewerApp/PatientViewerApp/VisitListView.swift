@@ -23,6 +23,7 @@ let inputDateFormatter: DateFormatter = {
 let outputDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
+    formatter.timeStyle = .short
     return formatter
 }()
 
@@ -57,6 +58,8 @@ private func wellVisitTitle(_ code: String) -> String {
     case "thirty_month": return L("patient_viewer.well_visit.title.thirty_month", comment: "Well visit title")
     case "thirtysix_month": return L("patient_viewer.well_visit.title.thirtysix_month", comment: "Well visit title")
     case "newborn_first": return L("patient_viewer.well_visit.title.newborn_first", comment: "Well visit title")
+    case "four_year": return L("patient_viewer.well_visit.title.four_year", comment: "Well visit title")
+    case "five_year": return L("patient_viewer.well_visit.title.five_year", comment: "Well visit title")
     default:
         return code
     }
@@ -279,11 +282,10 @@ struct PDFPreviewContainer: SwiftUI.View {
 }
 
 private func formatDate(_ raw: String) -> String {
-    if let date = inputDateFormatter.date(from: raw) {
-        return outputDateFormatter.string(from: date)
-    } else {
-        return raw
+    if let d = parseVisitDate(raw) {
+        return outputDateFormatter.string(from: d)
     }
+    return raw
 }
 
 struct VisitListView: SwiftUI.View {
@@ -385,11 +387,10 @@ struct VisitListView: SwiftUI.View {
     }
 
     func formatDate(_ raw: String) -> String {
-        if let date = inputDateFormatter.date(from: raw) {
-            return outputDateFormatter.string(from: date)
-        } else {
-            return raw
+        if let d = parseVisitDate(raw) {
+            return outputDateFormatter.string(from: d)
         }
+        return raw
     }
 
     func loadVisits() {
@@ -683,12 +684,35 @@ private func parseVisitDate(_ raw: String) -> Date? {
     let rawTrim = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     if rawTrim.isEmpty || rawTrim == "—" { return nil }
 
+    // 1) First try real ISO8601 parsing (handles trailing Z and timezone offsets).
+    //    Try fractional seconds first, then non-fractional.
+    let isoFrac = ISO8601DateFormatter()
+    isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = isoFrac.date(from: rawTrim) { return d }
+
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime]
+    if let d = iso.date(from: rawTrim) { return d }
+
+    // 2) Fallback to explicit DateFormatter patterns (legacy/variant exports)
     let formats = [
+        // Common ISO-ish exports
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         "yyyy-MM-dd'T'HH:mm:ss.SSS",
         "yyyy-MM-dd'T'HH:mm:ss",
         "yyyy-MM-dd HH:mm:ss",
-        "yyyy-MM-dd"
+        "yyyy-MM-dd",
+
+        // ISO-ish exports with timezone suffix (e.g. ...Z)
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
+
+        // Compact ISO-ish exports (no dashes/colons)
+        "yyyyMMdd'T'HHmmss.SSSSSS",
+        "yyyyMMdd'T'HHmmss.SSS",
+        "yyyyMMdd'T'HHmmss",
+        "yyyyMMdd"
     ]
 
     for f in formats {
@@ -757,6 +781,8 @@ private func mapWellVisitTypeCodeToFilename(_ codeRaw: String) -> String {
     case "thirty_month": return "30_month_visit"
     case "thirtysix_month": return "36_month_visit"
     case "newborn_first": return "newborn_first_visit"
+    case "four_year": return "4_year_visit"
+    case "five_year": return "5_year_visit"
     default:
         let cleaned = sanitizeFilenameComponent(code)
         return cleaned.isEmpty ? "well_visit" : "\(cleaned)_visit"

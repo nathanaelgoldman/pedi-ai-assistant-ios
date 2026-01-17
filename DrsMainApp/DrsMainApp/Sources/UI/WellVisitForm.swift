@@ -7,6 +7,19 @@
 
 import SwiftUI
 import SQLite3
+#if os(macOS)
+import AppKit
+#endif
+
+private var maxWellVisitFormHeight: CGFloat {
+    #if os(macOS)
+    let screenH = NSScreen.main?.visibleFrame.height ?? 900
+    // Leave room for title bar / toolbar / padding
+    return max(CGFloat(640), screenH - 140)
+    #else
+    return 1100
+    #endif
+}
 
 // Matches C macro used elsewhere so we can safely bind text.
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -363,6 +376,10 @@ struct WellVisitForm: View {
 
     /// If nil → create new visit; non-nil → edit existing well_visit row.
     let editingVisitID: Int?
+    
+    // MARK: - Logging (UI)
+    private static let uiLog = AppLog.ui
+    private static let dbLog = AppLog.db
 
     // Core fields
     @State private var visitDate: Date = Date()
@@ -492,6 +509,8 @@ struct WellVisitForm: View {
     @State private var deltaWeightPerDaySummary: String = ""
     @State private var deltaWeightPerDayValue: Int32? = nil
     @State private var deltaWeightIsNormal: Bool = false
+    
+    
 
     /// We only show the weight-delta helper box for the first 3 well visits
     /// (1, 2 and 4-month visits).
@@ -1811,11 +1830,13 @@ struct WellVisitForm: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("well_visit_form.toolbar.cancel") {
+                        Self.uiLog.debug("CANCEL tapped | pid=\(String(describing: appState.selectedPatientID), privacy: .public) visitID=\(String(describing: editingVisitID), privacy: .public)")
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("well_visit_form.toolbar.save") {
+                        Self.uiLog.debug("SAVE tapped | pid=\(String(describing: appState.selectedPatientID), privacy: .public) visitID=\(String(describing: editingVisitID), privacy: .public)")
                         saveTapped()
                     }
                     .keyboardShortcut(.defaultAction)
@@ -1830,10 +1851,11 @@ struct WellVisitForm: View {
                 Text(saveErrorMessage ?? NSLocalizedString("well_visit_form.alert.unknown_error", comment: ""))
             }
             .onAppear {
+                Self.uiLog.debug("WellVisitForm: opened editingVisitID=\(String(describing: editingVisitID), privacy: .public)")
                 loadIfEditing()
                 refreshWeightTrend()
             }
-            .onChange(of: visitDate) { _ in
+            .onChangeCompat(of: visitDate) {
                 refreshWeightTrend()
             }
         }
@@ -1841,9 +1863,9 @@ struct WellVisitForm: View {
             minWidth: 1100,
             idealWidth: 1200,
             maxWidth: 1400,
-            minHeight: 800,
-            idealHeight: 900,
-            maxHeight: 1100
+            minHeight: 640,
+            idealHeight: min(CGFloat(820), maxWellVisitFormHeight),
+            maxHeight: maxWellVisitFormHeight
         )
     }
     
@@ -2602,8 +2624,44 @@ struct WellVisitForm: View {
     /// Ensure the optional `problem_listing_tokens` column exists (backwards compatible).
     /// Safe to call repeatedly; we ignore the "duplicate column" error.
     private func ensureProblemListingTokensColumn(db: OpaquePointer) {
+        // 1) If it already exists, do nothing (no noise, no risk).
+        if columnExists(in: "well_visits", column: "problem_listing_tokens", db: db) {
+            return
+        }
+
+        // 2) Otherwise, add it.
         let sql = "ALTER TABLE well_visits ADD COLUMN problem_listing_tokens TEXT;"
-        _ = sqlite3_exec(db, sql, nil, nil, nil)
+        let rc = sqlite3_exec(db, sql, nil, nil, nil)
+
+        // 3) If something weird happens, log it (but keep the app running).
+        if rc != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            // If another thread/process added it between the check and ALTER, ignore that race safely.
+            if msg.localizedCaseInsensitiveContains("duplicate column name") {
+                return
+            }
+            // Optional: replace with your logger if you prefer
+            Self.dbLog.error("WellVisitForm: ensureProblemListingTokensColumn ALTER failed | msg=\(msg, privacy: .private)")
+        }
+    }
+
+    private func columnExists(in table: String, column: String, db: OpaquePointer) -> Bool {
+        let sql = "PRAGMA table_info(\(table));"
+        var stmt: OpaquePointer?
+
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            return false
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            // PRAGMA table_info columns: 0=cid, 1=name, 2=type, ...
+            if let cName = sqlite3_column_text(stmt, 1) {
+                let name = String(cString: cName)
+                if name == column { return true }
+            }
+        }
+        return false
     }
 
     private func encodeProblemTokensForDB(_ tokens: [ProblemToken]) -> String {
@@ -3664,6 +3722,9 @@ struct WellVisitForm: View {
             showError(NSLocalizedString("well_visit_form.error.no_patient_selected", comment: ""))
             return
         }
+        let t0 = CFAbsoluteTimeGetCurrent()
+        Self.dbLog.info("WellVisitForm: saveTapped start | pid=\(String(describing: appState.selectedPatientID), privacy: .public) visitID=\(String(describing: editingVisitID), privacy: .public)")
+        
         
         ensureBundleUserRowIfNeeded(dbURL: dbURL)
 
@@ -3922,7 +3983,12 @@ struct WellVisitForm: View {
                 showError(NSLocalizedString("well_visit_form.error.failed_insert", comment: ""))
                 return
             }
+
             visitID = Int(sqlite3_last_insert_rowid(db))
+            Self.dbLog.notice(
+                "WellVisitForm: saveTapped success (INSERT) | pid=\(String(describing: appState.selectedPatientID), privacy: .public) visitID=\(visitID, privacy: .public)"
+            )
+
             // Save physical exam structured fields
             savePhysicalExamColumns(db: db, visitID: visitID)
         } else {
@@ -4053,12 +4119,18 @@ struct WellVisitForm: View {
                 showError(NSLocalizedString("well_visit_form.error.failed_update", comment: ""))
                 return
             }
+            Self.dbLog.notice(
+                "WellVisitForm: saveTapped success (UPDATE) | pid=\(String(describing: appState.selectedPatientID), privacy: .public) visitID=\(visitID, privacy: .public)"
+            )
             // Save physical exam structured fields
             savePhysicalExamColumns(db: db, visitID: visitID)
         }
 
         // Save milestones for this visit (delete old, insert new)
         saveMilestones(db: db, visitID: visitID)
+        
+        let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - t0) * 1000.0)
+        Self.dbLog.notice("WellVisitForm: saveTapped done | mode=\(editingVisitID == nil ? "INSERT" : "UPDATE", privacy: .public) pid=\(String(describing: patientID), privacy: .public) visitID=\(visitID, privacy: .public) ms=\(elapsedMs, privacy: .public)")
 
         // Refresh visit list in UI + close sheet
         appState.reloadVisitsForSelectedPatient()
@@ -4066,6 +4138,8 @@ struct WellVisitForm: View {
     }
 
     private func savePhysicalExamColumns(db: OpaquePointer, visitID: Int) {
+        
+        Self.dbLog.debug("WellVisitForm: savePhysicalExamColumns start | visitID=\(visitID, privacy: .public)")
         let peTrophicNormalDB: Int32       = peTrophicNormal ? 1 : 0
         let peTrophicCommentDB             = peTrophicComment.trimmingCharacters(in: .whitespacesAndNewlines)
         let peHydrationNormalDB: Int32     = peHydrationNormal ? 1 : 0
@@ -4178,7 +4252,11 @@ struct WellVisitForm: View {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            Self.dbLog.error("WellVisitForm: savePhysicalExamColumns prepare failed | visitID=\(visitID, privacy: .public) msg=\(msg, privacy: .private)")
+            return
+        }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_int(stmt, 1, peTrophicNormalDB)
@@ -4236,10 +4314,18 @@ struct WellVisitForm: View {
         }
         _ = peTeethCommentDB.withCString { sqlite3_bind_text(stmt, 50, $0, -1, SQLITE_TRANSIENT) }
         sqlite3_bind_int64(stmt, 51, sqlite3_int64(visitID))
-        _ = sqlite3_step(stmt)
+        let rc = sqlite3_step(stmt)
+        if rc == SQLITE_DONE {
+            Self.dbLog.debug("WellVisitForm: savePhysicalExamColumns done | visitID=\(visitID, privacy: .public)")
+        } else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            Self.dbLog.error("WellVisitForm: savePhysicalExamColumns UPDATE failed | visitID=\(visitID, privacy: .public) msg=\(msg, privacy: .private)")
+        }
     }
 
     private func saveMilestones(db: OpaquePointer, visitID: Int) {
+        
+        Self.dbLog.debug("WellVisitForm: saveMilestones start | visitID=\(visitID, privacy: .public) count=\(currentMilestoneDescriptors.count, privacy: .public)")
         // Wipe existing rows for this visit
         do {
             let sql = "DELETE FROM well_visit_milestones WHERE visit_id = ?;"
@@ -4247,7 +4333,11 @@ struct WellVisitForm: View {
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
             sqlite3_bind_int64(stmt, 1, sqlite3_int64(visitID))
-            _ = sqlite3_step(stmt)  // ignore failure for now
+            let rc = sqlite3_step(stmt)
+            if rc != SQLITE_DONE {
+                let msg = String(cString: sqlite3_errmsg(db))
+                Self.dbLog.error("WellVisitForm: saveMilestones DELETE failed | visitID=\(visitID, privacy: .public) msg=\(msg, privacy: .private)")
+            }  // ignore failure for now
         }
 
         let descriptors = currentMilestoneDescriptors
@@ -4261,6 +4351,8 @@ struct WellVisitForm: View {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
+        
+        var okCount = 0
 
         for m in descriptors {
             let status = milestoneStatuses[m.code] ?? .uncertain
@@ -4275,23 +4367,34 @@ struct WellVisitForm: View {
             _ = status.rawValue.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
             _ = note.withCString     { sqlite3_bind_text(stmt, 5, $0, -1, SQLITE_TRANSIENT) }
 
-            _ = sqlite3_step(stmt)
+            let rc = sqlite3_step(stmt)
+            if rc == SQLITE_DONE {
+                okCount += 1
+            } else {
+                let msg = String(cString: sqlite3_errmsg(db))
+                Self.dbLog.error("WellVisitForm: saveMilestones INSERT failed | visitID=\(visitID, privacy: .public) code=\(m.code, privacy: .public) msg=\(msg, privacy: .private)")
+            }
         }
+        
+        Self.dbLog.debug("WellVisitForm: saveMilestones done | visitID=\(visitID, privacy: .public) ok=\(okCount, privacy: .public) total=\(descriptors.count, privacy: .public)")
     }
     
     // Ensure the active clinician exists in the bundle's local `users` table.
     // This mirrors the logic used for sick episodes.
     private func ensureBundleUserRowIfNeeded(dbURL: URL) {
+        Self.dbLog.debug("WellVisitForm: ensureBundleUserRowIfNeeded start | activeUserID=\(String(describing: appState.activeUserID), privacy: .public)")
         guard
             let activeID = appState.activeUserID,
             let clinician = clinicianStore.users.first(where: { $0.id == activeID })
         else {
+            Self.dbLog.debug("WellVisitForm: ensureBundleUserRowIfNeeded skip | missing activeID/clinician")
             return
         }
 
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
               let db = db else {
+            Self.dbLog.error("WellVisitForm: ensureBundleUserRowIfNeeded open DB failed | path=\(dbURL.path, privacy: .private)")
             return
         }
         defer { sqlite3_close(db) }
@@ -4305,6 +4408,8 @@ struct WellVisitForm: View {
         );
         """
         guard sqlite3_exec(db, createSQL, nil, nil, nil) == SQLITE_OK else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            Self.dbLog.error("WellVisitForm: ensureBundleUserRowIfNeeded create users table failed | msg=\(msg, privacy: .private)")
             return
         }
 
@@ -4318,6 +4423,7 @@ struct WellVisitForm: View {
 
         sqlite3_bind_int64(checkStmt, 1, sqlite3_int64(activeID))
         if sqlite3_step(checkStmt) == SQLITE_ROW {
+            Self.dbLog.debug("WellVisitForm: ensureBundleUserRowIfNeeded already present | userID=\(activeID, privacy: .public)")
             return
         }
 
@@ -4333,12 +4439,40 @@ struct WellVisitForm: View {
         _ = clinician.firstName.withCString { sqlite3_bind_text(insertStmt, 2, $0, -1, SQLITE_TRANSIENT) }
         _ = clinician.lastName.withCString  { sqlite3_bind_text(insertStmt, 3, $0, -1, SQLITE_TRANSIENT) }
 
-        _ = sqlite3_step(insertStmt)
+        let rc = sqlite3_step(insertStmt)
+        if rc == SQLITE_DONE {
+            Self.dbLog.notice("WellVisitForm: ensureBundleUserRowIfNeeded inserted user | userID=\(activeID, privacy: .public)")
+        } else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            Self.dbLog.error("WellVisitForm: ensureBundleUserRowIfNeeded insert failed | userID=\(activeID, privacy: .public) msg=\(msg, privacy: .private)")
+        }
     }
 
     private func showError(_ message: String) {
+        Self.dbLog.error(
+            "WellVisitForm: saveTapped FAILED | pid=\(String(describing: appState.selectedPatientID), privacy: .public) visitID=\(String(describing: editingVisitID), privacy: .public) msg=\(message, privacy: .private)"
+        )
         saveErrorMessage = message
         showErrorAlert = true
     }
 }
 
+
+// MARK: - SwiftUI compatibility helpers
+
+private extension View {
+    /// Avoids the macOS 14 deprecation warning for `onChange(of:perform:)` while keeping compatibility
+    /// with older deployment targets.
+    @ViewBuilder
+    func onChangeCompat<T: Equatable>(of value: T, perform action: @escaping () -> Void) -> some View {
+        if #available(macOS 14.0, *) {
+            self.onChange(of: value) {
+                action()
+            }
+        } else {
+            self.onChange(of: value) { _ in
+                action()
+            }
+        }
+    }
+}

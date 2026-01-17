@@ -119,7 +119,9 @@ public enum VitalsStore {
         bindInt(stmt,   11, bpDiastolic)
 
         if let s = recordedAtISO, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            s.withCString { cstr in sqlite3_bind_text(stmt, 12, cstr, -1, SQLITE_TRANSIENT) }
+            s.withCString { cstr in
+                _ = sqlite3_bind_text(stmt, 12, cstr, -1, SQLITE_TRANSIENT)
+            }
         } else {
             sqlite3_bind_null(stmt, 12)
         }

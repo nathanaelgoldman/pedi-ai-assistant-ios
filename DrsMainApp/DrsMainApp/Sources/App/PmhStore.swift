@@ -188,14 +188,20 @@ public final class PmhStore {
             if let v = history.allergies { sqlite3_bind_int(stmtIns, 5, Int32(v)) } else { sqlite3_bind_null(stmtIns, 5) }
 
             if let other = history.other {
-                other.withCString { cstr in sqlite3_bind_text(stmtIns, 6, cstr, -1, SQLITE_TRANSIENT) }
+                other.withCString { cstr in
+                    _ = sqlite3_bind_text(stmtIns, 6, cstr, -1, SQLITE_TRANSIENT)
+                }
             } else { sqlite3_bind_null(stmtIns, 6) }
 
             if let allergy = history.allergyDetails {
-                allergy.withCString { cstr in sqlite3_bind_text(stmtIns, 7, cstr, -1, SQLITE_TRANSIENT) }
+                allergy.withCString { cstr in
+                    _ = sqlite3_bind_text(stmtIns, 7, cstr, -1, SQLITE_TRANSIENT)
+                }
             } else { sqlite3_bind_null(stmtIns, 7) }
 
-            nowISO.withCString { cstr in sqlite3_bind_text(stmtIns, 8, cstr, -1, SQLITE_TRANSIENT) }
+            nowISO.withCString { cstr in
+                _ = sqlite3_bind_text(stmtIns, 8, cstr, -1, SQLITE_TRANSIENT)
+            }
 
             if sqlite3_step(stmtIns) != SQLITE_DONE {
                 let msg = String(cString: sqlite3_errmsg(db))

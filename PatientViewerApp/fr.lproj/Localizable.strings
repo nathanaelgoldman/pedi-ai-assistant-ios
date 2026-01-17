@@ -8,17 +8,17 @@
 //
 // ContentView
 "patient_viewer.content.nav_title" = "Dossiers médicaux";
-"patient_viewer.content.app_title" = "Patient Viewer";
-"patient_viewer.content.intro" = "Chargez un bundle patient pour consulter les visites, courbes de croissance et documents.";
+"patient_viewer.content.app_title" = "CareView Kids";
+"patient_viewer.content.intro" = "Chargez un dossier patient pour consulter les visites, courbes de croissance et documents.";
 
-"patient_viewer.content.action.load_new.title" = "Charger un nouveau bundle depuis l’appareil";
-"patient_viewer.content.action.load_new.subtitle" = "Importer un fichier .peMR.zip depuis Fichiers ou iCloud.";
-"patient_viewer.content.action.load_saved.title" = "Charger depuis les bundles enregistrés";
-"patient_viewer.content.action.load_saved.subtitle" = "Ouvrir un bundle patient déjà enregistré sur cet appareil.";
+"patient_viewer.content.action.load_new.title" = "Charger un nouveau dossier depuis l’appareil";
+"patient_viewer.content.action.load_new.subtitle" = "Importer un fichier .peMR depuis Fichiers ou iCloud.";
+"patient_viewer.content.action.load_saved.title" = "Charger depuis les dossiers enregistrés";
+"patient_viewer.content.action.load_saved.subtitle" = "Ouvrir un dossier patient déjà enregistré sur cet appareil.";
 "patient_viewer.content.action.settings.title" = "Réglages";
 "patient_viewer.content.action.settings.subtitle" = "Gérer le verrouillage de l’app et les préférences d’affichage.";
 
-"patient_viewer.content.import.duplicate.title" = "Un bundle pour ce patient existe déjà.";
+"patient_viewer.content.import.duplicate.title" = "Un dossier pour ce patient existe déjà.";
 "patient_viewer.content.import.duplicate.overwrite" = "Remplacer (archiver le précédent)";
 
 "patient_viewer.content.error.title" = "Erreur";
@@ -38,12 +38,12 @@
 "patient_viewer.content.card.parent_notes.title" = "Notes des parents";
 "patient_viewer.content.card.parent_notes.subtitle" = "Voir et ajouter des notes rédigées par les parents.";
 "patient_viewer.content.card.documents.title" = "Documents du patient";
-"patient_viewer.content.card.documents.subtitle" = "Ouvrir des scans, carnets de vaccination et autres fichiers.";
+"patient_viewer.content.card.documents.subtitle" = "Ouvrir et ajouter des documents.";
 "patient_viewer.content.card.export.title" = "Exporter le bundle";
-"patient_viewer.content.card.export.subtitle" = "Créer un bundle .peMR chiffré à partager ou archiver.";
+"patient_viewer.content.card.export.subtitle" = "Créer un dossier .peMR chiffré à partager ou archiver.";
 
-"patient_viewer.content.clear_button" = "Effacer le bundle actif";
-"patient_viewer.content.clear_note" = "Cela conserve vos bundles enregistrés ; seul le bundle de travail actuellement ouvert est effacé.";
+"patient_viewer.content.clear_button" = "Effacer le dossier actif";
+"patient_viewer.content.clear_note" = "Cela conserve vos dossiers enregistrés ; seul le dossier de travail actuellement ouvert est effacé.";
 
 "patient_viewer.content.export.default_filename" = "patientviewer";
 
@@ -54,16 +54,16 @@
 
 "patient_viewer.visits.list.nav_title" = "Résumés de visite";
 "patient_viewer.visits.list.title" = "Résumés de visite";
-"patient_viewer.visits.list.subtitle" = "Parcourir les visites de suivi et les visites maladie pour ce patient.";
+"patient_viewer.visits.list.subtitle" = "Parcourir les visites de suivi et les visites pour maladie pour ce patient.";
 "patient_viewer.visits.list.picker.label" = "Type de visite";
 "patient_viewer.visits.list.segment.well" = "🧒 Visites de suivi";
-"patient_viewer.visits.list.segment.sick" = "🤒 Visites maladie";
+"patient_viewer.visits.list.segment.sick" = "🤒 Visites pour maladie";
 "patient_viewer.visits.list.empty.well" = "Aucune visite de suivi pour le moment.";
-"patient_viewer.visits.list.empty.sick" = "Aucune visite maladie pour le moment.";
+"patient_viewer.visits.list.empty.sick" = "Aucune visite pour maladie pour le moment.";
 "patient_viewer.visits.list.empty.hint" = "Les nouvelles visites apparaîtront ici une fois enregistrées dans l’application du médecin.";
 
 "patient_viewer.visits.card.category.well" = "Visite de suivi";
-"patient_viewer.visits.card.category.sick" = "Visite maladie";
+"patient_viewer.visits.card.category.sick" = "Visite pour maladie";
 "patient_viewer.visits.card.no_title" = "Aucun titre enregistré";
 
 "patient_viewer.visit_detail.nav_title" = "Détails de la visite";
@@ -92,18 +92,18 @@
 "patient_viewer.well_visit.title.default" = "Visite de suivi";
 "patient_viewer.sick_visit.title.default" = "Visite maladie";
 
-"patient_viewer.well_visit.title.one_month" = "Visite 1 mois";
-"patient_viewer.well_visit.title.two_month" = "Visite 2 mois";
-"patient_viewer.well_visit.title.four_month" = "Visite 4 mois";
-"patient_viewer.well_visit.title.six_month" = "Visite 6 mois";
-"patient_viewer.well_visit.title.nine_month" = "Visite 9 mois";
-"patient_viewer.well_visit.title.twelve_month" = "Visite 12 mois";
-"patient_viewer.well_visit.title.fifteen_month" = "Visite 15 mois";
-"patient_viewer.well_visit.title.eighteen_month" = "Visite 18 mois";
-"patient_viewer.well_visit.title.twentyfour_month" = "Visite 24 mois";
-"patient_viewer.well_visit.title.thirty_month" = "Visite 30 mois";
-"patient_viewer.well_visit.title.thirtysix_month" = "Visite 36 mois";
-"patient_viewer.well_visit.title.newborn_first" = "Première visite après maternité";
+"patient_viewer.well_visit.title.one_month" = "Visite de 1 mois";
+"patient_viewer.well_visit.title.two_month" = "Visite de 2 mois";
+"patient_viewer.well_visit.title.four_month" = "Visite de 4 mois";
+"patient_viewer.well_visit.title.six_month" = "Visite de 6 mois";
+"patient_viewer.well_visit.title.nine_month" = "Visite de 9 mois";
+"patient_viewer.well_visit.title.twelve_month" = "Visite de 12 mois";
+"patient_viewer.well_visit.title.fifteen_month" = "Visite de 15 mois";
+"patient_viewer.well_visit.title.eighteen_month" = "Visite de 18 mois";
+"patient_viewer.well_visit.title.twentyfour_month" = "Visite de 24 mois";
+"patient_viewer.well_visit.title.thirty_month" = "Visite de 30 mois";
+"patient_viewer.well_visit.title.thirtysix_month" = "Visite de 36 mois";
+"patient_viewer.well_visit.title.newborn_first" = "Première visite après la maternité";
 
 //BundleLibraryView
 "patient_viewer.bundle_library.title" = "📚 Bundles patients enregistrés";
@@ -466,18 +466,18 @@
 
 /* ===== Visit type names ===== */
 "well_report.visit_type.well_visit" = "Visite de suivi";
-"well_report.visit_type.first_visit_after_maternity" = "Première visite après maternité";
-"well_report.visit_type.one_month" = "Visite 1 mois";
-"well_report.visit_type.two_month" = "Visite 2 mois";
-"well_report.visit_type.four_month" = "Visite 4 mois";
-"well_report.visit_type.six_month" = "Visite 6 mois";
-"well_report.visit_type.nine_month" = "Visite 9 mois";
-"well_report.visit_type.twelve_month" = "Visite 12 mois";
-"well_report.visit_type.fifteen_month" = "Visite 15 mois";
-"well_report.visit_type.eighteen_month" = "Visite 18 mois";
-"well_report.visit_type.twentyfour_month" = "Visite 24 mois";
-"well_report.visit_type.thirty_month" = "Visite 30 mois";
-"well_report.visit_type.thirtysix_month" = "Visite 36 mois";
+"well_report.visit_type.first_visit_after_maternity" = "Première visite après la maternité";
+"well_report.visit_type.one_month" = "Visite de 1 mois";
+"well_report.visit_type.two_month" = "Visite de 2 mois";
+"well_report.visit_type.four_month" = "Visite de 4 mois";
+"well_report.visit_type.six_month" = "Visite de 6 mois";
+"well_report.visit_type.nine_month" = "Visite de 9 mois";
+"well_report.visit_type.twelve_month" = "Visite de 12 mois";
+"well_report.visit_type.fifteen_month" = "Visite de 15 mois";
+"well_report.visit_type.eighteen_month" = "Visite de 18 mois";
+"well_report.visit_type.twentyfour_month" = "Visite de 24 mois";
+"well_report.visit_type.thirty_month" = "Visite de 30 mois";
+"well_report.visit_type.thirtysix_month" = "Visite de 36 mois";
 
 //* WellVisitPDFGenerator - formatAgeString()
 "well_report.age.day_singular" = "%d jour";
@@ -746,3 +746,11 @@
 "well_report.enum.vaccination.rsv" = "VRS";
 
 "pdf.sick.pe.additional_info.title" = "Informations supplémentaires sur l’examen clinique";
+"pdf.section.addenda" = "Addenda";
+
+/* Titre de consultation de suivi */
+"patient_viewer.well_visit.title.four_year" = "Visite des 4 ans";
+"patient_viewer.well_visit.title.five_year" = "Visite des 5 ans";
+/* Types de visites de suivi */
+"well_report.visit_type.four_year" = "Visite des 4 ans";
+"well_report.visit_type.five_year" = "Visite des 5 ans";

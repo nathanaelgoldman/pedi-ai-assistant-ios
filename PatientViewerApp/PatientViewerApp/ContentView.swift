@@ -153,7 +153,8 @@ struct ContentView: SwiftUI.View {
             }, message: {
                 Text(importError ?? "")
             })
-            .navigationTitle(L("patient_viewer.content.nav_title", comment: "Navigation title"))
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .background, .inactive:
@@ -177,9 +178,13 @@ struct ContentView: SwiftUI.View {
     private var emptyStateView: some SwiftUI.View {
         VStack(spacing: 32) {
             // Header / intro
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L("patient_viewer.content.app_title", comment: "App title"))
-                    .font(.largeTitle.bold())
+            VStack(alignment: .leading, spacing: 10) {
+                CareViewKidsMark(style: .large)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(L("patient_viewer.content.nav_title", comment: "Navigation title"))
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(L("patient_viewer.content.intro", comment: "Intro text"))
@@ -312,6 +317,16 @@ struct ContentView: SwiftUI.View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                // Brand header (same “title-under-logo” as empty state)
+                VStack(alignment: .leading, spacing: 10) {
+                    CareViewKidsMark(style: .large)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(L("patient_viewer.content.nav_title", comment: "Navigation title"))
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 // Patient header card
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
@@ -583,6 +598,64 @@ struct ContentView: SwiftUI.View {
     }
 }
 
+// MARK: - Brand mark (in-app)
+
+private struct CareViewKidsMark: SwiftUI.View {
+    enum Style {
+        case large
+        case compact
+
+        var font: SwiftUI.Font {
+            switch self {
+            case .large:
+                return .system(.largeTitle, design: .default).weight(.bold)
+            case .compact:
+                return .system(.headline, design: .default).weight(.semibold)
+            }
+        }
+
+        var paddingX: CGFloat {
+            switch self {
+            case .large: return 16
+            case .compact: return 12
+            }
+        }
+
+        var paddingY: CGFloat {
+            switch self {
+            case .large: return 8
+            case .compact: return 6
+            }
+        }
+    }
+
+    let style: Style
+
+    var body: some SwiftUI.View {
+        HStack(spacing: 8) {
+            Text("CareView")
+                .font(style.font)
+                .foregroundStyle(.primary)
+
+            Text("Kids")
+                .font(style.font)
+                .italic()
+                .foregroundStyle(Color.accentColor)
+        }
+        .padding(.horizontal, style.paddingX)
+        .padding(.vertical, style.paddingY)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color(.systemGray6))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+        )
+        .accessibilityLabel(Text("CareView Kids"))
+    }
+}
+
 // Reusable black badge-style card used in the active patient dashboard
 private struct ActionCard: SwiftUI.View {
     let systemImage: String
@@ -628,7 +701,7 @@ private struct ActionCard: SwiftUI.View {
 }
 
 // Simple FileDocument wrapper for exporting the generated .peMR bundle
-struct ZipFileDocument: FileDocument {
+struct ZipFileDocument: SwiftUI.FileDocument {
     static var readableContentTypes: [UTType] {
         if let pemr = UTType(filenameExtension: "pemr") {
             return [pemr]

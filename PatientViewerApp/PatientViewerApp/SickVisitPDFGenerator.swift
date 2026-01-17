@@ -798,6 +798,86 @@ struct SickVisitPDFGenerator {
                 renderSection(title: L("pdf.sick.section.medications"), content: try? episodeRow.get(medications))
                 renderSection(title: L("pdf.sick.section.anticipatoryGuidance"), content: try? episodeRow.get(anticipatory))
                 renderSection(title: L("pdf.sick.section.aiAssistantInput"), content: aiSectionContent, preserveNewlines: true)
+
+                // MARK: - Addenda (visit_addenda)
+                let addenda = Self.loadReportAddendaForEpisode(db: db, episodeID: visit.id)
+                if !addenda.isEmpty {
+                    y += 12
+                    drawHeaderBox(L("pdf.section.addenda"),
+                                  font: UIFont.boldSystemFont(ofSize: 16),
+                                  background: sectionBG,
+                                  textColor: .black)
+
+                    for a in addenda {
+                        let created = Self.cleanLine(a.createdAtISO)
+                        let updated = Self.cleanLine(a.updatedAtISO)
+                        let author  = Self.cleanLine(a.authorName)
+
+                        var header = ""
+                        if let c = created, let u = updated, c != u {
+                            header = "\(c) (updated \(u))"
+                        } else if let c = created {
+                            header = c
+                        } else if let u = updated {
+                            header = u
+                        }
+                        if let author = author {
+                            header = header.isEmpty ? author : "\(header) — \(author)"
+                        }
+
+                        let parts = a.text
+                            .replacingOccurrences(of: "\r\n", with: "\n")
+                            .replacingOccurrences(of: "\r", with: "\n")
+                            .components(separatedBy: "\n")
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+
+                        let paragraphStyle = NSMutableParagraphStyle()
+                        paragraphStyle.lineBreakMode = .byWordWrapping
+                        paragraphStyle.lineSpacing = 2
+                        paragraphStyle.paragraphSpacing = 6
+
+                        let block = NSMutableAttributedString()
+                        if !header.isEmpty {
+                            block.append(NSAttributedString(
+                                string: header + "\n",
+                                attributes: [
+                                    .font: UIFont.systemFont(ofSize: 12, weight: .semibold),
+                                    .foregroundColor: UIColor.secondaryLabel,
+                                    .paragraphStyle: paragraphStyle
+                                ]
+                            ))
+                        }
+
+                        if parts.isEmpty {
+                            block.append(NSAttributedString(
+                                string: "•\n",
+                                attributes: [
+                                    .font: subFont,
+                                    .paragraphStyle: paragraphStyle
+                                ]
+                            ))
+                        } else {
+                            for p in parts {
+                                block.append(NSAttributedString(
+                                    string: "• \(p)\n",
+                                    attributes: [
+                                        .font: subFont,
+                                        .paragraphStyle: paragraphStyle
+                                    ]
+                                ))
+                            }
+                        }
+
+                        // Trim final newline (looks cleaner)
+                        if block.string.hasSuffix("\n") {
+                            block.deleteCharacters(in: NSRange(location: block.length - 1, length: 1))
+                        }
+
+                        drawWrappedAttributedText(block, in: pageRect, at: &y, using: rendererContext)
+                        y += 4
+                    }
+                }
             } catch {
                 Self.log.error("DB error while generating sick visit PDF: \(error.localizedDescription, privacy: .public)")
                 drawText(LF("pdf.sick.error.dbError.fmt", error.localizedDescription), font: subFont)
@@ -814,6 +894,142 @@ struct SickVisitPDFGenerator {
             Self.log.error("Failed to save sick visit PDF: \(error.localizedDescription, privacy: .public)")
             return nil
         }
+    }
+
+    // MARK: - Addenda (visit_addenda)
+
+    private struct ReportAddendum: Identifiable {
+        let id: Int64
+        let createdAtISO: String?
+        let updatedAtISO: String?
+        let authorName: String?
+        let text: String
+    }
+
+    private static func tableExists(_ db: Connection, name: String) -> Bool {
+        do {
+            let q = "SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1;"
+            if let _ = try db.scalar(q, name) as? String {
+                return true
+            }
+            return false
+        } catch {
+            return false
+        }
+    }
+
+    private static func columns(in db: Connection, table: String) -> Set<String> {
+        do {
+            var out = Set<String>()
+            for row in try db.prepare("PRAGMA table_info(\(table));") {
+                if let n = row[1] as? String {
+                    out.insert(n)
+                }
+            }
+            return out
+        } catch {
+            return []
+        }
+    }
+
+    /// Fetch addenda for a SICK episode from `visit_addenda`.
+    /// This is best-effort and tolerant to small schema differences.
+    private static func loadReportAddendaForEpisode(db: Connection, episodeID: Int64) -> [ReportAddendum] {
+        guard tableExists(db, name: "visit_addenda") else { return [] }
+
+        let cols = columns(in: db, table: "visit_addenda")
+        guard !cols.isEmpty else { return [] }
+
+        let fkCandidates = ["episode_id", "episodeId", "episodeID", "visit_id", "visitID"]
+        guard let fk = fkCandidates.first(where: { cols.contains($0) }) else { return [] }
+
+        let idCol = cols.contains("id") ? "id" : "rowid"
+
+        guard let textCol = ["text", "content", "note", "addendum_text"].first(where: { cols.contains($0) }) else {
+            return []
+        }
+
+        let createdCol = ["created_at", "createdAt", "created_iso"].first(where: { cols.contains($0) })
+        let updatedCol = ["updated_at", "updatedAt", "updated_iso"].first(where: { cols.contains($0) })
+
+        let authorDirectCol = ["author_name", "clinician_name", "provider_name", "user_name"].first(where: { cols.contains($0) })
+        let authorUserFK = ["author_user_id", "clinician_user_id", "user_id", "provider_id", "doctor_user_id"].first(where: { cols.contains($0) })
+
+        let usersTableExists = tableExists(db, name: "users")
+
+        let idSel = "a.\(idCol)"
+        let textSel = "a.\(textCol)"
+        let createdSel = createdCol != nil ? "a.\(createdCol!)" : "NULL"
+        let updatedSel = updatedCol != nil ? "a.\(updatedCol!)" : "NULL"
+
+        let (authorSel, joinUsers): (String, String) = {
+            if let c = authorDirectCol {
+                return ("a.\(c)", "")
+            }
+            if usersTableExists, let fkCol = authorUserFK {
+                let sel = "trim(coalesce(u.first_name,'') || ' ' || coalesce(u.last_name,''))"
+                let join = "LEFT JOIN users u ON u.id = a.\(fkCol)"
+                return (sel, join)
+            }
+            return ("NULL", "")
+        }()
+
+        let orderExpr: String = {
+            if let c = createdCol { return "datetime(a.\(c))" }
+            return idSel
+        }()
+
+        let sql = """
+        SELECT \(idSel), \(textSel), \(createdSel), \(updatedSel), \(authorSel)
+        FROM visit_addenda a
+        \(joinUsers)
+        WHERE a.\(fk) = ?
+        ORDER BY \(orderExpr) ASC, \(idSel) ASC;
+        """
+
+        func asInt64(_ v: Any?) -> Int64 {
+            if let x = v as? Int64 { return x }
+            if let x = v as? Int { return Int64(x) }
+            if let x = v as? Int32 { return Int64(x) }
+            if let x = v as? Int16 { return Int64(x) }
+            if let x = v as? Int8 { return Int64(x) }
+            return 0
+        }
+
+        func asString(_ v: Any?) -> String? {
+            if let s = v as? String { return s }
+            if v == nil { return nil }
+            return String(describing: v!)
+        }
+
+        do {
+            var out: [ReportAddendum] = []
+            for row in try db.prepare(sql, episodeID) {
+                let id = asInt64(row[0])
+                let text = (asString(row[1]) ?? "")
+                let created = asString(row[2])
+                let updated = asString(row[3])
+                let author = asString(row[4])
+
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    out.append(ReportAddendum(
+                        id: id,
+                        createdAtISO: created,
+                        updatedAtISO: updated,
+                        authorName: author,
+                        text: text
+                    ))
+                }
+            }
+            return out
+        } catch {
+            return []
+        }
+    }
+
+    private static func cleanLine(_ s: String?) -> String? {
+        guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+        return s
     }
 
     private static func formatDate(_ raw: Any) -> String {

@@ -224,45 +224,164 @@ private struct SignInSheet: View {
     @State private var loginError: String? = nil
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 16) {
-                // Existing clinicians
-                if clinicianStore.users.isEmpty {
-                    Text("app.signin.no_clinicians_found")
-                        .font(.callout)
-                        .foregroundColor(.secondary)
-                } else {
-                    List {
-                        ForEach(clinicianStore.users, id: \.id) { u in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text({
-                                        let n = (u.firstName + " " + u.lastName)
-                                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                                        if n.isEmpty {
-                                            return String(format: NSLocalizedString("app.clinician.user_number", comment: ""), u.id)
-                                        }
-                                        return n
-                                    }())
-                                    .foregroundStyle(.primary)
-                                }
-                                Spacer()
-                                if selectedID == u.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.accentColor)
-                                } else if appState.activeUserID == u.id {
-                                    Text("app.signin.active")
-                                        .font(.caption)
-                                        .foregroundColor(.green)
-                                }
+        Group {
+            #if os(macOS)
+            NavigationStack {
+                sheetContent
+                    .navigationTitle("app.signin.title")
+            }
+            #else
+            NavigationView {
+                sheetContent
+                    .navigationTitle("app.signin.title")
+            }
+            #endif
+        }
+        // Give the sheet a bit more breathing room.
+        .frame(minWidth: 760, idealWidth: 860, maxWidth: 980,
+               minHeight: 560, idealHeight: 640, maxHeight: 760,
+               alignment: .center)
+    }
+
+    @ViewBuilder
+    private var sheetContent: some View {
+        VStack {
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer(minLength: 0)
+
+                VStack(spacing: 16) {
+                    // Existing clinicians
+                    if clinicianStore.users.isEmpty {
+                        Text("app.signin.no_clinicians_found")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    } else {
+                        cliniciansPicker
+                    }
+
+                    // Create new clinician
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("app.signin.create_clinician")
+                            .font(.headline)
+
+                        HStack {
+                            TextField("app.signin.first_name", text: $firstName)
+                                .textFieldStyle(.roundedBorder)
+                            TextField("app.signin.last_name", text: $lastName)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        Button("app.signin.add") {
+                            let fn = firstName.trimmingCharacters(in: .whitespaces)
+                            let ln = lastName.trimmingCharacters(in: .whitespaces)
+                            guard !fn.isEmpty, !ln.isEmpty else { return }
+                            _ = clinicianStore.createUser(firstName: fn, lastName: ln)
+                            // Pick the last user (newly appended) as selected
+                            selectedID = clinicianStore.users.last?.id
+                            firstName = ""
+                            lastName = ""
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    // Password for selected clinician (if required)
+                    VStack(alignment: .leading, spacing: 4) {
+                        SecureField("app.signin.password_optional", text: $password)
+                            .textFieldStyle(.roundedBorder)
+                        if let loginError {
+                            Text(loginError)
+                                .font(.footnote)
+                                .foregroundColor(.red)
+                        }
+                    }
+
+                    HStack {
+                        Button("app.common.cancel") {
+                            if appState.activeUserID == nil {
+                                // No active clinician: do not allow using the app without sign‑in
+                                #if os(macOS)
+                                // On macOS, terminate the app if user refuses to pick a clinician
+                                NSApp.terminate(nil)
+                                #else
+                                // On iOS (if ever used), keep the sheet open (no escape without clinician)
+                                // Do nothing here so the sign‑in sheet stays visible.
+                                #endif
+                            } else {
+                                // A clinician is already active: just dismiss the sheet
+                                showSignIn = false
                             }
+                        }
+                        .buttonStyle(.bordered)
+
+                        Spacer()
+
+                        Button("app.signin.use_selected") {
+                            let chosenID: Int? = {
+                                if let sel = selectedID { return sel }
+                                return clinicianStore.users.first?.id
+                            }()
+                            if let uid = chosenID {
+                                // If a password is set for this clinician, require it
+                                if clinicianStore.hasPassword(forUserID: uid) {
+                                    guard clinicianStore.verifyPassword(password, forUserID: uid) else {
+                                        loginError = NSLocalizedString("app.signin.incorrect_password", comment: "")
+                                        return
+                                    }
+                                }
+                                appState.activeUserID = uid
+                                showSignIn = false
+                                // Clear password state on successful sign-in
+                                password = ""
+                                loginError = nil
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(selectedID == nil && clinicianStore.users.isEmpty)
+                    }
+                }
+                // Keep the form centered and not stretched too wide.
+                .frame(maxWidth: 560)
+                .padding(24)
+                .background(
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color(.windowBackgroundColor).opacity(0.9))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color.secondary.opacity(0.15))
+                )
+
+                Spacer(minLength: 0)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+    }
+
+    @ViewBuilder
+    private var cliniciansPicker: some View {
+        #if os(macOS)
+        // macOS: use a list-like scroll container that sizes to content, up to a max height.
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView {
+                LazyVStack(spacing: 6) {
+                    ForEach(clinicianStore.users, id: \.id) { u in
+                        clinicianRow(u)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(selectedID == u.id ? Color.accentColor.opacity(0.10) : Color.clear)
+                            )
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 selectedID = u.id
                                 loginError = nil
                                 password = ""
                             }
-                            // macOS context menu delete
                             .contextMenu {
                                 Button(role: .destructive) {
                                     let idToDelete = u.id
@@ -272,119 +391,97 @@ private struct SignInSheet: View {
                                     Label("app.common.delete", systemImage: "trash")
                                 }
                             }
-                            #if os(iOS)
-                            // iOS swipe-to-delete
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    let idToDelete = u.id
-                                    clinicianStore.deleteUser(u)
-                                    if selectedID == idToDelete { selectedID = nil }
-                                } label: {
-                                    Label("app.common.delete", systemImage: "trash")
-                                }
-                            }
-                            #endif
-                        }
-                        // Also enable Delete via List's built-in edit mode (iOS)
-                        #if os(iOS)
-                        .onDelete { indexSet in
-                            for index in indexSet {
-                                let user = clinicianStore.users[index]
-                                let idToDelete = user.id
-                                clinicianStore.deleteUser(user)
-                                if selectedID == idToDelete { selectedID = nil }
-                            }
-                        }
-                        #endif
                     }
                 }
-
-                // Create new clinician
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("app.signin.create_clinician")
-                        .font(.headline)
-                    HStack {
-                        TextField("app.signin.first_name", text: $firstName)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("app.signin.last_name", text: $lastName)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Button("app.signin.add") {
-                        let fn = firstName.trimmingCharacters(in: .whitespaces)
-                        let ln = lastName.trimmingCharacters(in: .whitespaces)
-                        guard !fn.isEmpty, !ln.isEmpty else { return }
-                        _ = clinicianStore.createUser(firstName: fn, lastName: ln)
-                        // Pick the last user (newly appended) as selected
-                        selectedID = clinicianStore.users.last?.id
-                        firstName = ""
-                        lastName = ""
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                // Password for selected clinician (if required)
-                VStack(alignment: .leading, spacing: 4) {
-                    SecureField("app.signin.password_optional", text: $password)
-                        .textFieldStyle(.roundedBorder)
-                    if let loginError {
-                        Text(loginError)
-                            .font(.footnote)
-                            .foregroundColor(.red)
-                    }
-                }
-
-                Spacer()
-
+                .padding(.vertical, 10)
+            }
+            // Expand naturally when a few users exist; scroll when many.
+            .frame(minHeight: 80, maxHeight: 260)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.secondary.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.secondary.opacity(0.15))
+            )
+        }
+        #else
+        // iOS: keep native List behavior.
+        List {
+            ForEach(clinicianStore.users, id: \.id) { u in
                 HStack {
-                    Button("app.common.cancel") {
-                        if appState.activeUserID == nil {
-                            // No active clinician: do not allow using the app without sign‑in
-                            #if os(macOS)
-                            // On macOS, terminate the app if user refuses to pick a clinician
-                            NSApp.terminate(nil)
-                            #else
-                            // On iOS (if ever used), keep the sheet open (no escape without clinician)
-                            // Do nothing here so the sign‑in sheet stays visible.
-                            #endif
-                        } else {
-                            // A clinician is already active: just dismiss the sheet
-                            showSignIn = false
-                        }
-                    }
-                    .buttonStyle(.bordered)
-
-                    Spacer()
-
-                    Button("app.signin.use_selected") {
-                        let chosenID: Int? = {
-                            if let sel = selectedID { return sel }
-                            return clinicianStore.users.first?.id
-                        }()
-                        if let uid = chosenID {
-                            // If a password is set for this clinician, require it
-                            if clinicianStore.hasPassword(forUserID: uid) {
-                                guard clinicianStore.verifyPassword(password, forUserID: uid) else {
-                                    loginError = NSLocalizedString("app.signin.incorrect_password", comment: "")
-                                    return
-                                }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text({
+                            let n = (u.firstName + " " + u.lastName)
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            if n.isEmpty {
+                                return String(format: NSLocalizedString("app.clinician.user_number", comment: ""), u.id)
                             }
-                            appState.activeUserID = uid
-                            showSignIn = false
-                            // Clear password state on successful sign-in
-                            password = ""
-                            loginError = nil
-                        }
+                            return n
+                        }())
+                        .foregroundStyle(.primary)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(selectedID == nil && clinicianStore.users.isEmpty)
+                    Spacer()
+                    if selectedID == u.id {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.accentColor)
+                    } else if appState.activeUserID == u.id {
+                        Text("app.signin.active")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedID = u.id
+                    loginError = nil
+                    password = ""
+                }
+                .swipeActions {
+                    Button(role: .destructive) {
+                        let idToDelete = u.id
+                        clinicianStore.deleteUser(u)
+                        if selectedID == idToDelete { selectedID = nil }
+                    } label: {
+                        Label("app.common.delete", systemImage: "trash")
+                    }
                 }
             }
-            .frame(minWidth: 560, minHeight: 380) // ensure comfortable size on macOS
-            .padding()
-            .navigationTitle("app.signin.title")
+            .onDelete { indexSet in
+                for index in indexSet {
+                    let user = clinicianStore.users[index]
+                    let idToDelete = user.id
+                    clinicianStore.deleteUser(user)
+                    if selectedID == idToDelete { selectedID = nil }
+                }
+            }
         }
-        .frame(minWidth: 640, minHeight: 420) // enforce sheet size on macOS
-        .onAppear {
+        #endif
+    }
+
+    private func clinicianRow(_ u: Clinician) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text({
+                    let n = (u.firstName + " " + u.lastName)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if n.isEmpty {
+                        return String(format: NSLocalizedString("app.clinician.user_number", comment: ""), u.id)
+                    }
+                    return n
+                }())
+                .foregroundStyle(.primary)
+            }
+            Spacer()
+            if selectedID == u.id {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.accentColor)
+            } else if appState.activeUserID == u.id {
+                Text("app.signin.active")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
         }
     }
 }
@@ -673,7 +770,7 @@ private struct ClinicianProfileForm: View {
 
                             GroupBox {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    if let user, hasPassword {
+                                    if user != nil && hasPassword {
                                         Text("app.clinician_profile.app_lock.password_set")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
@@ -693,7 +790,7 @@ private struct ClinicianProfileForm: View {
                                         .textFieldStyle(.roundedBorder)
                                         .disabled(removePassword)
 
-                                    if let user, hasPassword {
+                                    if user != nil && hasPassword {
                                         Toggle("app.clinician_profile.app_lock.remove_existing", isOn: $removePassword)
                                     }
 

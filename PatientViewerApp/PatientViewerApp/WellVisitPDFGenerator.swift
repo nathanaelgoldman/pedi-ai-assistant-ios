@@ -13,12 +13,155 @@ import OSLog
 import CoreText
 
 
+
 struct WellVisitPDFGenerator {
     private static let log = Logger(subsystem: "com.patientviewer.app", category: "pdf.well")
     // Simple localization helper for non-SwiftUI code (PDF rendering).
     // Uses the key if available in Localizable.strings, otherwise falls back to the provided English.
     private static func L(_ key: String, _ fallback: String) -> String {
         NSLocalizedString(key, value: fallback, comment: "")
+    }
+    
+    // MARK: - Addenda (SQLite.swift style)
+
+    private struct ReportAddendumLite {
+        let createdAtISO: String?
+        let updatedAtISO: String?
+        let authorName: String?
+        let text: String
+    }
+
+    private static func clean(_ s: String?) -> String? {
+        guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+        return s
+    }
+
+    private static func tableExists(_ db: Connection, name: String) -> Bool {
+        do {
+            let sql = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='\(name)'"
+            if let n = try db.scalar(sql) as? Int64 { return n > 0 }
+        } catch { }
+        return false
+    }
+
+    private static func fetchAddendaForWellVisit(db: Connection, wellVisitID: Int64) -> [ReportAddendumLite] {
+        // Addenda are stored in `visit_addenda` in exported bundles (same as sick visits).
+        guard tableExists(db, name: "visit_addenda") else { return [] }
+
+        func columns(in table: String) -> [String] {
+            do {
+                var out: [String] = []
+                let stmt = try db.prepare("PRAGMA table_info(\(table));")
+                for row in stmt {
+                    // PRAGMA table_info returns columns: cid(0), name(1), type(2), notnull(3), dflt_value(4), pk(5)
+                    if row.count > 1, let name = row[1] as? String {
+                        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty { out.append(trimmed) }
+                    }
+                }
+                return out
+            } catch {
+                return []
+            }
+        }
+
+        let cols = Set(columns(in: "visit_addenda"))
+
+        // FK column varies across schema versions
+        let fkCandidates = ["visit_id", "visitID", "well_visit_id", "wellVisitID", "well_visitID"]
+        guard let fkCol = fkCandidates.first(where: { cols.contains($0) }) else { return [] }
+
+        // Text column varies too
+        let textCandidates = ["text", "content", "note", "addendum_text"]
+        guard let textCol = textCandidates.first(where: { cols.contains($0) }) else { return [] }
+
+        // Optional metadata columns
+        let createdCol = ["created_at", "createdAt", "created_iso"].first(where: { cols.contains($0) })
+        let updatedCol = ["updated_at", "updatedAt", "updated_iso"].first(where: { cols.contains($0) })
+        let authorCol  = ["author_name", "clinician_name", "provider_name", "user_name"].first(where: { cols.contains($0) })
+
+        let createdSel = createdCol ?? "NULL"
+        let updatedSel = updatedCol ?? "NULL"
+        let authorSel  = authorCol  ?? "NULL"
+
+        let orderExpr: String = {
+            if let c = createdCol { return "datetime(\(c))" }
+            return "rowid"
+        }()
+
+        let sql = """
+        SELECT \(textCol), \(createdSel), \(updatedSel), \(authorSel)
+        FROM visit_addenda
+        WHERE \(fkCol) = ?
+        ORDER BY \(orderExpr) ASC, rowid ASC;
+        """
+
+        do {
+            let stmt = try db.prepare(sql, wellVisitID)
+            var out: [ReportAddendumLite] = []
+
+            for row in stmt {
+                let text = (row[0] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { continue }
+
+                let created = clean(row[1] as? String)
+                let updated = clean(row[2] as? String)
+                let author  = clean(row[3] as? String)
+
+                out.append(.init(createdAtISO: created, updatedAtISO: updated, authorName: author, text: text))
+            }
+            return out
+        } catch {
+            return []
+        }
+    }
+
+    private static func buildAddendaBody(_ addenda: [ReportAddendumLite]) -> String {
+        guard !addenda.isEmpty else { return "" }
+
+        var lines: [String] = []
+
+        for a in addenda {
+            let created = clean(a.createdAtISO)
+            let updated = clean(a.updatedAtISO)
+            let author  = clean(a.authorName)
+
+            var header = ""
+            if let c = created, let u = updated, c != u {
+                header = "\(c) (updated \(u))"
+            } else if let c = created {
+                header = c
+            } else if let u = updated {
+                header = u
+            }
+
+            if let author = author {
+                header = header.isEmpty ? author : "\(header) — \(author)"
+            }
+
+            if !header.isEmpty { lines.append(header) }
+
+            let parts = a.text
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+                .components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            if parts.isEmpty {
+                lines.append("• ")
+            } else {
+                for p in parts { lines.append("• \(p)") }
+            }
+
+            lines.append("") // spacer
+        }
+
+        while let last = lines.last, last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.removeLast()
+        }
+
+        return lines.joined(separator: "\n")
     }
     
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
@@ -59,7 +202,11 @@ struct WellVisitPDFGenerator {
             "eighteen_month": WellVisitPDFGenerator.L("well_report.visit_type.eighteen_month", "18-month visit"),
             "twentyfour_month": WellVisitPDFGenerator.L("well_report.visit_type.twentyfour_month", "24-month visit"),
             "thirty_month": WellVisitPDFGenerator.L("well_report.visit_type.thirty_month", "30-month visit"),
-            "thirtysix_month": WellVisitPDFGenerator.L("well_report.visit_type.thirtysix_month", "36-month visit")
+            "thirtysix_month": WellVisitPDFGenerator.L("well_report.visit_type.thirtysix_month", "36-month visit"),
+
+            // Preschool / school-age milestone visits
+            "four_year": WellVisitPDFGenerator.L("well_report.visit_type.four_year", "4-year visit"),
+            "five_year": WellVisitPDFGenerator.L("well_report.visit_type.five_year", "5-year visit")
         ]
 
         let defaultWellVisitTitle = WellVisitPDFGenerator.L("well_report.visit_type.well_visit", "Well Visit")
@@ -621,6 +768,7 @@ struct WellVisitPDFGenerator {
                 let secProblemListing = WellVisitPDFGenerator.L("well_report.section.problem_listing", "Problem Listing")
                 let secConclusions = WellVisitPDFGenerator.L("well_report.section.conclusions", "Conclusions")
                 let secAnticipatoryGuidance = WellVisitPDFGenerator.L("well_report.section.anticipatory_guidance", "Anticipatory Guidance")
+                let secAddenda = WellVisitPDFGenerator.L("well_report.section.addenda", "Addenda")
 
                 let users = Table("users")
                 let userID = Expression<Int64?>("user_id")
@@ -2305,6 +2453,20 @@ struct WellVisitPDFGenerator {
                     drawText(WellVisitPDFGenerator.L("well_report.default.no_ai_input",
                                                      "No AI input recorded"),
                              font: subFont)
+                }
+                
+                // MARK: - Addenda (appended at end)
+                let addenda = WellVisitPDFGenerator.fetchAddendaForWellVisit(db: db, wellVisitID: visit.id)
+                if !addenda.isEmpty {
+                    y += 12
+                    drawSectionTitle(secAddenda, font: UIFont.boldSystemFont(ofSize: 16))
+
+                    let body = WellVisitPDFGenerator.buildAddendaBody(addenda)
+                    if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        drawText(placeholderDash, font: subFont)
+                    } else {
+                        drawWrappedText(body, font: subFont, in: pageRect, at: &y, using: context)
+                    }
                 }
                 
                 // MARK: - Growth Charts
