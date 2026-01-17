@@ -820,7 +820,15 @@ final class AppState: ObservableObject {
         self.log.info("selectBundle: chosen=\(chosen.lastPathComponent, privacy: .public)")
 
         if let dbURL = dbURLForCurrentBundle() {
+            // Bring older bundle DBs up to the current expected schema (tables + columns).
+            // This is generic: schema is defined by bundled `schema.sql`.
+            self.log.info("selectBundle: applying bundled schema.sql (if present) to \(dbURL.lastPathComponent, privacy: .public)")
+            applyBundledSchemaIfPresent(to: dbURL)
+
+            // Keep existing idempotent helpers (some are intentional no-ops for bundle DBs).
             applyGoldenSchemaIdempotent(to: dbURL)
+
+            // Growth unification objects (view + triggers + indexes)
             ensureGrowthUnificationSchema(at: dbURL)
         }
 
@@ -5642,7 +5650,22 @@ func reloadPatients() {
 
     /// Execute a .sql file (UTF-8) against a SQLite file on disk.
     private func applySQLFile(_ sqlURL: URL, to dbURL: URL) {
-        guard let sqlText = try? String(contentsOf: sqlURL, encoding: .utf8) else { return }
+        guard var sqlText = try? String(contentsOf: sqlURL, encoding: .utf8) else { return }
+
+        // Normalize newlines for stable parsing.
+        sqlText = sqlText.replacingOccurrences(of: "\r\n", with: "\n")
+
+        // Make trigger creation idempotent to avoid noisy "already exists" logs.
+        // SQLite supports: CREATE TRIGGER IF NOT EXISTS ...
+        // We only inject IF NOT EXISTS when it's not already present.
+        if let re = try? NSRegularExpression(
+            pattern: "(?i)\\bCREATE\\s+TRIGGER\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+            options: []
+        ) {
+            let range = NSRange(location: 0, length: (sqlText as NSString).length)
+            sqlText = re.stringByReplacingMatches(in: sqlText, options: [], range: range, withTemplate: "CREATE TRIGGER IF NOT EXISTS ")
+        }
+
         var db: OpaquePointer?
         if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
             if let db { sqlite3_close(db) }
@@ -5650,15 +5673,72 @@ func reloadPatients() {
         }
         defer { sqlite3_close(db) }
 
-        // Split on semicolons, tolerate whitespace/comments.
-        let statements = sqlText
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .components(separatedBy: ";")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("--") && !$0.hasPrefix("/*") }
+        // IMPORTANT: Do not split on semicolons.
+        // Triggers contain semicolons inside BEGIN...END blocks; naive splitting corrupts them.
+        // Instead, let SQLite parse the script statement-by-statement.
+        let bytes = Array(sqlText.utf8CString)
+        bytes.withUnsafeBufferPointer { buf in
+            guard let base = buf.baseAddress else { return }
+            var idx = 0
 
-        for stmt in statements {
-            _ = sqlite3_exec(db, stmt + ";", nil, nil, nil)
+            while idx < buf.count {
+                // Skip leading whitespace.
+                while idx < buf.count {
+                    let c = base.advanced(by: idx).pointee
+                    if c == 0 { return }
+                    if c == 32 || c == 9 || c == 10 || c == 13 { // space, tab, \n, \r
+                        idx += 1
+                        continue
+                    }
+                    break
+                }
+                if idx >= buf.count { break }
+                if base.advanced(by: idx).pointee == 0 { break }
+
+                var stmt: OpaquePointer?
+                var tail: UnsafePointer<CChar>?
+
+                let start = base.advanced(by: idx)
+                let prepRC = sqlite3_prepare_v2(db, start, -1, &stmt, &tail)
+                if prepRC != SQLITE_OK {
+                    // If parsing fails, bail out to avoid infinite loops.
+                    // (The schema.sql shipped with the app should be valid.)
+                    // We intentionally keep this quiet to avoid breaking imports.
+                    break
+                }
+
+                // If SQLite reports no statement (e.g., only comments/whitespace), we're done.
+                guard let stmt = stmt else { break }
+
+                // Execute statement; some statements (e.g., PRAGMAs) may produce rows.
+                var stepRC = sqlite3_step(stmt)
+                while stepRC == SQLITE_ROW {
+                    stepRC = sqlite3_step(stmt)
+                }
+
+                if stepRC != SQLITE_DONE {
+                    // Ignore common idempotency errors.
+                    let msg = String(cString: sqlite3_errmsg(db)).lowercased()
+                    if !(msg.contains("already exists") || msg.contains("duplicate column") || msg.contains("duplicate") ) {
+                        // Non-fatal: keep going, but don't spam logs.
+                    }
+                }
+
+                sqlite3_finalize(stmt)
+
+                // Advance to next statement using the tail pointer.
+                if let tail = tail {
+                    let newIdx = Int(tail - base)
+                    if newIdx <= idx {
+                        // Safety to avoid infinite loops.
+                        idx += 1
+                    } else {
+                        idx = newIdx
+                    }
+                } else {
+                    break
+                }
+            }
         }
     }
 

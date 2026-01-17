@@ -4132,7 +4132,7 @@ struct WellVisitForm: View {
         let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - t0) * 1000.0)
         Self.dbLog.notice("WellVisitForm: saveTapped done | mode=\(editingVisitID == nil ? "INSERT" : "UPDATE", privacy: .public) pid=\(String(describing: patientID), privacy: .public) visitID=\(visitID, privacy: .public) ms=\(elapsedMs, privacy: .public)")
 
-        // Refresh visit list in UI + close sheet
+        Self.uiLog.info("WellVisitForm: requesting reloadVisitsForSelectedPatient (after save) | pid=\(String(describing: patientID), privacy: .public)")
         appState.reloadVisitsForSelectedPatient()
         dismiss()
     }

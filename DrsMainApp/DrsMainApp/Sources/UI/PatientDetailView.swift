@@ -155,10 +155,8 @@ fileprivate func isSickCategory(_ raw: String) -> Bool {
 struct PatientDetailView: View {
 
     // Logger for diagnosing view-driven refreshes / sheet lifecycle.
-    private static let uiLog = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "DrsMainApp",
-        category: "ui.patient_detail"
-    )
+    // Keep consistent with AppLog conventions.
+    private static let uiLog = AppLog.feature("ui.patient_detail")
 
     // Compact patient/bundle meta shown next to the patient name (moved up from the old Facts grid)
     @ViewBuilder
@@ -803,16 +801,18 @@ struct PatientDetailView: View {
 
         let selected = appState.selectedPatientID
         let currentToken = appState.currentBundleURL?.path
+        let pidMatch = (openID != nil && selected != nil && openID == selected)
+        let tokenMatch = (openToken != nil && currentToken != nil && openToken == currentToken)
+
         debugLog("onDismiss WellVisitForm: openID=\(String(describing: openID)) selected=\(String(describing: selected))")
         debugLog("onDismiss WellVisitForm: openToken=\(String(describing: openToken)) currentToken=\(String(describing: currentToken))")
 
-        if let openID,
-           let selected,
-           openID == selected,
-           let openToken,
-           openToken == currentToken {
+        if pidMatch && tokenMatch, let selected {
+            Self.uiLog.info("WellVisitForm: onDismiss -> reload visits (reason=dismiss) | pid=\(selected, privacy: .public)")
             appState.loadVisits(for: selected)
             visitTab = .all
+        } else {
+            Self.uiLog.debug("WellVisitForm: onDismiss -> skip reload | pidMatch=\(pidMatch, privacy: .public) tokenMatch=\(tokenMatch, privacy: .public)")
         }
     }
 
