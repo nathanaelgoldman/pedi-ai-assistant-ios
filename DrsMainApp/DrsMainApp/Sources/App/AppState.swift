@@ -176,9 +176,12 @@ final class AppState: ObservableObject {
     private let wellVisitStore = WellVisitStore()
     
     // The db.sqlite inside the currently selected bundle
+    // (supports both <bundle>/db.sqlite and <bundle>/db/db.sqlite)
     var currentDBURL: URL? {
-        currentBundleURL?.appendingPathComponent("db.sqlite")
+        dbURLForCurrentBundle()
     }
+    // Apply schema upgrades at most once per selected bundle (idempotent but avoids extra work).
+    private var schemaAppliedForBundlePath: String? = nil
     /// docs/ folder in the current bundle (created if missing)
     var currentDocsURL: URL? {
         guard let root = currentBundleURL else { return nil }
@@ -514,6 +517,38 @@ final class AppState: ObservableObject {
         if FileManager.default.fileExists(atPath: c2.path) { return c2 }
         return nil
     }
+
+    /// Ensure the current app-bundled schema (schema.sql) has been applied to this bundle DB.
+    /// Generic: does not hardcode any table names; relies on schema.sql being idempotent.
+    private func ensureBundledSchemaAppliedIfNeeded(dbURL: URL) {
+        let bundlePath = (currentBundleURL?.standardizedFileURL.resolvingSymlinksInPath().path) ?? ""
+        guard !bundlePath.isEmpty else { return }
+
+        // Only apply once per selected bundle.
+        if schemaAppliedForBundlePath == bundlePath {
+            return
+        }
+
+        // Only apply when the DB file exists.
+        guard FileManager.default.fileExists(atPath: dbURL.path) else {
+            log.warning("ensureBundledSchemaAppliedIfNeeded: DB missing at \(dbURL.lastPathComponent, privacy: .public) for bundle \(bundlePath, privacy: .public)")
+            return
+        }
+
+        schemaAppliedForBundlePath = bundlePath
+
+        log.info("ensureBundledSchemaAppliedIfNeeded: applying bundled schema.sql (if present) to \(dbURL.lastPathComponent, privacy: .public)")
+
+        // Bring older bundle DBs up to the current expected schema (tables + columns).
+        // Generic: schema is defined by bundled `schema.sql`.
+        applyBundledSchemaIfPresent(to: dbURL)
+
+        // Keep existing idempotent helpers (some are intentional no-ops for bundle DBs).
+        applyGoldenSchemaIdempotent(to: dbURL)
+
+        // Growth unification objects (view + triggers + indexes)
+        ensureGrowthUnificationSchema(at: dbURL)
+    }
     
     
     /// Return true if a table exists
@@ -812,24 +847,21 @@ final class AppState: ObservableObject {
             return
         }
 
+        // `chosen` is already canonical because the guard unwraps via `canonicalBundleRoot(...)`.
+        let canonicalRoot = chosen
+
         // ✅ Persist the canonical bundle root (not a wrapper folder)
-        addToRecents(chosen)
+        addToRecents(canonicalRoot)
 
         // ✅ Use canonical root everywhere
-        currentBundleURL = chosen
-        self.log.info("selectBundle: chosen=\(chosen.lastPathComponent, privacy: .public)")
+        currentBundleURL = canonicalRoot
+        self.log.info("selectBundle: chosen=\(canonicalRoot.lastPathComponent, privacy: .public)")
 
+        // Apply schema upgrades once per bundle, when the DB path is resolvable.
         if let dbURL = dbURLForCurrentBundle() {
-            // Bring older bundle DBs up to the current expected schema (tables + columns).
-            // This is generic: schema is defined by bundled `schema.sql`.
-            self.log.info("selectBundle: applying bundled schema.sql (if present) to \(dbURL.lastPathComponent, privacy: .public)")
-            applyBundledSchemaIfPresent(to: dbURL)
-
-            // Keep existing idempotent helpers (some are intentional no-ops for bundle DBs).
-            applyGoldenSchemaIdempotent(to: dbURL)
-
-            // Growth unification objects (view + triggers + indexes)
-            ensureGrowthUnificationSchema(at: dbURL)
+            ensureBundledSchemaAppliedIfNeeded(dbURL: dbURL)
+        } else {
+            self.log.warning("selectBundle: no db.sqlite found yet under bundle \(canonicalRoot.lastPathComponent, privacy: .public)")
         }
 
         selectedPatientID = nil
@@ -863,6 +895,7 @@ func reloadPatients() {
         }
         return
     }
+    ensureBundledSchemaAppliedIfNeeded(dbURL: dbURL)
 
     let previousSelection = selectedPatientID
     let t0 = Date()
@@ -1228,7 +1261,8 @@ func reloadPatients() {
                     return newID
                 }
             } catch {
-                log.error("WellVisitStore upsert failed: \(String(describing: error), privacy: .public)")
+                let message = String(describing: error)
+                log.error("Save failed: \(message, privacy: .public)")
                 return nil
             }
         }
@@ -5649,37 +5683,83 @@ func reloadPatients() {
     }
 
     /// Execute a .sql file (UTF-8) against a SQLite file on disk.
+    /// Generic, idempotent-friendly runner:
+    /// - Applies the full script from bundled `schema.sql`.
+    /// - Does NOT stop at the first statement error (sqlite3_exec would).
+    /// - Continues statement-by-statement, ignoring common idempotency errors.
     private func applySQLFile(_ sqlURL: URL, to dbURL: URL) {
-        guard var sqlText = try? String(contentsOf: sqlURL, encoding: .utf8) else { return }
+        guard var sqlText = try? String(contentsOf: sqlURL, encoding: .utf8) else {
+            log.warning("applySQLFile: failed to read sql at \(sqlURL.lastPathComponent, privacy: .public)")
+            return
+        }
 
         // Normalize newlines for stable parsing.
         sqlText = sqlText.replacingOccurrences(of: "\r\n", with: "\n")
 
-        // Make trigger creation idempotent to avoid noisy "already exists" logs.
-        // SQLite supports: CREATE TRIGGER IF NOT EXISTS ...
-        // We only inject IF NOT EXISTS when it's not already present.
-        if let re = try? NSRegularExpression(
-            pattern: "(?i)\\bCREATE\\s+TRIGGER\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
-            options: []
-        ) {
-            let range = NSRange(location: 0, length: (sqlText as NSString).length)
-            sqlText = re.stringByReplacingMatches(in: sqlText, options: [], range: range, withTemplate: "CREATE TRIGGER IF NOT EXISTS ")
+        // Strip UTF-8 BOM if present (can break sqlite parsing in some cases).
+        if sqlText.hasPrefix("\u{FEFF}") {
+            sqlText.removeFirst()
         }
+
+        // Make common CREATE statements idempotent to reduce noisy failures.
+        // (This is generic and safe for schema overlay use.)
+        func injectIfNotExists(_ pattern: String, replacement: String) {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: []) else { return }
+            let range = NSRange(location: 0, length: (sqlText as NSString).length)
+            sqlText = re.stringByReplacingMatches(in: sqlText, options: [], range: range, withTemplate: replacement)
+        }
+
+        // TRIGGERS
+        injectIfNotExists(
+            "(?i)\\bCREATE\\s+TRIGGER\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+            replacement: "CREATE TRIGGER IF NOT EXISTS "
+        )
+        // INDEXES (including UNIQUE)
+        injectIfNotExists(
+            "(?i)\\bCREATE\\s+UNIQUE\\s+INDEX\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+            replacement: "CREATE UNIQUE INDEX IF NOT EXISTS "
+        )
+        injectIfNotExists(
+            "(?i)\\bCREATE\\s+INDEX\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+            replacement: "CREATE INDEX IF NOT EXISTS "
+        )
+        // VIEWS
+        injectIfNotExists(
+            "(?i)\\bCREATE\\s+VIEW\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+            replacement: "CREATE VIEW IF NOT EXISTS "
+        )
 
         var db: OpaquePointer?
         if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
             if let db { sqlite3_close(db) }
+            log.error("applySQLFile: sqlite open failed for \(dbURL.lastPathComponent, privacy: .public)")
             return
         }
+        guard let db = db else { return }
         defer { sqlite3_close(db) }
 
-        // IMPORTANT: Do not split on semicolons.
-        // Triggers contain semicolons inside BEGIN...END blocks; naive splitting corrupts them.
-        // Instead, let SQLite parse the script statement-by-statement.
+        // Wrap in a transaction for speed and consistency.
+        _ = sqlite3_exec(db, "BEGIN IMMEDIATE;", nil, nil, nil)
+
+        // IMPORTANT: do NOT split on semicolons.
+        // Triggers can contain semicolons inside BEGIN...END blocks.
+        // Instead, let SQLite parse the script statement-by-statement via prepare_v2 + tail.
         let bytes = Array(sqlText.utf8CString)
+        var idx = 0
+
+        // Generic idempotency errors we can ignore while overlaying schema.
+        func isIgnorableSchemaError(_ msg: String) -> Bool {
+            let m = msg.lowercased()
+            return m.contains("already exists")
+                || m.contains("duplicate column")
+                || m.contains("duplicate")
+        }
+
+        var executedCount = 0
+        var ignoredErrorCount = 0
+
         bytes.withUnsafeBufferPointer { buf in
             guard let base = buf.baseAddress else { return }
-            var idx = 0
 
             while idx < buf.count {
                 // Skip leading whitespace.
@@ -5692,6 +5772,7 @@ func reloadPatients() {
                     }
                     break
                 }
+
                 if idx >= buf.count { break }
                 if base.advanced(by: idx).pointee == 0 { break }
 
@@ -5702,26 +5783,27 @@ func reloadPatients() {
                 let prepRC = sqlite3_prepare_v2(db, start, -1, &stmt, &tail)
                 if prepRC != SQLITE_OK {
                     // If parsing fails, bail out to avoid infinite loops.
-                    // (The schema.sql shipped with the app should be valid.)
-                    // We intentionally keep this quiet to avoid breaking imports.
+                    // (Bundled schema.sql should be valid.)
                     break
                 }
 
                 // If SQLite reports no statement (e.g., only comments/whitespace), we're done.
                 guard let stmt = stmt else { break }
 
-                // Execute statement; some statements (e.g., PRAGMAs) may produce rows.
+                executedCount += 1
+
+                // Execute statement; some statements may produce rows.
                 var stepRC = sqlite3_step(stmt)
                 while stepRC == SQLITE_ROW {
                     stepRC = sqlite3_step(stmt)
                 }
 
                 if stepRC != SQLITE_DONE {
-                    // Ignore common idempotency errors.
-                    let msg = String(cString: sqlite3_errmsg(db)).lowercased()
-                    if !(msg.contains("already exists") || msg.contains("duplicate column") || msg.contains("duplicate") ) {
-                        // Non-fatal: keep going, but don't spam logs.
+                    let msg = String(cString: sqlite3_errmsg(db))
+                    if isIgnorableSchemaError(msg) {
+                        ignoredErrorCount += 1
                     }
+                    // Otherwise: non-fatal; continue to next statement.
                 }
 
                 sqlite3_finalize(stmt)
@@ -5740,13 +5822,25 @@ func reloadPatients() {
                 }
             }
         }
+
+        // Commit; if commit fails, rollback.
+        if sqlite3_exec(db, "COMMIT;", nil, nil, nil) != SQLITE_OK {
+            _ = sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("applySQLFile: commit failed err=\(msg, privacy: .public)")
+        } else {
+            log.info("applySQLFile: applied \(sqlURL.lastPathComponent, privacy: .public) statements=\(executedCount, privacy: .public) ignored=\(ignoredErrorCount, privacy: .public)")
+        }
     }
 
     /// Convenience: apply bundled schema.sql to the given db (no-op if missing).
     private func applyBundledSchemaIfPresent(to dbURL: URL) {
-        if let url = bundledSchemaSQLURL() {
-            applySQLFile(url, to: dbURL)
+        guard let url = bundledSchemaSQLURL() else {
+            self.log.warning("applyBundledSchemaIfPresent: schema.sql not found in bundle resources")
+            return
         }
+        self.log.info("applyBundledSchemaIfPresent: applying \(url.lastPathComponent, privacy: .public) to \(dbURL.lastPathComponent, privacy: .public)")
+        applySQLFile(url, to: dbURL)
     }
         // MARK: - Minimal schema & seed helpers (no dependency on external initializers)
         

@@ -51,6 +51,7 @@ struct SickEpisodeForm: View {
     let editingEpisodeID: Int?
 
     /// Active episode id for this form; once a new episode is first saved, this becomes non-nil.
+    
     @State private var activeEpisodeID: Int64? = nil
 
     // MARK: - Core HPI
@@ -194,7 +195,9 @@ struct SickEpisodeForm: View {
 
     private let guidanceChoices = ["See Plan","URI","AGE","UTI","Otitis"]
 
-    private let log = Logger(subsystem: "DrsMainApp", category: "SickEpisodeForm")
+    private static let uiLog = AppLog.ui
+    private static let dbLog = AppLog.db
+    private let log = AppLog.feature("sickEpisode")
 
     init(editingEpisodeID: Int? = nil) {
         self.editingEpisodeID = editingEpisodeID
@@ -816,8 +819,14 @@ struct SickEpisodeForm: View {
                     Button(NSLocalizedString("common.cancel", comment: "Toolbar cancel button")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(NSLocalizedString("common.save", comment: "Toolbar save button")) { saveTapped() }
-                        .keyboardShortcut(.defaultAction)
+                    Button(NSLocalizedString("common.save", comment: "Toolbar save button")) {
+                        Self.uiLog.info(
+                            "SickEpisodeForm: SAVE tapped | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: editingEpisodeID), privacy: .private)"
+                        )
+                        Self.uiLog.info("SickEpisodeForm: SAVE tapped | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private)")
+                        saveTapped()
+                    }
+                    .keyboardShortcut(.defaultAction)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button(NSLocalizedString("common.done", comment: "Toolbar done button")) { dismiss() }
@@ -1169,13 +1178,13 @@ struct SickEpisodeForm: View {
     private func ensureBundleUserRow(dbURL: URL) {
         // 1) We need an active user id
         guard let uid = appState.activeUserID else {
-            log.info("ensureBundleUserRow: no activeUserID, skipping users sync")
+            Self.dbLog.info("ensureBundleUserRow: no activeUserID, skipping users sync")
             return
         }
 
         // 2) Find the matching clinician in the local ClinicianStore
         guard let clinician = clinicianStore.users.first(where: { $0.id == uid }) else {
-            log.info("ensureBundleUserRow: no clinician match for id \(uid), skipping users sync")
+            Self.dbLog.info("ensureBundleUserRow: no clinician match for id \(uid), skipping users sync")
             return
         }
 
@@ -1184,7 +1193,7 @@ struct SickEpisodeForm: View {
         do {
             db = try dbOpen(dbURL)
         } catch {
-            log.error("ensureBundleUserRow: dbOpen failed")
+            Self.dbLog.error("ensureBundleUserRow: dbOpen failed")
             return
         }
         guard let db = db else { return }
@@ -1200,7 +1209,7 @@ struct SickEpisodeForm: View {
         """
         if sqlite3_exec(db, createSQL, nil, nil, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            log.error("ensureBundleUserRow: CREATE TABLE failed: \(msg, privacy: .public)")
+            Self.dbLog.error("SickEpisodeForm: ensureBundleUserRow CREATE TABLE failed | err=\(msg, privacy: .public)")
             return
         }
 
@@ -1219,7 +1228,7 @@ struct SickEpisodeForm: View {
 
         let changed = sqlite3_changes(db)
         if changed > 0 {
-            log.info("ensureBundleUserRow: updated users row for id=\(uid)")
+            Self.dbLog.info("ensureBundleUserRow: updated users row for id=\(uid)")
             return
         }
 
@@ -1227,7 +1236,7 @@ struct SickEpisodeForm: View {
         let insertSQL = "INSERT INTO users (id, first_name, last_name) VALUES (?, ?, ?);"
         if sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            log.error("ensureBundleUserRow: INSERT prepare failed: \(msg, privacy: .public)")
+            Self.dbLog.error("ensureBundleUserRow: INSERT prepare failed: \(msg, privacy: .public)")
             return
         }
         bindText(stmt, 2, clinician.firstName)
@@ -1235,16 +1244,16 @@ struct SickEpisodeForm: View {
         sqlite3_bind_int64(stmt, 1, sqlite3_int64(uid))
 
         if sqlite3_step(stmt) == SQLITE_DONE {
-            log.info("ensureBundleUserRow: inserted users row for id=\(uid)")
+            Self.dbLog.info("ensureBundleUserRow: inserted users row for id=\(uid)")
         } else {
             let msg = String(cString: sqlite3_errmsg(db))
-            log.error("ensureBundleUserRow: INSERT step failed: \(msg, privacy: .public)")
+            Self.dbLog.error("ensureBundleUserRow: INSERT step failed: \(msg, privacy: .public)")
         }
         sqlite3_finalize(stmt)
     }
 
     private func insertEpisode(dbURL: URL, patientID: Int64, payload: [String: Any]) throws -> Int64 {
-        log.info("insertEpisode → db=\(dbURL.path, privacy: .public), pid=\(patientID)")
+        Self.dbLog.info("SickEpisodeForm: insertEpisode start | db=\(dbURL.path, privacy: .private) pid=\(patientID, privacy: .private)")
         var db: OpaquePointer?
         db = try dbOpen(dbURL)
         defer { if db != nil { sqlite3_close(db) } }
@@ -1397,7 +1406,7 @@ struct SickEpisodeForm: View {
             let msg = String(cString: sqlite3_errmsg(db))
             throw NSError(domain: "SickEpisodeForm.DB", code: 5, userInfo: [NSLocalizedDescriptionKey: "update step failed: \(msg)"])
         }
-        log.info("updateEpisode OK → id=\(episodeID), changes=\(sqlite3_changes(db))")
+        Self.dbLog.info("SickEpisodeForm: updateEpisode success | episodeID=\(episodeID, privacy: .private) changes=\(sqlite3_changes(db), privacy: .public)")
     }
 
     /// Ensure the `episodes` table exists with the expected schema.
@@ -1458,7 +1467,7 @@ struct SickEpisodeForm: View {
     private func debugCountEpisodes(dbURL: URL, patientID: Int64) {
         var db: OpaquePointer?
         do { db = try dbOpen(dbURL) } catch {
-            log.error("debugCountEpisodes: open failed")
+            Self.dbLog.error("debugCountEpisodes: open failed")
             return
         }
         defer { if db != nil { sqlite3_close(db) } }
@@ -1471,7 +1480,7 @@ struct SickEpisodeForm: View {
         sqlite3_bind_int64(stmt, 1, patientID)
         if sqlite3_step(stmt) == SQLITE_ROW {
             let c = sqlite3_column_int64(stmt, 0)
-            log.info("Episodes count for pid \(patientID): \(c)")
+            Self.dbLog.debug("SickEpisodeForm: debugCountEpisodes | pid=\(patientID, privacy: .private) count=\(c, privacy: .public)")
         }
     }
 
@@ -2312,8 +2321,10 @@ struct SickEpisodeForm: View {
         selectedAIHistoryID = nil
     }
 
+    
     // MARK: - Save (commit to db + refresh UI)
     private func saveTapped() {
+        Self.uiLog.info("SickEpisodeForm: saveTapped start | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private) editingEpisodeID=\(String(describing: editingEpisodeID), privacy: .private)")
         let free = otherComplaints
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
