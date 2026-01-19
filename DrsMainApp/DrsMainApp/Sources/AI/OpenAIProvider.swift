@@ -25,7 +25,7 @@ final class OpenAIProvider: EpisodeAIProvider {
     private let apiKey: String
     private let model: String
     private let apiBaseURL: URL
-    private let log = Logger(subsystem: "DrsMainApp", category: "OpenAIProvider")
+    private let log = AppLog.feature("ai.openai")
 
     /// - Parameters:
     ///   - apiKey: Secret API key for the OpenAI account (from the clinician profile).
@@ -131,7 +131,9 @@ final class OpenAIProvider: EpisodeAIProvider {
         }
         guard (200..<300).contains(http.statusCode) else {
             let snippet = String(data: data, encoding: .utf8) ?? ""
-            log.error("OpenAIProvider: status \(http.statusCode) body=\(snippet, privacy: .public)")
+            let truncated = String(snippet.prefix(800))  // keep it sane
+
+            log.error("OpenAIProvider: status \(http.statusCode, privacy: .public) body=\(truncated, privacy: .private)")
             throw OpenAIProviderError.httpStatus(code: http.statusCode, body: snippet)
         }
 

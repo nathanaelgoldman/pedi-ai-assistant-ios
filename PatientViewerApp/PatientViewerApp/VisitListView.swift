@@ -29,7 +29,7 @@ let outputDateFormatter: DateFormatter = {
 
 // Structured logger for Visit-related flows (lists, details, PDF generation)
 
-private let logVisits = Logger(subsystem: "com.yunastic.PatientViewerApp", category: "visits")
+private let logVisits = AppLog.feature("visits")
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -113,7 +113,7 @@ struct PDFGenerator {
             let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
             let fileURL = docsURL.appendingPathComponent("VisitReport_\(visit.id).pdf")
             try data.write(to: fileURL)
-            logVisits.info("Saved PDF to \(fileURL.path, privacy: .public) (\(dataSize) bytes)")
+            logVisits.info("Saved PDF \(fileURL.lastPathComponent, privacy: .public) (\(dataSize, privacy: .public) bytes)")
             return fileURL
         } catch {
             logVisits.error("Failed to save PDF: \(String(describing: error))")
@@ -377,8 +377,7 @@ struct VisitListView: SwiftUI.View {
         }
         .navigationTitle(L("patient_viewer.visits.list.nav_title", comment: "Navigation title"))
         .onAppear {
-            let path = dbURL.appendingPathComponent("db.sqlite").path
-            logVisits.info("VisitListView appeared with db=\(path, privacy: .public)")
+            logVisits.info("VisitListView appeared | bundle=\(dbURL.lastPathComponent, privacy: .private) db=\("db.sqlite", privacy: .public)")
             loadVisits()
         }
         .onDisappear {
@@ -397,7 +396,7 @@ struct VisitListView: SwiftUI.View {
         let start = Date()
         
         let dbPath = dbURL.appendingPathComponent("db.sqlite").path
-        logVisits.info("Loading visits from \(dbPath, privacy: .public)")
+        logVisits.info("Loading visits | bundle=\(dbURL.lastPathComponent, privacy: .private) db=\("db.sqlite", privacy: .public)")
         do {
             let db = try Connection(dbPath)
 
@@ -569,23 +568,9 @@ final class PDFShareItemSource: NSObject, UIActivityItemSource {
     // Provide item
     func activityViewController(_ activityViewController: UIActivityViewController,
                                 itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
-        let raw = activityType?.rawValue ?? ""
-
-        #if targetEnvironment(macCatalyst)
-        // Mac Catalyst: “Save to Files…” expects a file URL (needs a filename).
+        // Always provide a file URL, for ALL activity types.
+        // This preserves the filename and avoids Catalyst/FileProvider “can’t fetch item” issues.
         return fileURL
-        #else
-        // iOS: For Save-to-Files, prefer URL (keeps filename).
-        if raw.contains("SaveToFiles") {
-            return fileURL
-        }
-
-        // Other targets can accept Data.
-        if let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) {
-            return data
-        }
-        return fileURL
-        #endif
     }
 
     // Declare the UTI / content type for the data we return
@@ -626,7 +611,15 @@ private func makeNamedShareCopy(originalURL: URL, visit: VisitSummary, bundleRoo
     // Example: Amber_Unicorn_🦋_36_month_visit_20251210_saved-20260107-123045_PatientViewerApp.pdf
     let fileName = "\(aliasPart)_\(visitTypePart)_\(visitDatePart)_saved-\(savedPart)_\(appPart).pdf"
 
-    let dest = fm.temporaryDirectory.appendingPathComponent(fileName)
+    // NOTE: Share / FileProvider on macOS/Catalyst can be picky about transient locations.
+    // Use Documents/ShareCopies so the file is in a stable, user-accessible sandbox.
+    let docsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+    let shareDir = docsURL.appendingPathComponent("ShareCopies", isDirectory: true)
+    if !fm.fileExists(atPath: shareDir.path) {
+        try? fm.createDirectory(at: shareDir, withIntermediateDirectories: true)
+    }
+
+    let dest = shareDir.appendingPathComponent(fileName)
 
     do {
         if fm.fileExists(atPath: dest.path) {
@@ -821,14 +814,30 @@ private func formatDateForFilename(_ d: Date) -> String {
 }
 
 private func sanitizeFilenameComponent(_ s: String) -> String {
-    // Replace path separators and other unfriendly filename characters.
+    // Goal: produce a conservative, share-safe filename component.
+    // Many share extensions behave poorly with emoji / some Unicode.
+
+    // 1) Remove obvious forbidden filesystem characters.
     let forbidden = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t")
     let parts = s.components(separatedBy: forbidden)
     let joined = parts.joined(separator: "-")
-    // Collapse whitespace to underscores for nicer filenames.
+
+    // 2) Normalize whitespace to single underscores.
     let ws = CharacterSet.whitespacesAndNewlines
-    let cleaned = joined.components(separatedBy: ws).filter { !$0.isEmpty }.joined(separator: "_")
-    return cleaned.isEmpty ? "unknown" : cleaned
+    let spaced = joined.components(separatedBy: ws).filter { !$0.isEmpty }.joined(separator: "_")
+
+    // 3) Keep only a conservative ASCII set for maximum compatibility across iOS share targets.
+    // Allowed: A-Z a-z 0-9 underscore dash dot
+    let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
+    let asciiSafe = String(spaced.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" })
+
+    // 4) Collapse repeated separators and trim.
+    let collapsed = asciiSafe
+        .replacingOccurrences(of: "--+", with: "-", options: .regularExpression)
+        .replacingOccurrences(of: "__+", with: "_", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "-_ ."))
+
+    return collapsed.isEmpty ? "unknown" : collapsed
 }
 
 struct IdentifiableURL: Identifiable {

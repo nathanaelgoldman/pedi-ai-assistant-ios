@@ -48,7 +48,7 @@ final class ClinicianStore: ObservableObject {
     @Published private(set) var users: [Clinician] = []
     @Published private(set) var activeUser: Clinician? = nil
 
-    private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "ClinicianStore")
+    private let log = AppLog.feature("clinicianStore")
     private let activeUserKey = "activeClinicianID"
 
     // MARK: - DB location
@@ -72,7 +72,7 @@ final class ClinicianStore: ObservableObject {
         var db: OpaquePointer?
         if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) != SQLITE_OK {
             if let db { sqlite3_close(db) }
-            log.error("Failed to open clinicians DB at \(self.dbURL.path, privacy: .public)")
+            log.error("ClinicianStore: failed to open clinicians DB file=\(self.dbURL.lastPathComponent, privacy: .public)")
             return nil
         }
         return db

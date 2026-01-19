@@ -804,8 +804,11 @@ struct PatientDetailView: View {
         let pidMatch = (openID != nil && selected != nil && openID == selected)
         let tokenMatch = (openToken != nil && currentToken != nil && openToken == currentToken)
 
+        let openBundle = openToken.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let currentBundle = currentToken.map { URL(fileURLWithPath: $0).lastPathComponent }
+
         debugLog("onDismiss WellVisitForm: openID=\(String(describing: openID)) selected=\(String(describing: selected))")
-        debugLog("onDismiss WellVisitForm: openToken=\(String(describing: openToken)) currentToken=\(String(describing: currentToken))")
+        debugLog("onDismiss WellVisitForm: openBundle=\(String(describing: openBundle)) currentBundle=\(String(describing: currentBundle))")
 
         if pidMatch && tokenMatch, let selected {
             Self.uiLog.info("WellVisitForm: onDismiss -> reload visits (reason=dismiss) | pid=\(selected, privacy: .public)")
@@ -824,8 +827,11 @@ struct PatientDetailView: View {
 
         let selected = appState.selectedPatientID
         let currentToken = appState.currentBundleURL?.path
+        let openBundle = openToken.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let currentBundle = currentToken.map { URL(fileURLWithPath: $0).lastPathComponent }
+
         debugLog("onDismiss SickEpisodeForm: openID=\(String(describing: openID)) selected=\(String(describing: selected))")
-        debugLog("onDismiss SickEpisodeForm: openToken=\(String(describing: openToken)) currentToken=\(String(describing: currentToken))")
+        debugLog("onDismiss SickEpisodeForm: openBundle=\(String(describing: openBundle)) currentBundle=\(String(describing: currentBundle))")
 
         if let openID,
            let selected,

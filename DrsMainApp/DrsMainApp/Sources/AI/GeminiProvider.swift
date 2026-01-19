@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import OSLog
+// Logging is centralized via AppLog
 
 /// Concrete implementation that calls Gemini's generateContent API.
 /// This type is intentionally tiny and stateless; all configuration is injected.
@@ -15,7 +15,8 @@ final class GeminiProvider: EpisodeAIProvider {
     private let apiKey: String
     private let model: String
     private let apiBaseURL: URL
-    private let log = Logger(subsystem: "DrsMainApp", category: "GeminiProvider")
+    // Feature-specific logger (AppLog convention)
+    private let log = AppLog.feature("ai.gemini")
 
     // MARK: - Localization
     /// Localized string helper (fileprivate to avoid cross-file symbol collisions).
@@ -89,7 +90,8 @@ final class GeminiProvider: EpisodeAIProvider {
 
         request.httpBody = try JSONEncoder().encode(body)
 
-        log.info("GeminiProvider: calling \(url.absoluteString, privacy: .public) with model \(self.model, privacy: .public)")
+        let safeURLForLog = "\(url.scheme ?? "")://\(url.host ?? "")\(url.path)"
+        log.info("GeminiProvider: calling \(safeURLForLog, privacy: .public) with model \(self.model, privacy: .public)")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -98,7 +100,8 @@ final class GeminiProvider: EpisodeAIProvider {
         }
         guard (200..<300).contains(http.statusCode) else {
             let snippet = String(data: data, encoding: .utf8) ?? ""
-            log.error("GeminiProvider: status \(http.statusCode) body=\(snippet, privacy: .public)")
+            let snippetForLog = String(snippet.prefix(512))
+            log.error("GeminiProvider: status \(http.statusCode) body=\(snippetForLog, privacy: .private)")
             throw GeminiProviderError.httpStatus(code: http.statusCode, body: snippet)
         }
 

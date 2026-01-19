@@ -57,4 +57,70 @@ enum AppLog {
     static func feature(_ name: String) -> Logger {
         Logger(subsystem: subsystem, category: name)
     }
+    
+
+
+    // MARK: - Scoped helpers (baseline logging)
+
+    /// A tiny helper to keep logging consistent across UI forms without creating ad-hoc Logger instances.
+    ///
+    /// Usage (example):
+    ///   let log = AppLog.baseline("SickEpisodeForm")
+    ///   log.opened(editingID: editingEpisodeID)
+    ///   log.saveTapped(pid: appState.selectedPatientID, idLabel: "episodeID", id: editingEpisodeID)
+    ///
+    struct Baseline {
+        let component: String
+
+        init(_ component: String) {
+            self.component = component
+        }
+
+        // Render optionals in a consistent, non-crashy way.
+        private func opt(_ v: Int?) -> String { v.map(String.init) ?? "nil" }
+        private func opt(_ v: Int64?) -> String { v.map(String.init) ?? "nil" }
+
+        // MARK: UI events
+
+        func opened(editingID: Int?) {
+            AppLog.ui.info("\(component, privacy: .public): opened editingID=\(opt(editingID), privacy: .private)")
+        }
+
+        func saveTapped(pid: Int?, idLabel: String, id: Int?) {
+            AppLog.ui.info("\(component, privacy: .public): SAVE tapped | pid=\(opt(pid), privacy: .private) \(idLabel, privacy: .public)=\(opt(id), privacy: .private)")
+        }
+
+        // MARK: DB / persistence events
+
+        func saveStart(pid: Int?, idLabel: String, id: Int?, editingID: Int?) {
+            AppLog.db.debug("\(component, privacy: .public): save start | pid=\(opt(pid), privacy: .private) \(idLabel, privacy: .public)=\(opt(id), privacy: .private) editingID=\(opt(editingID), privacy: .private)")
+        }
+
+        func payloadBuilt(idLabel: String, id: Int?, keyCount: Int) {
+            AppLog.db.debug("\(component, privacy: .public): payload built | \(idLabel, privacy: .public)=\(opt(id), privacy: .private) keys=\(keyCount, privacy: .public)")
+        }
+
+        func dbTarget(_ filename: String) {
+            // Keep this non-sensitive; the full path should remain private elsewhere.
+            AppLog.db.debug("\(component, privacy: .public): db=\(filename, privacy: .public)")
+        }
+
+        func saveSuccess(idLabel: String, id: Int, changes: Int?) {
+            AppLog.db.info("\(component, privacy: .public): save success | \(idLabel, privacy: .public)=\(id, privacy: .private) changes=\(opt(changes), privacy: .public)")
+        }
+
+        func saveFailed(idLabel: String, id: Int?, error: Error) {
+            AppLog.db.error("\(component, privacy: .public): save FAILED | \(idLabel, privacy: .public)=\(opt(id), privacy: .private) err=\(String(describing: error), privacy: .private(mask: .hash))")
+        }
+
+        // Optional: quick, low-stakes breadcrumb
+        func note(_ message: String) {
+            AppLog.ui.debug("\(component, privacy: .public): \(message, privacy: .private)")
+        }
+    }
+
+    /// Convenience constructor for `Baseline`.
+    static func baseline(_ component: String) -> Baseline {
+        Baseline(component)
+    }
 }

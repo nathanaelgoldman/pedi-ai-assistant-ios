@@ -20,6 +20,13 @@ enum BundleCrypto {
         return String(format: format, locale: Locale.current, arguments: args)
     }
 
+    /// Avoid leaking full filesystem paths in user-visible errors.
+    /// Use only the last path component (filename or folder name).
+    @inline(__always)
+    private static func safePath(_ url: URL) -> String {
+        url.lastPathComponent
+    }
+
     // MARK: - Key Derivation (HKDF)
 
     /// Static master seed used to derive both encryption and MAC keys.
@@ -69,7 +76,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1001,
-                userInfo: [NSLocalizedDescriptionKey: tr("bundlecrypto.error.aesgcm_combined_missing", src.path)]
+                userInfo: [NSLocalizedDescriptionKey: tr("bundlecrypto.error.aesgcm_combined_missing", safePath(src))]
             )
         }
 
@@ -95,7 +102,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1501,
-                userInfo: [NSLocalizedDescriptionKey: tr("bundlecrypto.error.encrypted_file_too_short", src.path)]
+                userInfo: [NSLocalizedDescriptionKey: tr("bundlecrypto.error.encrypted_file_too_short", safePath(src))]
             )
         }
 
@@ -110,7 +117,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1502,
-                userInfo: [NSLocalizedDescriptionKey: tr("bundlecrypto.error.hmac_verification_failed", src.path)]
+                userInfo: [NSLocalizedDescriptionKey: tr("bundlecrypto.error.hmac_verification_failed", safePath(src))]
             )
         }
 
@@ -181,7 +188,7 @@ enum BundleCrypto {
                     domain: "BundleCrypto",
                     code: 2003,
                     userInfo: [
-                        NSLocalizedDescriptionKey: tr("bundlecrypto.error.remove_plaintext_failed", plain.path)
+                        NSLocalizedDescriptionKey: tr("bundlecrypto.error.remove_plaintext_failed", safePath(plain))
                     ]
                 )
             }
@@ -194,7 +201,7 @@ enum BundleCrypto {
             domain: "BundleCrypto",
             code: 2004,
             userInfo: [
-                NSLocalizedDescriptionKey: tr("bundlecrypto.error.no_db_found", bundleRoot.path)
+                NSLocalizedDescriptionKey: tr("bundlecrypto.error.no_db_found", safePath(bundleRoot))
             ]
         )
     }

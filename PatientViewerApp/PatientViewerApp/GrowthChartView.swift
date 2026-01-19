@@ -7,7 +7,7 @@
 
 import SwiftUI
 import Charts
-import os
+import OSLog
 
 struct GrowthChartView: View {
     let dataPoints: [GrowthDataPoint]
@@ -15,8 +15,7 @@ struct GrowthChartView: View {
     let measurement: String
 
     // Logger
-    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp",
-                                    category: "GrowthChartView")
+    private static let log = AppLog.feature("GrowthChartView")
 
     // Localization helper with fallback (mirrors the PDF generator behavior)
     private func L(_ key: String, _ fallback: String) -> String {

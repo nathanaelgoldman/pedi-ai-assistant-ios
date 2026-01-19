@@ -15,7 +15,7 @@ import os
 
 struct BundleExporter {
     // Unified logger for this component
-    private static let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "BundleExporter")
+    private static let log = AppLog.feature("BundleExporter")
     /// Compute SHA-256 hex digest of a file on disk (streaming).
     private static func sha256Hex(ofFile url: URL) throws -> String {
         guard let stream = InputStream(url: url) else {
@@ -61,7 +61,7 @@ struct BundleExporter {
     private static func removeIfExists(_ url: URL) {
         if FileManager.default.fileExists(atPath: url.path) {
             do { try FileManager.default.removeItem(at: url) } catch {
-                log.warning("Could not remove existing item at \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                log.warning("Could not remove existing item: \(url.lastPathComponent, privacy: .public) | err=\(error.localizedDescription, privacy: .private)")
             }
         }
     }
@@ -217,7 +217,7 @@ struct BundleExporter {
         var sex: String? = nil
 
         do {
-            BundleExporter.log.debug("Attempting to open database at: \(dbURL.path, privacy: .public)")
+            BundleExporter.log.debug("Attempting to open database: \(dbURL.lastPathComponent, privacy: .public)")
             let db = try Connection(dbURL.path)
             let patients = Table("patients")
             let idCol = Expression<Int64>("id")
@@ -362,7 +362,7 @@ struct BundleExporter {
         removeIfExists(bundleFolder)
 
         // Log without using file:// scheme to keep logs tidy
-        BundleExporter.log.info("Export bundle ready at: \(bundleOutputURL.path, privacy: .public)")
+        BundleExporter.log.info("Export bundle ready: \(bundleOutputURL.lastPathComponent, privacy: .public)")
 
         return bundleOutputURL
     }

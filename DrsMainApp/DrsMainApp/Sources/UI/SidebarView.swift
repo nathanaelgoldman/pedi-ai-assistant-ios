@@ -17,7 +17,7 @@ struct SidebarView: View {
     @State private var pendingDeleteBundleURL: URL? = nil
     @State private var showDeleteBundleConfirm = false
 
-    private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "Sidebar")
+    private let log = AppLog.feature("sidebar")
 
     var body: some View {
         VStack(spacing: 0) {

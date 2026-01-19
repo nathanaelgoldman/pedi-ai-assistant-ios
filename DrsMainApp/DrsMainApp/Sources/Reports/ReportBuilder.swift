@@ -50,6 +50,7 @@ enum ReportFormat { case pdf, rtf }
 
 @MainActor
 final class ReportBuilder {
+    private static let log = AppLog.feature("reportBuilder")
 
     let appState: AppState
     let clinicianStore: ClinicianStore
@@ -3157,7 +3158,7 @@ extension ReportBuilder {
             let url = debugDir().appendingPathComponent("RTF-Minimal-PDF-\(debugTimestamp()).rtf")
             do {
                 try data.write(to: url, options: .atomic)
-                NSLog("[ReportDebug] wrote minimal PDF RTF probe %@", url.path)
+                NSLog("[ReportDebug] wrote minimal PDF RTF probe %@", url.lastPathComponent)
             } catch {
                 NSLog("[ReportDebug] write failed for minimal PDF RTF probe: %@", String(describing: error))
             }
@@ -3194,7 +3195,7 @@ extension ReportBuilder {
             let url = debugDir().appendingPathComponent("RTF-Minimal-\(debugTimestamp()).rtf")
             do {
                 try data.write(to: url, options: .atomic)
-                NSLog("[ReportDebug] wrote minimal RTF probe %@", url.path)
+                NSLog("[ReportDebug] wrote minimal RTF probe %@", url.lastPathComponent)
             } catch {
                 NSLog("[ReportDebug] write failed for minimal RTF probe: %@", String(describing: error))
             }
@@ -3230,7 +3231,7 @@ extension ReportBuilder {
             let url = debugDir().appendingPathComponent("RTF-Minimal-JPEG-\(debugTimestamp()).rtf")
             do {
                 try data.write(to: url, options: .atomic)
-                NSLog("[ReportDebug] wrote minimal JPEG RTF probe %@", url.path)
+                NSLog("[ReportDebug] wrote minimal JPEG RTF probe %@", url.lastPathComponent)
             } catch {
                 NSLog("[ReportDebug] write failed for minimal JPEG RTF probe: %@", String(describing: error))
             }
@@ -3394,7 +3395,9 @@ extension ReportBuilder {
                                                  includingPropertiesForKeys: [.isDirectoryKey],
                                                  options: [],
                                                  errorHandler: { url, error in
-                                                     NSLog("[ReportExport] docx enumerator error for %@: %@", url.path, String(describing: error))
+                NSLog("[ReportExport] docx enumerator error for %@: %@",
+                      url.lastPathComponent,
+                      String(describing: error))
                                                      return true
                                                  }) else {
                 throw NSError(
@@ -4320,7 +4323,7 @@ extension ReportBuilder {
               String(format: L(
                 "report.export.wrote_docx_format",
                 comment: "Export log: wrote DOCX file (format expects 1 path)"
-              ), outURL.path))
+              ), outURL.lastPathComponent))
         return outURL
     }
 
@@ -4394,10 +4397,10 @@ extension ReportBuilder {
            let rep  = NSBitmapImageRep(data: tiff),
            let png  = rep.representation(using: .png, properties: [:]) {
             do { try png.write(to: url)
-                NSLog("[ReportDebug] wrote %@", url.path)
+                NSLog("[ReportDebug] wrote %@", url.lastPathComponent)
                 return url
             } catch {
-                NSLog("[ReportDebug] write failed %@: %@", url.path, String(describing: error))
+                NSLog("[ReportDebug] write failed %@: %@", url.lastPathComponent, String(describing: error))
                 return nil
             }
         } else {
@@ -4418,7 +4421,7 @@ extension ReportBuilder {
             NSGraphicsContext.restoreGraphicsState()
             if let png = rep.representation(using: .png, properties: [:]) {
                 try? png.write(to: url)
-                NSLog("[ReportDebug] wrote (fallback) %@", url.path)
+                NSLog("[ReportDebug] wrote (fallback) %@", url.lastPathComponent)
                 return url
             }
             return nil
@@ -4431,13 +4434,13 @@ extension ReportBuilder {
         do {
             try data.write(to: url, options: .atomic)
             if let doc = PDFDocument(data: data) {
-                NSLog("[ReportDebug] wrote %@ (pages=%d)", url.path, doc.pageCount)
+                NSLog("[ReportDebug] wrote %@ (pages=%d)", url.lastPathComponent, doc.pageCount)
             } else {
-                NSLog("[ReportDebug] wrote %@ (unreadable by PDFDocument)", url.path)
+                NSLog("[ReportDebug] wrote %@ (unreadable by PDFDocument)", url.lastPathComponent)
             }
             return url
         } catch {
-            NSLog("[ReportDebug] write failed %@: %@", url.path, String(describing: error))
+            NSLog("[ReportDebug] write failed %@: %@", url.lastPathComponent, String(describing: error))
             return nil
         }
     }
@@ -4458,8 +4461,8 @@ extension ReportBuilder {
         // 1) Plain RTF
         if let rtf = s.rtf(from: range, documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) {
             let url = debugDir().appendingPathComponent("\(stem)-\(debugTimestamp()).rtf")
-            do { try rtf.write(to: url); NSLog("[ReportDebug] wrote %@", url.path) } catch {
-                NSLog("[ReportDebug] write failed %@: %@", url.path, String(describing: error))
+            do { try rtf.write(to: url); NSLog("[ReportDebug] wrote %@", url.lastPathComponent) } catch {
+                NSLog("[ReportDebug] write failed %@: %@", url.lastPathComponent, String(describing: error))
             }
         } else {
             NSLog("[ReportDebug] RTF serialization returned nil")
@@ -4470,9 +4473,9 @@ extension ReportBuilder {
             let dir = debugDir().appendingPathComponent("\(stem)-\(debugTimestamp()).rtfd", isDirectory: true)
             do {
                 try wrapper.write(to: dir, options: .atomic, originalContentsURL: nil)
-                NSLog("[ReportDebug] wrote %@", dir.path)
+                NSLog("[ReportDebug] wrote %@", dir.lastPathComponent)
             } catch {
-                NSLog("[ReportDebug] RTFD write failed %@: %@", dir.path, String(describing: error))
+                NSLog("[ReportDebug] RTFD write failed %@: %@", dir.lastPathComponent, String(describing: error))
             }
         } else {
             NSLog("[ReportDebug] RTFD fileWrapper creation failed")
@@ -4551,13 +4554,16 @@ extension ReportBuilder {
         // TEMPORARY: route "RTF" requests to the new DOCX path so existing UI
         // produces a Word file while we debug RTF/RTFD on macOS.
         // This keeps all call sites unchanged.
-        let url = try exportDOCX(for: kind)
-        NSLog("[ReportExport] %@",
-              String(format: L(
-                "report.export.rtf_shim_returned_docx_format",
-                comment: "Export log: RTF shim returned DOCX instead (format expects 1 path)"
-              ), url.path))
-        return url
+        let outURL = try exportDOCX(for: kind)
+
+        // Log only the filename to avoid leaking filesystem paths.
+        let fmt = NSLocalizedString(
+            "report.export.rtf_shim_returned_docx_format",
+            comment: "Export log: RTF shim returned DOCX instead (format expects 1 filename)"
+        )
+        NSLog("[ReportExport] %@", String(format: fmt, outURL.lastPathComponent))
+
+        return outURL
     }
     
     
@@ -4722,8 +4728,8 @@ private func renderProblemTokenLine(token: ProblemToken) -> String {
             let countInt = countVal ?? -1
             let willAppend = true
             let commentForLog = comment.isEmpty ? "nil" : comment
-            Logger(subsystem: "DrsMainApp", category: "ReportBuilder").debug(
-                "[ReportDebug] TEETH append? present=\(presentBool, privacy: .public) count=\(countInt, privacy: .public) comment=\(commentForLog, privacy: .public) -> willAppend=\(willAppend, privacy: .public)"
+            Self.log.debug(
+                "TEETH append? present=\(presentBool, privacy: .private) count=\(countInt, privacy: .private) comment=\(commentForLog, privacy: .private(mask: .hash)) -> willAppend=\(willAppend, privacy: .public)"
             )
             var line = "\(teethLabel): \(presentLabel)"
             if !countText.isEmpty { line += " (\(countText))" }

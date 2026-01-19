@@ -7,7 +7,7 @@ import Foundation
 import OSLog
 
 struct WhoReferenceLoader {
-    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp", category: "WhoReferenceLoader")
+    private static let log = AppLog.feature("WhoReferenceLoader")
 
     // Cache key must include sex to avoid returning the wrong curves when callers pass a generic name
     // (e.g., "wfa_0_24m") with different `sex` values across calls.

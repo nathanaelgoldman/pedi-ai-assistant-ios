@@ -24,7 +24,7 @@ private struct LocalPatientSummary {
 
 struct BundleDetailView: View {
     @EnvironmentObject var appState: AppState
-    private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "Detail")
+    private let log = AppLog.ui
 
     @State private var summary: LocalPatientSummary?
     @State private var loadError: String?
@@ -39,10 +39,12 @@ struct BundleDetailView: View {
                 Text(url.lastPathComponent)
                     .font(.headline)
 
+                #if DEBUG
                 Text(url.path)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                #endif
 
                 HStack {
                     Button {
@@ -146,13 +148,13 @@ struct BundleDetailView: View {
         } catch {
             let message = error.localizedDescription
             loadError = "Failed to prepare bundle database: \(message)"
-            log.error("Failed to decrypt/prepare bundle DB: \(message, privacy: .public)")
+            log.error("BundleDetailView: decrypt/prepare bundle DB failed | bundle=\(bundleURL.lastPathComponent, privacy: .public) err=\(message, privacy: .private)")
             return
         }
 
         let dbURL = bundleURL.appendingPathComponent("db.sqlite")
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
-            log.info("No db.sqlite in bundle at \(dbURL.path, privacy: .public)")
+            log.info("BundleDetailView: db.sqlite missing | bundle=\(bundleURL.lastPathComponent, privacy: .public) file=\(dbURL.lastPathComponent, privacy: .public)")
             return
         }
 
@@ -160,7 +162,7 @@ struct BundleDetailView: View {
             summary = try fetchPatientSummary(dbPath: dbURL.path)
         } catch {
             loadError = error.localizedDescription
-            log.error("Failed to load summary: \(error.localizedDescription, privacy: .public)")
+            log.error("BundleDetailView: load summary failed | bundle=\(bundleURL.lastPathComponent, privacy: .public) err=\(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -317,7 +319,7 @@ struct BundleDetailView: View {
             // Ensure a plain db.sqlite exists (decrypt if needed).
             try BundleCrypto.decryptDatabaseIfNeeded(at: bundleURL)
         } catch {
-            log.error("Failed to decrypt DB before opening: \(error.localizedDescription, privacy: .public)")
+            log.error("BundleDetailView: decrypt DB before open failed | bundle=\(bundleURL.lastPathComponent, privacy: .public) err=\(error.localizedDescription, privacy: .private)")
             return
         }
 

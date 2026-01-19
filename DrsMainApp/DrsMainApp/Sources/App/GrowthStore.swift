@@ -6,7 +6,6 @@
 //
 import Foundation
 import SQLite3
-import OSLog
 
 struct GrowthPoint: Identifiable, Equatable {
     let id: Int
@@ -75,7 +74,7 @@ enum GrowthStoreError: Error, LocalizedError {
 }
 
 final class GrowthStore {
-    private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "GrowthStore")
+    private let log = AppLog.feature("growth")
 
     /// Read unified growth rows for a patient from `growth_unified`, newest first.
     func fetchPatientGrowth(dbURL: URL, patientID: Int) throws -> [GrowthPoint] {

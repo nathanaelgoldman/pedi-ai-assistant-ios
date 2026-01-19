@@ -18,7 +18,7 @@ struct DocumentListView: View {
     @State private var files: [URL] = []
     @State private var errorMessage: String? = nil
 
-    private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "Documents")
+    private let log = AppLog.feature("documents")
     private let allowedExtensions: Set<String> = ["pdf", "png", "jpg", "jpeg", "docx", "txt"]
 
     private var docsFolder: URL? {

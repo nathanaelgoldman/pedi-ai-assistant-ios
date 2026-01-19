@@ -14,7 +14,7 @@ import CryptoKit
 import os
 
 // Central logger for this file
-private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "BundleLibraryView")
+private let log = AppLog.feature("BundleLibraryView")
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -233,7 +233,7 @@ enum BundleIO {
 
             // NEW: ensure we have a plain db.sqlite to work with (decrypt if needed).
             let resolvedRoot = try ensurePlainDB(at: root)
-            log.debug("📂 Resolved root for db.sqlite: \(resolvedRoot.path, privacy: .public)")
+            log.debug("📂 Resolved root for db.sqlite | folder=\(resolvedRoot.lastPathComponent, privacy: .private)")
 
             var dbURL = resolvedRoot.appendingPathComponent("db.sqlite")
             if !fm.fileExists(atPath: dbURL.path) {
@@ -306,17 +306,17 @@ enum BundleIO {
             let fm = FileManager.default
 
             // DEBUG: starting point
-            log.debug("🔎 ensurePlainDB starting at: \(root.path, privacy: .public)")
+            log.debug("🔎 ensurePlainDB starting | root=\(root.lastPathComponent, privacy: .private)")
 
             // 1) If a plain db.sqlite already exists anywhere under root, prefer that.
             if fm.fileExists(atPath: root.appendingPathComponent("db.sqlite").path) {
-                log.debug("✅ Found db.sqlite at root: \(root.path, privacy: .public)")
+                log.debug("✅ Found db.sqlite at root | root=\(root.lastPathComponent, privacy: .private)")
                 return root
             }
             if let e = fm.enumerator(at: root, includingPropertiesForKeys: nil) {
                 for case let u as URL in e where u.lastPathComponent == "db.sqlite" {
                     let base = u.deletingLastPathComponent()
-                    log.debug("✅ Found nested db.sqlite at: \(base.path, privacy: .public)")
+                    log.debug("✅ Found nested db.sqlite | base=\(base.lastPathComponent, privacy: .private)")
                     return base
                 }
             }
@@ -333,25 +333,25 @@ enum BundleIO {
             }
 
             if let encBase = encryptedBase {
-                log.debug("🧩 Found db.sqlite.enc under: \(encBase.path, privacy: .public). Attempting decryption…")
+                log.debug("🧩 Found db.sqlite.enc | base=\(encBase.lastPathComponent, privacy: .private) | attempting decryption")
                 // This is a no-op for legacy bundles if BundleCrypto decides nothing needs doing.
                 try BundleCrypto.decryptDatabaseIfNeeded(at: encBase)
 
                 // After decryption, look for db.sqlite starting from the encrypted base first.
                 let candidate = encBase.appendingPathComponent("db.sqlite")
                 if fm.fileExists(atPath: candidate.path) {
-                    log.debug("✅ Decrypted db.sqlite at: \(encBase.path, privacy: .public)")
+                    log.debug("✅ Decrypted db.sqlite | base=\(encBase.lastPathComponent, privacy: .private)")
                     return encBase
                 }
                 if let e2 = fm.enumerator(at: encBase, includingPropertiesForKeys: nil) {
                     for case let u as URL in e2 where u.lastPathComponent == "db.sqlite" {
                         let base = u.deletingLastPathComponent()
-                        log.debug("✅ Decrypted nested db.sqlite at: \(base.path, privacy: .public)")
+                        log.debug("✅ Decrypted nested db.sqlite | base=\(base.lastPathComponent, privacy: .private)")
                         return base
                     }
                 }
             } else {
-                log.debug("ℹ️ No db.sqlite.enc found under: \(root.path, privacy: .public)")
+                log.debug("ℹ️ No db.sqlite.enc found | root=\(root.lastPathComponent, privacy: .private)")
             }
 
             // 3) Final fallback: caller's validateBundleDB will throw if this is wrong.
@@ -386,7 +386,7 @@ enum BundleIO {
             // Make sure we are looking at a directory that actually contains a plain db.sqlite.
             // This also handles encrypted bundles (db.sqlite.enc + manifest.json) via BundleCrypto.
             let resolvedRoot = try ensurePlainDB(at: root)
-            log.debug("🧬 [Import] Using resolved root for identity: \(resolvedRoot.path, privacy: .public)")
+            log.debug("🧬 [Import] Using resolved root for identity | root=\(resolvedRoot.lastPathComponent, privacy: .private)")
 
             let (alias, name, dob, pid) = try readIdentity(from: resolvedRoot)
             let key = computePatientKey(alias: alias, dob: dob, patientId: pid)
@@ -613,7 +613,7 @@ enum BundleIO {
 
             // read alias/dob to return
             let (alias, _, dob, _) = try readIdentity(from: activeDBBase)
-            log.debug("📌 Active base set to: \(activeDBBase.path, privacy: .public)")
+            log.debug("📌 Active base set | bundle=\(activeDBBase.lastPathComponent, privacy: .private)")
             return Activation(activeBase: activeDBBase, alias: alias, dob: dob)
         }
 
@@ -1088,7 +1088,7 @@ private struct BundleRowCard: View {
 
         // Persist the active base and log
         ActiveBundleLocator.setCurrentBaseURL(activeDBBase)
-        log.debug("📌 Active base set to: \(activeDBBase.path, privacy: .public)")
+        log.debug("📌 Active base set | folder=\(activeDBBase.lastPathComponent, privacy: .private)")
 
         // Force UI refresh even if the user re-selects the same patient; then dismiss the sheet.
         extractedFolderURL = nil
@@ -1333,17 +1333,17 @@ private struct BundleRowCard: View {
     private func ensurePlainDBLocal(at root: URL) throws -> URL {
         let fm = FileManager.default
 
-        log.debug("🔎 [Local] ensurePlainDB starting at: \(root.path, privacy: .public)")
+        log.debug("🔎 [Local] ensurePlainDB starting | root=\(root.lastPathComponent, privacy: .private)")
 
         // 1) If a plain db.sqlite already exists anywhere under root, prefer that.
         if fm.fileExists(atPath: root.appendingPathComponent("db.sqlite").path) {
-            log.debug("✅ [Local] Found db.sqlite at root: \(root.path, privacy: .public)")
+            log.debug("✅ [Local] Found db.sqlite at root | root=\(root.lastPathComponent, privacy: .private)")
             return root
         }
         if let e = fm.enumerator(at: root, includingPropertiesForKeys: nil) {
             for case let u as URL in e where u.lastPathComponent == "db.sqlite" {
                 let base = u.deletingLastPathComponent()
-                log.debug("✅ [Local] Found nested db.sqlite at: \(base.path, privacy: .public)")
+                log.debug("✅ [Local] Found nested db.sqlite | base=\(base.lastPathComponent, privacy: .private)")
                 return base
             }
         }
@@ -1360,7 +1360,7 @@ private struct BundleRowCard: View {
         }
 
         if let encBase = encryptedBase {
-            log.debug("🧩 [Local] Found db.sqlite.enc under: \(encBase.path, privacy: .public). Attempting decryption…")
+            log.debug("🧩 [Local] Found db.sqlite.enc | base=\(encBase.lastPathComponent, privacy: .private) | attempting decryption")
 
             // This is a no-op for legacy plain bundles if manifest says not encrypted.
             try BundleCrypto.decryptDatabaseIfNeeded(at: encBase)
@@ -1368,18 +1368,18 @@ private struct BundleRowCard: View {
             // After decryption, look for db.sqlite starting from the encrypted base first.
             let candidate = encBase.appendingPathComponent("db.sqlite")
             if fm.fileExists(atPath: candidate.path) {
-                log.debug("✅ [Local] Decrypted db.sqlite at: \(encBase.path, privacy: .public)")
+                log.debug("✅ [Local] Decrypted db.sqlite | base=\(encBase.lastPathComponent, privacy: .private)")
                 return encBase
             }
             if let e2 = fm.enumerator(at: encBase, includingPropertiesForKeys: nil) {
                 for case let u as URL in e2 where u.lastPathComponent == "db.sqlite" {
                     let base = u.deletingLastPathComponent()
-                    log.debug("✅ [Local] Decrypted nested db.sqlite at: \(base.path, privacy: .public)")
+                    log.debug("✅ [Local] Decrypted nested db.sqlite | base=\(base.lastPathComponent, privacy: .private)")
                     return base
                 }
             }
         } else {
-            log.debug("ℹ️ [Local] No db.sqlite.enc found under: \(root.path, privacy: .public)")
+            log.debug("ℹ️ [Local] No db.sqlite.enc found | root=\(root.lastPathComponent, privacy: .private)")
         }
 
         // 3) Final fallback: caller's validation will throw if this is wrong.
@@ -1393,11 +1393,11 @@ private struct BundleRowCard: View {
         let fm = FileManager.default
 
         // 1. Debug log at the very start
-        log.debug("🧪 [Local] validateBundleDB starting at root: \(root.path, privacy: .public)")
+        log.debug("🧪 [Local] validateBundleDB starting | root=\(root.lastPathComponent, privacy: .private)")
 
         // NEW: ensure we have a plain db.sqlite to work with (decrypt if needed).
         let resolvedRoot = try ensurePlainDBLocal(at: root)
-        log.debug("📂 [Local] Resolved root for db.sqlite: \(resolvedRoot.path, privacy: .public)")
+        log.debug("📂 [Local] Resolved root for db.sqlite | root=\(resolvedRoot.lastPathComponent, privacy: .private)")
 
         var dbURL = resolvedRoot.appendingPathComponent("db.sqlite")
         if !fm.fileExists(atPath: dbURL.path) {
@@ -1409,18 +1409,22 @@ private struct BundleRowCard: View {
             }
         }
 
-        // 2. Debug log for candidate db path and marker files
-        log.debug("🔍 [Local] Candidate dbURL: \(dbURL.path, privacy: .public). Exists? \(fm.fileExists(atPath: dbURL.path) ? "YES" : "NO")")
+        // 2) Debug log for candidate db path and marker files (avoid full path leaks)
+        let dbExists = fm.fileExists(atPath: dbURL.path)
+        log.debug("🔍 [Local] Candidate dbURL: \(dbURL.lastPathComponent, privacy: .public) exists=\(dbExists, privacy: .public)")
 
+        #if DEBUG
         if let e = fm.enumerator(at: resolvedRoot, includingPropertiesForKeys: nil) {
-            log.debug("📦 [Local] Walking resolvedRoot tree to look for DB markers under: \(resolvedRoot.path, privacy: .public)")
+            log.debug("📦 [Local] Scanning for DB markers under resolvedRoot=\(resolvedRoot.lastPathComponent, privacy: .public)")
             for case let u as URL in e {
                 let name = u.lastPathComponent
                 if name == "db.sqlite" || name == "db.sqlite.enc" || name == "manifest.json" {
-                    log.debug(" • [Local] Found marker file: \(u.path, privacy: .public)")
+                    // Log filename only (no filesystem path)
+                    log.debug(" • [Local] Marker file: \(name, privacy: .public)")
                 }
             }
         }
+        #endif
 
         guard fm.fileExists(atPath: dbURL.path) else {
             throw NSError(domain: "BundleLibraryView",
@@ -1800,7 +1804,7 @@ private struct BundleRowCard: View {
             .appendingPathComponent("PersistentBundles", isDirectory: true)
             .appendingPathComponent(persistentFolderName, isDirectory: true)
 
-        log.debug("📦 Using existing persistent bundle at: \(persistentBundleURL.path, privacy: .public)")
+        log.debug("📦 Using existing persistent bundle at folder: \(persistentBundleURL.lastPathComponent, privacy: .public)")
 
         guard fileManager.fileExists(atPath: persistentBundleURL.path) else {
             throw NSError(
@@ -1851,7 +1855,7 @@ private struct BundleRowCard: View {
             }
             extractedFolderURL = fallback
             ActiveBundleLocator.setCurrentBaseURL(fallback)
-            log.debug("📌 Active base set to: \(fallback.path, privacy: .public)")
+            log.debug("📌 Active base set | bundle=\(fallback.lastPathComponent, privacy: .private)")
             UserDefaults.standard.set(zipURL.path, forKey: "SavedBundlePath")
             extractPatientInfo(from: fallback)
             return
@@ -1859,14 +1863,14 @@ private struct BundleRowCard: View {
 
         extractedFolderURL = baseForDB
         ActiveBundleLocator.setCurrentBaseURL(baseForDB)
-        log.debug("📌 Active base set to: \(baseForDB.path, privacy: .public)")
+        log.debug("📌 Active base set | bundle=\(baseForDB.lastPathComponent, privacy: .private)")
         UserDefaults.standard.set(zipURL.path, forKey: "SavedBundlePath")
         extractPatientInfo(from: baseForDB)
         // IMPORTANT: We never delete or modify the original ZIP or its .zip.import.json.
     }
 
     private func extractPatientInfo(from bundleURL: URL) {
-        log.debug("🔍 Starting extractPatientInfo from: \(bundleURL.path, privacy: .public)")
+        log.debug("🔍 Starting extractPatientInfo from folder: \(bundleURL.lastPathComponent, privacy: .public)")
         let dbPath = bundleURL.appendingPathComponent("db.sqlite").path
         var db: OpaquePointer?
 

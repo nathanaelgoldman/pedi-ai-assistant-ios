@@ -1,6 +1,6 @@
 import Foundation
 import SQLite
-import os
+import OSLog
 
 // Keep this single definition in the project to avoid redeclarations elsewhere.
 public struct GrowthDataPoint {
@@ -11,7 +11,7 @@ public struct GrowthDataPoint {
 final class GrowthDataFetcher {
 
     // MARK: - Logging
-    private static let log = Logger(subsystem: "com.yunastic.PatientViewerApp", category: "GrowthDataFetcher")
+    private static let log = AppLog.feature("GrowthDataFetcher")
 
     // MARK: - Constants
     private static let secondsPerDay: Swift.Double = 86_400.0

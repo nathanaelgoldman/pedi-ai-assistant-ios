@@ -40,7 +40,7 @@ struct DocumentRecord: Identifiable, Codable {
     }
 }
 
-private let documentsLog = Logger(subsystem: "Yunastic.PatientViewerApp", category: "Documents")
+private let documentsLog = AppLog.feature("Documents")
 
 private enum AllowedDocTypes {
     static var supported: [UTType] {
@@ -208,7 +208,7 @@ struct PatientDocumentsView: View {
         }
         .onAppear {
             guard !didLoadOnce else { return }
-            documentsLog.info("Documents view appeared. Base=\(dbURL.path, privacy: .public)")
+            documentsLog.info("Documents view appeared. Base=\(dbURL.lastPathComponent, privacy: .public)")
             loadManifest()
             didLoadOnce = true
         }
@@ -249,7 +249,7 @@ struct PatientDocumentsView: View {
     private func openFile(record: DocumentRecord) {
         let docsFolder = dbURL.appendingPathComponent("docs")
         let fileURL = docsFolder.appendingPathComponent(record.filename)
-        documentsLog.debug("Attempting to open file: \(fileURL.path, privacy: .public)")
+        documentsLog.debug("Attempting to open file: \(fileURL.lastPathComponent, privacy: .public)")
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
             guard !isPreviewing else {
@@ -260,7 +260,7 @@ struct PatientDocumentsView: View {
             isPreviewing = true
             wrappedPreviewURL = IdentifiableURL(url: fileURL)
         } else {
-            documentsLog.error("File not found at path: \(fileURL.path, privacy: .public)")
+            documentsLog.error("File not found: \(fileURL.lastPathComponent, privacy: .public)")
             alertMessage = LF("patientDocs.error.fileNotFound_fmt", record.originalName)
             showAlert = true
         }
@@ -274,9 +274,9 @@ struct PatientDocumentsView: View {
         do {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 try FileManager.default.removeItem(at: fileURL)
-                documentsLog.debug("Removed file at path: \(fileURL.path, privacy: .public)")
+                documentsLog.debug("Removed file: \(fileURL.lastPathComponent, privacy: .public)")
             } else {
-                documentsLog.warning("File to delete not found at path: \(fileURL.path, privacy: .public)")
+                documentsLog.warning("File to delete not found: \(fileURL.lastPathComponent, privacy: .public)")
             }
 
             // If currently previewing this file, dismiss the preview.
@@ -333,7 +333,7 @@ struct PatientDocumentsView: View {
         let legacyManifest = dbURL.appendingPathComponent("docs/manifest.json")
 
         func loadFromRootManifest(url: URL) -> Bool {
-            documentsLog.debug("Attempting to read manifest from ROOT: \(url.path, privacy: .public)")
+            documentsLog.debug("Attempting to read manifest from ROOT: \(url.lastPathComponent, privacy: .public)")
             do {
                 let data = try Data(contentsOf: url)
                 // Expect object with "files" map: { "files": { "filename": { ...meta... } } }
@@ -368,7 +368,7 @@ struct PatientDocumentsView: View {
         }
 
         func loadFromLegacyManifest(url: URL) -> Bool {
-            documentsLog.debug("Attempting to read manifest from LEGACY docs/: \(url.path, privacy: .public)")
+            documentsLog.debug("Attempting to read manifest from LEGACY docs/: \(url.lastPathComponent, privacy: .public)")
             do {
                 let data = try Data(contentsOf: url)
                 // Try legacy array schema first
@@ -461,7 +461,7 @@ struct PatientDocumentsView: View {
             )
             let data = try JSONEncoder().encode(records)
             try data.write(to: manifestURL, options: [.atomic])
-            documentsLog.info("Saved legacy docs manifest at: \(manifestURL.path, privacy: .public)")
+            documentsLog.info("Saved legacy docs manifest: \(manifestURL.lastPathComponent, privacy: .public)")
         } catch {
             alertMessage = NSLocalizedString("patientDocs.error.saveManifestFailed", comment: "")
             showAlert = true
@@ -479,7 +479,10 @@ struct PatientDocumentsView: View {
 struct QuickLookPreview: UIViewControllerRepresentable {
     let url: URL
 
-    private static let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "QuickLook")
+    private static let log = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp",
+        category: "QuickLook"
+    )
 
     // We wrap the QLPreviewController in a UINavigationController so we can add our own bar buttons.
     func makeUIViewController(context: Context) -> UINavigationController {
@@ -557,7 +560,7 @@ struct QuickLookPreview: UIViewControllerRepresentable {
                 }
                 try FileManager.default.copyItem(at: self.url, to: stagedURL)
                 provider = NSItemProvider(contentsOf: stagedURL)
-                QuickLookPreview.log.debug("Staged share copy at \(stagedURL.path, privacy: .public)")
+                QuickLookPreview.log.debug("Staged share copy: \(stagedURL.lastPathComponent, privacy: .public)")
             } catch {
                 QuickLookPreview.log.error("Failed to stage share copy: \(String(describing: error), privacy: .public). Falling back to direct provider.")
                 provider = NSItemProvider(contentsOf: self.url)

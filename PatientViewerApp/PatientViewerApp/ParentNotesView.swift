@@ -10,7 +10,9 @@ import SQLite
 import OSLog
 import UIKit
 
-private let notesLog = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ParentNotesView")
+import OSLog
+
+private let notesLog = AppLog.feature("ParentNotesView")
 
 private func L(_ key: String) -> String {
     NSLocalizedString(key, tableName: nil, bundle: .main, value: key, comment: "")
@@ -112,7 +114,7 @@ private let isoFormatter: ISO8601DateFormatter = {
         let count = (try db.scalar("SELECT count(*) FROM pragma_table_info('patients') WHERE name = 'parent_notes'") as? Int64) ?? 0
         if count == 0 {
             try db.run("ALTER TABLE patients ADD COLUMN parent_notes TEXT")
-            notesLog.info("Added missing parent_notes column in patients table at \(dbPath, privacy: .public)")
+            notesLog.info("Added missing parent_notes column in patients table at \(((dbPath as NSString).lastPathComponent), privacy: .public)")
         }
     }
 
@@ -134,21 +136,21 @@ private let isoFormatter: ISO8601DateFormatter = {
                 }
             }
         } else {
-            notesLog.warning("Provided dbURL is not a directory: \(dbURL.path, privacy: .public)")
+            notesLog.warning("Provided dbURL is not a directory: \(dbURL.lastPathComponent, privacy: .public)")
         }
         return nil
     }
 
     private func loadNotes() {
         do {
-            notesLog.debug("Attempting to load db from base URL: \(dbURL.path, privacy: .public)")
+            notesLog.debug("Attempting to load db from base URL: \(dbURL.lastPathComponent, privacy: .public)")
             guard let dbFileURL = resolveDBURL() else {
                 alertMessage = LF("parentNotes.error.dbNotFoundUnder_fmt", dbURL.lastPathComponent)
                 showAlert = true
                 return
             }
             try ensureParentNotesColumn(dbPath: dbFileURL.path)
-            notesLog.debug("Loading from DB path: \(dbFileURL.path, privacy: .public)")
+            notesLog.debug("Loading from DB: \(dbFileURL.lastPathComponent, privacy: .public)")
             let db = try Connection(dbFileURL.path)
             let patients = Table("patients")
             
@@ -182,7 +184,7 @@ private let isoFormatter: ISO8601DateFormatter = {
                 return
             }
             try ensureParentNotesColumn(dbPath: dbFileURL.path)
-            notesLog.debug("Saving to DB path: \(dbFileURL.path, privacy: .public)")
+            notesLog.debug("Saving to DB: \(dbFileURL.lastPathComponent, privacy: .public)")
             let db = try Connection(dbFileURL.path)
             let patients = Table("patients")
             let id = Expression<Int64>("id")

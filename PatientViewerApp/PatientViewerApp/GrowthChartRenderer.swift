@@ -20,10 +20,7 @@ struct GrowthChartRenderer {
         "bmi": 8...40         // kg/m² (0–60m) — wide enough to avoid clipping
     ]
 
-    private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp",
-        category: "GrowthChartRenderer"
-    )
+    private static let logger = AppLog.feature("GrowthChartRenderer")
 
     // MARK: - Localization helpers
 

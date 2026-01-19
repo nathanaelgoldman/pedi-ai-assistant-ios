@@ -11,6 +11,8 @@
 //  Created by ChatGPT on 11/14/25.
 //
 
+
+
 import SwiftUI
 import OSLog
 import SQLite3
@@ -820,10 +822,8 @@ struct SickEpisodeForm: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("common.save", comment: "Toolbar save button")) {
-                        Self.uiLog.info(
-                            "SickEpisodeForm: SAVE tapped | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: editingEpisodeID), privacy: .private)"
-                        )
-                        Self.uiLog.info("SickEpisodeForm: SAVE tapped | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private)")
+                        
+                        AppLog.ui.info("SickEpisodeForm: SAVE tapped | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private)")
                         saveTapped()
                     }
                     .keyboardShortcut(.defaultAction)
@@ -1178,13 +1178,13 @@ struct SickEpisodeForm: View {
     private func ensureBundleUserRow(dbURL: URL) {
         // 1) We need an active user id
         guard let uid = appState.activeUserID else {
-            Self.dbLog.info("ensureBundleUserRow: no activeUserID, skipping users sync")
+            AppLog.db.info("ensureBundleUserRow: no activeUserID, skipping users sync")
             return
         }
 
         // 2) Find the matching clinician in the local ClinicianStore
         guard let clinician = clinicianStore.users.first(where: { $0.id == uid }) else {
-            Self.dbLog.info("ensureBundleUserRow: no clinician match for id \(uid), skipping users sync")
+            AppLog.db.info("ensureBundleUserRow: no clinician match for id \(uid), skipping users sync")
             return
         }
 
@@ -1193,7 +1193,7 @@ struct SickEpisodeForm: View {
         do {
             db = try dbOpen(dbURL)
         } catch {
-            Self.dbLog.error("ensureBundleUserRow: dbOpen failed")
+            AppLog.db.error("ensureBundleUserRow: dbOpen failed")
             return
         }
         guard let db = db else { return }
@@ -1209,7 +1209,7 @@ struct SickEpisodeForm: View {
         """
         if sqlite3_exec(db, createSQL, nil, nil, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            Self.dbLog.error("SickEpisodeForm: ensureBundleUserRow CREATE TABLE failed | err=\(msg, privacy: .public)")
+            AppLog.db.error("SickEpisodeForm: ensureBundleUserRow CREATE TABLE failed | err=\(msg, privacy: .public)")
             return
         }
 
@@ -1228,7 +1228,7 @@ struct SickEpisodeForm: View {
 
         let changed = sqlite3_changes(db)
         if changed > 0 {
-            Self.dbLog.info("ensureBundleUserRow: updated users row for id=\(uid)")
+            AppLog.db.info("ensureBundleUserRow: updated users row for id=\(uid)")
             return
         }
 
@@ -1236,7 +1236,7 @@ struct SickEpisodeForm: View {
         let insertSQL = "INSERT INTO users (id, first_name, last_name) VALUES (?, ?, ?);"
         if sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
-            Self.dbLog.error("ensureBundleUserRow: INSERT prepare failed: \(msg, privacy: .public)")
+            AppLog.db.error("ensureBundleUserRow: INSERT prepare failed: \(msg, privacy: .public)")
             return
         }
         bindText(stmt, 2, clinician.firstName)
@@ -1244,16 +1244,16 @@ struct SickEpisodeForm: View {
         sqlite3_bind_int64(stmt, 1, sqlite3_int64(uid))
 
         if sqlite3_step(stmt) == SQLITE_DONE {
-            Self.dbLog.info("ensureBundleUserRow: inserted users row for id=\(uid)")
+            AppLog.db.info("ensureBundleUserRow: inserted users row for id=\(uid)")
         } else {
             let msg = String(cString: sqlite3_errmsg(db))
-            Self.dbLog.error("ensureBundleUserRow: INSERT step failed: \(msg, privacy: .public)")
+            AppLog.db.error("ensureBundleUserRow: INSERT step failed: \(msg, privacy: .public)")
         }
         sqlite3_finalize(stmt)
     }
 
     private func insertEpisode(dbURL: URL, patientID: Int64, payload: [String: Any]) throws -> Int64 {
-        Self.dbLog.info("SickEpisodeForm: insertEpisode start | db=\(dbURL.path, privacy: .private) pid=\(patientID, privacy: .private)")
+        AppLog.db.info("SickEpisodeForm: insertEpisode start | db=\(dbURL.path, privacy: .private) pid=\(patientID, privacy: .private)")
         var db: OpaquePointer?
         db = try dbOpen(dbURL)
         defer { if db != nil { sqlite3_close(db) } }
@@ -1332,6 +1332,7 @@ struct SickEpisodeForm: View {
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
+            AppLog.db.error("SickEpisodeForm: insertEpisode failed | pid=\(patientID, privacy: .private) db=\(dbURL.lastPathComponent, privacy: .public) err=\(msg, privacy: .public)")
             throw NSError(domain: "SickEpisodeForm.DB", code: 3, userInfo: [NSLocalizedDescriptionKey: "insert step failed: \(msg)"])
         }
         return sqlite3_last_insert_rowid(db)
@@ -1404,9 +1405,10 @@ struct SickEpisodeForm: View {
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
+            AppLog.db.error("SickEpisodeForm: updateEpisode failed | episodeID=\(episodeID, privacy: .private) db=\(dbURL.lastPathComponent, privacy: .public) err=\(msg, privacy: .public)")
             throw NSError(domain: "SickEpisodeForm.DB", code: 5, userInfo: [NSLocalizedDescriptionKey: "update step failed: \(msg)"])
         }
-        Self.dbLog.info("SickEpisodeForm: updateEpisode success | episodeID=\(episodeID, privacy: .private) changes=\(sqlite3_changes(db), privacy: .public)")
+        AppLog.db.info("SickEpisodeForm: updateEpisode success | episodeID=\(episodeID, privacy: .private) changes=\(sqlite3_changes(db), privacy: .public)")
     }
 
     /// Ensure the `episodes` table exists with the expected schema.
@@ -1467,7 +1469,7 @@ struct SickEpisodeForm: View {
     private func debugCountEpisodes(dbURL: URL, patientID: Int64) {
         var db: OpaquePointer?
         do { db = try dbOpen(dbURL) } catch {
-            Self.dbLog.error("debugCountEpisodes: open failed")
+            AppLog.db.error("debugCountEpisodes: open failed")
             return
         }
         defer { if db != nil { sqlite3_close(db) } }
@@ -1480,7 +1482,7 @@ struct SickEpisodeForm: View {
         sqlite3_bind_int64(stmt, 1, patientID)
         if sqlite3_step(stmt) == SQLITE_ROW {
             let c = sqlite3_column_int64(stmt, 0)
-            Self.dbLog.debug("SickEpisodeForm: debugCountEpisodes | pid=\(patientID, privacy: .private) count=\(c, privacy: .public)")
+            AppLog.db.debug("SickEpisodeForm: debugCountEpisodes | pid=\(patientID, privacy: .private) count=\(c, privacy: .public)")
         }
     }
 
@@ -2324,7 +2326,7 @@ struct SickEpisodeForm: View {
     
     // MARK: - Save (commit to db + refresh UI)
     private func saveTapped() {
-        Self.uiLog.info("SickEpisodeForm: saveTapped start | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private) editingEpisodeID=\(String(describing: editingEpisodeID), privacy: .private)")
+        AppLog.ui.info("SickEpisodeForm: saveTapped start | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private) editingEpisodeID=\(String(describing: editingEpisodeID), privacy: .private)")
         let free = otherComplaints
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -2372,24 +2374,23 @@ struct SickEpisodeForm: View {
         payload["comments"] = comments
 
         let episodeLabel = editingEpisodeID.map(String.init) ?? "new"
-        let keysJoined = payload.keys.joined(separator: ",")
-        log.info("Save tapped (episode: \(episodeLabel)) payload keys: \(keysJoined)")
+        AppLog.ui.debug("SickEpisodeForm: payload built | episode=\(episodeLabel, privacy: .private) keys=\(payload.count, privacy: .public)")
 
         guard let pid = appState.selectedPatientID,
               let dbURL = appState.currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else {
-            log.error("Cannot save episode: missing pid or dbURL.")
+            AppLog.ui.error("SickEpisodeForm: cannot save (missing pid/dbURL)")
             return
         }
 
         let userIDLabel = appState.activeUserID.map(String.init) ?? "nil"
-        log.info("SickEpisode save using activeUserID=\(userIDLabel)")
-        log.info("Persisting SickEpisode to DB: \(dbURL.path, privacy: .public) for pid \(pid)")
+        AppLog.db.info("SickEpisodeForm: saving | pid=\(pid, privacy: .private) episode=\(episodeLabel, privacy: .private) activeUserID=\(userIDLabel, privacy: .private)")
+        AppLog.db.debug("SickEpisodeForm: db=\(dbURL.lastPathComponent, privacy: .public)")
         ensureBundleUserRow(dbURL: dbURL)
         do {
             try ensureEpisodesTable(dbURL: dbURL)
         } catch {
-            log.error("ensureEpisodesTable failed: \(String(describing: error), privacy: .public)")
+            AppLog.db.error("ensureEpisodesTable failed: \(String(describing: error), privacy: .public)")
         }
 
         do {
@@ -2411,7 +2412,7 @@ struct SickEpisodeForm: View {
             appState.loadVisits(for: pid)
             appState.loadPatientProfile(for: Int64(pid))
         } catch {
-            log.error("Episode save failed: \(String(describing: error), privacy: .public)")
+            AppLog.db.error("Episode save failed: \(String(describing: error), privacy: .public)")
         }
     }
 }
@@ -2877,7 +2878,7 @@ extension SickEpisodeForm {
             // Skip if all empty
             if [w,h,hc,t].allSatisfy({ $0 == nil }) &&
                [hr,rr,s2,bs,bd].allSatisfy({ $0 == nil }) {
-                log.info("Vitals not saved: all fields empty")
+                AppLog.db.info("SickEpisodeForm: vitals not saved (all fields empty) | pid=\(pid, privacy: .private) episodeID=\(eid, privacy: .private)")
                 return
             }
 
@@ -2898,7 +2899,7 @@ extension SickEpisodeForm {
             // Refresh list + keep fields as-is
             loadVitalsHistory()
         } catch {
-            log.error("saveVitalsTapped failed: \(String(describing: error), privacy: .public)")
+            AppLog.db.error("SickEpisodeForm: saveVitalsTapped failed | pid=\(pid, privacy: .private) episodeID=\(eid, privacy: .private) err=\(String(describing: error), privacy: .public)")
         }
     }
 

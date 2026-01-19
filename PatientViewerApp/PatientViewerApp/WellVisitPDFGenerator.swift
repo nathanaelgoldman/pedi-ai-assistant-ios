@@ -15,7 +15,7 @@ import CoreText
 
 
 struct WellVisitPDFGenerator {
-    private static let log = Logger(subsystem: "com.patientviewer.app", category: "pdf.well")
+    private static let log = AppLog.feature("pdf.well")
     // Simple localization helper for non-SwiftUI code (PDF rendering).
     // Uses the key if available in Localizable.strings, otherwise falls back to the provided English.
     private static func L(_ key: String, _ fallback: String) -> String {
@@ -165,7 +165,7 @@ struct WellVisitPDFGenerator {
     }
     
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
-        WellVisitPDFGenerator.log.info("Generating WellVisit PDF for id=\(visit.id, privacy: .public) base=\(dbURL.path, privacy: .public)")
+       WellVisitPDFGenerator.log.info("Generating WellVisit PDF | id=\(visit.id, privacy: .public) bundle=\(dbURL.lastPathComponent, privacy: .public)")
         let pdfMetaData = [
             kCGPDFContextCreator: WellVisitPDFGenerator.L("well_report.pdf.meta.creator", "Patient Viewer"),
             kCGPDFContextAuthor:  WellVisitPDFGenerator.L("well_report.pdf.meta.author",  "Patient App"),
@@ -431,7 +431,7 @@ struct WellVisitPDFGenerator {
         // We'll need sexText and dbPath before rendering
         var sexTextForCharts: String = ""
         let dbPath: String = dbURL.appendingPathComponent("db.sqlite").path
-        WellVisitPDFGenerator.log.debug("Opening SQLite at path=\(dbPath, privacy: .public)")
+        WellVisitPDFGenerator.log.debug("Opening SQLite | file=\(URL(fileURLWithPath: dbPath).lastPathComponent, privacy: .public)")
         var pid: Int64 = 0
         // Approximate age in months at this visit for growth-chart gating (patient points only)
         var ageMonthsForCharts: Double? = nil
@@ -646,7 +646,7 @@ struct WellVisitPDFGenerator {
             drawText(String(format: fmtGenerated, WellVisitPDFGenerator.formatDate(Date())), font: subFont)
 
             let dbPath = dbURL.appendingPathComponent("db.sqlite").path
-            WellVisitPDFGenerator.log.debug("Opening SQLite at path=\(dbPath, privacy: .public)")
+            WellVisitPDFGenerator.log.debug("Opening SQLite | file=\(URL(fileURLWithPath: dbPath).lastPathComponent, privacy: .public)")
             do {
                 let db = try Connection(dbPath)
 
@@ -2526,9 +2526,13 @@ struct WellVisitPDFGenerator {
         try data.write(to: fileURL)
         if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
            let size = attrs[.size] as? NSNumber {
-            WellVisitPDFGenerator.log.info("WellVisit PDF saved at \(fileURL.path, privacy: .public) (size=\(size.intValue, privacy: .public) bytes)")
+            WellVisitPDFGenerator.log.info(
+                "WellVisit PDF saved | file=\(fileURL.lastPathComponent, privacy: .private) size=\(size.intValue, privacy: .public) bytes"
+            )
         } else {
-            WellVisitPDFGenerator.log.info("WellVisit PDF saved at \(fileURL.path, privacy: .public)")
+            WellVisitPDFGenerator.log.info(
+                "WellVisit PDF saved | file=\(fileURL.lastPathComponent, privacy: .private)"
+            )
         }
         return fileURL
     }

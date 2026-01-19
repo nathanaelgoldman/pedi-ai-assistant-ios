@@ -15,7 +15,7 @@ final class AnthropicProvider: EpisodeAIProvider {
     private let apiKey: String
     private let model: String
     private let apiBaseURL: URL
-    private let log = Logger(subsystem: "DrsMainApp", category: "AnthropicProvider")
+    private let log = AppLog.feature("ai.anthropic")
 
     /// - Parameters:
     ///   - apiKey: Secret API key for the Anthropic account (from the clinician profile).
@@ -65,7 +65,7 @@ final class AnthropicProvider: EpisodeAIProvider {
 
         request.httpBody = try JSONEncoder().encode(body)
 
-        log.info("AnthropicProvider: calling \(url.absoluteString, privacy: .public) with model \(self.model, privacy: .public)")
+        log.info("AnthropicProvider: calling endpoint=/v1/messages model=\(self.model, privacy: .public)")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -74,7 +74,8 @@ final class AnthropicProvider: EpisodeAIProvider {
         }
         guard (200..<300).contains(http.statusCode) else {
             let snippet = String(data: data, encoding: .utf8) ?? ""
-            log.error("AnthropicProvider: status \(http.statusCode) body=\(snippet, privacy: .public)")
+            let snippetForLog = String(snippet.prefix(512))
+            log.error("AnthropicProvider: status \(http.statusCode) body=\(snippetForLog, privacy: .private)")
             throw AnthropicProviderError.httpStatus(code: http.statusCode, body: snippet)
         }
 

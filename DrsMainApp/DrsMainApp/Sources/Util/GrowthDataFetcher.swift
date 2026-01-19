@@ -24,7 +24,7 @@ enum GDFErr: Error { case openDB, dobMissing }
 public enum GrowthDataFetcher {
 
     // MARK: - Logger
-    private static let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "GrowthDataFetcher")
+    private static let log = AppLog.feature("growth.fetcher")
 
     // MARK: - Date helpers
     private static let secondsPerDay: Double = 86_400.0
@@ -70,7 +70,11 @@ public enum GrowthDataFetcher {
     public static func fetchSeries(dbPath: String, patientID: Int64, measure: GrowthMeasure) -> [GrowthDataPoint] {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            let msg = String(format: NSLocalizedString("growthdatafetcher.log.open_db_failed", comment: "GrowthDataFetcher log"), dbPath)
+            let safeDB = URL(fileURLWithPath: dbPath).lastPathComponent
+            let msg = String(
+                format: NSLocalizedString("growthdatafetcher.log.open_db_failed", comment: "GrowthDataFetcher log"),
+                safeDB
+            )
             log.error("\(msg, privacy: .public)")
             return []
         }
@@ -78,8 +82,11 @@ public enum GrowthDataFetcher {
 
         // 1) DOB
         guard let dob = readDOB(db: db, patientID: patientID) else {
-            let msg = String(format: NSLocalizedString("growthdatafetcher.log.dob_missing", comment: "GrowthDataFetcher log"), patientID)
-            log.error("\(msg, privacy: .public)")
+            let msg = NSLocalizedString(
+                "growthdatafetcher.log.dob_missing",
+                comment: "GrowthDataFetcher log"
+            )
+            log.error("\(msg, privacy: .public) patientID=\(patientID, privacy: .private(mask: .hash))")
             return []
         }
 

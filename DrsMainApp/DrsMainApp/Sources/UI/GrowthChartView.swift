@@ -7,7 +7,7 @@
 
 import SwiftUI
 import Charts
-import OSLog
+ 
 import SQLite3
 
 struct GrowthChartView: View {
@@ -19,7 +19,7 @@ struct GrowthChartView: View {
     @State private var whoCurves: [(label: String, points: [PlotPoint])] = []
     @State private var birthDate: Date? = nil
 
-    private let log = Logger(subsystem: "DrsMainApp", category: "GrowthChartView")
+    private let log = AppLog.feature("growth")
 
     enum Tab: String, CaseIterable, Identifiable {
         case weight

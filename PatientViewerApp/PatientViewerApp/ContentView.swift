@@ -7,7 +7,7 @@ import UIKit
 import SQLite
 import os
 
-private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "ContentView")
+private let log = AppLog.feature("ContentView")
 
 // MARK: - Localization (file-local)
 @inline(__always)

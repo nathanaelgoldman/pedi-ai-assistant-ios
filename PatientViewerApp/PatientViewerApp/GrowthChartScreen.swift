@@ -1,5 +1,5 @@
 import SwiftUI
-import os
+import OSLog
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -13,11 +13,12 @@ private func LF(_ key: String, _ args: CVarArg...) -> String {
 }
 
 struct GrowthChartScreen: View {
+    private let logger = AppLog.feature("GrowthChartScreen")
     let patientSex: String
     let allPatientData: [String: [GrowthDataPoint]]
 
     @State private var selectedMeasurement = "weight"
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp", category: "GrowthChartScreen")
+    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp", category: "ui.growthChart")
 
     var body: some View {
         VStack {
@@ -31,7 +32,7 @@ struct GrowthChartScreen: View {
             .padding()
             .onChange(of: selectedMeasurement) { _, newValue in
                 let file = "\(filePrefix(for: newValue))_0_24m_\(patientSex)"
-                logger.debug("WHO file selected for \(newValue, privacy: .public): \(file, privacy: .public)")
+                log.debug("WHO file selected for \(newValue, privacy: .public): \(file, privacy: .public)")
             }
 
             let patientData: [GrowthDataPoint] = {
@@ -68,7 +69,7 @@ struct GrowthChartScreen: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear { logger.warning("patientData is empty for \(self.selectedMeasurement, privacy: .public)") }
+                .onAppear { log.warning("patientData is empty for \(self.selectedMeasurement, privacy: .public)") }
             } else if referenceCurves.isEmpty {
                 // Also avoid rendering if reference curves failed to load.
                 VStack(spacing: 12) {
@@ -81,7 +82,7 @@ struct GrowthChartScreen: View {
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear { logger.error("reference curves empty for \(whoFileName, privacy: .public)") }
+                .onAppear { log.error("reference curves empty for \(whoFileName, privacy: .public)") }
             } else {
                 GrowthChartView(
                     dataPoints: patientData,
@@ -89,12 +90,12 @@ struct GrowthChartScreen: View {
                     measurement: selectedMeasurement
                 )
                 .onAppear {
-                    logger.info("Chart appear: measurement=\(self.selectedMeasurement, privacy: .public) points=\(patientData.count) curves=\(referenceCurves.count)")
+                    log.info("Chart appear: measurement=\(self.selectedMeasurement, privacy: .public) points=\(patientData.count) curves=\(referenceCurves.count)")
                 }
             }
         }
         .onAppear {
-            logger.info("GrowthChartScreen appeared for sex=\(self.patientSex, privacy: .public) initialMeasurement=\(self.selectedMeasurement, privacy: .public)")
+            log.info("GrowthChartScreen appeared for sex=\(self.patientSex, privacy: .public) initialMeasurement=\(self.selectedMeasurement, privacy: .public)")
         }
         .navigationTitle(L("patient_viewer.growth_chart.title", comment: "Screen title"))
     }

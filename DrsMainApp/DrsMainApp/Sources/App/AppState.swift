@@ -168,7 +168,8 @@ final class AppState: ObservableObject {
     // Suppress noisy callstack logging when profile loads are triggered by patient selection.
     private var selectionDrivenProfileLoadDepth: Int = 0
     
-    private let profileLog = Logger(subsystem: "DrsMainApp", category: "PatientProfile")
+    // Feature logger for patient profile (badge/header) loading.
+    private let profileLog = AppLog.feature("patientProfile")
     // Clinicians: injected at init so AppState and Views share the same instance
     let clinicianStore: ClinicianStore
 
@@ -531,7 +532,7 @@ final class AppState: ObservableObject {
 
         // Only apply when the DB file exists.
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
-            log.warning("ensureBundledSchemaAppliedIfNeeded: DB missing at \(dbURL.lastPathComponent, privacy: .public) for bundle \(bundlePath, privacy: .public)")
+            log.warning("ensureBundledSchemaAppliedIfNeeded: DB missing at \(dbURL.lastPathComponent, privacy: .public) for bundle \(bundlePath, privacy: .private)")
             return
         }
 
@@ -577,7 +578,8 @@ final class AppState: ObservableObject {
     
     // MARK: - Private
     private let recentsKey = "recentBundlePaths"
-    private let log = Logger(subsystem: "com.pediai.DrsMainApp", category: "AppState")
+    // Feature logger for AppState (bundle selection, patient/visit loading, etc.).
+    private let log = AppLog.feature("appstate")
     
     // MARK: - Private
     private func loadRecentBundles() {
@@ -624,16 +626,18 @@ final class AppState: ObservableObject {
         profileLog.debug("loadPatientProfile: pid=\(patientID, privacy: .public) db=\(dbURL.lastPathComponent, privacy: .public)")
         #if DEBUG
         // Helps detect unexpected duplicate calls triggered by views (.task/.onAppear/.onChange).
-        let stack = Thread.callStackSymbols.prefix(12).joined(separator: " | ")
-        if selectionDrivenProfileLoadDepth == 0 {
-            log.debug("loadPatientProfile callstack: \(Thread.callStackSymbols.joined(separator: " | "))")
+        // Off by default: enable via UserDefaults key `debug.logCallstacks.loadPatientProfile` = true.
+        if selectionDrivenProfileLoadDepth == 0,
+           UserDefaults.standard.bool(forKey: "debug.logCallstacks.loadPatientProfile") {
+            let stack = Thread.callStackSymbols.prefix(12).joined(separator: " | ")
+            profileLog.debug("loadPatientProfile callstack: \(stack, privacy: .private)")
         }
         #endif
         let t0 = Date()
         
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else {
-            profileLog.error("sqlite3_open failed for \(dbURL.path, privacy: .public)")
+            profileLog.error("sqlite3_open failed for \(dbURL.lastPathComponent, privacy: .public)")
             return
         }
         defer { sqlite3_close(db) }
@@ -839,7 +843,7 @@ final class AppState: ObservableObject {
                 .standardizedFileURL
                 .resolvingSymlinksInPath()
         else {
-            self.log.info("selectBundle: dropping missing/non-bundle url \(standardized.path, privacy: .public)")
+            self.log.info("selectBundle: dropping missing/non-bundle url \(standardized.lastPathComponent, privacy: .public)")
             self.recentBundles.removeAll { $0.standardizedFileURL.resolvingSymlinksInPath().path == standardized.path }
             pruneRecentBundlesInPlace()
             persistRecentBundles()
@@ -3319,7 +3323,7 @@ func reloadPatients() {
 
             var db: OpaquePointer?
             guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
-                log.error("saveAIInputForActiveEpisode: failed to open DB at \(dbURL.path, privacy: .public)")
+                log.error("saveAIInputForActiveEpisode: failed to open DB at \(dbURL.lastPathComponent, privacy: .public)")
                 return
             }
             defer { sqlite3_close(db) }
@@ -3385,7 +3389,7 @@ func reloadPatients() {
 
             var db: OpaquePointer?
             guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = db else {
-                log.error("saveWellAIInput: failed to open DB at \(dbURL.path, privacy: .public)")
+                log.error("saveWellAIInput: failed to open DB at \(dbURL.lastPathComponent, privacy: .public)")
                 return
             }
             defer { sqlite3_close(db) }
@@ -4340,7 +4344,7 @@ func reloadPatients() {
                 "appstate.users_mirror.open_clinicians_db_failed_format",
                 comment: "Log when clinicians DB cannot be opened; %@ is the clinicians DB path."
             )
-            let line = String(format: fmt, cliniciansDBURL.path)
+            let line = String(format: fmt, cliniciansDBURL.lastPathComponent)
             log.error("\(line, privacy: .public)")
             return
         }
@@ -4666,10 +4670,10 @@ func reloadPatients() {
                     if !self.validateBundleIntegrity(at: bundleRoot) {
                         let fmt = NSLocalizedString(
                             "appstate.zip_import.integrity_check_failed_format",
-                            comment: "Log when bundle integrity validation fails during ZIP import. %@ is the bundle root path."
+                            comment: "Log when bundle integrity validation fails during ZIP import. %@ is the bundle folder name."
                         )
-                        let line = String(format: fmt, bundleRoot.path)
-                        self.log.error("\(line, privacy: .public)")
+                        let line = String(format: fmt, bundleRoot.lastPathComponent)
+                        self.log.error("\(line, privacy: .private)")
                         continue
                     }
 
@@ -4681,10 +4685,10 @@ func reloadPatients() {
                     guard let identity = self.extractPatientIdentity(from: bundleRoot) else {
                         let fmt = NSLocalizedString(
                             "appstate.zip_import.no_identity_found_format",
-                            comment: "Log when no patient identity can be extracted during ZIP import. %@ is the bundle root path."
+                            comment: "Log when no patient identity can be extracted during ZIP import. %@ is the bundle folder name."
                         )
-                        let line = String(format: fmt, bundleRoot.path)
-                        self.log.warning("\(line, privacy: .public)")
+                        let line = String(format: fmt, bundleRoot.lastPathComponent)
+                        self.log.warning("\(line, privacy: .private)")
                         if !self.bundleLocations.contains(bundleRoot) {
                             self.bundleLocations.append(bundleRoot)
                             self.addToRecents(bundleRoot)
@@ -4730,10 +4734,10 @@ func reloadPatients() {
                             self.addToRecents(bundleRoot)
                             let fmt = NSLocalizedString(
                                 "appstate.zip_import.kept_both_bundles_format",
-                                comment: "Log when keeping both bundles during import. First %@ is the identity string, second %@ is the new bundle path."
+                                comment: "Log when keeping both bundles during import. First %@ is the identity string, second %@ is the new bundle folder name."
                             )
-                            let line = String(format: fmt, self.identityString(identity), bundleRoot.path)
-                            self.log.info("\(line, privacy: .public)")
+                            let line = String(format: fmt, self.identityString(identity), bundleRoot.lastPathComponent)
+                            self.log.info("\(line, privacy: .private)")
 
                         case .cancel:
                             // Drop this staged import.
@@ -4768,8 +4772,9 @@ func reloadPatients() {
                             "appstate.zip_import.imported_new_bundle_no_autoselect_format",
                             comment: "Log when a new bundle is imported without auto-selecting it. First %@ is the identity string, second %@ is the bundle path."
                         )
-                        let line = String(format: fmt, self.identityString(identity), bundleRoot.path)
-                        self.log.info("\(line, privacy: .public)")
+                        // Avoid logging full filesystem paths; the bundle folder name is enough for debugging.
+                        let line = String(format: fmt, self.identityString(identity), bundleRoot.lastPathComponent)
+                        self.log.info("\(line, privacy: .private)")
                     }
 
                     // Cleanup: remove staging parent if it is empty (best-effort)
@@ -6039,6 +6044,14 @@ func reloadPatients() {
             let digest = hasher.finalize()
             return digest.map { String(format: "%02x", $0) }.joined()
         }
+        private func relativePath(from base: URL, to target: URL) -> String? {
+            let baseC = base.standardizedFileURL.resolvingSymlinksInPath().pathComponents
+            let targC = target.standardizedFileURL.resolvingSymlinksInPath().pathComponents
+
+            guard targC.starts(with: baseC) else { return nil }
+            return targC.dropFirst(baseC.count).joined(separator: "/")
+        }
+    
 
         /// Build docs manifest entries with relative paths (under 'docs/') and sha256.
         private func buildDocsManifest(docsRoot: URL, bundleRoot: URL) -> [[String: String]] {
@@ -6049,7 +6062,7 @@ func reloadPatients() {
                 for case let url as URL in en {
                     var isDir: ObjCBool = false
                     if fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue {
-                        let rel = url.path.replacingOccurrences(of: bundleRoot.path + "/", with: "")
+                        guard let rel = relativePath(from: bundleRoot, to: url) else { continue }
                         entries.append([
                             "path": rel,
                             "sha256": sha256OfFile(at: url)
@@ -6140,10 +6153,12 @@ func reloadPatients() {
                 } else {
                     let fmt = NSLocalizedString(
                         "appstate.manifest.validate.no_db_files_found_under_format",
-                        comment: "Log when neither db.sqlite nor db.sqlite.enc is found during manifest validation. %@ is the bundle root path."
+                        comment: "Log when neither db.sqlite nor db.sqlite.enc is found during manifest validation. %@ is the bundle identifier (folder name), not a full filesystem path."
                     )
-                    let line = String(format: fmt, bundleRoot.path)
-                    log.error("\(line, privacy: .public)")
+                    // Avoid leaking full filesystem paths in logs; keep only the folder name.
+                    let bundleRef = bundleRoot.lastPathComponent
+                    let line = String(format: fmt, bundleRef)
+                    log.error("\(line, privacy: .private)")
                     return false
                 }
 
@@ -6173,10 +6188,13 @@ func reloadPatients() {
                 if actualHash.lowercased() != expected.lowercased() {
                     let fmt = NSLocalizedString(
                         "appstate.manifest.validate.db_hash_mismatch_format",
-                        comment: "Log when bundle DB hash mismatches manifest. %@ is bundle path, %@ expected hash, %@ actual hash."
+                        comment: "Log when bundle DB hash mismatches manifest. %@ is bundle identifier (not full path), %@ expected hash, %@ actual hash."
                     )
-                    let line = String(format: fmt, bundleRoot.path, expected, actualHash)
-                    log.error("\(line, privacy: .public)")
+
+                    // Avoid leaking full filesystem paths in logs; keep only the folder name.
+                    let bundleRef = bundleRoot.lastPathComponent
+                    let line = String(format: fmt, bundleRef, expected, actualHash)
+                    log.error("\(line, privacy: .private)")
                     return false
                 }
 
@@ -6247,10 +6265,11 @@ func reloadPatients() {
             guard hasPlain || hasEnc else {
                 let fmt = NSLocalizedString(
                     "appstate.manifest.write_v2.no_db_payload_format",
-                    comment: "Log when writeManifestV2 cannot find db.sqlite or db.sqlite.enc. %@ is bundle root path."
+                    comment: "Log when writeManifestV2 cannot find db.sqlite or db.sqlite.enc. %@ is the bundle identifier (folder name), not a full filesystem path."
                 )
-                let line = String(format: fmt, bundleRoot.path)
-                log.warning("\(line, privacy: .public)")
+                let bundleRef = bundleRoot.lastPathComponent
+                let line = String(format: fmt, bundleRef)
+                log.warning("\(line, privacy: .private)")
                 return false
             }
 
@@ -6402,7 +6421,7 @@ func reloadPatients() {
                 ],
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             ) else {
-                log.warning("buildFilesList: failed to enumerate bundle root \(bundleRoot.path, privacy: .public)")
+                log.warning("buildFilesList: failed to enumerate bundle root \(bundleRoot.lastPathComponent, privacy: .private)")
                 return out
             }
 
@@ -6746,7 +6765,7 @@ private func cleanupEmptyParents(startingAt url: URL) {
                     comment: "Log/print when extracting a ZIP bundle fails. %@ is the error description."
                 )
                 let line = String(format: fmt, String(describing: error))
-                print(line)
+                AppLog.bundle.error("zip_extract failed: \(line, privacy: .private)")
                 return nil
             }
         }

@@ -26,7 +26,7 @@ enum BundleZipError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .sourceNotDirectory(let url):
-            return String(format: NSLocalizedString("exporter.bundlezip.error.source_not_directory", comment: "Bundle zip error: source is not a directory"), url.path)
+            return String(format: NSLocalizedString("exporter.bundlezip.error.source_not_directory", comment: "Bundle zip error: source is not a directory"), url.lastPathComponent)
         case .zipFailed(let code, let output):
             return String(format: NSLocalizedString("exporter.bundlezip.error.zip_failed", comment: "Bundle zip error: zip creation failed"), code, output)
         }

@@ -6,9 +6,8 @@
 //
 import Foundation
 import SQLite3
-import OSLog
 
-private let pmhLog = Logger(subsystem: "DrsMainApp", category: "PmhStore")
+private let pmhLog = AppLog.feature("pmh")
 
 public struct PastMedicalHistory: Equatable {
     public var patientID: Int64

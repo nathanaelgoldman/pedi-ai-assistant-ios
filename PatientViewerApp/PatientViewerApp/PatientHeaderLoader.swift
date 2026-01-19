@@ -1,4 +1,3 @@
-
 //
 //  PatientHeaderLoader.swift
 //  PatientViewerApp
@@ -13,7 +12,7 @@ import os
 /// Small DB helper used by `ContentView` to render the active bundle patient badge.
 /// Keeps SQLite reads out of SwiftUI views and avoids mixing with growth-related loaders.
 struct PatientHeaderLoader {
-    private static let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "PatientHeaderLoader")
+    private static let log = AppLog.feature("PatientHeaderLoader")
 
     /// Returns the first patient's full name as "First Last" from the `patients` table.
     /// Bundles are expected to contain a single patient, so we take the first row.
@@ -41,4 +40,3 @@ struct PatientHeaderLoader {
         }
     }
 }
-

@@ -16,7 +16,7 @@ private func LF(_ formatKey: String, _ args: CVarArg...) -> String {
 }
 
 struct SickVisitPDFGenerator {
-    private static let log = Logger(subsystem: "com.pedi.PatientViewer", category: "pdf.sick")
+    private static let log = AppLog.feature("pdf.sick")
     static func generate(for visit: VisitSummary, dbURL: URL) -> URL? {
         Self.log.log("Generating SickVisit PDF for id=\(visit.id, privacy: .public) db=\(dbURL.path, privacy: .private)")
         let pdfMetaData = [

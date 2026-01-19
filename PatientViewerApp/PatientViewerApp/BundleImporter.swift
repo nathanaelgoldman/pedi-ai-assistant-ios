@@ -11,7 +11,7 @@ let bundlesDirectoryName = "Bundles"
 let activeBundleDirName = "ActiveBundle"
 let archiveDirName = "ArchivedZips"
 
-private let log = Logger(subsystem: "Yunastic.PatientViewerApp", category: "BundleImporter")
+private let log = AppLog.feature("BundleImporter")
 
 @inline(__always)
 private func L(_ key: String) -> String {
@@ -255,7 +255,7 @@ struct BundleImporter: View {
         // Fail fast if db.sqlite isn't an actual SQLite file (magic header check)
         do {
             try validateSQLiteHeader(dbURL: dbURL)
-            log.debug("SQLite header validated for \(dbURL.path, privacy: .public)")
+            log.debug("SQLite header validated for \(dbURL.lastPathComponent, privacy: .public)")
         } catch {
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
