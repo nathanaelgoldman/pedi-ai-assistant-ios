@@ -3620,7 +3620,7 @@ extension ReportDataLoader {
 
             #if DEBUG
             let dbgMonths = String(format: "%.2f", months)
-            print("[ReportDataLoader] wellVisitAgeMonths visitID=\(visitID) dob=\(meta.dobISO) visitDate=\(meta.visitDateISO) months=\(dbgMonths)")
+            AppLog.report.debug("[ReportDataLoader] wellVisitAgeMonths visitID=\(visitID, privacy: .public) months=\(dbgMonths, privacy: .public)")
             #endif
 
             return months

@@ -3395,11 +3395,9 @@ extension ReportBuilder {
                                                  includingPropertiesForKeys: [.isDirectoryKey],
                                                  options: [],
                                                  errorHandler: { url, error in
-                NSLog("[ReportExport] docx enumerator error for %@: %@",
-                      url.lastPathComponent,
-                      String(describing: error))
-                                                     return true
-                                                 }) else {
+                AppLog.export.error("[ReportExport] docx enumerator error fileToken=\(AppLog.token(url.lastPathComponent), privacy: .public) err=\(String(describing: error), privacy: .private(mask: .hash))")
+                return true
+            }) else {
                 throw NSError(
                     domain: "ReportExport",
                     code: 5003,
@@ -3438,7 +3436,7 @@ extension ReportBuilder {
                                          relativeTo: packageRoot,
                                          compressionMethod: .deflate)
                 } catch {
-                    NSLog("[ReportExport] failed to add %@ to DOCX archive: %@", relPath, String(describing: error))
+                    AppLog.export.error("[ReportExport] failed to add entryToken=\(AppLog.token(relPath), privacy: .public) to DOCX archive err=\(String(describing: error), privacy: .private(mask: .hash))")
                     throw NSError(
                         domain: "ReportExport",
                         code: 5004,
@@ -3463,7 +3461,7 @@ extension ReportBuilder {
             task.waitUntilExit()
             if task.terminationStatus != 0 {
                 let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                NSLog("[ReportExport] docx zip failed (%d): %@", task.terminationStatus, out)
+                AppLog.export.error("[ReportExport] docx zip failed status=\(task.terminationStatus, privacy: .public) outHash=\(AppLog.token(out), privacy: .public)")
                 throw NSError(
                     domain: "ReportExport",
                     code: 5001,
