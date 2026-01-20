@@ -116,7 +116,8 @@ struct PDFGenerator {
             logVisits.info("Saved PDF \(fileURL.lastPathComponent, privacy: .public) (\(dataSize, privacy: .public) bytes)")
             return fileURL
         } catch {
-            logVisits.error("Failed to save PDF: \(String(describing: error))")
+            let ns = error as NSError
+            logVisits.error("Failed to save PDF (domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public))")
             return nil
         }
     }
@@ -260,7 +261,7 @@ struct PDFPreviewContainer: SwiftUI.View {
                         Text(L("patient_viewer.pdf_preview.error.could_not_load", comment: "Error"))
                             .foregroundColor(.red)
                         Text(L("patient_viewer.pdf_preview.label.path", comment: "Label"))
-                        Text(fileURL.path)
+                        Text(fileURL.lastPathComponent)
                             .font(.caption)
                             .foregroundColor(.gray)
                             .padding()
@@ -569,7 +570,7 @@ final class PDFShareItemSource: NSObject, UIActivityItemSource {
     func activityViewController(_ activityViewController: UIActivityViewController,
                                 itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
         // Always provide a file URL, for ALL activity types.
-        // This preserves the filename and avoids Catalyst/FileProvider “can’t fetch item” issues.
+        // This preserves the filename and avoids ShareKit / FileProvider “can’t fetch item” issues.
         return fileURL
     }
 

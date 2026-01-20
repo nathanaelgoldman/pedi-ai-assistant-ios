@@ -269,7 +269,7 @@ struct PatientDocumentsView: View {
     private func deleteRecord(_ record: DocumentRecord) {
         let docsFolder = dbURL.appendingPathComponent("docs")
         let fileURL = docsFolder.appendingPathComponent(record.filename)
-        documentsLog.info("Deleting document '\(record.originalName, privacy: .public)' (\(record.filename, privacy: .public))")
+        documentsLog.info("Deleting document '\(record.originalName, privacy: .private)' (\(record.filename, privacy: .public))")
 
         do {
             if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -289,7 +289,7 @@ struct PatientDocumentsView: View {
             records.removeAll { $0.id == record.id || $0.filename == record.filename }
             saveManifest()
         } catch {
-            documentsLog.error("Failed to delete file: \(String(describing: error), privacy: .public)")
+            documentsLog.error("Failed to delete file: \(String(describing: error), privacy: .private)")
             alertMessage = LF("patientDocs.error.deleteFailed_fmt", error.localizedDescription)
             showAlert = true
         }
@@ -302,12 +302,43 @@ struct PatientDocumentsView: View {
                 return
             }
 
+            // On iOS, FileImporter often returns a security-scoped URL (e.g. Files/iCloud Drive).
+            // We must start accessing before reading/copying, otherwise we can get permission errors.
+            let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    sourceURL.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            let fm = FileManager.default
             let filename = UUID().uuidString + (sourceURL.pathExtension.isEmpty ? "" : ".\(sourceURL.pathExtension)")
             let docsFolder = dbURL.appendingPathComponent("docs")
             let destinationURL = docsFolder.appendingPathComponent(filename)
 
-            try FileManager.default.createDirectory(at: docsFolder, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            try fm.createDirectory(at: docsFolder, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: destinationURL.path) {
+                try? fm.removeItem(at: destinationURL)
+            }
+
+            // Use NSFileCoordinator to safely read from provider-backed locations (iCloud Drive, etc.).
+            var coordError: NSError?
+            var copyError: Error?
+            let coordinator = NSFileCoordinator()
+            coordinator.coordinate(readingItemAt: sourceURL, options: [], error: &coordError) { coordinatedURL in
+                do {
+                    try fm.copyItem(at: coordinatedURL, to: destinationURL)
+                } catch {
+                    copyError = error
+                }
+            }
+
+            if let coordError {
+                throw coordError
+            }
+            if let copyError {
+                throw copyError
+            }
 
             documentsLog.info("Imported document '\(sourceURL.lastPathComponent, privacy: .public)' → \(filename, privacy: .public)")
 
@@ -321,7 +352,7 @@ struct PatientDocumentsView: View {
             records.insert(newRecord, at: 0)
             saveManifest()
         } catch {
-            documentsLog.error("Import failed: \(String(describing: error), privacy: .public)")
+            documentsLog.error("Import failed: \(String(describing: error), privacy: .private)")
             alertMessage = LF("patientDocs.error.importFailed_fmt", error.localizedDescription)
             showAlert = true
         }
@@ -362,7 +393,7 @@ struct PatientDocumentsView: View {
                     return true
                 }
             } catch {
-                documentsLog.error("Failed to read root manifest: \(String(describing: error), privacy: .public)")
+                documentsLog.error("Failed to read root manifest: \(String(describing: error), privacy: .private)")
             }
             return false
         }
@@ -400,7 +431,7 @@ struct PatientDocumentsView: View {
                     return true
                 }
             } catch {
-                documentsLog.error("Failed to read legacy manifest: \(String(describing: error), privacy: .public)")
+                documentsLog.error("Failed to read legacy manifest: \(String(describing: error), privacy: .private)")
             }
             return false
         }

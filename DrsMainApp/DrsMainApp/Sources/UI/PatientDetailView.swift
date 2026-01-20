@@ -12,6 +12,7 @@ import SwiftUI
 import OSLog
 import AppKit
 import UniformTypeIdentifiers
+import CryptoKit
 
 
 // Humanize visit categories (well-visit keys + a fallback)
@@ -678,6 +679,14 @@ struct PatientDetailView: View {
         Self.uiLog.debug("\(message, privacy: .public)")
     }
 
+    private func bundleRef(fromPath path: String?) -> String {
+        guard let path, !path.isEmpty else { return "nil" }
+        let label = URL(fileURLWithPath: path).lastPathComponent
+        let digest = SHA256.hash(data: Data(label.utf8))
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        return "BUNDLE#" + String(hex.prefix(12))
+    }
+
     private func handleOnAppear() {
         // Keep AppState selection in sync with the current detail view.
         // IMPORTANT: Do not trigger DB loads from the View; AppState.selectedPatientID didSet handles that.
@@ -804,11 +813,11 @@ struct PatientDetailView: View {
         let pidMatch = (openID != nil && selected != nil && openID == selected)
         let tokenMatch = (openToken != nil && currentToken != nil && openToken == currentToken)
 
-        let openBundle = openToken.map { URL(fileURLWithPath: $0).lastPathComponent }
-        let currentBundle = currentToken.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let openBundleRef = bundleRef(fromPath: openToken)
+        let currentBundleRef = bundleRef(fromPath: currentToken)
 
         debugLog("onDismiss WellVisitForm: openID=\(String(describing: openID)) selected=\(String(describing: selected))")
-        debugLog("onDismiss WellVisitForm: openBundle=\(String(describing: openBundle)) currentBundle=\(String(describing: currentBundle))")
+        debugLog("onDismiss WellVisitForm: openBundle=\(openBundleRef) currentBundle=\(currentBundleRef)")
 
         if pidMatch && tokenMatch, let selected {
             Self.uiLog.info("WellVisitForm: onDismiss -> reload visits (reason=dismiss) | pid=\(selected, privacy: .public)")
@@ -827,11 +836,11 @@ struct PatientDetailView: View {
 
         let selected = appState.selectedPatientID
         let currentToken = appState.currentBundleURL?.path
-        let openBundle = openToken.map { URL(fileURLWithPath: $0).lastPathComponent }
-        let currentBundle = currentToken.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let openBundleRef = bundleRef(fromPath: openToken)
+        let currentBundleRef = bundleRef(fromPath: currentToken)
 
         debugLog("onDismiss SickEpisodeForm: openID=\(String(describing: openID)) selected=\(String(describing: selected))")
-        debugLog("onDismiss SickEpisodeForm: openBundle=\(String(describing: openBundle)) currentBundle=\(String(describing: currentBundle))")
+        debugLog("onDismiss SickEpisodeForm: openBundle=\(openBundleRef) currentBundle=\(currentBundleRef)")
 
         if let openID,
            let selected,
@@ -842,7 +851,6 @@ struct PatientDetailView: View {
             visitTab = .all
         }
     }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {

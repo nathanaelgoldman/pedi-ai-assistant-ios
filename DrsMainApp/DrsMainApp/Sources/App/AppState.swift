@@ -836,14 +836,14 @@ final class AppState: ObservableObject {
 
         let fm = FileManager.default
         let standardized = url.standardizedFileURL.resolvingSymlinksInPath()
-        self.log.info("selectBundle: requested=\(standardized.lastPathComponent, privacy: .public)")
+        self.log.info("selectBundle: requested=\(AppLog.bundleRef(standardized))")
 
         guard fm.fileExists(atPath: standardized.path),
               let chosen = canonicalBundleRoot(at: standardized)?
                 .standardizedFileURL
                 .resolvingSymlinksInPath()
         else {
-            self.log.info("selectBundle: dropping missing/non-bundle url \(standardized.lastPathComponent, privacy: .public)")
+            self.log.info("selectBundle: dropping missing/non-bundle url \(AppLog.bundleRef(standardized))")
             self.recentBundles.removeAll { $0.standardizedFileURL.resolvingSymlinksInPath().path == standardized.path }
             pruneRecentBundlesInPlace()
             persistRecentBundles()
@@ -859,13 +859,13 @@ final class AppState: ObservableObject {
 
         // ✅ Use canonical root everywhere
         currentBundleURL = canonicalRoot
-        self.log.info("selectBundle: chosen=\(canonicalRoot.lastPathComponent, privacy: .public)")
+        self.log.info("selectBundle: chosen=\(AppLog.bundleRef(canonicalRoot))")
 
         // Apply schema upgrades once per bundle, when the DB path is resolvable.
         if let dbURL = dbURLForCurrentBundle() {
             ensureBundledSchemaAppliedIfNeeded(dbURL: dbURL)
         } else {
-            self.log.warning("selectBundle: no db.sqlite found yet under bundle \(canonicalRoot.lastPathComponent, privacy: .public)")
+            self.log.warning("selectBundle: no db.sqlite found yet under bundle \(AppLog.bundleRef(canonicalRoot))")
         }
 
         selectedPatientID = nil
@@ -1109,6 +1109,22 @@ func reloadPatients() {
                         let category = text(2)
                         rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
                     }
+                    // Debug: surface unexpected categories (e.g., "test") without dumping sensitive content.
+                    #if DEBUG
+                    if !rows.isEmpty {
+                        let cats = rows.map { $0.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                        let uniq = Array(Set(cats)).sorted()
+                        if uniq.contains("test") {
+                            // Log the first matching row to identify origin in the unified `visits` table.
+                            if let r = rows.first(where: { $0.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "test" }) {
+                                log.warning("loadVisits: found category=test in visits table | id=\(r.id, privacy: .public) date=\(r.dateISO, privacy: .public)")
+                            } else {
+                                log.warning("loadVisits: found category=test in visits table")
+                            }
+                        }
+                        log.debug("loadVisits: categories(uniq)=\(uniq.joined(separator: ","), privacy: .public)")
+                    }
+                    #endif
                     self.visits = rows
                     log.debug("loadVisits: pid=\(patientID, privacy: .public) done rows=\(rows.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
                     if rows.isEmpty {
@@ -1156,7 +1172,7 @@ func reloadPatients() {
             log.debug("loadVisits: using union over tables: \(parts.map{$0.table}.joined(separator: ","), privacy: .public)")
             let unionSQL = parts.map {
             """
-            SELECT id, \($0.dateCol) AS dateISO, \($0.categoryExpr) AS category
+            SELECT id, \($0.dateCol) AS dateISO, \($0.categoryExpr) AS category, '\($0.table)' AS src
             FROM \($0.table)
             WHERE \($0.pidCol) = ?
             """
@@ -1183,6 +1199,15 @@ func reloadPatients() {
                 }
                 let dateISO  = text(1)
                 let category = text(2)
+                let srcTable = text(3)
+
+                #if DEBUG
+                let catNorm = category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if catNorm == "test" {
+                    log.warning("loadVisits: found category=test | src=\(srcTable, privacy: .public) id=\(id, privacy: .public) date=\(dateISO, privacy: .public)")
+                }
+                #endif
+
                 rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
             }
             self.visits = rows
@@ -4773,8 +4798,8 @@ func reloadPatients() {
                             comment: "Log when a new bundle is imported without auto-selecting it. First %@ is the identity string, second %@ is the bundle path."
                         )
                         // Avoid logging full filesystem paths; the bundle folder name is enough for debugging.
-                        let line = String(format: fmt, self.identityString(identity), bundleRoot.lastPathComponent)
-                        self.log.info("\(line, privacy: .private)")
+                        let line = String(format: fmt, self.identityStringForLog(identity), bundleRoot.lastPathComponent)
+                        self.log.info("\(line, privacy: .public)")
                     }
 
                     // Cleanup: remove staging parent if it is empty (best-effort)
@@ -4791,8 +4816,11 @@ func reloadPatients() {
                         "appstate.zip_import.failed_for_zip_format",
                         comment: "Log when a ZIP import fails. First %@ is the zip path, second %@ is the error description."
                     )
-                    let line = String(format: fmt, zipURL.path, String(describing: error))
+                    let zipLabel = zipURL.lastPathComponent
+                    let line = String(format: fmt, zipLabel, String(describing: error))
                     self.log.error("\(line, privacy: .public)")
+                    // Optional deep debug: keep the full path private.
+                    self.log.debug("ZIP import failed (full path): \(zipURL.path, privacy: .private)")
                 }
             }
             // IMPORTANT: We do NOT change currentBundleURL or selectedPatientID here.
@@ -4878,6 +4906,31 @@ func reloadPatients() {
                 parts.append(day)
             }
             return parts.isEmpty ? "UnknownPatient" : parts.joined(separator: " • ")
+        }
+    
+        /// Log-safe identity string: avoids leaking raw MRN / alias into logs.
+        /// Deterministic and non-reversible (FNV-1a 64-bit).
+        private func identityStringForLog(_ id: PatientIdentity) -> String {
+            if let mrn = id.mrn?.trimmingCharacters(in: .whitespacesAndNewlines), !mrn.isEmpty {
+                return "MRN#\(obfuscatedToken(mrn))"
+            }
+            if let alias = id.alias?.trimmingCharacters(in: .whitespacesAndNewlines), !alias.isEmpty {
+                return "ALIAS#\(obfuscatedToken(alias))"
+            }
+            if let dob = id.dobISO?.trimmingCharacters(in: .whitespacesAndNewlines), !dob.isEmpty {
+                let day = dob.split(separator: "T").first.map(String.init) ?? dob
+                return "DOB#\(obfuscatedToken(day))"
+            }
+            return "UnknownPatient"
+        }
+
+        private func obfuscatedToken(_ s: String) -> String {
+            var hash: UInt64 = 1469598103934665603
+            for b in s.utf8 {
+                hash ^= UInt64(b)
+                hash &*= 1099511628211
+            }
+            return String(format: "%08llx", hash)
         }
 
         /// Lightweight summary used for displaying bundles in the sidebar.
@@ -5406,9 +5459,12 @@ func reloadPatients() {
 
             let fmt = NSLocalizedString(
                 "appstate.new_patient.created_bundle_format",
-                comment: "Log when a new patient bundle is created. First %@ is the patient alias, second %@ is the bundle path."
+                comment: "Log when a new patient bundle is created. First %@ is the patient alias (log-safe), second %@ is the bundle folder name."
             )
-            let line = String(format: fmt, safeAlias, bundleURL.path)
+            // Avoid logging raw alias or full filesystem paths.
+            let aliasToken = obfuscatedToken(safeAlias)
+            let bundleLabel = bundleURL.lastPathComponent
+            let line = String(format: fmt, "ALIAS#\(aliasToken)", bundleLabel)
             log.info("\(line, privacy: .public)")
 
             // 6) Activate

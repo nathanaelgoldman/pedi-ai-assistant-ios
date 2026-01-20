@@ -160,7 +160,9 @@ final class ReportDataLoader {
             ageMonthsDouble = months
         }
         let ageDebug = ageMonthsDouble.map { String(format: "%.2f", $0) } ?? "nil"
-        print("[ReportDataLoader] well ageMonths for visitID=\(visitID): dob=\(meta.dobISO) visitDate=\(meta.visitDateISO) ageMonths=\(ageDebug)")
+        if DEBUG_REPORT_EXPORT {
+            print("[ReportDataLoader] well ageMonths for visitID=\(visitID): ageMonths=\(ageDebug)")
+        }
         // STEP 4: Current visit core fields (type subtitle, parents' concerns, feeding, supplementation, sleep)
         let core = loadCurrentWellCoreFields(visitID: visitID)
         let currentVisitTitle = core.visitType ?? (meta.visitTypeReadable ?? L("report.well_visit.default_title"))
@@ -169,7 +171,9 @@ final class ReportDataLoader {
         let supplementationRaw = core.supplementation
         let stoolRaw = core.stool
         let sleepRaw = core.sleep
-        print("[ReportDataLoader] wellCore: type='\(currentVisitTitle)' parents=\(parentsConcernsRaw?.count ?? 0) feed=\(feedingRaw.count) supp=\(supplementationRaw.count) stool=\(stoolRaw.count) sleep=\(sleepRaw.count)")
+        if DEBUG_REPORT_EXPORT {
+            print("[ReportDataLoader] wellCore: parentsCount=\(parentsConcernsRaw?.count ?? 0) feedCount=\(feedingRaw.count) suppCount=\(supplementationRaw.count) stoolCount=\(stoolRaw.count) sleepCount=\(sleepRaw.count)")
+        }
 
         // STEP 5: Developmental evaluation (M-CHAT / Dev test / Parents' Concerns) + Milestones (for this visit)
         let devPack = loadDevelopmentForWellVisit(visitID: visitID)
@@ -187,7 +191,9 @@ final class ReportDataLoader {
         let rawVisitTypeID = rawVisitTypeIDForWell(visitID: visitID) ?? core.visitType
         let visibility = WellVisitReportRules.visibility(for: rawVisitTypeID, ageMonths: ageMonthsDouble)
         let rawTypeDebug = rawVisitTypeID ?? core.visitType ?? "nil"
-        print("[ReportDataLoader] well visibility lookup for visitID=\(visitID): rawTypeID=\(rawTypeDebug) ageMonths=\(ageDebug) visibility=\(String(describing: visibility))")
+        if DEBUG_REPORT_EXPORT {
+            print("[ReportDataLoader] well visibility lookup for visitID=\(visitID): rawTypeID=\(rawTypeDebug) ageMonths=\(ageDebug)")
+        }
 
         // At this stage, all age/visit-type gating has already been applied upstream
         // (WellVisitReportRules + form logic). ReportDataLoader now only routes
@@ -801,7 +807,11 @@ final class ReportDataLoader {
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
                 defer { sqlite3_close(db) }
 
-                func dbg(_ msg: String) { print("[ReportDataLoader] buildPerinatalSummary(pid:\(patientID)): \(msg)") }
+                func dbg(_ msg: String) {
+                    if DEBUG_REPORT_EXPORT {
+                        print("[ReportDataLoader] buildPerinatalSummary: \(msg)")
+                    }
+                }
 
                 // 1) List tables
                 var tables: [String] = []
@@ -812,14 +822,12 @@ final class ReportDataLoader {
                         if let c = sqlite3_column_text(s, 0) { tables.append(String(cString: c)) }
                     }
                 }
-                dbg("tables: \(tables)")
 
                 // 2) Pick perinatal table
                 let candidates = ["perinatal_summary","perinatal","perinatal_summaries","perinatal_info","perinatal_history"]
                 guard let table = candidates.first(where: { tables.contains($0) }) else {
                     dbg("no perinatal table found"); return nil
                 }
-                dbg("using table: \(table)")
 
                 // 3) Columns for the chosen table
                 var cols = Set<String>()
@@ -830,12 +838,10 @@ final class ReportDataLoader {
                         if let cName = sqlite3_column_text(s, 1) { cols.insert(String(cString: cName)) }
                     }
                 }
-                dbg("columns: \(Array(cols).sorted())")
                 if cols.isEmpty { return nil }
 
                 // 4) Patient FK
                 let patientFK = ["patient_id","patientId","patientID"].first(where: { cols.contains($0) }) ?? "patient_id"
-                dbg("patient FK: \(patientFK)")
 
                 // Helper to bind text
                 func bindText(_ st: OpaquePointer, _ index: Int32, _ str: String) {
@@ -848,7 +854,6 @@ final class ReportDataLoader {
                 func val(_ keys: [String]) -> String? {
                     guard let col = keys.first(where: { cols.contains($0) }) else { return nil }
                     let orderField = cols.contains("updated_at") ? "updated_at" : "id"
-                    dbg("ordering by \(orderField)")
                     var whereClause = "\(patientFK) = ?"
                     var needsDate = false
                     if cutoffISO != nil, cols.contains("updated_at") {
@@ -927,7 +932,6 @@ final class ReportDataLoader {
                 if let v = val(["evolution_since_maternity"]) { parts.append(LF("report.perinatal.evolution_since_maternity", v)) }
 
                 let summary = parts.joined(separator: "; ")
-                dbg("summary: \(summary)")
                 return summary.isEmpty ? nil : summary
             }
         } catch {
@@ -1775,9 +1779,12 @@ final class ReportDataLoader {
                         mainComplaint = reportLocalizedChoiceTokenList(mainComplaint)
                         hpi            = col(i); i += 1
                         duration       = col(i); i += 1
-                        // DEBUG: now-localized mainComplaint
-                        print("[ReportDataLoader] loadSick(\(episodeID)) mainComplaint=\(mainComplaint ?? "nil")")
-                        print("[ReportDataLoader] loadSick(\(episodeID)) raw duration=\(duration ?? "nil")")
+                        #if DEBUG
+                        // Privacy-safe debug: never log clinical content.
+                        let hasMainComplaint = !(mainComplaint ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        let hasDuration = !(duration ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        AppLog.report.debug("[ReportDataLoader] loadSick(\(episodeID, privacy: .public)) hasMainComplaint=\(hasMainComplaint, privacy: .public) hasDuration=\(hasDuration, privacy: .public)")
+                        #endif
                         if let v = col(i) { basics[L("report.sick.basics.feeding")] = v }; i += 1
                         if let v = col(i) { basics[L("report.sick.basics.urination")] = v }; i += 1
                         if let v = col(i) { basics[L("report.sick.basics.breathing")] = v }; i += 1
@@ -1827,10 +1834,13 @@ final class ReportDataLoader {
                             }
                             i += 1
                         }
-                        // DEBUG: selected PE values (now localized)
-                        print("[ReportDataLoader] loadSick(\(episodeID)) PE lungs=\(valuesByName[peLungs] ?? "nil")")
-                        print("[ReportDataLoader] loadSick(\(episodeID)) PE skin=\(valuesByName[peSkin] ?? "nil")")
-                        print("[ReportDataLoader] loadSick(\(episodeID)) PE heart=\(valuesByName[peHeart] ?? "nil")")
+                        #if DEBUG
+                        // Privacy-safe debug: log only presence flags, never PE values.
+                        let hasPELungs = (valuesByName[peLungs] != nil)
+                        let hasPESkin  = (valuesByName[peSkin] != nil)
+                        let hasPEHeart = (valuesByName[peHeart] != nil)
+                        AppLog.report.debug("[ReportDataLoader] loadSick(\(episodeID, privacy: .public)) hasPELungs=\(hasPELungs, privacy: .public) hasPESkin=\(hasPESkin, privacy: .public) hasPEHeart=\(hasPEHeart, privacy: .public)")
+                        #endif
                         let groupMap: [(String,[String])] = [
                             (L("report.sick.pe.group.general"), [peGeneralAppearance, peHydration, peColor, peSkin]),
                             (L("report.sick.pe.group.ent"), [peENT, peRightEar, peLeftEar, peRightEye, peLeftEye]),
@@ -2320,11 +2330,19 @@ final class ReportDataLoader {
         let size = (attrs?[.size] as? NSNumber)?.int64Value ?? -1
         let parent = url.deletingLastPathComponent().lastPathComponent
 
-        print("[ReportDataLoader] Using DB: \(path)")
-        print("[ReportDataLoader] Exists: \(exists)  Size: \(size) bytes  File: \(url.lastPathComponent)  Parent: \(parent)")
+        #if DEBUG
+        // Avoid leaking full sandbox paths (username / container path) in logs.
+        // Log stable references only (bundle token + filename).
+        let dbRef = AppLog.dbRef(url)
+        let parentRef = AppLog.bundleRef(url.deletingLastPathComponent())
+
+        AppLog.report.debug("[ReportDataLoader] DB: \(dbRef, privacy: .private(mask: .hash))")
+        AppLog.report.debug("[ReportDataLoader] Exists: \(exists, privacy: .public)  Size: \(size, privacy: .public) bytes  File: \(url.lastPathComponent, privacy: .public)  Parent: \(parentRef, privacy: .public)")
+
         if url.lastPathComponent.lowercased() != "db.sqlite" {
-            print("[ReportDataLoader][WARN] Expected 'db.sqlite' (patient bundle), but got '\(url.lastPathComponent)'.")
+            AppLog.report.warning("[ReportDataLoader][WARN] Expected 'db.sqlite' (patient bundle), but got '\(url.lastPathComponent, privacy: .public)'.")
         }
+        #endif
         return path
     }
 

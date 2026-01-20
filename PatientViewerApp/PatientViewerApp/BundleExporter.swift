@@ -91,7 +91,9 @@ struct BundleExporter {
                 return res.lowercased() == "ok"
             }
         } catch {
-            log.warning("PRAGMA integrity_check failed to run: \(error.localizedDescription, privacy: .public)")
+            let nsErr = error as NSError
+            let dbName = URL(fileURLWithPath: dbPath).lastPathComponent
+            log.warning("PRAGMA integrity_check failed | db=\(dbName, privacy: .public) err=\(nsErr.domain, privacy: .public):\(nsErr.code, privacy: .public)")
         }
         return false
     }
@@ -118,15 +120,18 @@ struct BundleExporter {
                 log.error("FK violation → table=\(table, privacy: .public) rowid=\(rowid, privacy: .public) parent=\(parent, privacy: .public) fkid=\(fkid, privacy: .public)")
             }
 
+            let dbName = URL(fileURLWithPath: dbPath).lastPathComponent
             if hasViolations {
-                log.error("foreign_key_check found violations in \(dbPath, privacy: .public)")
+                log.error("foreign_key_check found violations | db=\(dbName, privacy: .public)")
             } else {
-                log.debug("foreign_key_check OK for \(dbPath, privacy: .public)")
+                log.debug("foreign_key_check OK | db=\(dbName, privacy: .public)")
             }
 
             return !hasViolations
         } catch {
-            log.warning("PRAGMA foreign_key_check failed to run: \(error.localizedDescription, privacy: .public)")
+            let nsErr = error as NSError
+            let dbName = URL(fileURLWithPath: dbPath).lastPathComponent
+            log.warning("PRAGMA foreign_key_check failed | db=\(dbName, privacy: .public) err=\(nsErr.domain, privacy: .public):\(nsErr.code, privacy: .public)")
             return false
         }
     }

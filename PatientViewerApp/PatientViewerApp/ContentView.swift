@@ -89,9 +89,11 @@ struct ContentView: SwiftUI.View {
             ) { result in
                 switch result {
                 case .success(let url):
-                    log.info("Exported bundle to: \(url.path, privacy: .public)")
+                    let filename = url.lastPathComponent
+                    log.info("Exported bundle | file=\(filename, privacy: .public)")
                 case .failure(let error):
-                    log.error("Export failed: \(error.localizedDescription, privacy: .public)")
+                    let ns = error as NSError
+                    log.error("Export failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")
                 }
             }
             .fileImporter(
@@ -489,29 +491,43 @@ struct ContentView: SwiftUI.View {
         // Always persist current ActiveBundle first
         saveActiveBundleToPersistent()
         if let url = extractedFolderURL {
-            // Confirm persistent DB is written before clearing
-            let dbPath = url.appendingPathComponent("db.sqlite").path
-            log.debug("Pre-clear check: Confirming persistent DB exists and is intact.")
-            if FileManager.default.fileExists(atPath: dbPath) {
-                log.info("Persistent DB file exists at \(dbPath, privacy: .public)")
+            // Confirm DB is present before clearing (avoid logging absolute paths)
+            let dbURL = url.appendingPathComponent("db.sqlite")
+            log.debug("Pre-clear check: confirming DB exists.")
+
+            let exists = FileManager.default.fileExists(atPath: dbURL.path)
+            let label = "\(url.lastPathComponent)/\(dbURL.lastPathComponent)"
+
+            if exists {
+                log.info("Pre-clear check OK | file=\(label, privacy: .public)")
             } else {
-                log.error("Persistent DB file is MISSING at \(dbPath, privacy: .public)")
+                log.error("Pre-clear check FAILED (missing DB) | file=\(label, privacy: .public)")
             }
+
+            // Keep the exact path available for debugging without exposing it publicly
+            log.debug("Pre-clear check | fullPath=\(dbURL.path, privacy: .private)")
+
             log.debug("Ensuring only temporary bundle is cleared. Persistent bundles remain untouched.")
 
             // Only remove volatile temporary folders, not persistent ActiveBundle/{alias_label}
             let path = url.path
+            let folderLabel = url.lastPathComponent
+
             if path.contains("tmp") || path.contains("Temporary") {
                 try? FileManager.default.removeItem(at: url)
-                log.info("Cleared volatile bundle at \(path, privacy: .public)")
+                log.info("Cleared volatile bundle | folder=\(folderLabel, privacy: .public)")
+                log.debug("Cleared volatile bundle | fullPath=\(path, privacy: .private)")
             } else {
-                log.debug("Skipped clearing persistent ActiveBundle at \(path, privacy: .public)")
+                log.debug("Skipped clearing persistent ActiveBundle | folder=\(folderLabel, privacy: .public)")
+                log.debug("Skipped clearing persistent ActiveBundle | fullPath=\(path, privacy: .private)")
             }
         }
         // Flush DB to disk before clearing
         if let url = extractedFolderURL {
             let dbPath = url.appendingPathComponent("db.sqlite").path
-            log.debug("Forcing DB flush before clear at: \(dbPath, privacy: .public)")
+            let dbLabel = "\(url.lastPathComponent)/db.sqlite"
+            log.debug("Forcing DB flush before clear | file=\(dbLabel, privacy: .public)")
+            log.debug("Forcing DB flush before clear | fullPath=\(dbPath, privacy: .private)")
             let db = FMDatabase(path: dbPath)
             if db.open() {
                 db.executeUpdate("VACUUM;", withArgumentsIn: [])
@@ -567,7 +583,8 @@ struct ContentView: SwiftUI.View {
                 try fm.removeItem(at: destDB)
             }
             try fm.copyItem(at: srcDB, to: destDB)
-            log.info("Saved db.sqlite to persistent: \(destDB.path, privacy: .public)")
+            let destLabel = "PersistentBundles/\(alias)/\(destDB.lastPathComponent)"
+            log.info("Saved db.sqlite to persistent | file=\(destLabel, privacy: .public)")
 
             // Copy docs folder if present (replace atomically)
             let srcDocs = activeURL.appendingPathComponent("docs", isDirectory: true)
@@ -591,9 +608,12 @@ struct ContentView: SwiftUI.View {
                 log.info("Saved manifest.json to persistent.")
             }
 
-            log.info("Saved active bundle back to persistent at: \(persistentAlias.path, privacy: .public)")
+            let persistentLabel = "PersistentBundles/\(alias)"
+            log.info("Saved active bundle back to persistent | folder=\(persistentLabel, privacy: .public)")
         } catch {
-            log.error("Save to persistent failed: \(String(describing: error), privacy: .public)")
+            let ns = error as NSError
+            log.error("Save to persistent failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")
+            log.debug("Save to persistent failed | detail=\(ns.localizedDescription, privacy: .private)")
         }
     }
 }

@@ -95,8 +95,15 @@ enum BundleIO {
 
             // Determine the extracted root that actually contains the bundle
             let root = findExtractedRoot(in: tempDir, zipURL: url)
-            log.debug("📂 Selected extracted root: \(root.path, privacy: .public)")
-            log.debug("🚩 [Import] Stage 1: about to extract identity from root: \(root.path, privacy: .public)")
+            let rootLabel = root.lastPathComponent
+            log.debug("📂 Selected extracted root | folder=\(rootLabel, privacy: .private)")
+            log.debug("🚩 [Import] Stage 1: about to extract identity | folder=\(rootLabel, privacy: .private)")
+
+            #if DEBUG
+            log.debug("📂 Selected extracted root (full path): \(root.path, privacy: .private)")
+            log.debug("🚩 [Import] Stage 1: about to extract identity (full path): \(root.path, privacy: .private)")
+            #endif
+
             let identity = try extractIdentity(from: root)
             log.debug("✅ [Import] Stage 1 OK — alias: \(identity.alias, privacy: .private(mask: .hash)), dob: \(identity.dob ?? "nil", privacy: .private)")
             try validateBundleDB(at: root)
@@ -1923,7 +1930,7 @@ private struct BundleRowCard: View {
 
             // Determine the extracted root that actually contains the bundle
             let root = findExtractedRoot(in: tempDir, zipURL: url)
-            log.debug("📂 Selected extracted root: \(root.path, privacy: .public)")
+            log.debug("📂 Selected extracted root | folder=\(root.lastPathComponent, privacy: .private)")
 
             // STAGED IMPORT DEBUG: walk each critical step so we know exactly where it fails on-device
             log.debug("🚩 [Import] Stage 1: ensurePlainDBLocal on root: \(root.path, privacy: .public)")
