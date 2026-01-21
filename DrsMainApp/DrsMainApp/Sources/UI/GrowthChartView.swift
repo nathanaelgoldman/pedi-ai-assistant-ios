@@ -10,6 +10,28 @@ import Charts
  
 import SQLite3
 
+// MARK: - Light-blue section card styling (matches PerinatalHistoryForm section blocks)
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Apply the standard light-blue “section card” look (used for blocks inside forms).
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
+    }
+}
+
 struct GrowthChartView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -109,18 +131,22 @@ struct GrowthChartView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 12) {
-                    Picker(
-                        NSLocalizedString(
-                            "growth.charts.picker.label",
-                            comment: "Accessibility label for growth chart type picker"
-                        ),
-                        selection: $selectedTab
-                    ) {
-                        ForEach(Tab.allCases) { t in
-                            Text(t.localizedTitle).tag(t)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Picker(
+                            NSLocalizedString(
+                                "growth.charts.picker.label",
+                                comment: "Accessibility label for growth chart type picker"
+                            ),
+                            selection: $selectedTab
+                        ) {
+                            ForEach(Tab.allCases) { t in
+                                Text(t.localizedTitle).tag(t)
+                            }
                         }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
+                    .padding(12)
+                    .lightBlueSectionCardStyle()
 
                     let series = makeSeries(points: points, tab: selectedTab)
                     if series.isEmpty {

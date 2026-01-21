@@ -2986,6 +2986,96 @@ func reloadPatients() {
         /// Build a structured JSON snapshot of the current well-visit context.
         /// This is designed to be provider-agnostic and safe to embed directly
         /// into text prompts for LLMs.
+
+        // MARK: - Manual Growth (for AI context)
+
+        private struct ManualGrowthSnapshot {
+            let recordedAtISO: String
+            let weightKg: Double?
+            let heightCm: Double?
+            let headCircumferenceCm: Double?
+        }
+
+        /// Fetch the most recent manual growth entry for a patient.
+        /// Uses `manual_growth.recorded_at` ordering (best-effort ISO date/datetime).
+        private func fetchLatestManualGrowthSnapshot(patientID: Int) -> ManualGrowthSnapshot? {
+            guard let dbURL = currentDBURL,
+                  FileManager.default.fileExists(atPath: dbURL.path) else {
+                return nil
+            }
+
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+                  let db = db else {
+                return nil
+            }
+            defer { sqlite3_close(db) }
+
+            // Ensure the table exists (some bundles may not include it yet).
+            var existsStmt: OpaquePointer?
+            defer { sqlite3_finalize(existsStmt) }
+            if sqlite3_prepare_v2(db, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='manual_growth' LIMIT 1;", -1, &existsStmt, nil) != SQLITE_OK {
+                return nil
+            }
+            guard sqlite3_step(existsStmt) == SQLITE_ROW else {
+                return nil
+            }
+
+            let sql = """
+            SELECT
+              COALESCE(recorded_at,'') AS recorded_at,
+              weight_kg,
+              height_cm,
+              head_circumference_cm
+            FROM manual_growth
+            WHERE patient_id = ?
+            ORDER BY datetime(COALESCE(recorded_at,'0001-01-01T00:00:00Z')) DESC, id DESC
+            LIMIT 1;
+            """
+
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                return nil
+            }
+
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+
+            guard sqlite3_step(stmt) == SQLITE_ROW else {
+                return nil
+            }
+
+            func str(_ i: Int32) -> String {
+                if let c = sqlite3_column_text(stmt, i) { return String(cString: c) }
+                return ""
+            }
+            func dblOpt(_ i: Int32) -> Double? {
+                let t = sqlite3_column_type(stmt, i)
+                return t == SQLITE_NULL ? nil : sqlite3_column_double(stmt, i)
+            }
+
+            let recordedAt = str(0).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !recordedAt.isEmpty else {
+                return nil
+            }
+
+            let w = dblOpt(1)
+            let h = dblOpt(2)
+            let hc = dblOpt(3)
+
+            // If all values are nil, skip (no useful growth signal).
+            if w == nil && h == nil && hc == nil {
+                return nil
+            }
+
+            return ManualGrowthSnapshot(
+                recordedAtISO: recordedAt,
+                weightKg: w,
+                heightCm: h,
+                headCircumferenceCm: hc
+            )
+        }
+
         private func buildWellVisitJSON(using context: WellVisitAIContext) -> String {
             let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
             let problemLines = sanitizedProblems
@@ -3019,6 +3109,17 @@ func reloadPatients() {
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
                !vacc.isEmpty {
                 payload["vaccination_status"] = vacc
+            }
+
+            // ✅ Manual growth snapshot (preferred for well-visit interpretation)
+            if let growth = fetchLatestManualGrowthSnapshot(patientID: context.patientID) {
+                var g: [String: Any] = [
+                    "recorded_at": growth.recordedAtISO
+                ]
+                if let w = growth.weightKg { g["weight_kg"] = w }
+                if let h = growth.heightCm { g["height_cm"] = h }
+                if let hc = growth.headCircumferenceCm { g["head_circumference_cm"] = hc }
+                payload["manual_growth_snapshot"] = g
             }
 
             if JSONSerialization.isValidJSONObject(payload),
@@ -3537,14 +3638,64 @@ func reloadPatients() {
             }
         }
     
-        /// Entry point used by UI to run AI for a given sick episode context.
-        /// For now, this simply calls the local stub. Later it can dispatch to one
-        /// or more configured providers (OpenAI, UpToDate, local models, etc.).
+        /// Optional resolver that returns the clinician-selected provider id (e.g. "openai", "gemini", "anthropic").
+        /// If nil or empty, AppState will fall back to the first non-nil provider resolver.
+        var aiProviderIDResolver: (() -> String?)?
+
+        /// Optional provider resolvers (wired by the host app). These return a concrete `EpisodeAIProvider` when configured.
+        var openAIProviderResolver: (() -> EpisodeAIProvider?)?
+        var geminiProviderResolver: (() -> EpisodeAIProvider?)?
+        var anthropicProviderResolver: (() -> EpisodeAIProvider?)?
+
+        /// Normalize provider ids so different UI strings map to the same internal values.
+        private func normalizeProviderID(_ raw: String?) -> String? {
+            guard let s = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+            let lower = s.lowercased()
+            if lower.contains("openai") { return "openai" }
+            if lower.contains("gemini") { return "gemini" }
+            if lower.contains("anthropic") || lower.contains("claude") { return "anthropic" }
+            return lower
+        }
+
+        /// Resolve the currently configured episode-level AI provider.
+        /// Priority:
+        ///  1) Explicit `episodeAIProviderResolver` (legacy/override)
+        ///  2) `aiProviderIDResolver` + matching provider resolver
+        ///  3) First non-nil provider resolver in the order: OpenAI → Gemini → Anthropic
+        private func resolveEpisodeAIProvider() -> EpisodeAIProvider? {
+            // 1) Legacy/override
+            if let p = episodeAIProviderResolver?() {
+                return p
+            }
+
+            // 2) Clinician-selected provider id
+            if let pid = normalizeProviderID(aiProviderIDResolver?()) {
+                switch pid {
+                case "openai":
+                    return openAIProviderResolver?()
+                case "gemini":
+                    return geminiProviderResolver?()
+                case "anthropic":
+                    return anthropicProviderResolver?()
+                default:
+                    break
+                }
+            }
+
+            // 3) First available provider
+            if let p = openAIProviderResolver?() { return p }
+            if let p = geminiProviderResolver?() { return p }
+            if let p = anthropicProviderResolver?() { return p }
+
+            return nil
+        }
+
         /// Entry point used by UI to run AI for a given sick episode context.
         /// For now, this prefers any configured provider (e.g. OpenAI) and falls
         /// back to the local stub when none is available or on error.
         func runAIForEpisode(using context: EpisodeAIContext) {
-            if let provider = episodeAIProviderResolver?() {
+            if let provider = resolveEpisodeAIProvider() {
+                self.log.info("runAIForEpisode: using provider \(String(describing: type(of: provider)), privacy: .public)")
                 // Run the provider asynchronously so the UI remains responsive.
                 Task {
                     do {
@@ -3574,19 +3725,14 @@ func reloadPatients() {
                 runAIStub(using: context)
             }
         }
-    
-        /// Entry point used by UI to run AI for a given well-visit context.
-        /// For now, this uses a local stub summary; later it can dispatch to
-        /// one or more configured providers and persist to `well_ai_inputs`.
-        /// Entry point used by UI to run AI for a given well-visit context.
-        /// For now, this uses a local stub summary; later it can dispatch to
-        /// one or more configured providers and persist to `well_ai_inputs`.
+
         /// Entry point used by UI to run AI for a given well-visit context.
         /// For now, this prefers any configured provider (e.g. OpenAI) and falls
         /// back to a local stub when none is available or on error. Results are
         /// persisted to `well_ai_inputs`.
         func runAIForWellVisit(using context: WellVisitAIContext) {
-            if let provider = episodeAIProviderResolver?() {
+            if let provider = resolveEpisodeAIProvider() {
+                self.log.info("runAIForWellVisit: using provider \(String(describing: type(of: provider)), privacy: .public)")
                 // Run the provider asynchronously so the UI remains responsive.
                 Task {
                     do {
@@ -4740,7 +4886,8 @@ func reloadPatients() {
                                     "appstate.zip_import.replaced_existing_bundle_format",
                                     comment: "Log when an existing bundle is replaced during import. First %@ is the identity string, second %@ is the final path."
                                 )
-                                let line = String(format: fmt, self.identityString(identity), finalURL.path)
+                                let bundleLabel = AppLog.bundleRef(finalURL)
+                                let line = String(format: fmt, self.identityStringForLog(identity), bundleLabel)
                                 self.log.info("\(line, privacy: .public)")
                             } else {
                                 let fmt = NSLocalizedString(
@@ -4797,8 +4944,10 @@ func reloadPatients() {
                             "appstate.zip_import.imported_new_bundle_no_autoselect_format",
                             comment: "Log when a new bundle is imported without auto-selecting it. First %@ is the identity string, second %@ is the bundle path."
                         )
-                        // Avoid logging full filesystem paths; the bundle folder name is enough for debugging.
-                        let line = String(format: fmt, self.identityStringForLog(identity), bundleRoot.lastPathComponent)
+                        // Avoid logging full filesystem paths OR raw bundle folder names (they often contain the alias).
+                        // Log a stable, non-identifying bundle reference instead.
+                        let bundleLabel = AppLog.bundleRef(bundleRoot)
+                        let line = String(format: fmt, self.identityStringForLog(identity), bundleLabel)
                         self.log.info("\(line, privacy: .public)")
                     }
 

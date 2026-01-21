@@ -28,6 +28,19 @@ private extension View {
             self
         }
     }
+
+    @ViewBuilder
+    func lightBlueSectionCardStyle(cornerRadius: CGFloat = 12) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
 }
 
 /// Read-only table that lists unified growth points for the currently selected patient.
@@ -133,14 +146,7 @@ struct GrowthTableView: View {
                 }
             }
             .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.secondary.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.secondary.opacity(0.18))
-            )
+            .lightBlueSectionCardStyle(cornerRadius: 12)
             .padding(.horizontal, 24)
             .padding(.vertical, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

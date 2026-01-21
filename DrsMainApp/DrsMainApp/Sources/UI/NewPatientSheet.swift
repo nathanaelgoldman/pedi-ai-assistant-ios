@@ -124,6 +124,15 @@ struct NewPatientSheet: View {
             }
         }
         .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.accentColor.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
+        )
+        .padding(20)
         .frame(width: 560)
         .onAppear {
             // Seed alias & MRN on open

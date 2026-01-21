@@ -33,6 +33,42 @@ private enum L10nWVF {
     static func s(_ key: String) -> String { NSLocalizedString(key, comment: "") }
 }
 
+// MARK: - GroupBox helper style (removes default gray GroupBox chrome)
+/// A minimal GroupBoxStyle that removes the default rounded/gray container
+/// so we can apply our own card background (lightBlueSectionCardStyle).
+fileprivate struct PlainGroupBoxStyle: GroupBoxStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            configuration.label
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            configuration.content
+        }
+    }
+}
+// MARK: - Light-blue section card styling (matches SickEpisodeForm)
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Apply the standard light-blue “section card” look (used for blocks inside forms).
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
+    }
+}
+
 // MARK: - Problem listing tokens (step 1)
 
 /// Stable, localization-proof representation of problem-listing lines.
@@ -533,8 +569,8 @@ struct WellVisitForm: View {
     // MARK: - Addenda (well visits)
     @State private var wellAddenda: [WellVisitAddendum] = []
     @State private var addendaAreLoading: Bool = false
+    @State private var addendaErrorMessage: String? = nil
     @State private var newWellAddendumText: String = ""
-    @State private var wellAddendumEditTexts: [Int64: String] = [:]
 
     // Date formatter (yyyy-MM-dd)
     private static let isoDateOnly: ISO8601DateFormatter = {
@@ -787,6 +823,9 @@ struct WellVisitForm: View {
             }
             .padding(.top, 4)
         }
+        .groupBoxStyle(PlainGroupBoxStyle())
+        .padding(12)
+        .lightBlueSectionCardStyle()
     }
     
     private var isEarlyMilkOnlyVisit: Bool {
@@ -825,47 +864,50 @@ struct WellVisitForm: View {
     }
 
 
-    // MARK: - Addenda helpers (well visits)
+// MARK: - Addenda helpers (well visits)
 
-    private func reloadWellAddendaIfNeeded() {
+    private func loadWellAddenda() {
         guard let wid = editingVisitID else { return }
-        guard let dbURL = appState.currentDBURL else { return }
+        guard let dbURL = appState.currentDBURL else {
+            addendaErrorMessage = L10nWVF.s("well_visit_form.addenda.db_missing_error")
+            return
+        }
 
         addendaAreLoading = true
+        addendaErrorMessage = nil
+
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let store = WellVisitStore()
                 let rows = try store.fetchAddendaForWellVisit(dbURL: dbURL, wellVisitID: Int64(wid))
                 DispatchQueue.main.async {
                     self.wellAddenda = rows
-                    // Seed edit buffers with current texts
-                    var buffers: [Int64: String] = self.wellAddendumEditTexts
-                    for a in rows {
-                        buffers[a.id] = buffers[a.id] ?? a.text
-                    }
-                    self.wellAddendumEditTexts = buffers
                     self.addendaAreLoading = false
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.addendaAreLoading = false
-                    self.saveErrorMessage = error.localizedDescription
-                    self.showErrorAlert = true
+                    self.addendaErrorMessage = error.localizedDescription
                 }
             }
         }
     }
 
-    private func addWellAddendum() {
+    private func addWellAddendumTapped() {
         guard let wid = editingVisitID else { return }
-        guard let dbURL = appState.currentDBURL else { return }
-
         let trimmed = newWellAddendumText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
+        guard let dbURL = appState.currentDBURL else {
+            addendaErrorMessage = L10nWVF.s("well_visit_form.addenda.db_missing_error")
+            return
+        }
 
         let uid: Int64? = appState.activeUserID.map(Int64.init)
 
         addendaAreLoading = true
+        addendaErrorMessage = nil
+
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let store = WellVisitStore()
@@ -878,58 +920,12 @@ struct WellVisitForm: View {
                 DispatchQueue.main.async {
                     self.newWellAddendumText = ""
                     self.addendaAreLoading = false
-                    self.reloadWellAddendaIfNeeded()
+                    self.loadWellAddenda()
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.addendaAreLoading = false
-                    self.saveErrorMessage = error.localizedDescription
-                    self.showErrorAlert = true
-                }
-            }
-        }
-    }
-
-    private func saveWellAddendum(addendumID: Int64) {
-        guard let dbURL = appState.currentDBURL else { return }
-        let newText = (wellAddendumEditTexts[addendumID] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-        addendaAreLoading = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let store = WellVisitStore()
-                _ = try store.updateWellVisitAddendum(dbURL: dbURL, addendumID: addendumID, newText: newText)
-                DispatchQueue.main.async {
-                    self.addendaAreLoading = false
-                    self.reloadWellAddendaIfNeeded()
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.addendaAreLoading = false
-                    self.saveErrorMessage = error.localizedDescription
-                    self.showErrorAlert = true
-                }
-            }
-        }
-    }
-
-    private func deleteWellAddendum(addendumID: Int64) {
-        guard let dbURL = appState.currentDBURL else { return }
-
-        addendaAreLoading = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let store = WellVisitStore()
-                _ = try store.deleteWellVisitAddendum(dbURL: dbURL, addendumID: addendumID)
-                DispatchQueue.main.async {
-                    self.addendaAreLoading = false
-                    self.reloadWellAddendaIfNeeded()
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.addendaAreLoading = false
-                    self.saveErrorMessage = error.localizedDescription
-                    self.showErrorAlert = true
+                    self.addendaErrorMessage = error.localizedDescription
                 }
             }
         }
@@ -939,87 +935,99 @@ struct WellVisitForm: View {
     private var wellAddendaSection: some View {
         GroupBox(L10nWVF.k("well_visit_form.addenda.title")) {
             VStack(alignment: .leading, spacing: 12) {
-                if addendaAreLoading {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(L10nWVF.k("well_visit_form.addenda.loading"))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
 
-                if wellAddenda.isEmpty {
-                    Text(L10nWVF.k("well_visit_form.addenda.empty"))
-                        .font(.footnote)
+                if editingVisitID == nil {
+                    Text(L10nWVF.k("well_visit_form.addenda.save_visit_first_hint"))
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(wellAddenda) { a in
-                        VStack(alignment: .leading, spacing: 6) {
-                            if let created = a.createdAtISO, !created.isEmpty {
-                                Text(created)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                    if let err = addendaErrorMessage, !err.isEmpty {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
 
-                            TextEditor(text: Binding(
-                                get: { wellAddendumEditTexts[a.id] ?? a.text },
-                                set: { wellAddendumEditTexts[a.id] = $0 }
-                            ))
-                            .frame(minHeight: 90)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .strokeBorder(Color.secondary.opacity(0.25))
-                            )
+                    HStack {
+                        Button {
+                            loadWellAddenda()
+                        } label: {
+                            Label(L10nWVF.k("well_visit_form.addenda.refresh"), systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
 
-                            HStack(spacing: 12) {
-                                Button {
-                                    saveWellAddendum(addendumID: a.id)
-                                } label: {
-                                    Label(L10nWVF.k("well_visit_form.addenda.save"), systemImage: "checkmark")
+                        Spacer()
+
+                        if addendaAreLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+
+                    if wellAddenda.isEmpty {
+                        Text(L10nWVF.k("well_visit_form.addenda.empty"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(wellAddenda) { a in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(a.createdAtISO ?? L10nWVF.s("well_visit_form.addenda.time_na"))
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                    }
+
+                                    Text(a.text)
+                                        .font(.caption)
+                                        .textSelection(.enabled)
                                 }
-                                .buttonStyle(.bordered)
-
-                                Button(role: .destructive) {
-                                    deleteWellAddendum(addendumID: a.id)
-                                } label: {
-                                    Label(L10nWVF.k("well_visit_form.addenda.delete"), systemImage: "trash")
-                                }
-                                .buttonStyle(.bordered)
-
-                                Spacer()
+                                .padding(8)
+                                .background(Color.gray.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                         }
-                        .padding(.vertical, 6)
-
-                        Divider()
                     }
-                }
 
-                VStack(alignment: .leading, spacing: 6) {
+                    Divider().padding(.vertical, 4)
+
                     Text(L10nWVF.k("well_visit_form.addenda.new.title"))
                         .font(.subheadline.bold())
 
-                    TextEditor(text: $newWellAddendumText)
-                        .frame(minHeight: 90)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(Color.secondary.opacity(0.25))
-                        )
+                    ZStack(alignment: .topLeading) {
+                        if newWellAddendumText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(L10nWVF.k("well_visit_form.addenda.new.placeholder"))
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 8)
+                                .padding(.leading, 6)
+                        }
+
+                        TextEditor(text: $newWellAddendumText)
+                            .frame(minHeight: 90)
+                            .padding(.horizontal, 2)
+                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.25))
+                    )
 
                     HStack {
                         Spacer()
                         Button {
-                            addWellAddendum()
+                            addWellAddendumTapped()
                         } label: {
-                            Label(L10nWVF.k("well_visit_form.addenda.add"), systemImage: "plus")
+                            Label(L10nWVF.k("well_visit_form.addenda.add"), systemImage: "plus.bubble")
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(newWellAddendumText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(newWellAddendumText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || addendaAreLoading)
                     }
                 }
             }
             .padding(.top, 4)
         }
+        .groupBoxStyle(PlainGroupBoxStyle())
+        .padding(12)
+        .lightBlueSectionCardStyle()
     }
 
     init(editingVisitID: Int? = nil) {
@@ -1036,7 +1044,7 @@ struct WellVisitForm: View {
                         .onAppear {
                             // Only meaningful when editing an existing visit
                             if editingVisitID != nil {
-                                reloadWellAddendaIfNeeded()
+                                loadWellAddenda()
                             }
                         }
                     // Visit info
@@ -1057,6 +1065,9 @@ struct WellVisitForm: View {
                         }
                         .padding(.top, 4)
                     }
+                    .groupBoxStyle(PlainGroupBoxStyle())
+                    .padding(12)
+                    .lightBlueSectionCardStyle()
                     
                     if isWeightDeltaVisit {
                         GroupBox(L10nWVF.k("well_visit_form.weight_trend.title")) {
@@ -1099,6 +1110,9 @@ struct WellVisitForm: View {
                                 }
                             }
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     
@@ -1108,6 +1122,9 @@ struct WellVisitForm: View {
                         TextEditor(text: $parentsConcerns)
                             .frame(minHeight: 120)
                     }
+                    .groupBoxStyle(PlainGroupBoxStyle())
+                    .padding(12)
+                    .lightBlueSectionCardStyle()
 
                     // Feeding + Supplementation + Vitamin D
                     if layout.showsFeeding {
@@ -1184,6 +1201,9 @@ struct WellVisitForm: View {
                                 }
                             }
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                 GroupBox(L10nWVF.k("well_visit_form.stools.title")) {
@@ -1202,6 +1222,9 @@ struct WellVisitForm: View {
                             .textFieldStyle(.roundedBorder)
                     }
                 }
+                .groupBoxStyle(PlainGroupBoxStyle())
+                .padding(12)
+                .lightBlueSectionCardStyle()
 
                 // Sleep
                 if layout.showsSleep {
@@ -1286,6 +1309,9 @@ struct WellVisitForm: View {
                             }
                         }
                     }
+                    .groupBoxStyle(PlainGroupBoxStyle())
+                    .padding(12)
+                    .lightBlueSectionCardStyle()
                 }
 
                     // Physical examination (stored in lab_text for now)
@@ -1664,6 +1690,9 @@ struct WellVisitForm: View {
                                     .frame(minHeight: 120)
                             }
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     // Milestones / development
@@ -1699,6 +1728,9 @@ struct WellVisitForm: View {
                             }
                             .padding(.top, 4)
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     // Neurodevelopment screening (M-CHAT / Dev test)
@@ -1750,6 +1782,9 @@ struct WellVisitForm: View {
                             }
                             .padding(.top, 4)
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     // Problem listing
@@ -1767,6 +1802,9 @@ struct WellVisitForm: View {
                                 .buttonStyle(.borderedProminent)
                             }
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     // Conclusions
@@ -1775,6 +1813,9 @@ struct WellVisitForm: View {
                             TextEditor(text: $conclusions)
                                 .frame(minHeight: 140)
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     // Plan / Anticipatory Guidance
@@ -1783,6 +1824,9 @@ struct WellVisitForm: View {
                             TextEditor(text: $plan)
                                 .frame(minHeight: 140)
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     // Clinician Comment – stays at the end
@@ -1791,6 +1835,9 @@ struct WellVisitForm: View {
                             TextEditor(text: $clinicianComment)
                                 .frame(minHeight: 120)
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
 
                     // Next Visit Date
@@ -1808,6 +1855,9 @@ struct WellVisitForm: View {
                             }
                             .padding(.top, 4)
                         }
+                        .groupBoxStyle(PlainGroupBoxStyle())
+                        .padding(12)
+                        .lightBlueSectionCardStyle()
                     }
                     
                     
@@ -3667,6 +3717,175 @@ struct WellVisitForm: View {
     
     // MARK: - AI helpers (well visits)
 
+    // MARK: Manual growth snapshot (for AI context)
+
+    private struct ManualGrowthSnapshot {
+        let recordedAtRaw: String
+        let weightKg: Double?
+        let heightCm: Double?
+        let headCircCm: Double?
+    }
+
+    /// Fetch a manual growth entry that best matches the current `visitDate`.
+    ///
+    /// Strategy:
+    /// 1) Prefer the closest record within a small window around the visit date (±3 days)
+    ///    so same-day (or near) measurements are used even if a later measurement exists.
+    /// 2) If nothing exists in the window, fall back to the most recent record on or before
+    ///    the visit date.
+    ///
+    /// Uses `date(recorded_at)` so it works whether `recorded_at` is date-only or datetime.
+    private func fetchManualGrowthSnapshot(dbURL: URL, patientID: Int) -> ManualGrowthSnapshot? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        let visitISO = Self.isoDateOnly.string(from: visitDate)
+        let windowDays: Int32 = 3
+
+        func colDoubleOrNil(_ stmt: OpaquePointer?, _ idx: Int32) -> Double? {
+            guard let stmt else { return nil }
+            if sqlite3_column_type(stmt, idx) == SQLITE_NULL { return nil }
+            return sqlite3_column_double(stmt, idx)
+        }
+
+        func runQuery(_ sql: String, bind: (_ stmt: OpaquePointer) -> Void) -> ManualGrowthSnapshot? {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+                return nil
+            }
+            defer { sqlite3_finalize(stmt) }
+
+            bind(stmt)
+
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+
+            let recordedAt: String = {
+                guard let cStr = sqlite3_column_text(stmt, 0) else { return "" }
+                return String(cString: cStr)
+            }()
+            if recordedAt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+
+            let w  = colDoubleOrNil(stmt, 1)
+            let h  = colDoubleOrNil(stmt, 2)
+            let hc = colDoubleOrNil(stmt, 3)
+
+            // If everything is nil, don't bother.
+            if w == nil && h == nil && hc == nil { return nil }
+
+            return ManualGrowthSnapshot(
+                recordedAtRaw: recordedAt,
+                weightKg: w,
+                heightCm: h,
+                headCircCm: hc
+            )
+        }
+
+        // 1) Prefer the closest measurement within ±3 days of the visit date.
+        let closestSQL = """
+        SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
+        FROM manual_growth
+        WHERE patient_id = ?
+          AND abs(julianday(date(recorded_at)) - julianday(date(?))) <= ?
+        ORDER BY abs(julianday(date(recorded_at)) - julianday(date(?))) ASC,
+                 datetime(recorded_at) DESC
+        LIMIT 1;
+        """
+
+        if let snap = runQuery(closestSQL) { stmt in
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+            _ = visitISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+            sqlite3_bind_int(stmt, 3, windowDays)
+            _ = visitISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
+        } {
+            return snap
+        }
+
+        // 2) Fallback: most recent record on or before the visit date.
+        let fallbackSQL = """
+        SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
+        FROM manual_growth
+        WHERE patient_id = ?
+          AND date(recorded_at) <= date(?)
+        ORDER BY datetime(recorded_at) DESC
+        LIMIT 1;
+        """
+
+        return runQuery(fallbackSQL) { stmt in
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+            _ = visitISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+        }
+    }
+
+    /// Formats a compact, AI-friendly line that we append into the well-visit AI problem listing.
+    private func manualGrowthLineForAI(_ snap: ManualGrowthSnapshot) -> String {
+        func fmt(_ v: Double?, decimals: Int = 1) -> String {
+            guard let v else { return "—" }
+            return String(format: "%0.*f", decimals, v)
+        }
+
+        // Keep this intentionally plain (English) since it's AI-context only.
+        return "Growth near visit (manual_growth @ \(snap.recordedAtRaw)): weight \(fmt(snap.weightKg, decimals: 2)) kg; length \(fmt(snap.heightCm, decimals: 1)) cm; HC \(fmt(snap.headCircCm, decimals: 1)) cm"
+    }
+
+    /// Fetch patient's DOB from the bundle DB (best effort) so we can compute age at the visit.
+    private func fetchPatientDOBDate(dbURL: URL, patientID: Int) -> Date? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        func runDOBQuery(_ column: String) -> String? {
+            let sql = "SELECT \(column) FROM patients WHERE id = ? LIMIT 1;"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+                return nil
+            }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            guard let cStr = sqlite3_column_text(stmt, 0) else { return nil }
+            return String(cString: cStr)
+        }
+
+        // Try common DOB column names.
+        let raw = runDOBQuery("dob") ?? runDOBQuery("date_of_birth")
+        let t = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+
+        // Prefer date-only parsing (YYYY-MM-DD). If the DB stores a datetime, take the first 10 chars.
+        let prefix10 = String(t.prefix(10))
+        if let d = Self.isoDateOnly.date(from: prefix10) {
+            return d
+        }
+
+        // Fallback: attempt ISO8601 parsing.
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = iso.date(from: t) { return d }
+        iso.formatOptions = [.withInternetDateTime]
+        if let d = iso.date(from: t) { return d }
+
+        return nil
+    }
+
+    /// Compute age in days from DOB to the current `visitDate` (best effort).
+    private func computeAgeDaysForVisit(patientID: Int) -> Int? {
+        guard let dbURL = appState.currentDBURL,
+              let dob = fetchPatientDOBDate(dbURL: dbURL, patientID: patientID) else {
+            return nil
+        }
+        let days = Calendar.current.dateComponents([.day], from: dob, to: visitDate).day
+        guard let d = days else { return nil }
+        return max(0, d)
+    }
+
     /// Build the AI context for the current well visit, mirroring the sick-episode flow.
     /// For now we only allow AI when editing an existing saved visit.
     private func buildWellVisitAIContext() -> AppState.WellVisitAIContext? {
@@ -3685,16 +3904,28 @@ struct WellVisitForm: View {
 
         let trimmedProblems = problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Add contemporaneous growth values (if available) so AI can interpret the visit.
+        var problemsForAI = trimmedProblems
+        if let dbURL = appState.currentDBURL,
+           let snap = fetchManualGrowthSnapshot(dbURL: dbURL, patientID: patientID) {
+            let growthLine = manualGrowthLineForAI(snap)
+            problemsForAI = problemsForAI.isEmpty
+                ? growthLine
+                : (problemsForAI + "\n" + growthLine)
+        }
+
         let perinatalSummary = cleaned(appState.perinatalSummaryForSelectedPatient())
         let pmhSummary       = cleaned(appState.pmhSummaryForSelectedPatient())
         let vaccSummary      = cleaned(appState.vaccinationSummaryForSelectedPatient())
+
+        let ageDays = computeAgeDaysForVisit(patientID: patientID)
 
         return AppState.WellVisitAIContext(
             patientID: patientID,
             wellVisitID: visitID,
             visitType: visitTypeID,
-            ageDays: nil,  // can be wired to well_visits.age_days later
-            problemListing: trimmedProblems,
+            ageDays: ageDays,
+            problemListing: problemsForAI,
             perinatalSummary: perinatalSummary,
             pmhSummary: pmhSummary,
             vaccinationStatus: vaccSummary

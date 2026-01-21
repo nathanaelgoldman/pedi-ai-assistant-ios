@@ -8,11 +8,34 @@
 
 
 
+
 import SwiftUI
 import OSLog
 import AppKit
 import UniformTypeIdentifiers
 import CryptoKit
+
+// MARK: - Light-blue section card styling (Variant A: content cards, not header action groups)
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Apply the standard light-blue “section card” look (used for content blocks inside views).
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
+    }
+}
 
 
 // Humanize visit categories (well-visit keys + a fallback)
@@ -525,9 +548,14 @@ struct PatientDetailView: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.secondary.opacity(0.08))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
     }
 
     @ViewBuilder
@@ -666,8 +694,7 @@ struct PatientDetailView: View {
                     }
                 }
                 .padding(12)
-                .background(Color.secondary.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .lightBlueSectionCardStyle()
             }
         }
     }
@@ -1079,8 +1106,7 @@ struct PatientDetailView: View {
             }
         }
         .padding(8)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .lightBlueSectionCardStyle()
     }
 }
 
@@ -1159,8 +1185,7 @@ private struct SummarySection: View {
                 }
             }
             .padding(12)
-            .background(Color.secondary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .lightBlueSectionCardStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -1183,8 +1208,7 @@ private struct MilestonesSection: View {
                 BubbleText(text: summary)
             }
             .padding(12)
-            .background(Color.secondary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .lightBlueSectionCardStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

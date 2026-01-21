@@ -6,15 +6,15 @@
 //
 
 import Foundation
-// Logging is centralized via AppLog
 
-/// Concrete implementation that calls Gemini's generateContent API.
+/// Concrete implementation that calls Gemini's `generateContent` API.
 /// This type is intentionally tiny and stateless; all configuration is injected.
 final class GeminiProvider: EpisodeAIProvider {
 
     private let apiKey: String
     private let model: String
     private let apiBaseURL: URL
+
     // Feature-specific logger (AppLog convention)
     private let log = AppLog.feature("ai.gemini")
 
@@ -22,9 +22,7 @@ final class GeminiProvider: EpisodeAIProvider {
     /// Localized string helper (fileprivate to avoid cross-file symbol collisions).
     fileprivate static func tr(_ key: String, _ args: CVarArg...) -> String {
         let format = NSLocalizedString(key, comment: "")
-        if args.isEmpty {
-            return format
-        }
+        if args.isEmpty { return format }
         return String(format: format, locale: Locale.current, arguments: args)
     }
 
@@ -52,7 +50,8 @@ final class GeminiProvider: EpisodeAIProvider {
         context: AppState.EpisodeAIContext,
         prompt: String
     ) async throws -> AppState.EpisodeAIResult {
-        // Encode the model into the URL path safely.
+
+        // Encode model into the URL path safely.
         let encodedModel = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
         let basePathURL = apiBaseURL.appendingPathComponent("models/\(encodedModel):generateContent")
 
@@ -83,13 +82,12 @@ final class GeminiProvider: EpisodeAIProvider {
                     ]
                 )
             ],
-            generationConfig: .init(
-                temperature: temperature
-            )
+            generationConfig: .init(temperature: temperature)
         )
 
         request.httpBody = try JSONEncoder().encode(body)
 
+        // Don’t log the key. Log only scheme/host/path.
         let safeURLForLog = "\(url.scheme ?? "")://\(url.host ?? "")\(url.path)"
         log.info("GeminiProvider: calling \(safeURLForLog, privacy: .public) with model \(self.model, privacy: .public)")
 
@@ -98,6 +96,7 @@ final class GeminiProvider: EpisodeAIProvider {
         guard let http = response as? HTTPURLResponse else {
             throw GeminiProviderError.invalidResponse
         }
+
         guard (200..<300).contains(http.statusCode) else {
             let snippet = String(data: data, encoding: .utf8) ?? ""
             let snippetForLog = String(snippet.prefix(512))
@@ -110,8 +109,8 @@ final class GeminiProvider: EpisodeAIProvider {
         // Extract first candidate's first text part if available.
         let content: String? = decoded.candidates?
             .compactMap { candidate -> String? in
-                guard let parts = candidate.content.parts.first,
-                      let text = parts.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                guard let firstPart = candidate.content.parts.first,
+                      let text = firstPart.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !text.isEmpty else {
                     return nil
                 }
@@ -188,6 +187,8 @@ private struct GeminiGenerateContentResponse: Decodable {
 
     let candidates: [Candidate]?
 }
+
+// MARK: - Errors
 
 enum GeminiProviderError: Error, LocalizedError {
     case invalidURL

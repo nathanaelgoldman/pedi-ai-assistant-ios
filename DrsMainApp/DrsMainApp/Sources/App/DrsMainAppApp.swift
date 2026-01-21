@@ -92,15 +92,49 @@ struct DrsMainAppApp: App {
                             return nil
                         }
 
-                        // Determine model: use clinician-specific value if present, otherwise fall back to a reasonable default.
-                        let model: String = {
+                        // Determine model: use clinician-specific value if present, otherwise fall back to a reasonable default
+                        // for the chosen provider.
+                        let modelRaw: String = {
                             if let raw = clinician.aiModel?.trimmingCharacters(in: .whitespacesAndNewlines),
                                !raw.isEmpty {
                                 return raw
                             }
-                            // Default: you can change this to any supported model string.
-                            return "gpt-5.1-mini"
+                            switch providerID {
+                            case "gemini":
+                                // Known-good baseModelId examples are published in the Gemini Models API docs.
+                                // (We can always list supported models via GET /v1beta/models?key=...)
+                                return "gemini-2.0-flash"
+                            case "anthropic":
+                                return "claude-3-5-sonnet-latest"
+                            default:
+                                return "gpt-5.1-mini"
+                            }
                         }()
+
+                        // Normalize model strings that clinicians might paste (e.g., "models/..." or accidental whitespace).
+                        func normalizeModel(providerID: String, raw: String) -> String {
+                            var m = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                            // Common paste: "models/gemini-..." → strip leading "models/".
+                            if m.lowercased().hasPrefix("models/") {
+                                m = String(m.dropFirst("models/".count))
+                            }
+
+                            // Gemini API v1beta requires a model that exists and supports generateContent.
+                            // If the clinician entered a non-existent alias (e.g., "gemini-3-flash"),
+                            // fall back to a known valid baseModelId so the app keeps working.
+                            if providerID == "gemini" {
+                                let lower = m.lowercased()
+                                if lower == "gemini-3-flash" || lower.hasPrefix("gemini-3-") {
+                                    AppLog.feature("ai.gemini").warning("Unknown Gemini model \(m, privacy: .public); falling back to gemini-2.0-flash")
+                                    m = "gemini-2.0-flash"
+                                }
+                            }
+
+                            return m
+                        }
+
+                        let model = normalizeModel(providerID: providerID, raw: modelRaw)
 
                         switch providerID {
                         case "openai", "":
@@ -121,14 +155,79 @@ struct DrsMainAppApp: App {
                             )
 
                         case "anthropic":
-                            // Placeholder: in a future phase, this will return an AnthropicProvider.
-                            // For now, fall back to local stub behaviour.
-                            return nil
+                            // Optional custom endpoint; defaults to the public Anthropic API.
+                            let baseURL: URL = {
+                                if let endpointRaw = clinician.aiEndpoint?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   !endpointRaw.isEmpty,
+                                   let url = URL(string: endpointRaw) {
+                                    return url
+                                }
+                                return URL(string: "https://api.anthropic.com/v1")!
+                            }()
+
+                            return AnthropicProvider(
+                                apiKey: apiKeyRaw,
+                                model: model,
+                                apiBaseURL: baseURL
+                            )
 
                         case "gemini":
-                            // Placeholder: in a future phase, this will return a GeminiProvider.
-                            // For now, fall back to local stub behaviour.
-                            return nil
+                            // Optional custom endpoint; defaults to the public Gemini Generative Language API.
+                            // IMPORTANT: clinicians may paste the *full* generateContent URL (including `/models/...:generateContent`).
+                            // GeminiProvider expects a *base* like `.../v1beta`, so we normalise any supplied endpoint.
+                            func normaliseGeminiBaseURL(_ raw: String?) -> URL {
+                                // Default base
+                                let fallback = URL(string: "https://generativelanguage.googleapis.com/v1beta")!
+                                guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                                    return fallback
+                                }
+                                guard let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                                    return fallback
+                                }
+                                guard var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                                    return fallback
+                                }
+
+                                // Drop query/fragment for safety.
+                                comps.query = nil
+                                comps.fragment = nil
+
+                                // Trim any accidental full endpoint paths like `/models/<model>:generateContent`.
+                                var path = comps.path
+                                if let r = path.range(of: "/models/") {
+                                    path = String(path[..<r.lowerBound])
+                                }
+
+                                // If user pasted something even deeper, also trim after the API version segment.
+                                // Keep `/v1beta` or `/v1` if present; otherwise keep the current trimmed path.
+                                if let r = path.range(of: "/v1beta") {
+                                    path = String(path[..<r.upperBound])
+                                } else if let r = path.range(of: "/v1") {
+                                    path = String(path[..<r.upperBound])
+                                }
+
+                                // Ensure we have *some* version path.
+                                if path.isEmpty {
+                                    path = "/v1beta"
+                                }
+
+                                // Remove trailing slash to avoid double slashes when appending.
+                                while path.hasSuffix("/") {
+                                    path.removeLast()
+                                }
+
+                                comps.path = path
+
+                                return comps.url ?? fallback
+                            }
+
+                            let baseURL: URL = normaliseGeminiBaseURL(clinician.aiEndpoint)
+
+                            return GeminiProvider(
+                                apiKey: apiKeyRaw,
+                                model: model,
+                                apiBaseURL: baseURL
+                            )
 
                         default:
                             // Unknown provider string → be defensive and fall back to local stub.
@@ -222,6 +321,15 @@ private struct SignInSheet: View {
     @State private var lastName: String = ""
     @State private var password: String = ""
     @State private var loginError: String? = nil
+
+    // Match the light blue "card" styling used elsewhere in the app.
+    private var signInCardFill: Color {
+        #if os(macOS)
+        return Color(nsColor: NSColor(calibratedRed: 0.88, green: 0.94, blue: 1.00, alpha: 1.0))
+        #else
+        return Color.accentColor.opacity(0.08)
+        #endif
+    }
 
     var body: some View {
         Group {
@@ -345,13 +453,14 @@ private struct SignInSheet: View {
                 .frame(maxWidth: 560)
                 .padding(24)
                 .background(
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(Color(.windowBackgroundColor).opacity(0.9))
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(signInCardFill)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.secondary.opacity(0.15))
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
                 )
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
 
                 Spacer(minLength: 0)
             }
@@ -483,6 +592,44 @@ private struct SignInSheet: View {
                     .foregroundColor(.green)
             }
         }
+    }
+
+}
+
+// MARK: - Section styling helpers
+
+private extension View {
+    /// Applies a soft card-like tinted background + border, used for section blocks (GroupBox wrappers).
+    /// We intentionally tint using the app accent color so the blocks are visually distinct from the window.
+    func sectionCardBackground(tint: Color = .accentColor) -> some View {
+        self
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(sectionCardFill(tint: tint))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(sectionCardStroke(tint: tint), lineWidth: 1)
+            )
+            // Subtle lift so the tint reads even on very light backgrounds.
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+    }
+
+    private func sectionCardFill(tint: Color) -> Color {
+        #if os(macOS)
+        // macOS GroupBox tends to look “flat” on windowBackgroundColor.
+        // A tiny accent tint makes each section clearly a separate block.
+        return tint.opacity(0.07)
+        #else
+        // iOS: slightly stronger tint so it still reads over system backgrounds.
+        return tint.opacity(0.10)
+        #endif
+    }
+
+    private func sectionCardStroke(tint: Color) -> Color {
+        // Use a neutral stroke; accent would be too loud.
+        Color.secondary.opacity(0.18)
     }
 }
 
@@ -642,6 +789,7 @@ private struct ClinicianProfileForm: View {
                             } label: {
                                 Text("app.clinician_profile.section.identity")
                             }
+                            .sectionCardBackground()
 
                             GroupBox {
                                 VStack(alignment: .leading, spacing: 10) {
@@ -654,6 +802,7 @@ private struct ClinicianProfileForm: View {
                             } label: {
                                 Text("app.clinician_profile.section.contact")
                             }
+                            .sectionCardBackground()
 
                             GroupBox {
                                 VStack(alignment: .leading, spacing: 10) {
@@ -664,6 +813,7 @@ private struct ClinicianProfileForm: View {
                             } label: {
                                 Text("app.clinician_profile.section.professional")
                             }
+                            .sectionCardBackground()
 
                             GroupBox {
                                 VStack(alignment: .leading, spacing: 10) {
@@ -680,6 +830,7 @@ private struct ClinicianProfileForm: View {
                             } label: {
                                 Text("app.clinician_profile.section.social")
                             }
+                            .sectionCardBackground()
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -708,6 +859,7 @@ private struct ClinicianProfileForm: View {
                             } label: {
                                 Text("app.clinician_profile.section.ai_assistant")
                             }
+                            .sectionCardBackground()
 
                             GroupBox {
                                 VStack(alignment: .leading, spacing: 12) {
@@ -767,6 +919,7 @@ private struct ClinicianProfileForm: View {
                             } label: {
                                 Text("app.clinician_profile.section.ai_prompts_rules")
                             }
+                            .sectionCardBackground()
 
                             GroupBox {
                                 VStack(alignment: .leading, spacing: 10) {
@@ -804,6 +957,7 @@ private struct ClinicianProfileForm: View {
                             } label: {
                                 Text("app.clinician_profile.section.app_lock")
                             }
+                            .sectionCardBackground()
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }

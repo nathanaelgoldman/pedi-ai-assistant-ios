@@ -62,14 +62,7 @@ struct PmhForm: View {
                         Spacer(minLength: 8)
                     }
                     .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.background)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(.quaternary)
-                            )
-                    )
+                    .lightBlueSectionCardStyle()
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .top)
                 }
@@ -135,5 +128,27 @@ struct PmhForm: View {
             app.loadPMHForSelectedPatient()
             dismiss()
         }
+    }
+}
+
+// MARK: - Light-blue section card styling (matches other forms)
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Apply the standard light-blue “section card” look (used for blocks inside forms).
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
     }
 }

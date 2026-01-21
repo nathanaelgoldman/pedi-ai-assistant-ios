@@ -5,7 +5,30 @@
 //  Created by yunastic on 11/1/25.
 //
 
+
 import SwiftUI
+
+// MARK: - Light-blue section card styling (matches PerinatalHistoryForm section blocks)
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Apply the standard light-blue “section card” look.
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
+    }
+}
 
 struct VitalsTableView: View {
     @EnvironmentObject var appState: AppState
@@ -177,14 +200,7 @@ struct VitalsTableView: View {
                     }
                 }
                 .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(.background)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-                )
+                .lightBlueSectionCardStyle()
             }
             // Match the “self-contained sheet” style used elsewhere
             .padding(20)

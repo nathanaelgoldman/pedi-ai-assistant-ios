@@ -4,7 +4,43 @@
 //
 //  Created by yunastic on 11/13/25.
 //
+
 import SwiftUI
+
+// MARK: - Shared UI styles (used across forms)
+
+/// Remove the default GroupBox chrome so we can apply our own “card” background.
+fileprivate struct PlainGroupBoxStyle: GroupBoxStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            configuration.label
+                .font(.headline)
+            configuration.content
+        }
+    }
+}
+
+/// Light blue rounded “section card” (matches SickEpisodeForm / WellVisitForm styling).
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Apply the standard light-blue “section card” look (used for blocks inside forms).
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
+    }
+}
 
 /// Lightweight editor for the perinatal_history table, wired to AppState.
 /// Reads current values from `app.perinatalHistory`, lets you edit, then saves via
@@ -109,8 +145,7 @@ struct PerinatalHistoryForm: View {
         String(localized: "perinatal.choice.family_vax.none"),
         String(localized: "perinatal.choice.family_vax.dtap"),
         String(localized: "perinatal.choice.family_vax.flu"),
-        String(localized: "perinatal.choice.family_vax.covid"),
-        String(localized: "perinatal.choice.family_vax.rsv")
+        String(localized: "perinatal.choice.family_vax.covid")
     ]
 
     static let CH_HEART: [String] = [
@@ -142,6 +177,7 @@ struct PerinatalHistoryForm: View {
     // Working state for multi-select fields (CSV-backed)
     @State private var pregnancyRiskSet: Set<String> = []
     @State private var infectionRiskSet: Set<String> = []
+    @State private var resuscitationSet: Set<String> = []   // CSV-backed; "None" is mutually exclusive
     @State private var maternityStayEventsSet: Set<String> = []
     @State private var maternityVaccinationsSet: Set<String> = []
     @State private var motherVaccinationsSet: Set<String> = []
@@ -267,6 +303,7 @@ struct PerinatalHistoryForm: View {
         birthMode = h?.birthMode ?? ""
         birthTermWeeks = h?.birthTermWeeks.map(String.init) ?? ""
         resuscitation = h?.resuscitation ?? ""
+        resuscitationSet = csvToSet(resuscitation)
         nicuStay = h?.nicuStay ?? false
         infectionRisk = h?.infectionRisk ?? ""
         birthWeightG = h?.birthWeightG.map(String.init) ?? ""
@@ -302,6 +339,7 @@ struct PerinatalHistoryForm: View {
         // Keep the display strings consistent with sets
         pregnancyRisk = setToCSV(pregnancyRiskSet)
         infectionRisk = setToCSV(infectionRiskSet)
+        resuscitation = setToCSV(resuscitationSet)
         maternityStayEvents = setToCSV(maternityStayEventsSet)
         maternityVaccinations = setToCSV(maternityVaccinationsSet)
         motherVaccinations = setToCSV(motherVaccinationsSet)
@@ -324,6 +362,7 @@ struct PerinatalHistoryForm: View {
         // Mirror menu selections into CSV strings for a consistent UI
         pregnancyRisk = setToCSV(pregnancyRiskSet)
         infectionRisk = setToCSV(infectionRiskSet)
+        resuscitation = setToCSV(resuscitationSet)
         maternityStayEvents = setToCSV(maternityStayEventsSet)
         maternityVaccinations = setToCSV(maternityVaccinationsSet)
         motherVaccinations = setToCSV(motherVaccinationsSet)
@@ -349,7 +388,7 @@ struct PerinatalHistoryForm: View {
         h.pregnancyRisk = emptyToNil(setToCSV(pregnancyRiskSet))
         h.birthMode = emptyToNil(birthMode)
         h.birthTermWeeks = Int(birthTermWeeks)
-        h.resuscitation = emptyToNil(resuscitation)
+        h.resuscitation = emptyToNil(setToCSV(resuscitationSet))
         h.nicuStay = nicuStay
         h.infectionRisk = emptyToNil(setToCSV(infectionRiskSet))
         h.birthWeightG = Int(birthWeightG)
@@ -518,6 +557,158 @@ struct PerinatalHistoryForm: View {
         }
     }
 
+    private func normalizeResuscitationSelection(old: Set<String>, new: Set<String>) -> Set<String> {
+        let allowed = Set(Self.CH_RESUSC)
+        var s = new.intersection(allowed)
+        let none = Self.CH_RESUSC.first ?? ""
+        guard !none.isEmpty else { return s }
+
+        // Mutual exclusivity rule:
+        // - If "None" was just selected, it clears everything else.
+        // - If some other option was selected while "None" was already on, drop "None".
+        if s.contains(none), s.count > 1 {
+            let noneJustAdded = !old.contains(none) && s.contains(none)
+            if noneJustAdded {
+                s = [none]
+            } else {
+                s.remove(none)
+            }
+        }
+        return s
+    }
+
+    private func normalizeNoneExclusiveSelection(old: Set<String>, new: Set<String>, noneLabel: String) -> Set<String> {
+        var s = new
+        guard !noneLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return s }
+
+        // Mutual exclusivity rule:
+        // - If `noneLabel` was just selected, it clears everything else.
+        // - If some other option was selected while `noneLabel` was already on, drop `noneLabel`.
+        if s.contains(noneLabel), s.count > 1 {
+            let noneJustAdded = !old.contains(noneLabel)
+            if noneJustAdded {
+                s = [noneLabel]
+            } else {
+                s.remove(noneLabel)
+            }
+        }
+        return s
+    }
+
+    private func normalizeNoneExclusiveSelection(old: Set<String>, new: Set<String>, noneLabelFrom options: [String]) -> Set<String> {
+        let none = options.first ?? ""
+        return normalizeNoneExclusiveSelection(old: old, new: new, noneLabel: none)
+    }
+
+    private var resuscitationChipsBinding: Binding<Set<String>> {
+        Binding(
+            get: { resuscitationSet },
+            set: { newSet in
+                let old = resuscitationSet
+                resuscitationSet = normalizeResuscitationSelection(old: old, new: newSet)
+                // Keep the legacy CSV string in sync for dirty-check consistency
+                resuscitation = setToCSV(resuscitationSet)
+            }
+        )
+    }
+
+    private var pregnancyChipsBinding: Binding<Set<String>> {
+        Binding(
+            get: { pregnancyRiskSet },
+            set: { newSet in
+                let old = pregnancyRiskSet
+                // In this list, the first option is "Normal" (acts like "None")
+                pregnancyRiskSet = normalizeNoneExclusiveSelection(old: old, new: newSet, noneLabelFrom: Self.CH_PREGNANCY)
+                pregnancyRisk = setToCSV(pregnancyRiskSet)
+            }
+        )
+    }
+
+    private var infectionRiskChipsBinding: Binding<Set<String>> {
+        Binding(
+            get: { infectionRiskSet },
+            set: { newSet in
+                infectionRiskSet = newSet.intersection(Set(Self.CH_INF_RISK))
+                infectionRisk = setToCSV(infectionRiskSet)
+            }
+        )
+    }
+
+    private var maternityEventsChipsBinding: Binding<Set<String>> {
+        Binding(
+            get: { maternityStayEventsSet },
+            set: { newSet in
+                let old = maternityStayEventsSet
+                maternityStayEventsSet = normalizeNoneExclusiveSelection(old: old, new: newSet.intersection(Set(Self.CH_MAT_STAY_EVENTS)), noneLabelFrom: Self.CH_MAT_STAY_EVENTS)
+                maternityStayEvents = setToCSV(maternityStayEventsSet)
+            }
+        )
+    }
+
+    private var maternityVaxChipsBinding: Binding<Set<String>> {
+        Binding(
+            get: { maternityVaccinationsSet },
+            set: { newSet in
+                maternityVaccinationsSet = newSet.intersection(Set(Self.CH_VACCINATIONS_MAT))
+                maternityVaccinations = setToCSV(maternityVaccinationsSet)
+            }
+        )
+    }
+
+    private var motherVaxChipsBinding: Binding<Set<String>> {
+        Binding(
+            get: { motherVaccinationsSet },
+            set: { newSet in
+                let old = motherVaccinationsSet
+                motherVaccinationsSet = normalizeNoneExclusiveSelection(old: old, new: newSet.intersection(Set(Self.CH_MOTHER_VAX)), noneLabelFrom: Self.CH_MOTHER_VAX)
+                motherVaccinations = setToCSV(motherVaccinationsSet)
+            }
+        )
+    }
+
+    private var familyVaxChipsBinding: Binding<Set<String>> {
+        Binding(
+            get: { familyVaccinationsSet },
+            set: { newSet in
+                let old = familyVaccinationsSet
+                familyVaccinationsSet = normalizeNoneExclusiveSelection(old: old, new: newSet.intersection(Set(Self.CH_FAMILY_VAX)), noneLabelFrom: Self.CH_FAMILY_VAX)
+                familyVaccinations = setToCSV(familyVaccinationsSet)
+            }
+        )
+    }
+
+    private func multiSelectChips(title: String, options: [String], selection: Binding<Set<String>>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .foregroundStyle(.secondary)
+            WrappingChips(strings: options, selection: selection)
+        }
+    }
+
+    private func singleSelectChips(title: String, options: [String], selection: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .foregroundStyle(.secondary)
+
+            // Render as chips: selecting a chip sets the bound string.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 8, alignment: .leading)], alignment: .leading, spacing: 8) {
+                ForEach(options, id: \.self) { opt in
+                    Button {
+                        selection.wrappedValue = opt
+                    } label: {
+                        Text(opt)
+                            .font(.caption)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(WrappingChips.ChipButtonStyle(isSelected: selection.wrappedValue == opt))
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func unitTextField(_ label: String, text: Binding<String>, unit: String) -> some View {
         LabeledContent {
@@ -534,25 +725,81 @@ struct PerinatalHistoryForm: View {
         }
     }
 
+
+    // MARK: - Chip UI
+
+    /// Simple multi-select chip grid that wraps naturally.
+    /// Used by PerinatalHistoryForm for additive selections.
+    fileprivate struct WrappingChips: View {
+        let strings: [String]
+        @Binding var selection: Set<String>
+
+        // Slightly conservative min width so chips wrap nicely across platforms.
+        private let columns: [GridItem] = [
+            GridItem(.adaptive(minimum: 140), spacing: 8, alignment: .leading)
+        ]
+
+        var body: some View {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach(strings, id: \.self) { s in
+                    Button {
+                        if selection.contains(s) {
+                            selection.remove(s)
+                        } else {
+                            selection.insert(s)
+                        }
+                    } label: {
+                        Text(s)
+                            .font(.caption)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(ChipButtonStyle(isSelected: selection.contains(s)))
+                    .controlSize(.small)
+                }
+            }
+        }
+
+        fileprivate struct ChipButtonStyle: ButtonStyle {
+            let isSelected: Bool
+
+            func makeBody(configuration: Configuration) -> some View {
+                configuration.label
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(isSelected ? Color.accentColor.opacity(configuration.isPressed ? 0.35 : 0.25) : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.secondary.opacity(isSelected ? 0.35 : 0.25), lineWidth: 1)
+                    )
+                    .foregroundStyle(isSelected ? Color.primary : Color.primary)
+            }
+        }
+    }
+
     // MARK: - Columns
 
     @ViewBuilder
     private var columnLeft: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                // Multi-select pregnancy issues
-                multiSelectMenu(
+                // Multi-select pregnancy issues (chips; "Normal" is mutually exclusive)
+                multiSelectChips(
                     title: String(localized: "perinatal.field.pregnancy_issues"),
                     options: Self.CH_PREGNANCY,
-                    selection: $pregnancyRiskSet
+                    selection: pregnancyChipsBinding
                 )
 
-                // Single-choice pickers
-                Picker(String(localized: "perinatal.field.birth_mode"), selection: $birthMode) {
-                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                    ForEach(Self.CH_BIRTH_MODE, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.menu)
+                // Delivery type (single choice)
+                singleSelectChips(
+                    title: String(localized: "perinatal.field.birth_mode"),
+                    options: Self.CH_BIRTH_MODE,
+                    selection: $birthMode
+                )
 
                 let termLU = labelAndUnitFromFormatKey("appstate.profile.perinatal.term_weeks_format")
                 unitTextField(termLU.label.isEmpty ? String(localized: "perinatal.field.gestational_age_weeks") : termLU.label,
@@ -562,25 +809,28 @@ struct PerinatalHistoryForm: View {
                     .keyboardType(.numberPad)
 #endif
 
-                Picker(String(localized: "perinatal.field.resuscitation_at_birth"), selection: $resuscitation) {
-                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                    ForEach(Self.CH_RESUSC, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.menu)
+                multiSelectChips(
+                    title: String(localized: "perinatal.field.resuscitation_at_birth"),
+                    options: Self.CH_RESUSC,
+                    selection: resuscitationChipsBinding
+                )
 
                 Toggle(String(localized: "perinatal.field.nicu_stay"), isOn: $nicuStay)
 
-                // Infection risk multi-select
-                multiSelectMenu(
+                // Infection risk factors (chips)
+                multiSelectChips(
                     title: String(localized: "perinatal.field.infection_risk_factors"),
                     options: Self.CH_INF_RISK,
-                    selection: $infectionRiskSet
+                    selection: infectionRiskChipsBinding
                 )
             }
             .padding(.top, 2)
         } label: {
             Text(String(localized: "perinatal.section.birth_pregnancy"))
         }
+        .groupBoxStyle(PlainGroupBoxStyle())
+        .padding(12)
+        .lightBlueSectionCardStyle()
 
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
@@ -666,31 +916,35 @@ struct PerinatalHistoryForm: View {
         } label: {
             Text(String(localized: "perinatal.section.measurements_birth"))
         }
+        .groupBoxStyle(PlainGroupBoxStyle())
+        .padding(12)
+        .lightBlueSectionCardStyle()
     }
 
     @ViewBuilder
     private var columnRight: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                multiSelectMenu(
+                multiSelectChips(
                     title: String(localized: "perinatal.field.maternity_events"),
                     options: Self.CH_MAT_STAY_EVENTS,
-                    selection: $maternityStayEventsSet
+                    selection: maternityEventsChipsBinding
                 )
 
-                multiSelectMenu(
+                multiSelectChips(
                     title: String(localized: "perinatal.field.vaccinations_maternity"),
                     options: Self.CH_VACCINATIONS_MAT,
-                    selection: $maternityVaccinationsSet
+                    selection: maternityVaxChipsBinding
                 )
 
                 Toggle(String(localized: "perinatal.field.vitamin_k_given"), isOn: $vitaminK)
 
-                Picker(String(localized: "perinatal.field.feeding_maternity"), selection: $feedingInMaternity) {
-                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                    ForEach(Self.CH_FEEDING, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.menu)
+                // Feeding type (single choice)
+                singleSelectChips(
+                    title: String(localized: "perinatal.field.feeding_maternity"),
+                    options: Self.CH_FEEDING,
+                    selection: $feedingInMaternity
+                )
 
                 Toggle(String(localized: "perinatal.field.passed_meconium_24h"), isOn: $passedMeconium24h)
                 Toggle(String(localized: "perinatal.field.urination_24h"), isOn: $urination24h)
@@ -699,44 +953,50 @@ struct PerinatalHistoryForm: View {
         } label: {
             Text(String(localized: "perinatal.section.maternity_stay"))
         }
+        .groupBoxStyle(PlainGroupBoxStyle())
+        .padding(12)
+        .lightBlueSectionCardStyle()
 
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                Picker(String(localized: "perinatal.field.heart_screening"), selection: $heartScreening) {
-                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                    ForEach(Self.CH_HEART, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.menu)
+                singleSelectChips(
+                    title: String(localized: "perinatal.field.heart_screening"),
+                    options: Self.CH_HEART,
+                    selection: $heartScreening
+                )
 
-                Picker(String(localized: "perinatal.field.metabolic_screening"), selection: $metabolicScreening) {
-                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                    ForEach(Self.CH_METAB, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.menu)
+                singleSelectChips(
+                    title: String(localized: "perinatal.field.metabolic_screening"),
+                    options: Self.CH_METAB,
+                    selection: $metabolicScreening
+                )
 
-                Picker(String(localized: "perinatal.field.hearing_screening"), selection: $hearingScreening) {
-                    Text(String(localized: "generic.menu.select.placeholder")).tag("")
-                    ForEach(Self.CH_HEARING, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.menu)
+                singleSelectChips(
+                    title: String(localized: "perinatal.field.hearing_screening"),
+                    options: Self.CH_HEARING,
+                    selection: $hearingScreening
+                )
             }
             .padding(.top, 2)
         } label: {
             Text(String(localized: "perinatal.section.screenings"))
         }
+        .groupBoxStyle(PlainGroupBoxStyle())
+        .padding(12)
+        .lightBlueSectionCardStyle()
 
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                multiSelectMenu(
+                multiSelectChips(
                     title: String(localized: "perinatal.field.mother_vaccinations"),
                     options: Self.CH_MOTHER_VAX,
-                    selection: $motherVaccinationsSet
+                    selection: motherVaxChipsBinding
                 )
 
-                multiSelectMenu(
+                multiSelectChips(
                     title: String(localized: "perinatal.field.family_vaccinations"),
                     options: Self.CH_FAMILY_VAX,
-                    selection: $familyVaccinationsSet
+                    selection: familyVaxChipsBinding
                 )
 
                 LabeledContent {
@@ -769,6 +1029,9 @@ struct PerinatalHistoryForm: View {
         } label: {
             Text(String(localized: "perinatal.section.family_aftercare"))
         }
+        .groupBoxStyle(PlainGroupBoxStyle())
+        .padding(12)
+        .lightBlueSectionCardStyle()
     }
 
     // MARK: - Helpers
@@ -801,9 +1064,6 @@ struct PerinatalHistoryForm: View {
         if !Self.CH_BIRTH_MODE.contains(birthMode) {
             birthMode = Self.CH_BIRTH_MODE.first ?? ""
         }
-        if !Self.CH_RESUSC.contains(resuscitation) {
-            resuscitation = Self.CH_RESUSC.first ?? ""
-        }
         if !Self.CH_HEART.contains(heartScreening) {
             heartScreening = Self.CH_HEART.first ?? ""
         }
@@ -824,6 +1084,42 @@ struct PerinatalHistoryForm: View {
         maternityVaccinationsSet = maternityVaccinationsSet.intersection(Set(Self.CH_VACCINATIONS_MAT))
         motherVaccinationsSet = motherVaccinationsSet.intersection(Set(Self.CH_MOTHER_VAX))
         familyVaccinationsSet = familyVaccinationsSet.intersection(Set(Self.CH_FAMILY_VAX))
+
+        // Pregnancy "Normal" exclusivity
+        let pregNone = Self.CH_PREGNANCY.first ?? ""
+        if !pregNone.isEmpty, pregnancyRiskSet.contains(pregNone), pregnancyRiskSet.count > 1 {
+            pregnancyRiskSet.remove(pregNone)
+        }
+        pregnancyRisk = setToCSV(pregnancyRiskSet)
+
+        // Maternity events "None" exclusivity
+        let evNone = Self.CH_MAT_STAY_EVENTS.first ?? ""
+        if !evNone.isEmpty, maternityStayEventsSet.contains(evNone), maternityStayEventsSet.count > 1 {
+            maternityStayEventsSet.remove(evNone)
+        }
+        maternityStayEvents = setToCSV(maternityStayEventsSet)
+
+        // Mother/family vax "None" exclusivity
+        let mNone = Self.CH_MOTHER_VAX.first ?? ""
+        if !mNone.isEmpty, motherVaccinationsSet.contains(mNone), motherVaccinationsSet.count > 1 {
+            motherVaccinationsSet.remove(mNone)
+        }
+        motherVaccinations = setToCSV(motherVaccinationsSet)
+
+        let fNone = Self.CH_FAMILY_VAX.first ?? ""
+        if !fNone.isEmpty, familyVaccinationsSet.contains(fNone), familyVaccinationsSet.count > 1 {
+            familyVaccinationsSet.remove(fNone)
+        }
+        familyVaccinations = setToCSV(familyVaccinationsSet)
+
+        // Clamp resuscitation multi-select to allowed vocab and enforce "None" exclusivity
+        resuscitationSet = resuscitationSet.intersection(Set(Self.CH_RESUSC))
+        let none = Self.CH_RESUSC.first ?? ""
+        if !none.isEmpty, resuscitationSet.contains(none), resuscitationSet.count > 1 {
+            // When legacy data contains both, prefer the specific actions over "None"
+            resuscitationSet.remove(none)
+        }
+        resuscitation = setToCSV(resuscitationSet)
     }
 
     private func emptyToNil(_ s: String) -> String? {

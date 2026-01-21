@@ -2766,3 +2766,9 @@
 "well_visit_form.addenda.delete" = "Supprimer";
 
 "report.section.addenda" = "Addenda";
+
+/* FR */
+"well_visit_form.addenda.refresh" = "Actualiser";
+
+"docs.toolbar.save_copy" = "Enregistrer une copie…";
+"docs.error.export-failed" = "Échec de l’export : %@";

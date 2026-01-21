@@ -83,12 +83,12 @@ struct DocumentListView: View {
             }
             .padding(12)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(nsColor: .windowBackgroundColor))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.06))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
             )
             .padding(20)
             .task { loadFiles() }
@@ -103,6 +103,15 @@ struct DocumentListView: View {
                     if let url = selectedURL {
                         OpenInFinderButton(url: url)
                         ShareButton(url: url)
+                        Button {
+                            exportSelected(url)
+                        } label: {
+                            Label(
+                                NSLocalizedString("docs.toolbar.save_copy",
+                                                  comment: "Toolbar button to save a copy of the selected document to a user-chosen location"),
+                                systemImage: "square.and.arrow.down"
+                            )
+                        }
                         Button(role: .destructive) {
                             deleteSelected(url)
                         } label: {
@@ -176,6 +185,36 @@ struct DocumentListView: View {
         if let sel = selectedURL, !files.contains(sel) {
             selectedURL = nil
         }
+    }
+    private func exportSelected(_ url: URL) {
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = url.lastPathComponent
+
+        // Best-effort content type hint
+        if let t = UTType(filenameExtension: url.pathExtension.lowercased()) {
+            panel.allowedContentTypes = [t]
+        }
+
+        if panel.runModal() == .OK, let dest = panel.url {
+            do {
+                let fm = FileManager.default
+                if fm.fileExists(atPath: dest.path) {
+                    try fm.removeItem(at: dest)
+                }
+                try fm.copyItem(at: url, to: dest)
+            } catch {
+                errorMessage = String(
+                    format: NSLocalizedString(
+                        "docs.error.export-failed",
+                        comment: "Shown when exporting/saving a copy of a document fails; %@ is the underlying error message"
+                    ),
+                    error.localizedDescription
+                )
+            }
+        }
+        #endif
     }
 
     private func importFile() {

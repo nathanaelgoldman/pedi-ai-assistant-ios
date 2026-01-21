@@ -3386,7 +3386,7 @@ extension ReportBuilder {
                     userInfo: [NSLocalizedDescriptionKey: String(format: L(
                         "report.error.docx_archive_create_format",
                         comment: "DOCX export error: failed to create archive (format expects 1 path)"
-                    ), zipFile.path)]
+                    ), AppLog.fileRef(zipFile))]
                 )
             }
 
@@ -3404,7 +3404,7 @@ extension ReportBuilder {
                     userInfo: [NSLocalizedDescriptionKey: String(format: L(
                         "report.error.docx_package_enumerate_format",
                         comment: "DOCX export error: failed to enumerate package directory (format expects 1 path)"
-                    ), packageRoot.path)]
+                    ), AppLog.bundleRef(packageRoot))]
                 )
             }
 
@@ -3443,7 +3443,7 @@ extension ReportBuilder {
                         userInfo: [NSLocalizedDescriptionKey: String(format: L(
                             "report.error.docx_add_entry_format",
                             comment: "DOCX export error: failed to add an entry (format expects entry path, then docx path)"
-                        ), relPath, zipFile.path)]
+                        ), relPath, AppLog.fileRef(zipFile))]
                     )
                 }
             }
@@ -3468,7 +3468,7 @@ extension ReportBuilder {
                     userInfo: [NSLocalizedDescriptionKey: String(format: L(
                         "report.error.docx_zip_failed_format",
                         comment: "DOCX export error: failed to zip package (format expects 1 path)"
-                    ), packageRoot.path)]
+                    ), AppLog.bundleRef(packageRoot))]
                 )
             }
         }
@@ -4317,11 +4317,12 @@ extension ReportBuilder {
             images: images,
             destinationURL: outURL
         )
-        NSLog("[ReportExport] %@",
-              String(format: L(
-                "report.export.wrote_docx_format",
-                comment: "Export log: wrote DOCX file (format expects 1 path)"
-              ), outURL.lastPathComponent))
+        let docxToken = AppLog.token(outURL.lastPathComponent)
+        let wroteMsg = String(format: L(
+            "report.export.wrote_docx_format",
+            comment: "Export log: wrote DOCX file (format expects 1 path)"
+        ), docxToken)
+        AppLog.export.info("[ReportExport] \(wroteMsg, privacy: .public)")
         return outURL
     }
 
@@ -4559,7 +4560,9 @@ extension ReportBuilder {
             "report.export.rtf_shim_returned_docx_format",
             comment: "Export log: RTF shim returned DOCX instead (format expects 1 filename)"
         )
-        NSLog("[ReportExport] %@", String(format: fmt, outURL.lastPathComponent))
+        let docxToken = AppLog.token(outURL.lastPathComponent)
+        let msg = String(format: fmt, docxToken)
+        AppLog.export.info("[ReportExport] \(msg, privacy: .public)")
 
         return outURL
     }

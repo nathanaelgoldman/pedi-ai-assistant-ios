@@ -36,10 +36,54 @@ fileprivate struct SheetCardStyle: ViewModifier {
     }
 }
 
+// MARK: - Chip button style (Perinatal-like pill chips)
+fileprivate struct ChipButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        isSelected
+                        ? Color.accentColor.opacity(configuration.isPressed ? 0.25 : 0.18)
+                        : Color(nsColor: .textBackgroundColor)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.secondary.opacity(isSelected ? 0.28 : 0.22), lineWidth: 1)
+            )
+            .foregroundStyle(Color.primary)
+    }
+}
+
+// MARK: - Light-blue section card styling (matches PerinatalHistoryForm section blocks)
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
 fileprivate extension View {
     /// Apply the standard “card in a sheet” look.
     func sheetCardStyle() -> some View {
         self.modifier(SheetCardStyle())
+    }
+
+    /// Apply the standard light-blue “section card” look (used for blocks inside forms).
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
     }
 }
 
@@ -355,6 +399,8 @@ struct SickEpisodeForm: View {
                 }
             }
         }
+        .padding(12)
+        .lightBlueSectionCardStyle()
         .padding(.top, 8)
     }
 
@@ -381,6 +427,8 @@ struct SickEpisodeForm: View {
 
                 additionalPEInfoSection()
             }
+            .padding(12)
+            .lightBlueSectionCardStyle()
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
             // Column B (right)
@@ -404,6 +452,8 @@ struct SickEpisodeForm: View {
                 pickerRow(NSLocalizedString("sick_episode_form.pe.musculoskeletal.label", comment: "Label for musculoskeletal picker"), $musculoskeletal, mskChoices)
                 multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.lymph_nodes.label", comment: "Label for lymph nodes multiselect"), options: nodesOptionsMulti, selection: $lymphNodesSet)
             }
+            .padding(12)
+            .lightBlueSectionCardStyle()
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
@@ -436,6 +486,8 @@ struct SickEpisodeForm: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
             pickerRow(NSLocalizedString("sick_episode_form.plan.anticipatory_guidance.label", comment: "Label for anticipatory guidance picker"), $anticipatoryGuidance, guidanceChoices)
         }
+        .padding(12)
+        .lightBlueSectionCardStyle()
         .padding(.top, 8)
     }
 
@@ -681,7 +733,8 @@ struct SickEpisodeForm: View {
                 .padding(8)
             }
         }
-        .padding(.horizontal, 20)
+        .padding(12)
+        .lightBlueSectionCardStyle()
     }
 
     private var addendaSection: some View {
@@ -774,7 +827,8 @@ struct SickEpisodeForm: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(12)
+        .lightBlueSectionCardStyle()
     }
 
     private var doneRow: some View {
@@ -792,7 +846,6 @@ struct SickEpisodeForm: View {
         VStack(alignment: .leading, spacing: 16) {
             headerView
             vitalsSection
-            Divider()
             twoColumnSection
             planSection
             aiSection
@@ -2565,7 +2618,45 @@ private struct WrappingChips: View {
                     isOn: Binding(
                         get: { selection.contains(s) },
                         set: { on in
-                            if on { selection.insert(s) } else { selection.remove(s) }
+                            let noneValue = "None"
+                            let normalValue = "Normal"
+                            let hasNormal = strings.contains(normalValue)
+
+                            var set = selection
+
+                            if s == noneValue {
+                                // Tap "None" => clears others; allow clearing if it was the only one
+                                if on {
+                                    set = [noneValue]
+                                } else {
+                                    if set == [noneValue] { set.remove(noneValue) }
+                                }
+                            } else if s == normalValue {
+                                // "Normal" is an exclusive default where present
+                                if on {
+                                    set = [normalValue]
+                                } else {
+                                    // Keep Normal if it's the only value (default)
+                                    if set != [normalValue] {
+                                        set.remove(normalValue)
+                                        if set.isEmpty { set = [normalValue] }
+                                    }
+                                }
+                            } else {
+                                // Any other choice removes None + Normal
+                                if set.contains(noneValue) { set.remove(noneValue) }
+                                if set.contains(normalValue) { set.remove(normalValue) }
+
+                                if on {
+                                    set.insert(s)
+                                } else {
+                                    set.remove(s)
+                                    // If this group supports Normal, it becomes the default when empty
+                                    if set.isEmpty, hasNormal { set = [normalValue] }
+                                }
+                            }
+
+                            selection = set
                         }
                     )
                 ) {
@@ -2574,7 +2665,7 @@ private struct WrappingChips: View {
                         .truncationMode(.tail)
                 }
                 .toggleStyle(.button)
-                .buttonStyle(.bordered)
+                .buttonStyle(ChipButtonStyle(isSelected: selection.contains(s)))
             }
         }
     }

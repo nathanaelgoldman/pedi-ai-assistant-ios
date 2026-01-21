@@ -32,15 +32,19 @@ struct VaccinationStatusForm: View {
             }
 
             // Picker
-            Picker(NSLocalizedString("vax.field.status.label",
-                                     comment: "Vaccination status picker label"),
-                   selection: $status) {
-                ForEach(Self.choices, id: \.self) { choice in
-                    // Localized label, but tag stays as the original code
-                    Text(localizedStatusLabel(for: choice)).tag(choice)
+            VStack(alignment: .leading, spacing: 10) {
+                Picker(NSLocalizedString("vax.field.status.label",
+                                         comment: "Vaccination status picker label"),
+                       selection: $status) {
+                    ForEach(Self.choices, id: \.self) { choice in
+                        // Localized label, but tag stays as the original code
+                        Text(localizedStatusLabel(for: choice)).tag(choice)
+                    }
                 }
+                .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
+            .padding(12)
+            .lightBlueSectionCardStyle()
 
             Spacer(minLength: 8)
 
@@ -62,14 +66,7 @@ struct VaccinationStatusForm: View {
             }
         }
         .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.background)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
-        )
+        .sheetCardStyle()
         .padding(20)
         .frame(minWidth: 460, idealWidth: 520, maxWidth: 560,
                minHeight: 180, idealHeight: 220, maxHeight: 240)
@@ -113,3 +110,45 @@ struct VaccinationStatusForm: View {
     EmptyView()
 }
 #endif
+
+// MARK: - Shared sheet card styling
+
+fileprivate struct SheetCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.background)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.quaternary, lineWidth: 1)
+            )
+    }
+}
+
+fileprivate struct LightBlueSectionCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+}
+
+fileprivate extension View {
+    /// Standard “card in a sheet” look.
+    func sheetCardStyle() -> some View {
+        self.modifier(SheetCardStyle())
+    }
+
+    /// Standard light-blue “section card” look.
+    func lightBlueSectionCardStyle() -> some View {
+        self.modifier(LightBlueSectionCardStyle())
+    }
+}
