@@ -315,6 +315,7 @@ private struct SignInSheet: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var clinicianStore: ClinicianStore
     @Binding var showSignIn: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var selectedID: Int? = nil
     @State private var firstName: String = ""
@@ -322,12 +323,17 @@ private struct SignInSheet: View {
     @State private var password: String = ""
     @State private var loginError: String? = nil
 
-    // Match the light blue "card" styling used elsewhere in the app.
+    // Match the light blue "card" styling used elsewhere in the app, but keep it readable in Dark Mode.
     private var signInCardFill: Color {
         #if os(macOS)
-        return Color(nsColor: NSColor(calibratedRed: 0.88, green: 0.94, blue: 1.00, alpha: 1.0))
+        if colorScheme == .dark {
+            // Use a system adaptive background in dark mode so text and controls remain legible.
+            return Color(nsColor: NSColor.controlBackgroundColor)
+        } else {
+            return Color(nsColor: NSColor(calibratedRed: 0.88, green: 0.94, blue: 1.00, alpha: 1.0))
+        }
         #else
-        return Color.accentColor.opacity(0.08)
+        return Color.accentColor.opacity(colorScheme == .dark ? 0.14 : 0.08)
         #endif
     }
 
@@ -483,7 +489,9 @@ private struct SignInSheet: View {
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .fill(selectedID == u.id ? Color.accentColor.opacity(0.10) : Color.clear)
+                                    .fill(selectedID == u.id
+                                          ? Color.accentColor.opacity(colorScheme == .dark ? 0.22 : 0.10)
+                                          : Color.clear)
                             )
                             .contentShape(Rectangle())
                             .onTapGesture {
@@ -508,11 +516,11 @@ private struct SignInSheet: View {
             .frame(minHeight: 80, maxHeight: 260)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.secondary.opacity(0.06))
+                    .fill(Color.secondary.opacity(colorScheme == .dark ? 0.14 : 0.06))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.secondary.opacity(0.15))
+                    .stroke(Color.secondary.opacity(colorScheme == .dark ? 0.26 : 0.15))
             )
         }
         #else

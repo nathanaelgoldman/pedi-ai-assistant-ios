@@ -3725,6 +3725,108 @@ struct WellVisitForm: View {
         let heightCm: Double?
         let headCircCm: Double?
     }
+    
+    /// Fetch up to `limit` manual growth entries in a window around `visitDate`.
+    /// Default window: last 12 months and up to +3 days after the visit (to catch “same visit day” entries
+    /// recorded the next day).
+    private func fetchManualGrowthSeries(
+        dbURL: URL,
+        patientID: Int,
+        lookbackDays: Int = 365,
+        forwardDays: Int = 3,
+        limit: Int = 6
+    ) -> [ManualGrowthSnapshot] {
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db else {
+            return []
+        }
+        defer { sqlite3_close(db) }
+
+        let visitISO = Self.isoDateOnly.string(from: visitDate)
+        let lowerMod = "-\(lookbackDays) day"
+        let upperMod = "+\(forwardDays) day"
+
+        let sql = """
+        SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
+        FROM manual_growth
+        WHERE patient_id = ?
+          AND date(recorded_at) >= date(?, ?)
+          AND date(recorded_at) <= date(?, ?)
+        ORDER BY recorded_at DESC
+        LIMIT ?;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            return []
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+        _ = visitISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+        _ = lowerMod.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
+        _ = visitISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
+        _ = upperMod.withCString { sqlite3_bind_text(stmt, 5, $0, -1, SQLITE_TRANSIENT) }
+        sqlite3_bind_int(stmt, 6, Int32(limit))
+
+        func colDoubleOrNil(_ idx: Int32) -> Double? {
+            if sqlite3_column_type(stmt, idx) == SQLITE_NULL { return nil }
+            return sqlite3_column_double(stmt, idx)
+        }
+
+        var out: [ManualGrowthSnapshot] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let recordedAt: String = {
+                guard let cStr = sqlite3_column_text(stmt, 0) else { return "" }
+                return String(cString: cStr)
+            }()
+            let recTrim = recordedAt.trimmingCharacters(in: .whitespacesAndNewlines)
+            if recTrim.isEmpty { continue }
+
+            let w  = colDoubleOrNil(1)
+            let h  = colDoubleOrNil(2)
+            let hc = colDoubleOrNil(3)
+
+            // Skip rows with no measurements at all.
+            if w == nil && h == nil && hc == nil { continue }
+
+            out.append(
+                ManualGrowthSnapshot(
+                    recordedAtRaw: recTrim,
+                    weightKg: w,
+                    heightCm: h,
+                    headCircCm: hc
+                )
+            )
+        }
+
+        // We fetched DESC for easy "latest first". For human/AI readability, return ASC.
+        return out.reversed()
+    }
+    
+    /// Formats a small growth timeline block for AI context.
+    /// Intentionally plain (English) and compact.
+    private func manualGrowthTrendBlockForAI(
+        _ series: [ManualGrowthSnapshot],
+        lookbackDays: Int,
+        forwardDays: Int
+    ) -> String {
+        func fmt(_ v: Double?, decimals: Int) -> String {
+            guard let v else { return "—" }
+            return String(format: "%0.*f", decimals, v)
+        }
+
+        let header = "Growth near visit (manual_growth window -\(lookbackDays)d..+\(forwardDays)d):"
+        let lines = series.map { p in
+            "• \(p.recordedAtRaw): wt \(fmt(p.weightKg, decimals: 2)) kg; len \(fmt(p.heightCm, decimals: 1)) cm; HC \(fmt(p.headCircCm, decimals: 1)) cm"
+        }
+
+        return ([header] + lines).joined(separator: "\n")
+    }
+    
+    
 
     /// Fetch a manual growth entry that best matches the current `visitDate`.
     ///
@@ -3906,12 +4008,23 @@ struct WellVisitForm: View {
 
         // Add contemporaneous growth values (if available) so AI can interpret the visit.
         var problemsForAI = trimmedProblems
-        if let dbURL = appState.currentDBURL,
-           let snap = fetchManualGrowthSnapshot(dbURL: dbURL, patientID: patientID) {
-            let growthLine = manualGrowthLineForAI(snap)
-            problemsForAI = problemsForAI.isEmpty
-                ? growthLine
-                : (problemsForAI + "\n" + growthLine)
+        if let dbURL = appState.currentDBURL {
+            let lookbackDays = 365
+            let forwardDays  = 3
+            let limit        = 6
+
+            let series = fetchManualGrowthSeries(
+                dbURL: dbURL,
+                patientID: patientID,
+                lookbackDays: lookbackDays,
+                forwardDays: forwardDays,
+                limit: limit
+            )
+
+            if !series.isEmpty {
+                let block = manualGrowthTrendBlockForAI(series, lookbackDays: lookbackDays, forwardDays: forwardDays)
+                problemsForAI = problemsForAI.isEmpty ? block : (problemsForAI + "\n" + block)
+            }
         }
 
         let perinatalSummary = cleaned(appState.perinatalSummaryForSelectedPatient())
