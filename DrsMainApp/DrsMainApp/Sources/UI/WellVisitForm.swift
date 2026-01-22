@@ -1,4 +1,4 @@
-//
+
 //  WellVisitForm.swift
 //  DrsMainApp
 //
@@ -545,9 +545,21 @@ struct WellVisitForm: View {
     @State private var deltaWeightPerDaySummary: String = ""
     @State private var deltaWeightPerDayValue: Int32? = nil
     @State private var deltaWeightIsNormal: Bool = false
+
+    // MARK: - Growth snapshot (manual_growth) near visit
+    @State private var growthAgeSummary: String = ""
+    @State private var growthCurrentSummary: String = ""
+    @State private var growthPreviousSummary: String = ""
+    @State private var growthDeltaSummary: String = ""
+    @State private var growthSnapshotIsLoading: Bool = false
     
     @State private var showErrorAlert: Bool = false
     @State private var saveErrorMessage: String = ""
+    
+    // MARK: - WHO growth evaluation (LMS / z-score)
+    @State private var whoSex: WHOGrowthEvaluator.Sex? = nil
+    @State private var growthWHOZSummary: String = ""
+    @State private var growthWHOTrendSummary: String = ""
 
     /// We only show the weight-delta helper box for the first 3 well visits
     /// (1, 2 and 4-month visits).
@@ -578,6 +590,369 @@ struct WellVisitForm: View {
         f.formatOptions = [.withFullDate]
         return f
     }()
+
+    // MARK: - Growth snapshot helpers (manual_growth)
+
+    private struct GrowthPoint {
+        let recordedAtRaw: String
+        let recordedDate: Date
+        let weightKg: Double?
+        let heightCm: Double?
+        let headCircCm: Double?
+    }
+
+    private func fmt(_ v: Double?, decimals: Int) -> String {
+        guard let v else { return "—" }
+        return String(format: "%0.*f", decimals, v)
+    }
+
+    /// Best-effort DOB fetch (YYYY-MM-DD or ISO8601) from patients table.
+    private func fetchDOB(dbURL: URL, patientID: Int) -> Date? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db else { return nil }
+        defer { sqlite3_close(db) }
+
+        func runDOBQuery(_ column: String) -> String? {
+            let sql = "SELECT \(column) FROM patients WHERE id = ? LIMIT 1;"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return nil }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            guard let cStr = sqlite3_column_text(stmt, 0) else { return nil }
+            return String(cString: cStr)
+        }
+
+        let raw = runDOBQuery("dob") ?? runDOBQuery("date_of_birth")
+        let t = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+
+        let prefix10 = String(t.prefix(10))
+        if let d = Self.isoDateOnly.date(from: prefix10) { return d }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = iso.date(from: t) { return d }
+        iso.formatOptions = [.withInternetDateTime]
+        if let d = iso.date(from: t) { return d }
+
+        return nil
+    }
+    
+    /// Best-effort patient sex fetch from patients table.
+    /// Returns WHO evaluator sex if we can parse it.
+    private func fetchWHOSex(dbURL: URL, patientID: Int) -> WHOGrowthEvaluator.Sex? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db else { return nil }
+        defer { sqlite3_close(db) }
+
+        let sql = "SELECT sex FROM patients WHERE id = ? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        guard let cStr = sqlite3_column_text(stmt, 0) else { return nil }
+        let raw = String(cString: cStr).trimmingCharacters(in: .whitespacesAndNewlines)
+        return parseWHOSex(raw)
+    }
+
+    private func parseWHOSex(_ raw: String) -> WHOGrowthEvaluator.Sex? {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let u = t.uppercased()
+
+        if u == "M" || u == "MALE" || u == "BOY" || u == "GARCON" || u == "G" { return .male }
+        if u == "F" || u == "FEMALE" || u == "GIRL" || u == "FILLE" { return .female }
+        return nil
+    }
+
+    private func ageMonths(dob: Date, at date: Date) -> Double {
+        let days = Calendar.current.dateComponents([.day], from: dob, to: date).day ?? 0
+        return Double(max(0, days)) / 30.4375
+    }
+
+    private func bmiKgM2(weightKg: Double, heightCm: Double) -> Double? {
+        guard weightKg.isFinite, weightKg > 0 else { return nil }
+        guard heightCm.isFinite, heightCm > 0 else { return nil }
+        let hm = heightCm / 100.0
+        guard hm > 0 else { return nil }
+        return weightKg / (hm * hm)
+    }
+
+    private func computeAgeSummary(dob: Date, visit: Date) -> String {
+        let days = Calendar.current.dateComponents([.day], from: dob, to: visit).day ?? 0
+        let safeDays = max(0, days)
+        let months = Double(safeDays) / 30.4375
+        // Keep it clinician-friendly: days + approx months
+        return String(format: "Age at visit: %d days (~%.1f months)", safeDays, months)
+    }
+
+    /// Fetch recent manual_growth points around the visit date (ASC for readability).
+    private func fetchGrowthPoints(
+        dbURL: URL,
+        patientID: Int,
+        lookbackDays: Int = 365,
+        forwardDays: Int = 3,
+        limit: Int = 12
+    ) -> [GrowthPoint] {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db else { return [] }
+        defer { sqlite3_close(db) }
+
+        let visitISO = Self.isoDateOnly.string(from: visitDate)
+        let lowerMod = "-\(lookbackDays) day"
+        let upperMod = "+\(forwardDays) day"
+
+        let sql = """
+        SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
+        FROM manual_growth
+        WHERE patient_id = ?
+          AND date(recorded_at) >= date(?, ?)
+          AND date(recorded_at) <= date(?, ?)
+        ORDER BY datetime(recorded_at) ASC
+        LIMIT ?;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+        _ = visitISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+        _ = lowerMod.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
+        _ = visitISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
+        _ = upperMod.withCString { sqlite3_bind_text(stmt, 5, $0, -1, SQLITE_TRANSIENT) }
+        sqlite3_bind_int(stmt, 6, Int32(limit))
+
+        func colDoubleOrNil(_ idx: Int32) -> Double? {
+            if sqlite3_column_type(stmt, idx) == SQLITE_NULL { return nil }
+            return sqlite3_column_double(stmt, idx)
+        }
+
+        var out: [GrowthPoint] = []
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let recordedAt: String = {
+                guard let cStr = sqlite3_column_text(stmt, 0) else { return "" }
+                return String(cString: cStr)
+            }()
+            let raw = recordedAt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { continue }
+
+            // Parse date best-effort: date-only or datetime.
+            let dateOnly = String(raw.prefix(10))
+            let recordedDate: Date? = Self.isoDateOnly.date(from: dateOnly)
+                ?? iso.date(from: raw)
+                ?? {
+                    iso.formatOptions = [.withInternetDateTime]
+                    return iso.date(from: raw)
+                }()
+
+            guard let rd = recordedDate else { continue }
+
+            let w = colDoubleOrNil(1)
+            let h = colDoubleOrNil(2)
+            let hc = colDoubleOrNil(3)
+            if w == nil && h == nil && hc == nil { continue }
+
+            out.append(GrowthPoint(recordedAtRaw: raw, recordedDate: rd, weightKg: w, heightCm: h, headCircCm: hc))
+        }
+
+        return out
+    }
+
+    /// Pick the best “current” point: closest within ±3 days of visit date; else latest on/before visit.
+    private func selectCurrentGrowthPoint(_ points: [GrowthPoint]) -> GrowthPoint? {
+        guard !points.isEmpty else { return nil }
+
+        let visitDay = Calendar.current.startOfDay(for: visitDate)
+        let windowDays = 3
+
+        // 1) Closest within ±3 days
+        let withDiff: [(GrowthPoint, Int)] = points.map { p in
+            let d0 = Calendar.current.startOfDay(for: p.recordedDate)
+            let diff = Calendar.current.dateComponents([.day], from: d0, to: visitDay).day ?? 0
+            return (p, abs(diff))
+        }
+
+        if let best = withDiff
+            .filter({ $0.1 <= windowDays })
+            .sorted(by: { a, b in
+                if a.1 != b.1 { return a.1 < b.1 }
+                return a.0.recordedDate > b.0.recordedDate
+            })
+            .first?.0 {
+            return best
+        }
+
+        // 2) Fallback: latest on/before visit
+        return points
+            .filter { $0.recordedDate <= visitDate }
+            .sorted(by: { $0.recordedDate > $1.recordedDate })
+            .first
+    }
+
+    private func buildGrowthSummaryLine(prefix: String, _ p: GrowthPoint) -> String {
+        return "\(prefix) (\(p.recordedAtRaw)): wt \(fmt(p.weightKg, decimals: 2)) kg; len \(fmt(p.heightCm, decimals: 1)) cm; HC \(fmt(p.headCircCm, decimals: 1)) cm"
+    }
+
+    private func buildGrowthDeltaLine(current: GrowthPoint, previous: GrowthPoint) -> String {
+        func d(_ a: Double?, _ b: Double?, decimals: Int) -> String {
+            guard let a, let b else { return "—" }
+            return String(format: "%0.*f", decimals, (a - b))
+        }
+        let dayDelta = max(1, Calendar.current.dateComponents([.day], from: previous.recordedDate, to: current.recordedDate).day ?? 1)
+        let dw = (current.weightKg != nil && previous.weightKg != nil) ? ((current.weightKg! - previous.weightKg!) * 1000.0 / Double(dayDelta)) : nil
+
+        let dwPerDay = dw == nil ? "—" : String(format: "%.0f", dw!)
+
+        return "Δ vs previous: wt \(d(current.weightKg, previous.weightKg, decimals: 2)) kg; len \(d(current.heightCm, previous.heightCm, decimals: 1)) cm; HC \(d(current.headCircCm, previous.headCircCm, decimals: 1)) cm; wt/day \(dwPerDay) g/day"
+    }
+
+    private func refreshGrowthSnapshotCard() {
+        guard let dbURL = appState.currentDBURL,
+              let patientID = appState.selectedPatientID else {
+            growthAgeSummary = ""
+            growthCurrentSummary = ""
+            growthPreviousSummary = ""
+            growthDeltaSummary = ""
+            return
+        }
+
+        growthSnapshotIsLoading = true
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let points = fetchGrowthPoints(dbURL: dbURL, patientID: patientID)
+            let current = selectCurrentGrowthPoint(points)
+
+            // previous point = last point strictly before the current point
+            let previous: GrowthPoint? = {
+                guard let current else { return nil }
+                return points
+                    .filter { $0.recordedDate < current.recordedDate }
+                    .sorted(by: { $0.recordedDate > $1.recordedDate })
+                    .first
+            }()
+
+            let dob = fetchDOB(dbURL: dbURL, patientID: patientID)
+            
+            let sex = fetchWHOSex(dbURL: dbURL, patientID: patientID)
+
+            // Build WHO z-score + trend summaries (best-effort)
+            var whoZLines: [String] = []
+            var whoTrendLines: [String] = []
+
+            if let dob, let sex, let current {
+                func buildPrior(_ extract: (GrowthPoint) -> Double?) -> [(ageMonths: Double, value: Double)] {
+                    let priors = points
+                        .filter { $0.recordedDate < current.recordedDate }
+                        .sorted(by: { $0.recordedDate < $1.recordedDate })
+                        .compactMap { p -> (Double, Double)? in
+                            guard let v = extract(p) else { return nil }
+                            return (ageMonths(dob: dob, at: p.recordedDate), v)
+                        }
+                    return priors.map { (ageMonths: $0.0, value: $0.1) }
+                }
+
+                let currentAgeM = ageMonths(dob: dob, at: current.recordedDate)
+
+                do {
+                    if let w = current.weightKg {
+                        let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
+                        whoZLines.append("WFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+
+                        let prior = buildPrior { $0.weightKg }
+                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .wfa, sex: sex, prior: prior,
+                                                                       current: (ageMonths: currentAgeM, value: w),
+                                                                       lastN: 5, thresholdZ: 2.0)
+                        if t.priorCount > 0 { whoTrendLines.append("WFA: " + t.narrative) }
+                    }
+
+                    if let h = current.heightCm {
+                        let r = try WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: currentAgeM, value: h)
+                        whoZLines.append("LHFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+
+                        let prior = buildPrior { $0.heightCm }
+                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .lhfa, sex: sex, prior: prior,
+                                                                       current: (ageMonths: currentAgeM, value: h),
+                                                                       lastN: 5, thresholdZ: 2.0)
+                        if t.priorCount > 0 { whoTrendLines.append("LHFA: " + t.narrative) }
+                    }
+
+                    if let hc = current.headCircCm {
+                        let r = try WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: currentAgeM, value: hc)
+                        whoZLines.append("HCFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+
+                        let prior = buildPrior { $0.headCircCm }
+                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .hcfa, sex: sex, prior: prior,
+                                                                       current: (ageMonths: currentAgeM, value: hc),
+                                                                       lastN: 5, thresholdZ: 2.0)
+                        if t.priorCount > 0 { whoTrendLines.append("HCFA: " + t.narrative) }
+                    }
+
+                    if let w = current.weightKg, let h = current.heightCm, let bmi = bmiKgM2(weightKg: w, heightCm: h) {
+                        let r = try WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: currentAgeM, value: bmi)
+                        whoZLines.append("BMIFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+
+                        let prior = points
+                            .filter { $0.recordedDate < current.recordedDate }
+                            .sorted(by: { $0.recordedDate < $1.recordedDate })
+                            .compactMap { p -> (ageMonths: Double, value: Double)? in
+                                guard let pw = p.weightKg, let ph = p.heightCm,
+                                      let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
+                                return (ageMonths(dob: dob, at: p.recordedDate), pbmi)
+                            }
+
+                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .bmifa, sex: sex, prior: prior,
+                                                                       current: (ageMonths: currentAgeM, value: bmi),
+                                                                       lastN: 5, thresholdZ: 2.0)
+                        if t.priorCount > 0 { whoTrendLines.append("BMIFA: " + t.narrative) }
+                    }
+                } catch {
+                    whoZLines = []
+                    whoTrendLines = ["WHO evaluation failed: \(error.localizedDescription)"]
+                }
+            }
+
+            DispatchQueue.main.async {
+                if let dob {
+                    self.growthAgeSummary = computeAgeSummary(dob: dob, visit: self.visitDate)
+                } else {
+                    self.growthAgeSummary = "Age at visit: —"
+                }
+
+                if let current {
+                    self.growthCurrentSummary = buildGrowthSummaryLine(prefix: "Growth near visit", current)
+                } else {
+                    self.growthCurrentSummary = "Growth near visit: —"
+                }
+
+                if let previous {
+                    self.growthPreviousSummary = buildGrowthSummaryLine(prefix: "Previous", previous)
+                } else {
+                    self.growthPreviousSummary = "Previous: —"
+                }
+
+                if let current, let previous {
+                    self.growthDeltaSummary = buildGrowthDeltaLine(current: current, previous: previous)
+                } else {
+                    self.growthDeltaSummary = ""
+                }
+                self.whoSex = sex
+                    self.growthWHOZSummary = whoZLines.isEmpty ? "" : ("WHO z-scores: " + whoZLines.joined(separator: " · "))
+                    self.growthWHOTrendSummary = whoTrendLines.isEmpty ? "" : ("Trend:\n" + whoTrendLines.joined(separator: "\n"))
+
+                self.growthSnapshotIsLoading = false
+            }
+        }
+    }
 
     private var visitTypes: [WellVisitType] { WELL_VISIT_TYPES }
 
@@ -883,6 +1258,7 @@ struct WellVisitForm: View {
                 DispatchQueue.main.async {
                     self.wellAddenda = rows
                     self.addendaAreLoading = false
+                    
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -1115,7 +1491,60 @@ struct WellVisitForm: View {
                         .lightBlueSectionCardStyle()
                     }
 
-                    
+                    // Growth snapshot near visit (manual_growth)
+                    GroupBox(L10nWVF.k("well_visit_form.growth_snapshot.title")) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if !growthAgeSummary.isEmpty {
+                                Text(growthAgeSummary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text(growthCurrentSummary)
+                                .font(.subheadline)
+
+                            if !growthPreviousSummary.isEmpty {
+                                Text(growthPreviousSummary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if !growthDeltaSummary.isEmpty {
+                                Text(growthDeltaSummary)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            if !growthWHOZSummary.isEmpty {
+                                Text(growthWHOZSummary)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 4)
+                            }
+
+                            if !growthWHOTrendSummary.isEmpty {
+                                Text(growthWHOTrendSummary)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if growthSnapshotIsLoading {
+                                ProgressView().controlSize(.small)
+                            }
+                        }
+                        .onAppear {
+                            refreshGrowthSnapshotCard()
+                        }
+                        .onChange(of: visitDate) { _, _ in
+                            refreshGrowthSnapshotCard()
+                        }
+                        .onChange(of: appState.selectedPatientID) { _, _ in
+                            refreshGrowthSnapshotCard()
+                        }
+                    }
+                    .groupBoxStyle(PlainGroupBoxStyle())
+                    .padding(12)
+                    .lightBlueSectionCardStyle()
 
                     // Parent's concerns  → parent_concerns
                     GroupBox(L10nWVF.k("well_visit_form.section.parents_concerns.title")) {
@@ -3931,6 +4360,63 @@ struct WellVisitForm: View {
 
         // Keep this intentionally plain (English) since it's AI-context only.
         return "Growth near visit (manual_growth @ \(snap.recordedAtRaw)): weight \(fmt(snap.weightKg, decimals: 2)) kg; length \(fmt(snap.heightCm, decimals: 1)) cm; HC \(fmt(snap.headCircCm, decimals: 1)) cm"
+    }
+
+    /// Fetch patient's recorded sex from the bundle DB (best effort).
+    ///
+    /// We keep this intentionally lightweight (single-column query), mirroring the SickEpisodeForm approach.
+    /// Returned values can vary depending on legacy data; `normalizePatientSexForWHO(_:)` collapses
+    /// common forms to "M" / "F".
+    private func fetchPatientSexRaw(dbURL: URL, patientID: Int) -> String? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = "SELECT sex FROM patients WHERE id = ? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            return nil
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        guard let cStr = sqlite3_column_text(stmt, 0) else { return nil }
+        let raw = String(cString: cStr).trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+    }
+
+    /// Normalize patient sex string into a stable "M" / "F" code for WHO lookups.
+    /// Returns nil when unknown/empty.
+    private func normalizePatientSexForWHO(_ raw: String?) -> String? {
+        let t = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+
+        let lower = t.lowercased()
+        if lower == "m" || lower == "male" || lower == "man" || lower == "boy" || lower == "garçon" || lower == "garcon" {
+            return "M"
+        }
+        if lower == "f" || lower == "female" || lower == "woman" || lower == "girl" || lower == "fille" {
+            return "F"
+        }
+
+        // Some legacy schemas store sex as numeric strings.
+        // We avoid being too clever; only map obvious cases.
+        if lower == "1" { return "M" }
+        if lower == "2" { return "F" }
+
+        return nil
+    }
+
+    /// Convert the patient's recorded sex into the app's `ReportGrowth.Sex` enum for WHO lookups.
+    /// Returns nil when unknown.
+    private func fetchPatientSexForWHOEnum(dbURL: URL, patientID: Int) -> ReportGrowth.Sex? {
+        let raw = fetchPatientSexRaw(dbURL: dbURL, patientID: patientID)
+        guard let code = normalizePatientSexForWHO(raw) else { return nil }
+        return (code == "M") ? .male : .female
     }
 
     /// Fetch patient's DOB from the bundle DB (best effort) so we can compute age at the visit.

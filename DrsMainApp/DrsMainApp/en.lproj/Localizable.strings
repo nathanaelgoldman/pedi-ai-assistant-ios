@@ -2782,3 +2782,5 @@
 
 "docs.toolbar.save_copy" = "Save a copy…";
 "docs.error.export-failed" = "Export failed: %@";
+
+"well_visit_form.growth_snapshot.title" = "Growth snapshot (near visit)";
