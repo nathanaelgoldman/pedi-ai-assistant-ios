@@ -2774,3 +2774,17 @@
 "docs.error.export-failed" = "Échec de l’export : %@";
 
 "well_visit_form.growth_snapshot.title" = "Aperçu de croissance (autour de la visite)";
+/* ===== Aperçu de croissance (WellVisitForm) ===== */
+"well_visit_form.growth_snapshot.age_at_visit" = "Âge à la visite : %@ jours (~%@ mois)";
+"well_visit_form.growth_snapshot.near_visit" = "Croissance proche de la visite (%@) : poids %@ kg ; taille %@ cm ; PC %@ cm";
+"well_visit_form.growth_snapshot.previous" = "Précédent (%@) : poids %@ kg ; taille %@ cm ; PC %@ cm";
+"well_visit_form.growth_snapshot.delta" = "Δ vs précédent : poids %@ kg ; taille %@ cm ; PC %@ cm ; poids/j %@ g/j";
+"well_visit_form.growth_snapshot.who_zscores" = "Scores z OMS : %@";
+"well_visit_form.growth_snapshot.trend_title" = "Tendance :";
+
+/* ===== Analyse de tendance (narratif WHOGrowthEvaluator) ===== */
+"well_visit_form.growth_trend.only_one_point" = "Une seule mesure disponible (pas de tendance antérieure à comparer).";
+"well_visit_form.growth_trend.higher" = "plus élevé";
+"well_visit_form.growth_trend.lower" = "plus bas";
+"well_visit_form.growth_trend.significant" = "La valeur actuelle est %@ que la tendance antérieure (Δz≈%@ ; seuil %@) ; actuel ≈ P%@.";
+"well_visit_form.growth_trend.consistent" = "La valeur actuelle est cohérente avec la tendance antérieure (Δz≈%@ < %@) ; actuel ≈ P%@.";

@@ -2784,3 +2784,18 @@
 "docs.error.export-failed" = "Export failed: %@";
 
 "well_visit_form.growth_snapshot.title" = "Growth snapshot (near visit)";
+
+/* ===== Growth Snapshot (WellVisitForm) ===== */
+"well_visit_form.growth_snapshot.age_at_visit" = "Age at visit: %@ days (~%@ months)";
+"well_visit_form.growth_snapshot.near_visit" = "Growth near visit (%@): wt %@ kg; len %@ cm; HC %@ cm";
+"well_visit_form.growth_snapshot.previous" = "Previous (%@): wt %@ kg; len %@ cm; HC %@ cm";
+"well_visit_form.growth_snapshot.delta" = "Δ vs previous: wt %@ kg; len %@ cm; HC %@ cm; wt/day %@ g/day";
+"well_visit_form.growth_snapshot.who_zscores" = "WHO z-scores: %@";
+"well_visit_form.growth_snapshot.trend_title" = "Trend:";
+
+/* ===== Trend Evaluation (WHOGrowthEvaluator narrative) ===== */
+"well_visit_form.growth_trend.only_one_point" = "Only one measurement available (no prior trend to compare).";
+"well_visit_form.growth_trend.higher" = "higher";
+"well_visit_form.growth_trend.lower" = "lower";
+"well_visit_form.growth_trend.significant" = "Current value is %@ than prior trend by Δz≈%@ (threshold %@); current ≈ P%@.";
+"well_visit_form.growth_trend.consistent" = "Current value is consistent with prior trend (Δz≈%@ < %@); current ≈ P%@.";

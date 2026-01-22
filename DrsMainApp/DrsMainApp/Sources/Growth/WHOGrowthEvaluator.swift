@@ -7,6 +7,17 @@
 
 import Foundation
 
+// MARK: - Localization helpers
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+private func LF(_ formatKey: String, _ args: CVarArg...) -> String {
+    String(format: NSLocalizedString(formatKey, comment: ""), arguments: args)
+}
+
+
+
 /// Local evaluator for WHO growth using LMS tables.
 ///
 /// This reads LMS rows from `Resources/WHO/<measure>_0_5y_<sex>_lms.csv`.
@@ -61,7 +72,7 @@ enum WHOGrowthEvaluator {
         var summaryLine: String {
             let p = String(format: "%.1f", percentile)
             let z = String(format: "%.2f", zScore)
-            return "\(kind.rawValue.uppercased()) \(String(format: "%.2f", value)) \(kind.unitLabel) @ \(String(format: "%.2f", ageMonths)) mo → z=\(z), p=\(p)" 
+            return "\(kind.rawValue.uppercased()) \(String(format: "%.2f", value)) \(kind.unitLabel) @ \(String(format: "%.2f", ageMonths)) mo → z=\(z), p=\(p)"
         }
     }
 
@@ -96,10 +107,14 @@ enum WHOGrowthEvaluator {
 
         var errorDescription: String? {
             switch self {
-            case .resourceNotFound(let s): return "WHO LMS file not found: \(s)"
-            case .malformedCSV(let s): return "WHO LMS CSV malformed: \(s)"
-            case .noLMSForAge: return "WHO LMS: no reference row for this age"
-            case .invalidValue: return "WHO LMS: invalid measurement value"
+            case .resourceNotFound(let s):
+                return LF("who_growth.error.resource_not_found", s)
+            case .malformedCSV(let s):
+                return LF("who_growth.error.malformed_csv", s)
+            case .noLMSForAge:
+                return L("who_growth.error.no_lms_for_age")
+            case .invalidValue:
+                return L("who_growth.error.invalid_value")
             }
         }
     }
@@ -170,7 +185,7 @@ enum WHOGrowthEvaluator {
                 deltaZFromMedian: nil,
                 isSignificantShift: false,
                 priorCount: 0,
-                narrative: "Only one measurement available (no prior trend to compare)."
+                narrative: L("well_visit_form.growth_trend.only_one_point")
             )
         }
 
@@ -187,16 +202,16 @@ enum WHOGrowthEvaluator {
         let significant = abs(delta) >= thresholdZ
 
         // Small narrative for clinicians.
-        let dir = delta >= 0 ? "higher" : "lower"
+        let dir = delta >= 0 ? L("well_visit_form.growth_trend.higher") : L("well_visit_form.growth_trend.lower")
         let dzText = String(format: "%.2f", abs(delta))
         let thText = String(format: "%.2f", thresholdZ)
         let pText = String(format: "%.1f", currentRes.percentile)
 
         let narrative: String
         if significant {
-            narrative = "Current value is \(dir) than prior trend by Δz≈\(dzText) (threshold \(thText)); current ≈ P\(pText)."
+            narrative = LF("well_visit_form.growth_trend.significant", dir, dzText, thText, pText)
         } else {
-            narrative = "Current value is consistent with prior trend (Δz≈\(dzText) < \(thText)); current ≈ P\(pText)."
+            narrative = LF("well_visit_form.growth_trend.consistent", dzText, thText, pText)
         }
 
         return TrendAssessment(
@@ -320,8 +335,22 @@ enum WHOGrowthEvaluator {
             return cached
         }
 
-        guard let url = bundle.url(forResource: fileStem, withExtension: "csv", subdirectory: "WHO") else {
-            throw GrowthError.resourceNotFound("WHO/\(fileStem).csv")
+        let candidates: [(subdir: String?, label: String)] = [
+            ("WHO", "WHO"),
+            ("Resources/WHO", "Resources/WHO"),
+            (nil, "(root)")
+        ]
+
+        var foundURL: URL? = nil
+        for c in candidates {
+            if let u = bundle.url(forResource: fileStem, withExtension: "csv", subdirectory: c.subdir) {
+                foundURL = u
+                break
+            }
+        }
+
+        guard let url = foundURL else {
+            throw GrowthError.resourceNotFound("Tried: WHO/\(fileStem).csv, Resources/WHO/\(fileStem).csv, and bundle root \(fileStem).csv")
         }
 
         let data = try Data(contentsOf: url)
