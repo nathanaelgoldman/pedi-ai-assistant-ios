@@ -2449,6 +2449,12 @@ func reloadPatients() {
             let perinatalSummary: String?  // consolidated perinatal history
             let pmhSummary: String?        // past medical history summary
             let vaccinationStatus: String? // vaccination summary
+
+            // Optional, locally-computed growth trend evaluation (provided by the UI).
+            // We keep defaults so existing call-sites don't need to change.
+            let growthTrendSummary: String? = nil      // human-readable summary (e.g., weight-for-age trend)
+            let growthTrendIsFlagged: Bool? = nil      // true if concerning / needs attention
+            let growthTrendWindow: String? = nil       // e.g. "from 4 months onward" or similar
         }
 
         /// Sanitize problem listing text before sending to AI:
@@ -3076,7 +3082,7 @@ func reloadPatients() {
             )
         }
 
-        private func buildWellVisitJSON(using context: WellVisitAIContext) -> String {
+        private func buildWellVisitJSON(using context: AppState.WellVisitAIContext) -> String {
             let sanitizedProblems = sanitizeProblemListingForAI(context.problemListing)
             let problemLines = sanitizedProblems
                 .split(separator: "\n")
@@ -3103,12 +3109,23 @@ func reloadPatients() {
                !pmh.isEmpty {
                 payload["past_medical_history"] = pmh
             }
-            
-            
 
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
                !vacc.isEmpty {
                 payload["vaccination_status"] = vacc
+            }
+
+            // ✅ Locally computed growth trend evaluation (if provided by the UI)
+            if let trend = context.growthTrendSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !trend.isEmpty {
+                payload["growth_trend_summary"] = trend
+            }
+            if let flagged = context.growthTrendIsFlagged {
+                payload["growth_trend_flagged"] = flagged
+            }
+            if let window = context.growthTrendWindow?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !window.isEmpty {
+                payload["growth_trend_window"] = window
             }
 
             // ✅ Manual growth snapshot (preferred for well-visit interpretation)
@@ -3309,7 +3326,7 @@ func reloadPatients() {
         ///  - a structured patient/well-visit context.
         ///
         /// This string can be sent as-is to any text-based AI provider.
-        func buildWellAIPrompt(using context: WellVisitAIContext) -> String {
+        func buildWellAIPrompt(using context: AppState.WellVisitAIContext) -> String {
             let basePrompt = wellPromptResolver?()?.trimmingCharacters(in: .whitespacesAndNewlines)
             let header: String
 
@@ -3730,7 +3747,7 @@ func reloadPatients() {
         /// For now, this prefers any configured provider (e.g. OpenAI) and falls
         /// back to a local stub when none is available or on error. Results are
         /// persisted to `well_ai_inputs`.
-        func runAIForWellVisit(using context: WellVisitAIContext) {
+        func runAIForWellVisit(using context: AppState.WellVisitAIContext) {
             if let provider = resolveEpisodeAIProvider() {
                 self.log.info("runAIForWellVisit: using provider \(String(describing: type(of: provider)), privacy: .public)")
                 // Run the provider asynchronously so the UI remains responsive.
@@ -3798,7 +3815,7 @@ func reloadPatients() {
     /// Temporary stub for a well-visit AI call.
     /// Mirrors `runAIStub(using:)` but targets the well-visit context and
     /// persists into `well_ai_inputs`.
-    private func runWellAIStub(using context: WellVisitAIContext) {
+        private func runWellAIStub(using context: AppState.WellVisitAIContext) {
         // Build the full prompt (even for the stub) so we can persist it alongside the response.
         let prompt = buildWellAIPrompt(using: context)
 

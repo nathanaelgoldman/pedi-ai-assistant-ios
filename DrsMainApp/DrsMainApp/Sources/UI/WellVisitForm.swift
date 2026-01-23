@@ -4282,7 +4282,7 @@ struct WellVisitForm: View {
     
     // MARK: - AI helpers (well visits)
 
-    // MARK: Manual growth snapshot (for AI context)
+    // MARK: - Manual growth helpers (for AI context)
 
     private struct ManualGrowthSnapshot {
         let recordedAtRaw: String
@@ -4290,11 +4290,13 @@ struct WellVisitForm: View {
         let heightCm: Double?
         let headCircCm: Double?
     }
-    
-    /// Fetch up to `limit` manual growth entries in a window around `visitDate`.
-    /// Default window: last 12 months and up to +3 days after the visit (to catch “same visit day” entries
-    /// recorded the next day).
-    private func fetchManualGrowthSeries(
+
+    /// Query manual growth rows around the current `visitDate`.
+    ///
+    /// IMPORTANT: We intentionally exclude any vitals-mirrored rows (`source` LIKE 'vitals%').
+    ///
+    /// Returns rows in chronological order (ASC).
+    private func fetchManualGrowthSeriesForAI(
         dbURL: URL,
         patientID: Int,
         lookbackDays: Int = 365,
@@ -4317,9 +4319,9 @@ struct WellVisitForm: View {
         SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
         FROM manual_growth
         WHERE patient_id = ?
+          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
           AND date(recorded_at) >= date(?, ?)
           AND date(recorded_at) <= date(?, ?)
-          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
         ORDER BY datetime(recorded_at) ASC
         LIMIT ?;
         """
@@ -4368,11 +4370,10 @@ struct WellVisitForm: View {
             )
         }
 
-        // We fetched DESC for easy "latest first". For human/AI readability, return ASC.
-        return out.reversed()
+        return out
     }
-    
-    /// Formats a small growth timeline block for AI context.
+
+    /// Formats a compact growth timeline block for AI context.
     /// Intentionally plain (English) and compact.
     private func manualGrowthTrendBlockForAI(
         _ series: [ManualGrowthSnapshot],
@@ -4391,8 +4392,30 @@ struct WellVisitForm: View {
 
         return ([header] + lines).joined(separator: "\n")
     }
-    
-    
+
+    /// Single entry-point used by `buildWellVisitAIContext()`.
+    /// Returns an updated problem string with a growth block appended (when available).
+    private func appendManualGrowthBlockForAI(
+        baseProblems: String,
+        dbURL: URL,
+        patientID: Int,
+        lookbackDays: Int = 365,
+        forwardDays: Int = 3,
+        limit: Int = 6
+    ) -> String {
+        let series = fetchManualGrowthSeriesForAI(
+            dbURL: dbURL,
+            patientID: patientID,
+            lookbackDays: lookbackDays,
+            forwardDays: forwardDays,
+            limit: limit
+        )
+
+        guard !series.isEmpty else { return baseProblems }
+
+        let block = manualGrowthTrendBlockForAI(series, lookbackDays: lookbackDays, forwardDays: forwardDays)
+        return baseProblems.isEmpty ? block : (baseProblems + "\n" + block)
+    }
 
     /// Fetch a manual growth entry that best matches the current `visitDate`.
     ///
@@ -4634,22 +4657,11 @@ struct WellVisitForm: View {
         // Add contemporaneous growth values (if available) so AI can interpret the visit.
         var problemsForAI = trimmedProblems
         if let dbURL = appState.currentDBURL {
-            let lookbackDays = 365
-            let forwardDays  = 3
-            let limit        = 6
-
-            let series = fetchManualGrowthSeries(
+            problemsForAI = appendManualGrowthBlockForAI(
+                baseProblems: problemsForAI,
                 dbURL: dbURL,
-                patientID: patientID,
-                lookbackDays: lookbackDays,
-                forwardDays: forwardDays,
-                limit: limit
+                patientID: patientID
             )
-
-            if !series.isEmpty {
-                let block = manualGrowthTrendBlockForAI(series, lookbackDays: lookbackDays, forwardDays: forwardDays)
-                problemsForAI = problemsForAI.isEmpty ? block : (problemsForAI + "\n" + block)
-            }
         }
 
         let perinatalSummary = cleaned(appState.perinatalSummaryForSelectedPatient())
