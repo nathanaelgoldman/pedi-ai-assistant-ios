@@ -421,46 +421,11 @@ CREATE INDEX IF NOT EXISTS idx_visit_addenda_episode ON visit_addenda(episode_id
 CREATE INDEX IF NOT EXISTS idx_visit_addenda_well_visit ON visit_addenda(well_visit_id, created_at);
 
 -- ========== TRIGGERS (growth mirroring from vitals) ==========
+-- IMPORTANT: Do NOT mirror vitals into manual_growth.
+-- Keep DROP statements to remove any legacy triggers in existing DBs.
 
 DROP TRIGGER IF EXISTS vitals_to_manual_growth_ai;
-CREATE TRIGGER vitals_to_manual_growth_ai
-AFTER INSERT ON vitals
-WHEN (NEW.weight_kg IS NOT NULL OR NEW.height_cm IS NOT NULL OR NEW.head_circumference_cm IS NOT NULL)
-BEGIN
-  INSERT INTO manual_growth (patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source, created_at, updated_at)
-  VALUES (
-    NEW.patient_id,
-    COALESCE(NEW.recorded_at, CURRENT_TIMESTAMP),
-    NEW.weight_kg,
-    NEW.height_cm,
-    NEW.head_circumference_cm,
-    'vitals',
-    CURRENT_TIMESTAMP,
-    CURRENT_TIMESTAMP
-  );
-END;
-
 DROP TRIGGER IF EXISTS vitals_to_manual_growth_au;
-CREATE TRIGGER vitals_to_manual_growth_au
-AFTER UPDATE ON vitals
-WHEN (
-  (NEW.weight_kg IS NOT NULL AND NEW.weight_kg IS NOT OLD.weight_kg) OR
-  (NEW.height_cm IS NOT NULL AND NEW.height_cm IS NOT OLD.height_cm) OR
-  (NEW.head_circumference_cm IS NOT NULL AND NEW.head_circumference_cm IS NOT OLD.head_circumference_cm)
-)
-BEGIN
-  INSERT INTO manual_growth (patient_id, recorded_at, weight_kg, height_cm, head_circumference_cm, source, created_at, updated_at)
-  VALUES (
-    NEW.patient_id,
-    COALESCE(NEW.recorded_at, CURRENT_TIMESTAMP),
-    NEW.weight_kg,
-    NEW.height_cm,
-    NEW.head_circumference_cm,
-    'vitals:update',
-    CURRENT_TIMESTAMP,
-    CURRENT_TIMESTAMP
-  );
-END;
 
 -- ========== VIEW (unified growth) ==========
 
@@ -475,19 +440,6 @@ SELECT
   mg.head_circumference_cm AS head_circumference_cm,
   COALESCE(mg.source,'manual') AS source
 FROM manual_growth mg
-
-UNION ALL
-
-SELECT
-  v.id + 1000000           AS id,
-  v.patient_id             AS patient_id,
-  v.episode_id             AS episode_id,
-  COALESCE(v.recorded_at, CURRENT_TIMESTAMP) AS recorded_at,
-  v.weight_kg              AS weight_kg,
-  v.height_cm              AS height_cm,
-  v.head_circumference_cm  AS head_circumference_cm,
-  'vitals'                 AS source
-FROM vitals v
 
 UNION ALL
 

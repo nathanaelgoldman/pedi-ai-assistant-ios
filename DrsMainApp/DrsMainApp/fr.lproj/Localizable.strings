@@ -2788,3 +2788,10 @@
 "well_visit_form.growth_trend.lower" = "plus bas";
 "well_visit_form.growth_trend.significant" = "La valeur actuelle est %@ que la tendance antérieure (Δz≈%@ ; seuil %@) ; actuel ≈ P%@.";
 "well_visit_form.growth_trend.consistent" = "La valeur actuelle est cohérente avec la tendance antérieure (Δz≈%@ < %@) ; actuel ≈ P%@.";
+
+"who.growth.kind.weight" = "Poids";
+"who.growth.kind.length_height" = "Longueur / Taille";
+"who.growth.kind.head_circumference" = "Périmètre crânien";
+"who.growth.kind.bmi" = "IMC";
+
+"well_visit_form.growth_trend.flag" = "En dehors de la tendance attendue";

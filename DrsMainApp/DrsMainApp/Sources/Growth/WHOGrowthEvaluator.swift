@@ -57,6 +57,21 @@ enum WHOGrowthEvaluator {
             case .bmifa: return "kg/m²"
             }
         }
+        
+        /// Localization key for the human-friendly name of this measure.
+        var nameKey: String {
+            switch self {
+            case .wfa:   return "who.growth.kind.weight"
+            case .lhfa:  return "who.growth.kind.length_height"
+            case .hcfa:  return "who.growth.kind.head_circumference"
+            case .bmifa: return "who.growth.kind.bmi"
+            }
+        }
+
+        /// Localized, human-friendly name (e.g., "Weight", "Length/Height").
+        func displayName(bundle: Bundle = .main) -> String {
+            NSLocalizedString(nameKey, bundle: bundle, comment: "")
+        }
     }
 
     struct Result: Equatable {
@@ -72,7 +87,8 @@ enum WHOGrowthEvaluator {
         var summaryLine: String {
             let p = String(format: "%.1f", percentile)
             let z = String(format: "%.2f", zScore)
-            return "\(kind.rawValue.uppercased()) \(String(format: "%.2f", value)) \(kind.unitLabel) @ \(String(format: "%.2f", ageMonths)) mo → z=\(z), p=\(p)"
+            let kindName = kind.displayName()
+            return "\(kindName) \(String(format: "%.2f", value)) \(kind.unitLabel) @ \(String(format: "%.2f", ageMonths)) mo → z=\(z), p=\(p)"
         }
     }
 

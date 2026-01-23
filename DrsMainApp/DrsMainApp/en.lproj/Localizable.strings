@@ -2799,3 +2799,10 @@
 "well_visit_form.growth_trend.lower" = "lower";
 "well_visit_form.growth_trend.significant" = "Current value is %@ than prior trend by Δz≈%@ (threshold %@); current ≈ P%@.";
 "well_visit_form.growth_trend.consistent" = "Current value is consistent with prior trend (Δz≈%@ < %@); current ≈ P%@.";
+
+"who.growth.kind.weight" = "Weight";
+"who.growth.kind.length_height" = "Length/Height";
+"who.growth.kind.head_circumference" = "Head circumference";
+"who.growth.kind.bmi" = "BMI";
+
+"well_visit_form.growth_trend.flag" = "Out of expected trend";

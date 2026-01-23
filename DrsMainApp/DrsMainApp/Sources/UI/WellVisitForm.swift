@@ -560,6 +560,7 @@ struct WellVisitForm: View {
     @State private var whoSex: WHOGrowthEvaluator.Sex? = nil
     @State private var growthWHOZSummary: String = ""
     @State private var growthWHOTrendSummary: String = ""
+    @State private var growthWHOTrendIsFlagged: Bool = false
 
     /// We only show the weight-delta helper box for the first 3 well visits
     /// (1, 2 and 4-month visits).
@@ -570,6 +571,28 @@ struct WellVisitForm: View {
             "two_month"
         ]
         return earlyTypes.contains(visitTypeID)
+    }
+
+    /// Show WHO z-score + trend only from the 4-month visit onward.
+    /// For earlier visits (newborn/1m/2m) we rely on absolute weight gain (g/day)
+    /// and there are often too few points for meaningful WHO trend evaluation.
+    private var showsWHOGrowthEvaluation: Bool {
+        switch visitTypeID {
+        case "four_month",
+             "six_month",
+             "nine_month",
+             "twelve_month",
+             "fifteen_month",
+             "eighteen_month",
+             "twentyfour_month",
+             "thirty_month",
+             "thirtysix_month",
+             "four_year",
+             "five_year":
+            return true
+        default:
+            return false
+        }
     }
 
     // Milestone state: per-code status + optional note
@@ -688,7 +711,11 @@ struct WellVisitForm: View {
         let safeDays = max(0, days)
         let months = Double(safeDays) / 30.4375
         // Keep it clinician-friendly: days + approx months
-        return String(format: "Age at visit: %d days (~%.1f months)", safeDays, months)
+        return String(
+            format: L10nWVF.s("well_visit_form.growth_snapshot.age_at_visit"),
+            String(safeDays),
+            String(format: "%.1f", months)
+        )
     }
 
     /// Fetch recent manual_growth points around the visit date (ASC for readability).
@@ -712,6 +739,7 @@ struct WellVisitForm: View {
         SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
         FROM manual_growth
         WHERE patient_id = ?
+          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
           AND date(recorded_at) >= date(?, ?)
           AND date(recorded_at) <= date(?, ?)
         ORDER BY datetime(recorded_at) ASC
@@ -799,8 +827,14 @@ struct WellVisitForm: View {
             .first
     }
 
-    private func buildGrowthSummaryLine(prefix: String, _ p: GrowthPoint) -> String {
-        return "\(prefix) (\(p.recordedAtRaw)): wt \(fmt(p.weightKg, decimals: 2)) kg; len \(fmt(p.heightCm, decimals: 1)) cm; HC \(fmt(p.headCircCm, decimals: 1)) cm"
+    private func buildGrowthSummaryLine(labelKey: String, _ p: GrowthPoint) -> String {
+        return String(
+            format: L10nWVF.s(labelKey),
+            p.recordedAtRaw,
+            fmt(p.weightKg, decimals: 2),
+            fmt(p.heightCm, decimals: 1),
+            fmt(p.headCircCm, decimals: 1)
+        )
     }
 
     private func buildGrowthDeltaLine(current: GrowthPoint, previous: GrowthPoint) -> String {
@@ -813,7 +847,13 @@ struct WellVisitForm: View {
 
         let dwPerDay = dw == nil ? "—" : String(format: "%.0f", dw!)
 
-        return "Δ vs previous: wt \(d(current.weightKg, previous.weightKg, decimals: 2)) kg; len \(d(current.heightCm, previous.heightCm, decimals: 1)) cm; HC \(d(current.headCircCm, previous.headCircCm, decimals: 1)) cm; wt/day \(dwPerDay) g/day"
+        return String(
+            format: L10nWVF.s("well_visit_form.growth_snapshot.delta"),
+            d(current.weightKg, previous.weightKg, decimals: 2),
+            d(current.heightCm, previous.heightCm, decimals: 1),
+            d(current.headCircCm, previous.headCircCm, decimals: 1),
+            dwPerDay
+        )
     }
 
     private func refreshGrowthSnapshotCard() {
@@ -823,10 +863,14 @@ struct WellVisitForm: View {
             growthCurrentSummary = ""
             growthPreviousSummary = ""
             growthDeltaSummary = ""
+            growthWHOZSummary = ""
+            growthWHOTrendSummary = ""
+            growthWHOTrendIsFlagged = false
             return
         }
 
         growthSnapshotIsLoading = true
+        let includeWHO = self.showsWHOGrowthEvaluation
 
         DispatchQueue.global(qos: .userInitiated).async {
             let points = fetchGrowthPoints(dbURL: dbURL, patientID: patientID)
@@ -848,8 +892,9 @@ struct WellVisitForm: View {
             // Build WHO z-score + trend summaries (best-effort)
             var whoZLines: [String] = []
             var whoTrendLines: [String] = []
+            var whoTrendIsFlagged = false
 
-            if let dob, let sex, let current {
+            if includeWHO, let dob, let sex, let current {
                 func buildPrior(_ extract: (GrowthPoint) -> Double?) -> [(ageMonths: Double, value: Double)] {
                     let priors = points
                         .filter { $0.recordedDate < current.recordedDate }
@@ -864,42 +909,71 @@ struct WellVisitForm: View {
                 let currentAgeM = ageMonths(dob: dob, at: current.recordedDate)
 
                 do {
+                    let wfaLabel   = WHOGrowthEvaluator.Kind.wfa.displayName()
+                    let lhfaLabel  = WHOGrowthEvaluator.Kind.lhfa.displayName()
+                    let hcfaLabel  = WHOGrowthEvaluator.Kind.hcfa.displayName()
+                    let bmifaLabel = WHOGrowthEvaluator.Kind.bmifa.displayName()
+                    
                     if let w = current.weightKg {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
-                        whoZLines.append("WFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+                        whoZLines.append(wfaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
 
                         let prior = buildPrior { $0.weightKg }
                         let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .wfa, sex: sex, prior: prior,
                                                                        current: (ageMonths: currentAgeM, value: w),
-                                                                       lastN: 5, thresholdZ: 2.0)
-                        if t.priorCount > 0 { whoTrendLines.append("WFA: " + t.narrative) }
+                                                                       lastN: 10, thresholdZ: 1.0)
+                        if t.priorCount > 0 {
+                            whoTrendLines.append(wfaLabel + ": " + t.narrative)
+                            if t.isSignificantShift
+                                    || abs(t.current.zScore) >= 2.0
+                                    || t.current.percentile <= 3.0
+                                    || t.current.percentile >= 97.0 {
+                                    whoTrendIsFlagged = true
+                                }
+                        }
                     }
 
                     if let h = current.heightCm {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: currentAgeM, value: h)
-                        whoZLines.append("LHFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+                        whoZLines.append(lhfaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
 
                         let prior = buildPrior { $0.heightCm }
                         let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .lhfa, sex: sex, prior: prior,
                                                                        current: (ageMonths: currentAgeM, value: h),
-                                                                       lastN: 5, thresholdZ: 2.0)
-                        if t.priorCount > 0 { whoTrendLines.append("LHFA: " + t.narrative) }
+                                                                       lastN: 10, thresholdZ: 1.0)
+                        if t.priorCount > 0 {
+                            whoTrendLines.append(lhfaLabel + ": " + t.narrative)
+                            if t.isSignificantShift
+                                    || abs(t.current.zScore) >= 2.0
+                                    || t.current.percentile <= 3.0
+                                    || t.current.percentile >= 97.0 {
+                                    whoTrendIsFlagged = true
+                                }
+                        }
                     }
 
                     if let hc = current.headCircCm {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: currentAgeM, value: hc)
-                        whoZLines.append("HCFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+                        whoZLines.append(hcfaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
 
                         let prior = buildPrior { $0.headCircCm }
                         let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .hcfa, sex: sex, prior: prior,
                                                                        current: (ageMonths: currentAgeM, value: hc),
-                                                                       lastN: 5, thresholdZ: 2.0)
-                        if t.priorCount > 0 { whoTrendLines.append("HCFA: " + t.narrative) }
+                                                                       lastN: 10, thresholdZ: 1.0)
+                        if t.priorCount > 0 {
+                            whoTrendLines.append(hcfaLabel + ": " + t.narrative)
+                            if t.isSignificantShift
+                                    || abs(t.current.zScore) >= 2.0
+                                    || t.current.percentile <= 3.0
+                                    || t.current.percentile >= 97.0 {
+                                    whoTrendIsFlagged = true
+                                }
+                        }
                     }
 
                     if let w = current.weightKg, let h = current.heightCm, let bmi = bmiKgM2(weightKg: w, heightCm: h) {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: currentAgeM, value: bmi)
-                        whoZLines.append("BMIFA z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+                        whoZLines.append(bmifaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
 
                         let prior = points
                             .filter { $0.recordedDate < current.recordedDate }
@@ -912,12 +986,21 @@ struct WellVisitForm: View {
 
                         let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .bmifa, sex: sex, prior: prior,
                                                                        current: (ageMonths: currentAgeM, value: bmi),
-                                                                       lastN: 5, thresholdZ: 2.0)
-                        if t.priorCount > 0 { whoTrendLines.append("BMIFA: " + t.narrative) }
+                                                                       lastN: 10, thresholdZ: 1.0)
+                        if t.priorCount > 0 {
+                            whoTrendLines.append(bmifaLabel + ": " + t.narrative)
+                            if t.isSignificantShift
+                            || abs(t.current.zScore) >= 2.0
+                            || t.current.percentile <= 3.0
+                            || t.current.percentile >= 97.0 {
+                            whoTrendIsFlagged = true
+                            }
+                        }
                     }
                 } catch {
                     whoZLines = []
                     whoTrendLines = ["WHO evaluation failed: \(error.localizedDescription)"]
+                    whoTrendIsFlagged = false
                 }
             }
 
@@ -925,19 +1008,35 @@ struct WellVisitForm: View {
                 if let dob {
                     self.growthAgeSummary = computeAgeSummary(dob: dob, visit: self.visitDate)
                 } else {
-                    self.growthAgeSummary = "Age at visit: —"
+                    self.growthAgeSummary = String(
+                        format: L10nWVF.s("well_visit_form.growth_snapshot.age_at_visit"),
+                        "—",
+                        "—"
+                    )
                 }
 
                 if let current {
-                    self.growthCurrentSummary = buildGrowthSummaryLine(prefix: "Growth near visit", current)
+                    self.growthCurrentSummary = buildGrowthSummaryLine(
+                        labelKey: "well_visit_form.growth_snapshot.near_visit",
+                        current
+                    )
                 } else {
-                    self.growthCurrentSummary = "Growth near visit: —"
+                    self.growthCurrentSummary = String(
+                        format: L10nWVF.s("well_visit_form.growth_snapshot.near_visit"),
+                        "—", "—", "—", "—"
+                    )
                 }
 
                 if let previous {
-                    self.growthPreviousSummary = buildGrowthSummaryLine(prefix: "Previous", previous)
+                    self.growthPreviousSummary = buildGrowthSummaryLine(
+                        labelKey: "well_visit_form.growth_snapshot.previous",
+                        previous
+                    )
                 } else {
-                    self.growthPreviousSummary = "Previous: —"
+                    self.growthPreviousSummary = String(
+                        format: L10nWVF.s("well_visit_form.growth_snapshot.previous"),
+                        "—", "—", "—", "—"
+                    )
                 }
 
                 if let current, let previous {
@@ -945,9 +1044,24 @@ struct WellVisitForm: View {
                 } else {
                     self.growthDeltaSummary = ""
                 }
+
                 self.whoSex = sex
-                    self.growthWHOZSummary = whoZLines.isEmpty ? "" : ("WHO z-scores: " + whoZLines.joined(separator: " · "))
-                    self.growthWHOTrendSummary = whoTrendLines.isEmpty ? "" : ("Trend:\n" + whoTrendLines.joined(separator: "\n"))
+
+                self.growthWHOZSummary = whoZLines.isEmpty
+                    ? ""
+                    : String(
+                        format: L10nWVF.s("well_visit_form.growth_snapshot.who_zscores"),
+                        whoZLines.joined(separator: " · ")
+                    )
+
+                self.growthWHOTrendSummary = whoTrendLines.isEmpty
+                    ? ""
+                    : {
+                        let title = L10nWVF.s("well_visit_form.growth_snapshot.trend_title")
+                        return title + "\n" + whoTrendLines.joined(separator: "\n")
+                    }()
+
+                self.growthWHOTrendIsFlagged = whoTrendIsFlagged
 
                 self.growthSnapshotIsLoading = false
             }
@@ -1515,17 +1629,26 @@ struct WellVisitForm: View {
                                     .foregroundStyle(.secondary)
                             }
                             
-                            if !growthWHOZSummary.isEmpty {
-                                Text(growthWHOZSummary)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 4)
-                            }
+                            if showsWHOGrowthEvaluation {
+                                if !growthWHOZSummary.isEmpty {
+                                    Text(growthWHOZSummary)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.top, 4)
+                                }
 
-                            if !growthWHOTrendSummary.isEmpty {
-                                Text(growthWHOTrendSummary)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                if !growthWHOTrendSummary.isEmpty {
+                                    if growthWHOTrendIsFlagged {
+                                        Label(L10nWVF.k("well_visit_form.growth_trend.flag"), systemImage: "exclamationmark.triangle.fill")
+                                            .font(.footnote.bold())
+                                            .foregroundStyle(.orange)
+                                            .padding(.top, 2)
+                                    }
+
+                                    Text(growthWHOTrendSummary)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
 
                             if growthSnapshotIsLoading {
@@ -1536,6 +1659,9 @@ struct WellVisitForm: View {
                             refreshGrowthSnapshotCard()
                         }
                         .onChange(of: visitDate) { _, _ in
+                            refreshGrowthSnapshotCard()
+                        }
+                        .onChange(of: visitTypeID) { _, _ in
                             refreshGrowthSnapshotCard()
                         }
                         .onChange(of: appState.selectedPatientID) { _, _ in
@@ -2456,19 +2582,28 @@ struct WellVisitForm: View {
 
         let sql = """
         WITH all_weights AS (
-            SELECT weight_kg * 1000.0 AS weight_g, recorded_at AS date_str
-            FROM vitals
-            WHERE patient_id = ? AND weight_kg IS NOT NULL
-
-            UNION ALL
-
-            SELECT weight_kg * 1000.0 AS weight_g, recorded_at AS date_str
+            -- Manual growth only (exclude vitals-mirrored rows)
+            SELECT weight_kg * 1000.0 AS weight_g,
+                   substr(recorded_at, 1, 10) AS date_str
             FROM manual_growth
-            WHERE patient_id = ? AND weight_kg IS NOT NULL
+            WHERE patient_id = ?
+              AND weight_kg IS NOT NULL
+              AND COALESCE(source,'manual') NOT LIKE 'vitals%'
 
             UNION ALL
 
-            SELECT discharge_weight_g AS weight_g, maternity_discharge_date AS date_str
+            -- Birth weight (date = patient's DOB)
+            SELECT CAST(birth_weight_g AS REAL) AS weight_g,
+                   substr((SELECT dob FROM patients WHERE id = ?), 1, 10) AS date_str
+            FROM perinatal_history
+            WHERE patient_id = ?
+              AND birth_weight_g IS NOT NULL
+
+            UNION ALL
+
+            -- Maternity discharge weight
+            SELECT CAST(discharge_weight_g AS REAL) AS weight_g,
+                   substr(maternity_discharge_date, 1, 10) AS date_str
             FROM perinatal_history
             WHERE patient_id = ?
               AND discharge_weight_g IS NOT NULL
@@ -2477,8 +2612,8 @@ struct WellVisitForm: View {
         SELECT weight_g, date_str
         FROM all_weights
         WHERE date_str IS NOT NULL
-          AND date_str <= ?
-        ORDER BY date_str DESC
+          AND date(date_str) <= date(?)
+        ORDER BY date(date_str) DESC
         LIMIT 2;
         """
 
@@ -2488,10 +2623,11 @@ struct WellVisitForm: View {
         }
         defer { sqlite3_finalize(stmt) }
 
-        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
-        sqlite3_bind_int64(stmt, 2, sqlite3_int64(patientID))
-        sqlite3_bind_int64(stmt, 3, sqlite3_int64(patientID))
-        _ = dateISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID)) // manual_growth
+        sqlite3_bind_int64(stmt, 2, sqlite3_int64(patientID)) // patients.id for DOB subquery
+        sqlite3_bind_int64(stmt, 3, sqlite3_int64(patientID)) // perinatal birth_weight
+        sqlite3_bind_int64(stmt, 4, sqlite3_int64(patientID)) // perinatal discharge_weight
+        _ = dateISO.withCString { sqlite3_bind_text(stmt, 5, $0, -1, SQLITE_TRANSIENT) } // visit date
 
         var points: [(weightG: Double, dateStr: String)] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -4183,7 +4319,8 @@ struct WellVisitForm: View {
         WHERE patient_id = ?
           AND date(recorded_at) >= date(?, ?)
           AND date(recorded_at) <= date(?, ?)
-        ORDER BY recorded_at DESC
+          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
+        ORDER BY datetime(recorded_at) ASC
         LIMIT ?;
         """
 
@@ -4320,6 +4457,7 @@ struct WellVisitForm: View {
         SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
         FROM manual_growth
         WHERE patient_id = ?
+          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
           AND abs(julianday(date(recorded_at)) - julianday(date(?))) <= ?
         ORDER BY abs(julianday(date(recorded_at)) - julianday(date(?))) ASC,
                  datetime(recorded_at) DESC
@@ -4340,6 +4478,7 @@ struct WellVisitForm: View {
         SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
         FROM manual_growth
         WHERE patient_id = ?
+          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
           AND date(recorded_at) <= date(?)
         ORDER BY datetime(recorded_at) DESC
         LIMIT 1;
