@@ -2451,10 +2451,35 @@ func reloadPatients() {
             let vaccinationStatus: String? // vaccination summary
 
             // Optional, locally-computed growth trend evaluation (provided by the UI).
-            // We keep defaults so existing call-sites don't need to change.
-            let growthTrendSummary: String? = nil      // human-readable summary (e.g., weight-for-age trend)
-            let growthTrendIsFlagged: Bool? = nil      // true if concerning / needs attention
-            let growthTrendWindow: String? = nil       // e.g. "from 4 months onward" or similar
+            let growthTrendSummary: String?      // human-readable summary (e.g., weight-for-age trend)
+            let growthTrendIsFlagged: Bool?      // true if concerning / needs attention
+            let growthTrendWindow: String?       // e.g. "from 4 months onward" or similar
+            
+            init(
+                patientID: Int,
+                wellVisitID: Int,
+                visitType: String,
+                ageDays: Int?,
+                problemListing: String,
+                perinatalSummary: String?,
+                pmhSummary: String?,
+                vaccinationStatus: String?,
+                growthTrendSummary: String? = nil,
+                growthTrendIsFlagged: Bool? = nil,
+                growthTrendWindow: String? = nil
+            ) {
+                self.patientID = patientID
+                self.wellVisitID = wellVisitID
+                self.visitType = visitType
+                self.ageDays = ageDays
+                self.problemListing = problemListing
+                self.perinatalSummary = perinatalSummary
+                self.pmhSummary = pmhSummary
+                self.vaccinationStatus = vaccinationStatus
+                self.growthTrendSummary = growthTrendSummary
+                self.growthTrendIsFlagged = growthTrendIsFlagged
+                self.growthTrendWindow = growthTrendWindow
+            }
         }
 
         /// Sanitize problem listing text before sending to AI:
@@ -3394,6 +3419,23 @@ func reloadPatients() {
                 "appstate.ai.prompt.line.vaccination_status_not_documented",
                 comment: "Line when vaccination is missing, e.g. 'Vaccination status: not documented.'"
             )
+            
+            let growthTrendTitle = NSLocalizedString(
+                "appstate.ai.prompt.well.growth_trend_title",
+                comment: "Title for the growth trend section in the well-visit AI prompt."
+            )
+            let growthTrendWindowFormat = NSLocalizedString(
+                "appstate.ai.prompt.well.growth_trend.window_format",
+                comment: "Format for growth trend window line. %@ is the window description."
+            )
+            let growthTrendFlaggedYes = NSLocalizedString(
+                "appstate.ai.prompt.well.growth_trend.flagged_yes",
+                comment: "Growth trend flagged line when flagged is true."
+            )
+            let growthTrendFlaggedNo = NSLocalizedString(
+                "appstate.ai.prompt.well.growth_trend.flagged_no",
+                comment: "Growth trend flagged line when flagged is false."
+            )
 
             if let bp = basePrompt, !bp.isEmpty {
                 header = bp
@@ -3442,6 +3484,25 @@ func reloadPatients() {
             } else {
                 lines.append(vaccNotDocumented)
             }
+            
+            // ✅ Growth trend evaluation (provided by the UI via WellVisitAIContext)
+            if let trend = context.growthTrendSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !trend.isEmpty {
+
+                lines.append("")
+                lines.append("---")
+                lines.append(growthTrendTitle)
+                lines.append(trend)
+
+                if let window = context.growthTrendWindow?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !window.isEmpty {
+                    lines.append(String(format: growthTrendWindowFormat, window))
+                }
+                if let flagged = context.growthTrendIsFlagged {
+                    lines.append(flagged ? growthTrendFlaggedYes : growthTrendFlaggedNo)
+                }
+            }
+               
 
             // Append a machine-readable JSON snapshot of the same well-visit context.
             lines.append("")

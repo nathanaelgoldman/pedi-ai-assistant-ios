@@ -2795,3 +2795,10 @@
 "who.growth.kind.bmi" = "IMC";
 
 "well_visit_form.growth_trend.flag" = "En dehors de la tendance attendue";
+
+"appstate.ai.prompt.well.growth_trend_title" = "Tendance de croissance (OMS)";
+"appstate.ai.prompt.well.growth_trend.window_format" = "Fenêtre : %@";
+"appstate.ai.prompt.well.growth_trend.flagged_yes" = "Signalé : OUI";
+"appstate.ai.prompt.well.growth_trend.flagged_no" = "Signalé : non";
+
+"well_visit_form.growth_snapshot.weight_gain_low" = "Prise de poids faible : %+0.2f kg en %d jours.";

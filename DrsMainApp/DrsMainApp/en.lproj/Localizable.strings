@@ -2806,3 +2806,12 @@
 "who.growth.kind.bmi" = "BMI";
 
 "well_visit_form.growth_trend.flag" = "Out of expected trend";
+
+"appstate.ai.prompt.well.growth_trend_title" = "Growth trend (WHO)";
+"appstate.ai.prompt.well.growth_trend.window_format" = "Window: %@";
+"appstate.ai.prompt.well.growth_trend.flagged_yes" = "Flagged: YES";
+"appstate.ai.prompt.well.growth_trend.flagged_no" = "Flagged: no";
+
+"well_visit_form.growth_snapshot.weight_gain_low" = "Low weight gain: %+0.2f kg over %d days.";
+
+

@@ -215,7 +215,7 @@ enum WHOGrowthEvaluator {
 
         let med = median(priorZ)
         let delta = currentRes.zScore - med
-        let significant = abs(delta) >= thresholdZ
+        let significantZShift = abs(delta) >= thresholdZ
 
         // Small narrative for clinicians.
         let dir = delta >= 0 ? L("well_visit_form.growth_trend.higher") : L("well_visit_form.growth_trend.lower")
@@ -223,18 +223,85 @@ enum WHOGrowthEvaluator {
         let thText = String(format: "%.2f", thresholdZ)
         let pText = String(format: "%.1f", currentRes.percentile)
 
+        // --- Extra: weight-for-age velocity check (WHO median gain vs observed gain) ---
+        // Goal: catch visually obvious growth faltering even when Δz-to-median is small.
+        var velocityConcern = false
+        var velocityMsg: String? = nil
+        if kind == .wfa, let first = cleanedPrior.first {
+            let durationMonths = max(0.0, current.ageMonths - first.ageMonths)
+            // Only evaluate if the window is long enough to be meaningful.
+            if durationMonths >= 1.0 {
+                do {
+                    let table = try loadLMSTable(kind: kind, sex: sex, bundle: bundle)
+                    let lmsStart = try table.lms(atAgeMonths: first.ageMonths)
+                    let lmsEnd   = try table.lms(atAgeMonths: current.ageMonths)
+
+                    // WHO median (M) is in kg for WFA.
+                    let expectedGainKg = lmsEnd.M - lmsStart.M
+                    let observedGainKg = current.value - first.value
+
+                    let durText = String(format: "%.1f", durationMonths)
+                    let obsText = String(format: "%.2f", observedGainKg)
+                    let expText = String(format: "%.2f", expectedGainKg)
+
+                    if observedGainKg < 0 {
+                        velocityConcern = true
+                        velocityMsg = LF("well_visit_form.growth_trend.wfa_weight_loss", obsText, durText)
+                    } else {
+                        // Two regimes:
+                        // 1) Expected gain is meaningful (infants / active growth): compare ratio.
+                        // 2) Expected gain is small (older toddlers): require very small observed gain over a longer window.
+                        let meaningfulExpected = expectedGainKg >= 0.10
+                        if meaningfulExpected {
+                            let ratio = (expectedGainKg > 0) ? (observedGainKg / expectedGainKg) : 1.0
+                            // Flag if gain is substantially below WHO-median expectation.
+                            if ratio < 0.60 {
+                                velocityConcern = true
+                                velocityMsg = LF("well_visit_form.growth_trend.wfa_velocity_low", obsText, expText, durText)
+                            }
+                        } else {
+                            // If expected gain is tiny, we only worry if the window is long and gain is almost nil.
+                            if durationMonths >= 3.0 && observedGainKg < 0.05 {
+                                velocityConcern = true
+                                velocityMsg = LF("well_visit_form.growth_trend.wfa_velocity_low", obsText, expText, durText)
+                            }
+                        }
+                    }
+                } catch {
+                    // Best-effort; if we cannot compute expected gain, skip velocity check.
+                    velocityConcern = false
+                    velocityMsg = nil
+                }
+            }
+        }
+
+        let overallSignificant = significantZShift || velocityConcern
+
+        // Build a single coherent narrative (avoid contradictions).
         let narrative: String
-        if significant {
-            narrative = LF("well_visit_form.growth_trend.significant", dir, dzText, thText, pText)
+        if significantZShift {
+            // Base: z-score shifted meaningfully.
+            let base = LF("well_visit_form.growth_trend.significant", dir, dzText, thText, pText)
+            if let extra = velocityMsg, velocityConcern {
+                narrative = base + "\n" + extra
+            } else {
+                narrative = base
+            }
         } else {
-            narrative = LF("well_visit_form.growth_trend.consistent", dzText, thText, pText)
+            // Base: z-score consistent.
+            let base = LF("well_visit_form.growth_trend.consistent", dzText, thText, pText)
+            if let extra = velocityMsg, velocityConcern {
+                narrative = base + "\n" + extra
+            } else {
+                narrative = base
+            }
         }
 
         return TrendAssessment(
             current: currentRes,
             previousMedianZ: med,
             deltaZFromMedian: delta,
-            isSignificantShift: significant,
+            isSignificantShift: overallSignificant,
             priorCount: priorZ.count,
             narrative: narrative
         )

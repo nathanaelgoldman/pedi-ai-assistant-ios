@@ -917,6 +917,10 @@ struct WellVisitForm: View {
                     if let w = current.weightKg {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
                         whoZLines.append(wfaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+                        // Flag extreme current value even if trend can't be computed reliably.
+                        if abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0 {
+                            whoTrendIsFlagged = true
+                        }
 
                         let prior = buildPrior { $0.weightKg }
                         let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .wfa, sex: sex, prior: prior,
@@ -924,13 +928,11 @@ struct WellVisitForm: View {
                                                                        lastN: 10, thresholdZ: 1.0)
                         if t.priorCount > 0 {
                             whoTrendLines.append(wfaLabel + ": " + t.narrative)
-                            if t.isSignificantShift
-                                    || abs(t.current.zScore) >= 2.0
-                                    || t.current.percentile <= 3.0
-                                    || t.current.percentile >= 97.0 {
-                                    whoTrendIsFlagged = true
-                                }
+                            if t.isSignificantShift {
+                                whoTrendIsFlagged = true
+                            }
                         }
+
                     }
 
                     if let h = current.heightCm {
@@ -4663,12 +4665,33 @@ struct WellVisitForm: View {
                 patientID: patientID
             )
         }
+        
 
         let perinatalSummary = cleaned(appState.perinatalSummaryForSelectedPatient())
         let pmhSummary       = cleaned(appState.pmhSummaryForSelectedPatient())
         let vaccSummary      = cleaned(appState.vaccinationSummaryForSelectedPatient())
 
         let ageDays = computeAgeDaysForVisit(patientID: patientID)
+        
+        // ✅ Growth trend evaluation for AI (best-effort)
+        // Only meaningful when WHO growth evaluation is shown (4-month+ visits).
+        let growthTrendSummaryForAI: String? = {
+            guard showsWHOGrowthEvaluation else { return nil }
+            let z = growthWHOZSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+            let t = growthWHOTrendSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+            let combined = [z.isEmpty ? nil : z, t.isEmpty ? nil : t]
+                .compactMap { $0 }
+                .joined(separator: "\n")
+            return combined.isEmpty ? nil : combined
+        }()
+
+        let growthTrendIsFlaggedForAI: Bool? =
+            showsWHOGrowthEvaluation ? growthWHOTrendIsFlagged : nil
+
+        let growthTrendWindowForAI: String? = {
+            guard showsWHOGrowthEvaluation else { return nil }
+            return "WHO trend uses lastN=10 prior points (when available), thresholdZ=1.0; shown from 4-month visit onward."
+        }()
 
         return AppState.WellVisitAIContext(
             patientID: patientID,
@@ -4678,7 +4701,10 @@ struct WellVisitForm: View {
             problemListing: problemsForAI,
             perinatalSummary: perinatalSummary,
             pmhSummary: pmhSummary,
-            vaccinationStatus: vaccSummary
+            vaccinationStatus: vaccSummary,
+            growthTrendSummary: growthTrendSummaryForAI,
+            growthTrendIsFlagged: growthTrendIsFlaggedForAI,
+            growthTrendWindow: growthTrendWindowForAI
         )
     }
     
