@@ -722,9 +722,9 @@ struct WellVisitForm: View {
     private func fetchGrowthPoints(
         dbURL: URL,
         patientID: Int,
-        lookbackDays: Int = 365,
+        lookbackDays: Int = 3650,
         forwardDays: Int = 3,
-        limit: Int = 12
+        limit: Int = 200
     ) -> [GrowthPoint] {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,

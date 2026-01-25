@@ -2802,3 +2802,12 @@
 "appstate.ai.prompt.well.growth_trend.flagged_no" = "Signalé : non";
 
 "well_visit_form.growth_snapshot.weight_gain_low" = "Prise de poids faible : %+0.2f kg en %d jours.";
+
+/* WHOGrowthEvaluator — contrôle de “vitesse” WFA : gain observé vs attendu (médiane OMS) */
+"well_visit_form.growth_trend.wfa_velocity_low" = "Prise de poids insuffisante pour l’âge : +%@ kg vs attendu +%@ kg sur %@ mois.";
+
+/* WHOGrowthEvaluator — perte de poids sur la période */
+"well_visit_form.growth_trend.wfa_weight_loss" = "Diminution du poids sur la période : %@ kg sur %@ mois.";
+
+"well_visit_form.growth_trend.concern" = "Growth trend concern detected.";
+"well_visit_form.growth_trend.trajectory_deviation" = "Trajectory deviation: %@ than expected by %@(robust SD), threshold %@.";

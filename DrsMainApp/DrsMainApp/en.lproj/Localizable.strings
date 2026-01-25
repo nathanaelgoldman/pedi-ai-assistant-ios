@@ -2814,4 +2814,11 @@
 
 "well_visit_form.growth_snapshot.weight_gain_low" = "Low weight gain: %+0.2f kg over %d days.";
 
+/* WHOGrowthEvaluator — weight-for-age velocity check: observed vs expected WHO median gain */
+"well_visit_form.growth_trend.wfa_velocity_low" = "Weight gain is low for age: +%@ kg vs expected +%@ kg over %@ months.";
 
+/* WHOGrowthEvaluator — weight loss detected over prior window */
+"well_visit_form.growth_trend.wfa_weight_loss" = "Weight decreased over period: %@ kg over %@ months.";
+
+"well_visit_form.growth_trend.concern" = "Growth trend concern detected.";
+"well_visit_form.growth_trend.trajectory_deviation" = "Trajectory deviation: %@ than expected by %@(robust SD), threshold %@.";

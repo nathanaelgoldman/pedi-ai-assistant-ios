@@ -217,6 +217,58 @@ enum WHOGrowthEvaluator {
         let delta = currentRes.zScore - med
         let significantZShift = abs(delta) >= thresholdZ
 
+        #if DEBUG
+        let ageText = String(format: "%.2f", currentRes.ageMonths)
+        let valText = String(format: "%.2f", currentRes.value)
+        let zText   = String(format: "%.3f", currentRes.zScore)
+        print("WHO TREND \(kind.rawValue): current ageMo=\(ageText) value=\(valText) z=\(zText)")
+
+        let medText = String(format: "%.3f", med)
+        let dText   = String(format: "%.3f", delta)
+        let thTextD = String(format: "%.2f", thresholdZ)
+        print("WHO TREND \(kind.rawValue): priorCount=\(priorZ.count) medianZ=\(medText) deltaZ=\(dText) thresholdZ=\(thTextD)")
+        #endif
+
+        // --- Extra: robust trajectory deviation check (Theil–Sen + MAD) ---
+        // Runs for all measures when we have enough prior points.
+        var trajectoryConcern = false
+        var trajectoryMsg: String? = nil
+        #if DEBUG
+        print("WHO TREND \(kind.rawValue): cleanedPrior.count=\(cleanedPrior.count)")
+        #endif
+        if cleanedPrior.count >= 3 {
+            var priorPoints: [(ageMonths: Double, z: Double)] = []
+            priorPoints.reserveCapacity(cleanedPrior.count)
+            for i in 0..<cleanedPrior.count {
+                priorPoints.append((ageMonths: cleanedPrior[i].ageMonths, z: priorZ[i]))
+            }
+
+            if let traj = assessTrajectoryDeviation(
+                prior: priorPoints,
+                currentAgeMonths: currentRes.ageMonths,
+                currentZ: currentRes.zScore,
+                scoreThreshold: 2.5,
+                sigmaFloor: trajectorySigmaFloor(for: kind)
+            ) {
+                trajectoryConcern = traj.isConcern
+                if traj.isConcern {
+                    let dir = traj.residual >= 0 ? L("well_visit_form.growth_trend.higher") : L("well_visit_form.growth_trend.lower")
+                    let scoreText = String(format: "%.2f", traj.score)
+                    let thText = String(format: "%.2f", traj.threshold)
+                    trajectoryMsg = LF("well_visit_form.growth_trend.trajectory_deviation", dir, scoreText, thText)
+                }
+
+                #if DEBUG
+                let expText  = String(format: "%.3f", traj.expectedZ)
+                let resText  = String(format: "%.3f", traj.residual)
+                let sigText  = String(format: "%.3f", traj.sigma)
+                let scoreTxt = String(format: "%.2f", traj.score)
+                let thTxt    = String(format: "%.2f", traj.threshold)
+                print("WHO TRAJ \(kind.rawValue): expectedZ=\(expText) residual=\(resText) sigma=\(sigText) score=\(scoreTxt) th=\(thTxt)")
+                #endif
+            }
+        }
+
         // Small narrative for clinicians.
         let dir = delta >= 0 ? L("well_visit_form.growth_trend.higher") : L("well_visit_form.growth_trend.lower")
         let dzText = String(format: "%.2f", abs(delta))
@@ -275,27 +327,27 @@ enum WHOGrowthEvaluator {
             }
         }
 
-        let overallSignificant = significantZShift || velocityConcern
+        let overallSignificant = significantZShift || velocityConcern || trajectoryConcern
 
         // Build a single coherent narrative (avoid contradictions).
-        let narrative: String
+        let base: String
         if significantZShift {
-            // Base: z-score shifted meaningfully.
-            let base = LF("well_visit_form.growth_trend.significant", dir, dzText, thText, pText)
-            if let extra = velocityMsg, velocityConcern {
-                narrative = base + "\n" + extra
-            } else {
-                narrative = base
-            }
+            base = LF("well_visit_form.growth_trend.significant", dir, dzText, thText, pText)
+        } else if velocityConcern || trajectoryConcern {
+            base = L("well_visit_form.growth_trend.concern")
         } else {
-            // Base: z-score consistent.
-            let base = LF("well_visit_form.growth_trend.consistent", dzText, thText, pText)
-            if let extra = velocityMsg, velocityConcern {
-                narrative = base + "\n" + extra
-            } else {
-                narrative = base
-            }
+            base = LF("well_visit_form.growth_trend.consistent", dzText, thText, pText)
         }
+
+        var extras: [String] = []
+        if let m = trajectoryMsg, trajectoryConcern {
+            extras.append(m)
+        }
+        if let m = velocityMsg, velocityConcern {
+            extras.append(m)
+        }
+
+        let narrative = ([base] + extras).joined(separator: "\n")
 
         return TrendAssessment(
             current: currentRes,
@@ -577,6 +629,117 @@ enum WHOGrowthEvaluator {
 
     private static func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double {
         a + (b - a) * t
+    }
+
+    // MARK: - Robust trajectory helpers (Theil–Sen + MAD)
+
+    /// Minimum noise scale (in z-score units) used by the trajectory model.
+    /// Prevents over-flagging when historical scatter (MAD) is extremely small.
+    private static func trajectorySigmaFloor(for kind: Kind) -> Double {
+        switch kind {
+        case .wfa:
+            return 0.30
+        case .lhfa:
+            return 0.35
+        case .hcfa:
+            return 0.45
+        case .bmifa:
+            return 0.35
+        }
+    }
+
+    private struct TrajectoryDeviation {
+        let expectedZ: Double
+        let residual: Double
+        let sigma: Double
+        let score: Double
+        let threshold: Double
+        let isConcern: Bool
+    }
+
+    /// Robustly assess how surprising the current z-score is given the prior trajectory.
+    /// - Uses Theil–Sen slope (median of pairwise slopes) + median intercept.
+    /// - Uses MAD of prior residuals to estimate noise scale.
+    /// - Returns nil if we cannot compute a stable fit (e.g., repeated ages only).
+    private static func assessTrajectoryDeviation(
+        prior: [(ageMonths: Double, z: Double)],
+        currentAgeMonths: Double,
+        currentZ: Double,
+        scoreThreshold: Double,
+        sigmaFloor: Double
+    ) -> TrajectoryDeviation? {
+
+        // Require >= 3 priors at call site; also ensure we have at least 3 distinct ages.
+        let cleaned = prior
+            .filter { $0.ageMonths.isFinite && $0.z.isFinite }
+            .sorted { $0.ageMonths < $1.ageMonths }
+
+        guard cleaned.count >= 3 else { return nil }
+
+        // Compute Theil–Sen slope: median of all pairwise slopes.
+        var slopes: [Double] = []
+        slopes.reserveCapacity(cleaned.count * (cleaned.count - 1) / 2)
+
+        for i in 0..<(cleaned.count - 1) {
+            for j in (i + 1)..<cleaned.count {
+                let dx = cleaned[j].ageMonths - cleaned[i].ageMonths
+                if dx == 0 { continue }
+                let s = (cleaned[j].z - cleaned[i].z) / dx
+                if s.isFinite {
+                    slopes.append(s)
+                }
+            }
+        }
+
+        guard !slopes.isEmpty else { return nil }
+        let b = median(slopes)
+
+        // Intercept: median(z_i - b*x_i)
+        var intercepts: [Double] = []
+        intercepts.reserveCapacity(cleaned.count)
+        for p in cleaned {
+            let a = p.z - b * p.ageMonths
+            if a.isFinite {
+                intercepts.append(a)
+            }
+        }
+        guard !intercepts.isEmpty else { return nil }
+        let a = median(intercepts)
+
+        let expected = a + b * currentAgeMonths
+        let residual = currentZ - expected
+
+        // Prior residuals to estimate noise.
+        var resids: [Double] = []
+        resids.reserveCapacity(cleaned.count)
+        for p in cleaned {
+            let r = p.z - (a + b * p.ageMonths)
+            if r.isFinite {
+                resids.append(r)
+            }
+        }
+        guard !resids.isEmpty else { return nil }
+
+        let sigma = max(1.4826 * mad(resids), sigmaFloor)
+        let score = abs(residual) / sigma
+        let isConcern = score >= scoreThreshold
+
+        return TrajectoryDeviation(
+            expectedZ: expected,
+            residual: residual,
+            sigma: sigma,
+            score: score,
+            threshold: scoreThreshold,
+            isConcern: isConcern
+        )
+    }
+
+    /// Median Absolute Deviation (MAD).
+    private static func mad(_ xs: [Double]) -> Double {
+        guard !xs.isEmpty else { return 0 }
+        let m = median(xs)
+        let absDev = xs.map { abs($0 - m) }
+        return median(absDev)
     }
 
     private static func median(_ xs: [Double]) -> Double {
