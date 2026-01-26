@@ -2787,8 +2787,9 @@
 
 /* ===== Growth Snapshot (WellVisitForm) ===== */
 "well_visit_form.growth_snapshot.age_at_visit" = "Age at visit: %@ days (~%@ months)";
-"well_visit_form.growth_snapshot.near_visit" = "Growth near visit (%@): wt %@ kg; len %@ cm; HC %@ cm";
-"well_visit_form.growth_snapshot.previous" = "Previous (%@): wt %@ kg; len %@ cm; HC %@ cm";
+"well_visit_form.growth_snapshot.near_visit" = "Growth near visit (%@): **Weight:** %@ kg · **Length/Height:** %@ cm · **HC:** %@ cm";
+"well_visit_form.growth_snapshot.previous"  = "Previous (%@): **Weight:** %@ kg · **Length/Height:** %@ cm · **HC:** %@ cm";
+
 "well_visit_form.growth_snapshot.delta" = "Δ vs previous: wt %@ kg; len %@ cm; HC %@ cm; wt/day %@ g/day";
 "well_visit_form.growth_snapshot.who_zscores" = "WHO z-scores: %@";
 "well_visit_form.growth_snapshot.trend_title" = "Trend:";
@@ -2822,3 +2823,23 @@
 
 "well_visit_form.growth_trend.concern" = "Growth trend concern detected.";
 "well_visit_form.growth_trend.trajectory_deviation" = "Trajectory deviation: %@ than expected by %@(robust SD), threshold %@.";
+
+/* Overall growth trend summary (header line when something is flagged). */
+"well_visit_form.growth_snapshot.overall_concern" = "not in line with expected trend %@";
+
+/* Overall growth trend summary (header line when nothing is flagged). */
+"well_visit_form.growth_snapshot.overall_ok" = "Overall trend reassuring";
+
+"who_growth.result.summary_line" = "%@ %@ %@ à %@ months → z=%@, p=%@";
+"who_growth.detail.tried_paths"  = "Tested locations : %@";
+
+"who.growth.kind.weight_for_length" = "Weight-for-length";
+
+"who_growth.nutrition.summary_line" = "%@: z=%@ → %@";
+
+"who_growth.nutrition.severe_thinness" = "Severe thinness";
+"who_growth.nutrition.thinness" = "Thinness";
+"who_growth.nutrition.healthy" = "Healthy";
+"who_growth.nutrition.risk_overweight" = "Risk of overweight";
+"who_growth.nutrition.overweight" = "Overweight";
+"who_growth.nutrition.obesity" = "Obesity";

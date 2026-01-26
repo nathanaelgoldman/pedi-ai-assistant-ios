@@ -559,8 +559,14 @@ struct WellVisitForm: View {
     // MARK: - WHO growth evaluation (LMS / z-score)
     @State private var whoSex: WHOGrowthEvaluator.Sex? = nil
     @State private var growthWHOZSummary: String = ""
+    @State private var growthWHONutritionSummary: String = ""
     @State private var growthWHOTrendSummary: String = ""
     @State private var growthWHOTrendIsFlagged: Bool = false
+    
+    @State private var growthWHOOverallFlags: [String] = []
+    // Tokens persisted for PatientViewerApp (localization-proof)
+    @State private var growthWHOProblemTokens: [ProblemToken] = []
+    @State private var growthWHOMeasurementTokens: [ProblemToken] = []
 
     /// We only show the weight-delta helper box for the first 3 well visits
     /// (1, 2 and 4-month visits).
@@ -856,6 +862,15 @@ struct WellVisitForm: View {
         )
     }
 
+    private func markdownText(_ s: String) -> Text {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return Text("") }
+        if let attributed = try? AttributedString(markdown: trimmed) {
+            return Text(attributed)
+        }
+        return Text(trimmed)
+    }
+
     private func refreshGrowthSnapshotCard() {
         guard let dbURL = appState.currentDBURL,
               let patientID = appState.selectedPatientID else {
@@ -864,8 +879,12 @@ struct WellVisitForm: View {
             growthPreviousSummary = ""
             growthDeltaSummary = ""
             growthWHOZSummary = ""
+            growthWHONutritionSummary = ""
             growthWHOTrendSummary = ""
             growthWHOTrendIsFlagged = false
+            growthWHOOverallFlags = []
+            growthWHOProblemTokens = []
+            growthWHOMeasurementTokens = []
             return
         }
 
@@ -893,6 +912,12 @@ struct WellVisitForm: View {
             var whoZLines: [String] = []
             var whoTrendLines: [String] = []
             var whoTrendIsFlagged = false
+            var whoNutritionLine: String = ""
+
+            var overallFlags: [String] = []
+            func addOverallFlag(_ label: String) {
+                if !overallFlags.contains(label) { overallFlags.append(label) }
+            }
 
             if includeWHO, let dob, let sex, let current {
                 func buildPrior(_ extract: (GrowthPoint) -> Double?) -> [(ageMonths: Double, value: Double)] {
@@ -907,6 +932,8 @@ struct WellVisitForm: View {
                 }
 
                 let currentAgeM = ageMonths(dob: dob, at: current.recordedDate)
+                var wflZForNutrition: Double? = nil
+                var bmiZForNutrition: Double? = nil
 
                 do {
                     let wfaLabel   = WHOGrowthEvaluator.Kind.wfa.displayName()
@@ -916,93 +943,203 @@ struct WellVisitForm: View {
                     
                     if let w = current.weightKg {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
-                        whoZLines.append(wfaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
-                        // Flag extreme current value even if trend can't be computed reliably.
-                        if abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0 {
+                        let zStr = String(format: "%.2f", r.zScore)
+                        let pStr = String(format: "%.0f", r.percentile)
+                        whoZLines.append("**\(wfaLabel):** z=\(zStr) P\(pStr)")
+
+                        let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
+                        if extreme {
                             whoTrendIsFlagged = true
+                            addOverallFlag(wfaLabel)
                         }
 
                         let prior = buildPrior { $0.weightKg }
-                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .wfa, sex: sex, prior: prior,
-                                                                       current: (ageMonths: currentAgeM, value: w),
-                                                                       lastN: 10, thresholdZ: 1.0)
+                        let t = try WHOGrowthEvaluator.assessTrendLastN(
+                            kind: .wfa, sex: sex, prior: prior,
+                            current: (ageMonths: currentAgeM, value: w),
+                            lastN: 10, thresholdZ: 1.0
+                        )
+
                         if t.priorCount > 0 {
-                            whoTrendLines.append(wfaLabel + ": " + t.narrative)
+                            whoTrendLines.append("**\(wfaLabel):** " + t.narrative)
                             if t.isSignificantShift {
                                 whoTrendIsFlagged = true
+                                addOverallFlag(wfaLabel)
                             }
                         }
-
                     }
 
                     if let h = current.heightCm {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: currentAgeM, value: h)
-                        whoZLines.append(lhfaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+                        let zStr = String(format: "%.2f", r.zScore)
+                        let pStr = String(format: "%.0f", r.percentile)
+                        whoZLines.append("**\(lhfaLabel):** z=\(zStr) P\(pStr)")
+
+                        let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
+                        if extreme {
+                            whoTrendIsFlagged = true
+                            addOverallFlag(lhfaLabel)
+                        }
 
                         let prior = buildPrior { $0.heightCm }
-                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .lhfa, sex: sex, prior: prior,
-                                                                       current: (ageMonths: currentAgeM, value: h),
-                                                                       lastN: 10, thresholdZ: 1.0)
+                        let t = try WHOGrowthEvaluator.assessTrendLastN(
+                            kind: .lhfa, sex: sex, prior: prior,
+                            current: (ageMonths: currentAgeM, value: h),
+                            lastN: 10, thresholdZ: 1.0
+                        )
+
                         if t.priorCount > 0 {
-                            whoTrendLines.append(lhfaLabel + ": " + t.narrative)
-                            if t.isSignificantShift
-                                    || abs(t.current.zScore) >= 2.0
-                                    || t.current.percentile <= 3.0
-                                    || t.current.percentile >= 97.0 {
-                                    whoTrendIsFlagged = true
-                                }
+                            whoTrendLines.append("**\(lhfaLabel):** " + t.narrative)
+                            if t.isSignificantShift {
+                                whoTrendIsFlagged = true
+                                addOverallFlag(lhfaLabel)
+                            }
                         }
                     }
 
                     if let hc = current.headCircCm {
                         let r = try WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: currentAgeM, value: hc)
-                        whoZLines.append(hcfaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
+                        let zStr = String(format: "%.2f", r.zScore)
+                        let pStr = String(format: "%.0f", r.percentile)
+                        whoZLines.append("**\(hcfaLabel):** z=\(zStr) P\(pStr)")
+
+
+                        let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
+                        if extreme {
+                            whoTrendIsFlagged = true
+                            addOverallFlag(hcfaLabel)
+                        }
 
                         let prior = buildPrior { $0.headCircCm }
-                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .hcfa, sex: sex, prior: prior,
-                                                                       current: (ageMonths: currentAgeM, value: hc),
-                                                                       lastN: 10, thresholdZ: 1.0)
+                        let t = try WHOGrowthEvaluator.assessTrendLastN(
+                            kind: .hcfa, sex: sex, prior: prior,
+                            current: (ageMonths: currentAgeM, value: hc),
+                            lastN: 10, thresholdZ: 1.0
+                        )
+
                         if t.priorCount > 0 {
-                            whoTrendLines.append(hcfaLabel + ": " + t.narrative)
-                            if t.isSignificantShift
-                                    || abs(t.current.zScore) >= 2.0
-                                    || t.current.percentile <= 3.0
-                                    || t.current.percentile >= 97.0 {
-                                    whoTrendIsFlagged = true
+                            whoTrendLines.append("**\(hcfaLabel):** " + t.narrative)
+                            if t.isSignificantShift {
+                                whoTrendIsFlagged = true
+                                addOverallFlag(hcfaLabel)
+                            }
+                        }
+                    }
+
+                    // Use WFL for < 24 months; BMI-for-age for >= 24 months.
+                    if let w = current.weightKg, let h = current.heightCm {
+                        if currentAgeM < 24.0 {
+                            // Weight-for-length (WFL)
+                            let wflLabel = WHOGrowthEvaluator.Kind.wfl.displayName()
+                            let wfl = try WHOGrowthEvaluator.evaluateWeightForLength(
+                                sex: sex,
+                                lengthCM: h,
+                                weightKG: w
+                            )
+                            let zStr = String(format: "%.2f", wfl.zScore)
+                            let pStr = String(format: "%.0f", wfl.percentile)
+                            whoZLines.append("**\(wflLabel):** z=\(zStr) P\(pStr)")
+                            wflZForNutrition = wfl.zScore
+
+                            let extreme = abs(wfl.zScore) >= 2.0 || wfl.percentile <= 3.0 || wfl.percentile >= 97.0
+                            if extreme {
+                                whoTrendIsFlagged = true
+                                addOverallFlag(wflLabel)
+                            }
+
+                            let priorWFL: [(lengthCM: Double, weightKG: Double)] = points
+                                .filter { $0.recordedDate < current.recordedDate }
+                                .sorted(by: { $0.recordedDate < $1.recordedDate })
+                                .compactMap { p -> (Double, Double)? in
+                                    guard let pw = p.weightKg, let ph = p.heightCm else { return nil }
+                                    return (ph, pw)
                                 }
+
+                            let t = try WHOGrowthEvaluator.assessTrendWeightForLengthLastN(
+                                sex: sex,
+                                prior: priorWFL,
+                                current: (lengthCM: h, weightKG: w),
+                                lastN: 10,
+                                thresholdZ: 1.0
+                            )
+
+                            if t.priorCount > 0 {
+                                whoTrendLines.append("**\(wflLabel):** " + t.narrative)
+                                if t.isSignificantShift {
+                                    whoTrendIsFlagged = true
+                                    addOverallFlag(wflLabel)
+                                }
+                            }
+                        } else {
+                            // BMI-for-age (BMIFA)
+                            if let bmi = bmiKgM2(weightKg: w, heightCm: h) {
+                                let bmifaLabel = WHOGrowthEvaluator.Kind.bmifa.displayName()
+                                let r = try WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: currentAgeM, value: bmi)
+                                let zStr = String(format: "%.2f", r.zScore)
+                                let pStr = String(format: "%.0f", r.percentile)
+                                whoZLines.append("**\(bmifaLabel):** z=\(zStr) P\(pStr)")
+                                bmiZForNutrition = r.zScore
+
+                                let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
+                                if extreme {
+                                    whoTrendIsFlagged = true
+                                    addOverallFlag(bmifaLabel)
+                                }
+
+                                let prior = points
+                                    .filter { $0.recordedDate < current.recordedDate }
+                                    .sorted(by: { $0.recordedDate < $1.recordedDate })
+                                    .compactMap { p -> (ageMonths: Double, value: Double)? in
+                                        guard let pw = p.weightKg, let ph = p.heightCm,
+                                              let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
+                                        return (ageMonths(dob: dob, at: p.recordedDate), pbmi)
+                                    }
+
+                                let t = try WHOGrowthEvaluator.assessTrendLastN(
+                                    kind: .bmifa, sex: sex, prior: prior,
+                                    current: (ageMonths: currentAgeM, value: bmi),
+                                    lastN: 10, thresholdZ: 1.0
+                                )
+
+                                if t.priorCount > 0 {
+                                    whoTrendLines.append("**\(bmifaLabel):** " + t.narrative)
+                                    if t.isSignificantShift {
+                                        whoTrendIsFlagged = true
+                                        addOverallFlag(bmifaLabel)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if !whoZLines.isEmpty {
+                        if whoTrendIsFlagged {
+                            let list = overallFlags.isEmpty ? "" : " (" + overallFlags.joined(separator: ", ") + ")"
+                            whoTrendLines.insert(
+                                String(format: L10nWVF.s("well_visit_form.growth_snapshot.overall_concern"), list),
+                                at: 0
+                            )
+                        } else {
+                            whoTrendLines.insert(
+                                L10nWVF.s("well_visit_form.growth_snapshot.overall_ok"),
+                                at: 0
+                            )
                         }
                     }
 
-                    if let w = current.weightKg, let h = current.heightCm, let bmi = bmiKgM2(weightKg: w, heightCm: h) {
-                        let r = try WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: currentAgeM, value: bmi)
-                        whoZLines.append(bmifaLabel + " z=" + String(format: "%.2f", r.zScore) + " P" + String(format: "%.0f", r.percentile))
-
-                        let prior = points
-                            .filter { $0.recordedDate < current.recordedDate }
-                            .sorted(by: { $0.recordedDate < $1.recordedDate })
-                            .compactMap { p -> (ageMonths: Double, value: Double)? in
-                                guard let pw = p.weightKg, let ph = p.heightCm,
-                                      let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
-                                return (ageMonths(dob: dob, at: p.recordedDate), pbmi)
-                            }
-
-                        let t = try WHOGrowthEvaluator.assessTrendLastN(kind: .bmifa, sex: sex, prior: prior,
-                                                                       current: (ageMonths: currentAgeM, value: bmi),
-                                                                       lastN: 10, thresholdZ: 1.0)
-                        if t.priorCount > 0 {
-                            whoTrendLines.append(bmifaLabel + ": " + t.narrative)
-                            if t.isSignificantShift
-                            || abs(t.current.zScore) >= 2.0
-                            || t.current.percentile <= 3.0
-                            || t.current.percentile >= 97.0 {
-                            whoTrendIsFlagged = true
-                            }
-                        }
+                    if let nut = WHOGrowthEvaluator.assessNutritionStatus(
+                        ageMonths: currentAgeM,
+                        wflZ: wflZForNutrition,
+                        bmiZ: bmiZForNutrition
+                    ) {
+                        whoNutritionLine = nut.summaryLine()
                     }
+
                 } catch {
                     whoZLines = []
                     whoTrendLines = ["WHO evaluation failed: \(error.localizedDescription)"]
                     whoTrendIsFlagged = false
+                    whoNutritionLine = ""
                 }
             }
 
@@ -1056,18 +1193,130 @@ struct WellVisitForm: View {
                         whoZLines.joined(separator: " · ")
                     )
 
+                self.growthWHONutritionSummary = whoNutritionLine
+
                 self.growthWHOTrendSummary = whoTrendLines.isEmpty
                     ? ""
                     : {
                         let title = L10nWVF.s("well_visit_form.growth_snapshot.trend_title")
-                        return title + "\n" + whoTrendLines.joined(separator: "\n")
+
+                        // NOTE: `AttributedString(markdown:)` treats single newlines as spaces.
+                        // Use Markdown hard line breaks (`"  \n"`) to force line breaks reliably.
+                        if whoTrendLines.count == 1 {
+                            return title + "  \n" + whoTrendLines[0]
+                        }
+
+                        let head = whoTrendLines[0]
+                        let bulletLines = whoTrendLines
+                            .dropFirst()
+                            .map { "• " + $0 }
+
+                        let body = ([head] + bulletLines).joined(separator: "  \n")
+                        return title + "  \n" + body
                     }()
 
                 self.growthWHOTrendIsFlagged = whoTrendIsFlagged
+                self.growthWHOOverallFlags = overallFlags
 
                 self.growthSnapshotIsLoading = false
             }
         }
+    }
+    
+    // MARK: - Growth eval persistence (well_visit_growth_eval)
+
+    private func ensureWellVisitGrowthEvalTable(db: OpaquePointer) {
+        let createSQL = """
+        CREATE TABLE IF NOT EXISTS well_visit_growth_eval (
+          well_visit_id INTEGER PRIMARY KEY,
+          problem_tokens_json TEXT NOT NULL DEFAULT '[]',
+          measurement_tokens_json TEXT NOT NULL DEFAULT '[]',
+          updated_at TEXT
+        );
+        """
+        _ = sqlite3_exec(db, createSQL, nil, nil, nil)
+
+        // Ensure columns exist (forward/backward compatibility)
+        func hasColumn(_ name: String) -> Bool {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "PRAGMA table_info(well_visit_growth_eval);", -1, &stmt, nil) == SQLITE_OK,
+                  let stmt else { return false }
+            defer { sqlite3_finalize(stmt) }
+
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                if let cStr = sqlite3_column_text(stmt, 1) {
+                    if String(cString: cStr) == name { return true }
+                }
+            }
+            return false
+        }
+
+        if !hasColumn("problem_tokens_json") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN problem_tokens_json TEXT NOT NULL DEFAULT '[]';", nil, nil, nil)
+        }
+        if !hasColumn("measurement_tokens_json") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN measurement_tokens_json TEXT NOT NULL DEFAULT '[]';", nil, nil, nil)
+        }
+        if !hasColumn("updated_at") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN updated_at TEXT;", nil, nil, nil)
+        }
+    }
+
+    private func encodeTokensJSON(_ tokens: [ProblemToken]) -> String {
+        guard !tokens.isEmpty else { return "[]" }
+        do {
+            let data = try JSONEncoder().encode(tokens)
+            return String(data: data, encoding: .utf8) ?? "[]"
+        } catch {
+            return "[]"
+        }
+    }
+
+    private func saveWellVisitGrowthEval(
+        db: OpaquePointer,
+        wellVisitID: Int,
+        problemTokens: [ProblemToken],
+        measurementTokens: [ProblemToken]
+    ) {
+        ensureWellVisitGrowthEvalTable(db: db)
+
+        let problemJSON = encodeTokensJSON(problemTokens)
+        let measJSON = encodeTokensJSON(measurementTokens)
+
+        let upsertSQL = """
+        INSERT INTO well_visit_growth_eval (
+            well_visit_id,
+            problem_tokens_json,
+            measurement_tokens_json,
+            updated_at
+        ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(well_visit_id) DO UPDATE SET
+            problem_tokens_json = excluded.problem_tokens_json,
+            measurement_tokens_json = excluded.measurement_tokens_json,
+            updated_at = CURRENT_TIMESTAMP;
+        """
+
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, upsertSQL, -1, &stmt, nil) != SQLITE_OK {
+            let replaceSQL = """
+            REPLACE INTO well_visit_growth_eval (
+                well_visit_id,
+                problem_tokens_json,
+                measurement_tokens_json,
+                updated_at
+            ) VALUES (?, ?, ?, CURRENT_TIMESTAMP);
+            """
+            _ = sqlite3_prepare_v2(db, replaceSQL, -1, &stmt, nil)
+        }
+
+        guard let stmt else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(wellVisitID))
+        _ = problemJSON.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+        _ = measJSON.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
+
+        _ = sqlite3_step(stmt)
     }
 
     private var visitTypes: [WellVisitType] { WELL_VISIT_TYPES }
@@ -1616,11 +1865,11 @@ struct WellVisitForm: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            Text(growthCurrentSummary)
+                            markdownText(growthCurrentSummary)
                                 .font(.subheadline)
 
                             if !growthPreviousSummary.isEmpty {
-                                Text(growthPreviousSummary)
+                                markdownText(growthPreviousSummary)
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -1633,12 +1882,15 @@ struct WellVisitForm: View {
                             
                             if showsWHOGrowthEvaluation {
                                 if !growthWHOZSummary.isEmpty {
-                                    Text(growthWHOZSummary)
+                                    markdownText(growthWHOZSummary)
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
-                                        .padding(.top, 4)
                                 }
-
+                                if !growthWHONutritionSummary.isEmpty {
+                                    Text(growthWHONutritionSummary)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
                                 if !growthWHOTrendSummary.isEmpty {
                                     if growthWHOTrendIsFlagged {
                                         Label(L10nWVF.k("well_visit_form.growth_trend.flag"), systemImage: "exclamationmark.triangle.fill")
@@ -1647,7 +1899,7 @@ struct WellVisitForm: View {
                                             .padding(.top, 2)
                                     }
 
-                                    Text(growthWHOTrendSummary)
+                                    markdownText(growthWHOTrendSummary)
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
@@ -3835,6 +4087,90 @@ struct WellVisitForm: View {
                 )
             }
         }
+        
+        // 3b) Growth (WHO) – only when flagged
+        if showsWHOGrowthEvaluation && growthWHOTrendIsFlagged {
+            let flagged = growthWHOOverallFlags
+            let list = flagged.isEmpty
+                ? ""
+                : " (" + flagged.joined(separator: ", ") + ")"
+
+            // Same localized phrasing as the snapshot card
+            let overallLine = String(
+                format: L10nWVF.s("well_visit_form.growth_snapshot.overall_concern"),
+                list
+            )
+            add(overallLine)
+
+            // Add *explanatory* details for the flagged metric(s) so the problem list isn't vague.
+            // We reuse the already-computed snapshot strings but filter them down to the flagged label(s).
+            func plainText(_ s: String) -> String {
+                s.replacingOccurrences(of: "**", with: "")
+                    .replacingOccurrences(of: "• ", with: "")
+                    .replacingOccurrences(of: "  \n", with: "\n")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            // 1) z-score lines (only for flagged labels)
+            let zSummaryRaw = plainText(growthWHOZSummary)
+            if !zSummaryRaw.isEmpty {
+                // `growthWHOZSummary` is formatted as something like "<prefix>: <item> · <item>".
+                // Keep only items that mention one of the flagged labels.
+                let payload: String = {
+                    let parts = zSummaryRaw.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                    if parts.count == 2 { return String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines) }
+                    return zSummaryRaw
+                }()
+
+                let items = payload
+                    .components(separatedBy: " · ")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { item in
+                        guard !item.isEmpty else { return false }
+                        // Match by label text (e.g. "Longueur / Taille", "Poids", "IMC", etc.)
+                        return flagged.contains(where: { item.localizedCaseInsensitiveContains($0) })
+                    }
+
+                if !items.isEmpty {
+                    add(items.joined(separator: " · "))
+                }
+            }
+
+            // 2) trend narrative lines (only for flagged labels)
+            let trendRaw = plainText(growthWHOTrendSummary)
+            if !trendRaw.isEmpty {
+                let lines = trendRaw
+                    .components(separatedBy: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+
+                let filtered = lines
+                    .filter { line in
+                        flagged.contains(where: { line.localizedCaseInsensitiveContains($0) })
+                    }
+                    // `growthWHOTrendSummary` includes the overall header (e.g. "En dehors… (Longueur / Taille)")
+                    // which would otherwise get repeated. We already added it above.
+                    .filter { plainText($0) != plainText(overallLine) }
+
+                // Avoid dumping the whole block; only show the lines that explain the flagged metric.
+                for line in filtered {
+                    add(line)
+                }
+            }
+
+            // 3) Nutrition line: only include when nutrition itself is the flagged concern (WFL/BMI).
+            // This avoids listing a normal BMI as a "problem" when the concern is elsewhere (e.g. stature trend).
+            let nutritionRelevant =
+                flagged.contains(WHOGrowthEvaluator.Kind.wfl.displayName()) ||
+                flagged.contains(WHOGrowthEvaluator.Kind.bmifa.displayName())
+
+            if nutritionRelevant {
+                let nut = trimmed(growthWHONutritionSummary)
+                if !nut.isEmpty {
+                    add(nut)
+                }
+            }
+        }
 
         // 4) Physical exam – start migrating away from raw lines by emitting PE tokens
         if let item = peAbnormalFieldToken(
@@ -4672,16 +5008,75 @@ struct WellVisitForm: View {
         let vaccSummary      = cleaned(appState.vaccinationSummaryForSelectedPatient())
 
         let ageDays = computeAgeDaysForVisit(patientID: patientID)
-        
+
+        // Nutrition category line for AI (derived from the same WHO evaluator)
+        let nutritionSummaryLineForAI: String? = {
+            guard showsWHOGrowthEvaluation else { return nil }
+            guard let dbURL = appState.currentDBURL else { return nil }
+            guard let ageDays, ageDays >= 0 else { return nil }
+            let ageMonths = Double(ageDays) / 30.4375
+
+            guard let reportSex = fetchPatientSexForWHOEnum(dbURL: dbURL, patientID: patientID) else { return nil }
+            let sex: WHOGrowthEvaluator.Sex = (reportSex == .male) ? .male : .female
+            guard let snap = fetchManualGrowthSnapshot(dbURL: dbURL, patientID: patientID) else { return nil }
+
+            guard let wt = snap.weightKg, wt > 0 else { return nil }
+            let len = snap.heightCm
+
+            // Compute WFL z (0–24m) when length is available
+            var wflZ: Double? = nil
+            if let len, len > 0 {
+                if let r = try? WHOGrowthEvaluator.evaluateWeightForLength(
+                    sex: sex,
+                    lengthCM: len,
+                    weightKG: wt
+                ) {
+                    wflZ = r.zScore
+                }
+            }
+
+            // Compute BMI z (0–60m) when length is available
+            var bmiZ: Double? = nil
+            if let len, len > 0 {
+                let m = len / 100.0
+                if m > 0 {
+                    let bmi = wt / (m * m)
+                    if let r = try? WHOGrowthEvaluator.evaluate(
+                        kind: .bmifa,
+                        sex: sex,
+                        ageMonths: ageMonths,
+                        value: bmi
+                    ) {
+                        bmiZ = r.zScore
+                    }
+                }
+            }
+
+            guard let assessment = WHOGrowthEvaluator.assessNutritionStatus(
+                ageMonths: ageMonths,
+                wflZ: wflZ,
+                bmiZ: bmiZ
+            ) else { return nil }
+
+            // Keep it compact and English for AI context.
+            return assessment.summaryLine()
+        }()
+
         // ✅ Growth trend evaluation for AI (best-effort)
         // Only meaningful when WHO growth evaluation is shown (4-month+ visits).
         let growthTrendSummaryForAI: String? = {
             guard showsWHOGrowthEvaluation else { return nil }
+
             let z = growthWHOZSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+            let n = (nutritionSummaryLineForAI ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let t = growthWHOTrendSummary.trimmingCharacters(in: .whitespacesAndNewlines)
-            let combined = [z.isEmpty ? nil : z, t.isEmpty ? nil : t]
-                .compactMap { $0 }
-                .joined(separator: "\n")
+
+            var parts: [String] = []
+            if !z.isEmpty { parts.append(z) }
+            if !n.isEmpty { parts.append(n) }
+            if !t.isEmpty { parts.append(t) }
+
+            let combined = parts.joined(separator: "\n")
             return combined.isEmpty ? nil : combined
         }()
 

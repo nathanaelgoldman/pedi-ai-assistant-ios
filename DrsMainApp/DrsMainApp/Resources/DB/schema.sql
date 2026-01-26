@@ -353,6 +353,7 @@ CREATE TABLE IF NOT EXISTS well_visits (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+
 CREATE TABLE IF NOT EXISTS well_visit_milestones (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   visit_id INTEGER NOT NULL,
@@ -363,6 +364,23 @@ CREATE TABLE IF NOT EXISTS well_visit_milestones (
   updated_at TEXT,
   UNIQUE(visit_id, code),
   FOREIGN KEY (visit_id) REFERENCES well_visits(id) ON DELETE CASCADE
+);
+
+-- Computed growth evaluation for well visits (precomputed in DrsMainApp; rendered in PatientViewerApp)
+-- Stores token payloads (localizable later) instead of fully-rendered strings.
+CREATE TABLE IF NOT EXISTS well_visit_growth_eval (
+  well_visit_id INTEGER PRIMARY KEY,
+  evaluator_version TEXT NOT NULL,
+  is_flagged INTEGER NOT NULL DEFAULT 0,
+
+  -- Token payloads for report sections (arrays of token objects, JSON-encoded)
+  problem_tokens_json TEXT NOT NULL DEFAULT '[]',
+  measurement_tokens_json TEXT NOT NULL DEFAULT '[]',
+
+  created_at TEXT,
+  updated_at TEXT,
+
+  FOREIGN KEY (well_visit_id) REFERENCES well_visits(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS ai_inputs (

@@ -2773,19 +2773,19 @@
 "docs.toolbar.save_copy" = "Enregistrer une copie…";
 "docs.error.export-failed" = "Échec de l’export : %@";
 
-"well_visit_form.growth_snapshot.title" = "Aperçu de croissance (autour de la visite)";
+"well_visit_form.growth_snapshot.title" = "Aperçu de la croissance (autour de la visite)";
 /* ===== Aperçu de croissance (WellVisitForm) ===== */
 "well_visit_form.growth_snapshot.age_at_visit" = "Âge à la visite : %@ jours (~%@ mois)";
-"well_visit_form.growth_snapshot.near_visit" = "Croissance proche de la visite (%@) : poids %@ kg ; taille %@ cm ; PC %@ cm";
-"well_visit_form.growth_snapshot.previous" = "Précédent (%@) : poids %@ kg ; taille %@ cm ; PC %@ cm";
+"well_visit_form.growth_snapshot.near_visit" = "Croissance autour de la visite (%@) : **Poids :** %@ kg · **Longueur / Taille :** %@ cm · **PC :** %@ cm";
+"well_visit_form.growth_snapshot.previous"  = "Précédent (%@) : **Poids :** %@ kg · **Longueur / Taille :** %@ cm · **PC :** %@ cm";
 "well_visit_form.growth_snapshot.delta" = "Δ vs précédent : poids %@ kg ; taille %@ cm ; PC %@ cm ; poids/j %@ g/j";
 "well_visit_form.growth_snapshot.who_zscores" = "Scores z OMS : %@";
 "well_visit_form.growth_snapshot.trend_title" = "Tendance :";
 
 /* ===== Analyse de tendance (narratif WHOGrowthEvaluator) ===== */
 "well_visit_form.growth_trend.only_one_point" = "Une seule mesure disponible (pas de tendance antérieure à comparer).";
-"well_visit_form.growth_trend.higher" = "plus élevé";
-"well_visit_form.growth_trend.lower" = "plus bas";
+"well_visit_form.growth_trend.higher" = "plus élevée";
+"well_visit_form.growth_trend.lower" = "plus basse";
 "well_visit_form.growth_trend.significant" = "La valeur actuelle est %@ que la tendance antérieure (Δz≈%@ ; seuil %@) ; actuel ≈ P%@.";
 "well_visit_form.growth_trend.consistent" = "La valeur actuelle est cohérente avec la tendance antérieure (Δz≈%@ < %@) ; actuel ≈ P%@.";
 
@@ -2809,5 +2809,25 @@
 /* WHOGrowthEvaluator — perte de poids sur la période */
 "well_visit_form.growth_trend.wfa_weight_loss" = "Diminution du poids sur la période : %@ kg sur %@ mois.";
 
-"well_visit_form.growth_trend.concern" = "Growth trend concern detected.";
-"well_visit_form.growth_trend.trajectory_deviation" = "Trajectory deviation: %@ than expected by %@(robust SD), threshold %@.";
+"well_visit_form.growth_trend.concern" = "Tendance de croissance préoccupante.";
+"well_visit_form.growth_trend.trajectory_deviation" = "La trajectoire est %@ qu'attendue, de %@(robust SD), seuil %@.";
+
+/* Overall growth trend summary (header line when something is flagged). */
+"well_visit_form.growth_snapshot.overall_concern" = "En dehors de la tendance attendue et à surveiller:%@";
+
+/* Overall growth trend summary (header line when nothing is flagged). */
+"well_visit_form.growth_snapshot.overall_ok" = "Tendance globale rassurante";
+
+"who_growth.result.summary_line" = "%@ %@ %@ à %@ mois → z=%@, p=%@";
+"who_growth.detail.tried_paths"  = "Emplacements testés : %@";
+
+"who.growth.kind.weight_for_length" = "Poids-pour-Taille";
+
+"who_growth.nutrition.summary_line" = "%@ : z=%@ → %@";
+
+"who_growth.nutrition.severe_thinness" = "Maigreur sévère";
+"who_growth.nutrition.thinness" = "Maigreur";
+"who_growth.nutrition.healthy" = "Corpulence normale";
+"who_growth.nutrition.risk_overweight" = "Risque de surpoids";
+"who_growth.nutrition.overweight" = "Surpoids";
+"who_growth.nutrition.obesity" = "Obésité";

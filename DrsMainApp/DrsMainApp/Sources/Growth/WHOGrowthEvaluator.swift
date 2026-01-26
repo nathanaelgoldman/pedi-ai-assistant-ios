@@ -29,7 +29,11 @@ private func LF(_ formatKey: String, _ args: CVarArg...) -> String {
 ///
 /// We compute z-score locally from LMS, and percentile from z.
 enum WHOGrowthEvaluator {
-
+    // MARK: - Debug logging
+    #if DEBUG
+    /// Toggle to enable verbose WHO growth debug logs.
+    private static let debugLoggingEnabled = true
+    #endif
     // MARK: - Public types
 
     enum Sex: String {
@@ -48,13 +52,16 @@ enum WHOGrowthEvaluator {
         case hcfa
         /// BMI-for-age
         case bmifa
+        /// Weight-for-length (typically used < 2 years)
+        case wfl
 
         var unitLabel: String {
             switch self {
-            case .wfa: return "kg"
-            case .lhfa: return "cm"
-            case .hcfa: return "cm"
+            case .wfa:   return "kg"
+            case .lhfa:  return "cm"
+            case .hcfa:  return "cm"
             case .bmifa: return "kg/m²"
+            case .wfl:   return "kg"
             }
         }
         
@@ -65,6 +72,7 @@ enum WHOGrowthEvaluator {
             case .lhfa:  return "who.growth.kind.length_height"
             case .hcfa:  return "who.growth.kind.head_circumference"
             case .bmifa: return "who.growth.kind.bmi"
+            case .wfl:   return "who.growth.kind.weight_for_length"
             }
         }
 
@@ -87,8 +95,10 @@ enum WHOGrowthEvaluator {
         var summaryLine: String {
             let p = String(format: "%.1f", percentile)
             let z = String(format: "%.2f", zScore)
+            let v = String(format: "%.2f", value)
+            let a = String(format: "%.2f", ageMonths)
             let kindName = kind.displayName()
-            return "\(kindName) \(String(format: "%.2f", value)) \(kind.unitLabel) @ \(String(format: "%.2f", ageMonths)) mo → z=\(z), p=\(p)"
+            return LF("who_growth.result.summary_line", kindName, v, kind.unitLabel, a, z, p)
         }
     }
 
@@ -113,6 +123,92 @@ enum WHOGrowthEvaluator {
 
         /// Plain English summary for UI/notes.
         let narrative: String
+    }
+
+    // MARK: - Nutritional status (WHO z-score categories)
+
+    enum NutritionCategory: String, CaseIterable {
+        case severeThinness
+        case thinness
+        case healthy
+        case riskOfOverweight
+        case overweight
+        case obesity
+
+        /// Localization key for display (keep simple; caller can prepend context if desired).
+        var labelKey: String {
+            switch self {
+            case .severeThinness:   return "who_growth.nutrition.severe_thinness"
+            case .thinness:         return "who_growth.nutrition.thinness"
+            case .healthy:          return "who_growth.nutrition.healthy"
+            case .riskOfOverweight: return "who_growth.nutrition.risk_overweight"
+            case .overweight:       return "who_growth.nutrition.overweight"
+            case .obesity:          return "who_growth.nutrition.obesity"
+            }
+        }
+
+        /// Whether this should be visually flagged in UI/report.
+        var isFlagged: Bool {
+            switch self {
+            case .healthy:
+                return false
+            default:
+                return true
+            }
+        }
+
+        func displayLabel(bundle: Bundle = .main) -> String {
+            NSLocalizedString(labelKey, bundle: bundle, comment: "")
+        }
+    }
+
+    struct NutritionAssessment: Equatable {
+        /// Which reference drove the assessment.
+        /// - <2y: weight-for-length
+        /// - >=2y: BMI-for-age
+        let basisKind: Kind
+        let zScore: Double
+        let category: NutritionCategory
+
+        /// Convenience: one-liner for reports/UI.
+        func summaryLine(bundle: Bundle = .main) -> String {
+            let basis = basisKind.displayName(bundle: bundle)
+            let z = String(format: "%.2f", zScore)
+            let cat = category.displayLabel(bundle: bundle)
+            return LF("who_growth.nutrition.summary_line", basis, z, cat)
+        }
+    }
+
+    /// Categorize nutritional status from available z-scores.
+    /// - For age < 24 months: uses weight-for-length (wfl) z-score if provided.
+    /// - For age >= 24 months: uses BMI-for-age (bmifa) z-score if provided.
+    /// - Returns nil if the required z-score is missing.
+    static func assessNutritionStatus(
+        ageMonths: Double,
+        wflZ: Double?,
+        bmiZ: Double?,
+        bundle: Bundle = .main
+    ) -> NutritionAssessment? {
+        guard ageMonths.isFinite, ageMonths >= 0 else { return nil }
+
+        if ageMonths < 24.0 {
+            guard let z = wflZ, z.isFinite else { return nil }
+            return NutritionAssessment(basisKind: .wfl, zScore: z, category: nutritionCategoryWHO(z))
+        } else {
+            guard let z = bmiZ, z.isFinite else { return nil }
+            return NutritionAssessment(basisKind: .bmifa, zScore: z, category: nutritionCategoryWHO(z))
+        }
+    }
+
+    /// WHO preschool-style categories using z-score cutoffs.
+    /// Matches the requested scheme for 2–5y BMI and mirrors it for <2y WFL.
+    private static func nutritionCategoryWHO(_ z: Double) -> NutritionCategory {
+        if z < -3.0 { return .severeThinness }
+        if z < -2.0 { return .thinness }
+        if z >  3.0 { return .obesity }
+        if z >  2.0 { return .overweight }
+        if z >  1.0 { return .riskOfOverweight }
+        return .healthy
     }
 
     enum GrowthError: Error, LocalizedError {
@@ -162,6 +258,69 @@ enum WHOGrowthEvaluator {
             zScore: z,
             percentile: p
         )
+    }
+
+    /// Evaluate weight-for-length (WFL) using WHO LMS tables where the independent variable is **length in cm**.
+    ///
+    /// The official WHO WFL LMS CSVs are keyed by length (cm), e.g. columns:
+    /// `Length,L,M,S,...`.
+    ///
+    /// - Parameters:
+    ///   - lengthCM: Recumbent length in cm (typically used < 24 months).
+    ///   - weightKG: Measured weight in kg.
+    /// - Returns: z-score + percentile for weight-for-length.
+    static func evaluateWeightForLength(
+        sex: Sex,
+        lengthCM: Double,
+        weightKG: Double,
+        bundle: Bundle = .main
+    ) throws -> (zScore: Double, percentile: Double) {
+        guard lengthCM.isFinite, lengthCM > 0 else { throw GrowthError.invalidValue }
+        guard weightKG.isFinite, weightKG > 0 else { throw GrowthError.invalidValue }
+
+        // NOTE: For WFL, the LMS table x-axis is *length in cm*.
+        // We reuse the same LMSTable interpolation machinery by querying with `target = lengthCM`.
+        let table = try loadLMSTable(kind: .wfl, sex: sex, bundle: bundle)
+        let lms = try table.lms(atAgeMonths: lengthCM)
+        let z = zScore(value: weightKG, L: lms.L, M: lms.M, S: lms.S)
+        let p = percentileFromZ(z)
+        return (zScore: z, percentile: p)
+    }
+
+    // MARK: - WFL trend helpers
+
+    /// Trend assessment for weight-for-length (WFL).
+    ///
+    /// WFL LMS tables are keyed by length (cm). We reuse the existing trend engine by mapping:
+    /// - x-axis: lengthCM  (passed through the "ageMonths" slot)
+    /// - y-axis: weightKG  (passed through the "value" slot)
+    ///
+    /// The resulting z-scores are still correct because `.wfl` LMS lookup is performed against the first CSV column
+    /// (which is length for WFL tables).
+    static func assessTrendWeightForLength(
+        sex: Sex,
+        prior: [(lengthCM: Double, weightKG: Double)],
+        current: (lengthCM: Double, weightKG: Double),
+        thresholdZ: Double = 2.0,
+        bundle: Bundle = .main
+    ) throws -> TrendAssessment {
+        let mappedPrior: [(ageMonths: Double, value: Double)] = prior.map { (ageMonths: $0.lengthCM, value: $0.weightKG) }
+        let mappedCurrent: (ageMonths: Double, value: Double) = (ageMonths: current.lengthCM, value: current.weightKG)
+        return try assessTrend(kind: .wfl, sex: sex, prior: mappedPrior, current: mappedCurrent, thresholdZ: thresholdZ, bundle: bundle)
+    }
+
+    /// Convenience: assess WFL trend using only the last N prior points.
+    static func assessTrendWeightForLengthLastN(
+        sex: Sex,
+        prior: [(lengthCM: Double, weightKG: Double)],
+        current: (lengthCM: Double, weightKG: Double),
+        lastN: Int = 5,
+        thresholdZ: Double = 2.0,
+        bundle: Bundle = .main
+    ) throws -> TrendAssessment {
+        let mappedPrior: [(ageMonths: Double, value: Double)] = prior.map { (ageMonths: $0.lengthCM, value: $0.weightKG) }
+        let mappedCurrent: (ageMonths: Double, value: Double) = (ageMonths: current.lengthCM, value: current.weightKG)
+        return try assessTrendLastN(kind: .wfl, sex: sex, prior: mappedPrior, current: mappedCurrent, lastN: lastN, thresholdZ: thresholdZ, bundle: bundle)
     }
 
     /// Evaluate a visit-point against prior points.
@@ -218,24 +377,25 @@ enum WHOGrowthEvaluator {
         let significantZShift = abs(delta) >= thresholdZ
 
         #if DEBUG
-        let ageText = String(format: "%.2f", currentRes.ageMonths)
-        let valText = String(format: "%.2f", currentRes.value)
-        let zText   = String(format: "%.3f", currentRes.zScore)
-        print("WHO TREND \(kind.rawValue): current ageMo=\(ageText) value=\(valText) z=\(zText)")
+        var debugParts: [String] = []
+        if debugLoggingEnabled {
+            let ageText = String(format: "%.2f", currentRes.ageMonths)
+            let valText = String(format: "%.2f", currentRes.value)
+            let zText   = String(format: "%.3f", currentRes.zScore)
 
-        let medText = String(format: "%.3f", med)
-        let dText   = String(format: "%.3f", delta)
-        let thTextD = String(format: "%.2f", thresholdZ)
-        print("WHO TREND \(kind.rawValue): priorCount=\(priorZ.count) medianZ=\(medText) deltaZ=\(dText) thresholdZ=\(thTextD)")
+            let medText = String(format: "%.3f", med)
+            let dText   = String(format: "%.3f", delta)
+            let thTextD = String(format: "%.2f", thresholdZ)
+
+            debugParts.append("WHO \(kind.rawValue) ageMo=\(ageText) value=\(valText) z=\(zText)")
+            debugParts.append("priors=\(priorZ.count) medZ=\(medText) dZ=\(dText) th=\(thTextD)")
+        }
         #endif
 
         // --- Extra: robust trajectory deviation check (Theil–Sen + MAD) ---
         // Runs for all measures when we have enough prior points.
         var trajectoryConcern = false
         var trajectoryMsg: String? = nil
-        #if DEBUG
-        print("WHO TREND \(kind.rawValue): cleanedPrior.count=\(cleanedPrior.count)")
-        #endif
         if cleanedPrior.count >= 3 {
             var priorPoints: [(ageMonths: Double, z: Double)] = []
             priorPoints.reserveCapacity(cleanedPrior.count)
@@ -259,12 +419,14 @@ enum WHOGrowthEvaluator {
                 }
 
                 #if DEBUG
-                let expText  = String(format: "%.3f", traj.expectedZ)
-                let resText  = String(format: "%.3f", traj.residual)
-                let sigText  = String(format: "%.3f", traj.sigma)
-                let scoreTxt = String(format: "%.2f", traj.score)
-                let thTxt    = String(format: "%.2f", traj.threshold)
-                print("WHO TRAJ \(kind.rawValue): expectedZ=\(expText) residual=\(resText) sigma=\(sigText) score=\(scoreTxt) th=\(thTxt)")
+                if debugLoggingEnabled {
+                    let expText  = String(format: "%.3f", traj.expectedZ)
+                    let resText  = String(format: "%.3f", traj.residual)
+                    let sigText  = String(format: "%.3f", traj.sigma)
+                    let scoreTxt = String(format: "%.2f", traj.score)
+                    let thTxt    = String(format: "%.2f", traj.threshold)
+                    debugParts.append("traj expZ=\(expText) res=\(resText) sigma=\(sigText) score=\(scoreTxt) th=\(thTxt)")
+                }
                 #endif
             }
         }
@@ -348,6 +510,11 @@ enum WHOGrowthEvaluator {
         }
 
         let narrative = ([base] + extras).joined(separator: "\n")
+        #if DEBUG
+        if debugLoggingEnabled, !debugParts.isEmpty {
+            print(debugParts.joined(separator: " | "))
+        }
+        #endif
 
         return TrendAssessment(
             current: currentRes,
@@ -462,9 +629,28 @@ enum WHOGrowthEvaluator {
     private static var cache: [String: LMSTable] = [:]
     private static let cacheQueue = DispatchQueue(label: "who.lms.cache.queue", qos: .userInitiated)
 
+    /// Preferred LMS file stems (without extension) for each kind.
+    /// Most measures are stored as <kind>_0_5y_<sex>_lms.
+    /// Weight-for-length may be stored as 0–2y (or 0–5y) depending on the dataset bundle.
+    private static func lmsFileStems(kind: Kind, sex: Sex) -> [String] {
+        let sx = sex.rawValue
+        switch kind {
+        case .wfl:
+            // Try the most specific first, then fall back.
+            return [
+                "wfl_0_2y_\(sx)_lms",
+                "wfl_0_5y_\(sx)_lms",
+                "wfh_0_5y_\(sx)_lms" // some bundles use weight-for-height naming
+            ]
+        default:
+            return ["\(kind.rawValue)_0_5y_\(sx)_lms"]
+        }
+    }
+
     private static func loadLMSTable(kind: Kind, sex: Sex, bundle: Bundle) throws -> LMSTable {
-        let fileStem = "\(kind.rawValue)_0_5y_\(sex.rawValue)_lms"
-        let cacheKey = fileStem
+        let stems = lmsFileStems(kind: kind, sex: sex)
+        // Cache by the first (preferred) stem.
+        let cacheKey = stems.first ?? "\(kind.rawValue)_0_5y_\(sex.rawValue)_lms"
 
         if let cached = cacheQueue.sync(execute: { cache[cacheKey] }) {
             return cached
@@ -477,26 +663,42 @@ enum WHOGrowthEvaluator {
         ]
 
         var foundURL: URL? = nil
-        for c in candidates {
-            if let u = bundle.url(forResource: fileStem, withExtension: "csv", subdirectory: c.subdir) {
-                foundURL = u
-                break
+        var usedStem: String? = nil
+        outer: for stem in stems {
+            for c in candidates {
+                if let u = bundle.url(forResource: stem, withExtension: "csv", subdirectory: c.subdir) {
+                    foundURL = u
+                    usedStem = stem
+                    break outer
+                }
             }
         }
 
         guard let url = foundURL else {
-            throw GrowthError.resourceNotFound("Tried: WHO/\(fileStem).csv, Resources/WHO/\(fileStem).csv, and bundle root \(fileStem).csv")
+            // Build a helpful "tried" string.
+            var triedParts: [String] = []
+            for stem in stems {
+                triedParts.append("WHO/\(stem).csv")
+                triedParts.append("Resources/WHO/\(stem).csv")
+                triedParts.append("\(stem).csv")
+            }
+            let tried = triedParts.joined(separator: ", ")
+            throw GrowthError.resourceNotFound(LF("who_growth.detail.tried_paths", tried))
         }
 
         let data = try Data(contentsOf: url)
         guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
-            throw GrowthError.malformedCSV("cannot decode utf8/latin1")
+            throw GrowthError.malformedCSV(L("who_growth.detail.decode_failed"))
         }
 
         let table = try parseLMSTable(fromCSV: text)
 
         cacheQueue.sync {
+            // Cache under preferred key and the actual used stem (if different).
             cache[cacheKey] = table
+            if let u = usedStem, u != cacheKey {
+                cache[u] = table
+            }
         }
 
         return table
@@ -510,7 +712,7 @@ enum WHOGrowthEvaluator {
             .split(separator: "\n", omittingEmptySubsequences: true)
 
         guard !lines.isEmpty else {
-            throw GrowthError.malformedCSV("empty")
+            throw GrowthError.malformedCSV(L("who_growth.detail.empty_file"))
         }
 
         // Determine if first row is header (non-numeric in col1).
@@ -548,7 +750,7 @@ enum WHOGrowthEvaluator {
         }
 
         guard !rows.isEmpty else {
-            throw GrowthError.malformedCSV("no numeric rows")
+            throw GrowthError.malformedCSV(L("who_growth.detail.no_numeric_rows"))
         }
 
         rows.sort { $0.ageMonths < $1.ageMonths }
@@ -645,6 +847,8 @@ enum WHOGrowthEvaluator {
             return 0.45
         case .bmifa:
             return 0.35
+        case .wfl:
+            return 0.30
         }
     }
 

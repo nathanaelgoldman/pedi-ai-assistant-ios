@@ -5542,6 +5542,10 @@ func reloadPatients() {
         private func addBundleRootAndSelect(_ root: URL) {
             selectBundle(root.standardizedFileURL)
             PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
+            // Ensure bundle DB has the newest tables (idempotent) for well-visit growth evaluation.
+            if let dbURL = self.currentDBURL {
+                self.ensureWellVisitGrowthEvalSchema(at: dbURL)
+            }
             // Refresh perinatal and pmh cache for the newly selected bundle/patient context
             self.reloadPerinatalForActivePatient()
             self.loadPMHForSelectedPatient()
@@ -5600,6 +5604,8 @@ func reloadPatients() {
             }
             // Ensure growth view/triggers exist (idempotent)
             ensureGrowthUnificationSchema(at: dbURL)
+            // Ensure well-visit growth evaluation storage exists (idempotent)
+            ensureWellVisitGrowthEvalSchema(at: dbURL)
 
 
             // 4) Generate (or use provided) alias + MRN, then seed initial patient row
@@ -6129,6 +6135,68 @@ func reloadPatients() {
         }
         self.log.info("applyBundledSchemaIfPresent: applying \(url.lastPathComponent, privacy: .public) to \(dbURL.lastPathComponent, privacy: .public)")
         applySQLFile(url, to: dbURL)
+    }
+
+    // MARK: - Well-visit growth evaluation schema (bundle DB)
+
+    /// Ensure the storage table for well-visit growth evaluations exists.
+    ///
+    /// This is intentionally *idempotent* and safe to run on every app launch / bundle select.
+    /// We prefer a targeted migration (just the needed table + columns) instead of applying the
+    /// full bundled schema.sql to an existing patient bundle.
+    private func ensureWellVisitGrowthEvalSchema(at dbURL: URL) {
+        var db: OpaquePointer?
+        if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            log.warning("ensureWellVisitGrowthEvalSchema: sqlite open failed for \(dbURL.lastPathComponent, privacy: .public)")
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        // Create table (safe if it already exists).
+        let createSQL = """
+        CREATE TABLE IF NOT EXISTS well_visit_growth_eval (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          well_visit_id INTEGER NOT NULL UNIQUE,
+          is_flagged INTEGER NOT NULL DEFAULT 0,
+          basis TEXT,
+          tokens_json TEXT NOT NULL DEFAULT '[]',
+          z_summary TEXT,
+          nutrition_line TEXT,
+          trend_summary TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT
+        );
+        """
+
+        if sqlite3_exec(db, createSQL, nil, nil, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.warning("ensureWellVisitGrowthEvalSchema: create table failed err=\(msg, privacy: .public)")
+            return
+        }
+
+        // Helpful index for lookups (safe if it already exists).
+        _ = sqlite3_exec(
+            db,
+            "CREATE INDEX IF NOT EXISTS idx_well_visit_growth_eval_well_visit_id ON well_visit_growth_eval(well_visit_id);",
+            nil, nil, nil
+        )
+
+        // Best-effort add missing columns for older DBs (ignore 'duplicate column' errors).
+        let alterStatements: [String] = [
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN is_flagged INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN basis TEXT",
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN tokens_json TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN z_summary TEXT",
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN nutrition_line TEXT",
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN trend_summary TEXT",
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP",
+            "ALTER TABLE well_visit_growth_eval ADD COLUMN updated_at TEXT"
+        ]
+        for stmt in alterStatements {
+            _ = sqlite3_exec(db, stmt, nil, nil, nil)
+        }
     }
         // MARK: - Minimal schema & seed helpers (no dependency on external initializers)
         
