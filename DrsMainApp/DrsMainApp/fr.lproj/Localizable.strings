@@ -2833,3 +2833,13 @@
 "who_growth.nutrition.obesity" = "Obésité";
 
 "report.well.measurements.growth_interpretation" = "Interprétation";
+
+"growth.who.shift" = "• OMS %@ : score-z %@ → %@ (seuil %@ ; n=%@)";
+/* fr.lproj/Localizable.strings */
+
+"growth.metric.wfa" = "Poids pour l’âge";
+"growth.metric.lhfa" = "Longueur / Taille pour l’âge";
+"growth.metric.hcfa" = "Périmètre crânien pour l’âge";
+"growth.metric.wfl" = "Poids pour la longueur";
+"growth.metric.bmi" = "IMC pour l’âge";
+"growth.metric.unknown" = "Indicateur de croissance";

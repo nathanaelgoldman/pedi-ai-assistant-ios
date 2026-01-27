@@ -2845,3 +2845,14 @@
 "who_growth.nutrition.obesity" = "Obesity";
 
 "report.well.measurements.growth_interpretation" = "Interpretation";
+
+"growth.who.shift" = "• WHO %@: z-score %@ → %@ (threshold %@; n=%@)";
+
+/* en.lproj/Localizable.strings */
+
+"growth.metric.wfa" = "Weight-for-age";
+"growth.metric.lhfa" = "Length/Height-for-age";
+"growth.metric.hcfa" = "Head circumference-for-age";
+"growth.metric.wfl" = "Weight-for-length";
+"growth.metric.bmi" = "BMI-for-age";
+"growth.metric.unknown" = "Growth metric";

@@ -1167,6 +1167,19 @@ if visibility?.showMeasurements ?? true {
 // MARK: - Content assembly from AppState
 
 extension ReportBuilder {
+    /// Localizes WHO growth metric short codes used in token args (e.g. wfa, lhfa, hcfa, bmifa, wfl).
+    /// Uses keys like: growth.metric.lhfa, growth.metric.wfa, ...
+    private func localizedGrowthMetricCode(_ raw: String) -> String {
+        let code = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !code.isEmpty else { return raw }
+
+        let known: Set<String> = ["wfa", "lhfa", "hcfa", "wfl", "bmifa", "bmi"]
+        guard known.contains(code) else { return raw }
+
+        let k = "growth.metric.\(code)"
+        let s = NSLocalizedString(k, comment: "WHO growth metric label")
+        return (s == k) ? raw : s
+    }
     /// Localizes an inline M-CHAT result code in a legacy/plain-text line.
     /// Example: "• M-CHAT: score 5 – medium_risk" -> "• M-CHAT: score 5 – <localized label>"
     private func localizedMchatInlineValueInLegacyLine(_ rawLine: String) -> String {
@@ -1657,6 +1670,13 @@ extension ReportBuilder {
     private func localizeProblemTokenArg(_ raw: String, tokenKey: String) -> CVarArg {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { return "" as NSString }
+
+        // WHO growth metric codes are stored as short tokens (e.g. "lhfa").
+        // Localize them via growth.metric.<code> when present.
+        let metricLocalized = localizedGrowthMetricCode(t)
+        if metricLocalized != t {
+            return metricLocalized as NSString
+        }
 
         switch tokenKey {
         case "well_visit_form.problem_listing.sleep.regularity":
@@ -4615,6 +4635,13 @@ private extension ReportBuilder {
     /// This includes logic for specific keys (used for teeth, etc).
 private func renderProblemTokenLine(token: ProblemToken) -> String {
         let key = token.key
+        // TEMP DEBUG: WHO token args (to verify if the report is rendering stored/frozen values)
+        if key.hasPrefix("well_visit_form.problem_listing.token.who_") ||
+           key.hasPrefix("well_visit_form.problem_listing.token.oms_") {
+            NSLog("[ReportDebug][WHO_TOKEN] key=%@ args=%@",
+                  key,
+                  token.args.joined(separator: " | "))
+        }
         // ... other token keys ...
         if key == "well_visit_form.problem_listing.token.pe_teeth_V1" ||
            key == "well_visit_form.problem_listing.token.pe_teeth_v1" {

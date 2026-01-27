@@ -1360,6 +1360,7 @@ struct WellVisitForm: View {
         let createSQL = """
         CREATE TABLE IF NOT EXISTS well_visit_growth_eval (
           well_visit_id INTEGER PRIMARY KEY,
+          evaluator_version TEXT NOT NULL DEFAULT 'wvf_growth_eval_v1',
           problem_tokens_json TEXT NOT NULL DEFAULT '[]',
           measurement_tokens_json TEXT NOT NULL DEFAULT '[]',
           updated_at TEXT
@@ -1380,6 +1381,15 @@ struct WellVisitForm: View {
                 }
             }
             return false
+        }
+
+        if !hasColumn("evaluator_version") {
+            // Add with a DEFAULT so existing rows remain valid and future inserts can omit it if needed.
+            _ = sqlite3_exec(
+                db,
+                "ALTER TABLE well_visit_growth_eval ADD COLUMN evaluator_version TEXT NOT NULL DEFAULT 'wvf_growth_eval_v1';",
+                nil, nil, nil
+            )
         }
 
         if !hasColumn("problem_tokens_json") {
@@ -1410,6 +1420,10 @@ struct WellVisitForm: View {
         measurementTokens: [ProblemToken]
     ) {
         ensureWellVisitGrowthEvalTable(db: db)
+        let isMain = Thread.isMainThread
+        print("🧩 ENTER saveWellVisitGrowthEval: wellVisitID=\(wellVisitID) problemTokens=\(problemTokens.count) measurementTokens=\(measurementTokens.count) isMain=\(isMain)")
+        // Version tag for the growth evaluator logic so reports can be reproduced when logic evolves.
+        let evaluatorVersion = "wvf_growth_eval_v1"
         print("🧩 saveWellVisitGrowthEval: wellVisitID=\(wellVisitID) problemTokens=\(problemTokens.count) measurementTokens=\(measurementTokens.count)")
 
         let problemJSON = encodeTokensJSON(problemTokens)
@@ -1419,11 +1433,13 @@ struct WellVisitForm: View {
         let upsertSQL = """
         INSERT INTO well_visit_growth_eval (
             well_visit_id,
+            evaluator_version,
             problem_tokens_json,
             measurement_tokens_json,
             updated_at
-        ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(well_visit_id) DO UPDATE SET
+            evaluator_version = excluded.evaluator_version,
             problem_tokens_json = excluded.problem_tokens_json,
             measurement_tokens_json = excluded.measurement_tokens_json,
             updated_at = CURRENT_TIMESTAMP;
@@ -1438,10 +1454,11 @@ struct WellVisitForm: View {
             let replaceSQL = """
             REPLACE INTO well_visit_growth_eval (
                 well_visit_id,
+                evaluator_version,
                 problem_tokens_json,
                 measurement_tokens_json,
                 updated_at
-            ) VALUES (?, ?, ?, CURRENT_TIMESTAMP);
+            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP);
             """
             let rcReplace = sqlite3_prepare_v2(db, replaceSQL, -1, &stmt, nil)
             if rcReplace != SQLITE_OK {
@@ -1457,8 +1474,9 @@ struct WellVisitForm: View {
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_int64(stmt, 1, sqlite3_int64(wellVisitID))
-        _ = problemJSON.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
-        _ = measJSON.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
+        _ = evaluatorVersion.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+        _ = problemJSON.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
+        _ = measJSON.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
 
         let rcStep = sqlite3_step(stmt)
         if rcStep != SQLITE_DONE {
@@ -6060,3 +6078,23 @@ private extension View {
         }
     }
 }
+
+// MARK: - WellVisit Form Save Action Growth Eval Integration
+
+// The following code integrates saveWellVisitGrowthEval after saving a well visit.
+// It should be placed immediately after the well visit is successfully saved (insert or update)
+// and while the db: OpaquePointer is still open.
+
+// Example insertion point (replace or adapt as needed in your actual save function):
+/*
+    // ... after INSERT or UPDATE of well visit, and you have the saved ID:
+    let savedWellVisitID: Int = ... // e.g., Int(editingVisitID ?? Int(savedId64))
+    print("🧩 WellVisit SAVE ok: wellVisitID=\(savedWellVisitID) tokens(problem=\(growthWHOProblemTokens.count), meas=\(growthWHOMeasurementTokens.count))")
+    saveWellVisitGrowthEval(
+        db: db,
+        wellVisitID: savedWellVisitID,
+        problemTokens: growthWHOProblemTokens,
+        measurementTokens: growthWHOMeasurementTokens
+    )
+    print("🧩 WellVisit SAVE: growth eval save invoked for wellVisitID=\(savedWellVisitID)")
+*/
