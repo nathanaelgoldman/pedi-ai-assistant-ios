@@ -2809,7 +2809,7 @@
 /* WHOGrowthEvaluator — perte de poids sur la période */
 "well_visit_form.growth_trend.wfa_weight_loss" = "Diminution du poids sur la période : %@ kg sur %@ mois.";
 
-"well_visit_form.growth_trend.concern" = "Tendance de croissance préoccupante.";
+"well_visit_form.growth_trend.concern" = "Tendance de croissance à surveiller ou réévaluer.";
 "well_visit_form.growth_trend.trajectory_deviation" = "La trajectoire est %@ qu'attendue, de %@(robust SD), seuil %@.";
 
 /* Overall growth trend summary (header line when something is flagged). */
@@ -2831,3 +2831,5 @@
 "who_growth.nutrition.risk_overweight" = "Risque de surpoids";
 "who_growth.nutrition.overweight" = "Surpoids";
 "who_growth.nutrition.obesity" = "Obésité";
+
+"report.well.measurements.growth_interpretation" = "Interprétation";

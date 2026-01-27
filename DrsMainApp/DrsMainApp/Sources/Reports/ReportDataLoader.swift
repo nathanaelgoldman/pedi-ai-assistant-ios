@@ -214,6 +214,8 @@ final class ReportDataLoader {
                                                       ageMonths: ageMonthsDouble) ?? pePack.problem
         // STEP 7b: Problem listing tokens (localization-proof)
         let problemListingTokens = loadProblemListingTokensForWellVisit(visitID: visitID)
+        // STEP 7c: Persisted WHO growth evaluation tokens (for report + PatientViewerApp)
+        let growthEvalTokens = loadWellVisitGrowthEvalTokens(visitID: visitID)
         let conclusions = pePack.conclusions
         let anticipatoryGuidance = pePack.anticipatory
         let clinicianComments = pePack.comments
@@ -248,6 +250,7 @@ final class ReportDataLoader {
             physicalExamGroups: physicalExamGroups,
             problemListing: problemListing,
             problemListingTokens: problemListingTokens,
+            growthEvalTokens: growthEvalTokens,
             conclusions: conclusions,
             anticipatoryGuidance: anticipatoryGuidance,
             clinicianComments: clinicianComments,
@@ -4755,7 +4758,12 @@ extension ReportDataLoader {
     /// Returns nil if the row or column cannot be found.
     private func rawVisitTypeIDForWell(visitID: Int) -> String? {
         do {
+            // IMPORTANT: Always resolve the DB path from the *active bundle*.
+            // Avoid any staging/import paths that may exist elsewhere in the app.
             let dbPath = try currentBundleDBPath()
+#if DEBUG
+            print("[ReportDataLoader] rawVisitTypeIDForWell using dbPath=\(dbPath)")
+#endif
             var db: OpaquePointer?
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
                 defer { sqlite3_close(db) }
@@ -4980,7 +4988,10 @@ extension ReportDataLoader {
         }
 
         do {
-            let dbPath = try currentBundleDBPath()
+            let dbPath = try bundleDBPathWithDebug()
+#if DEBUG
+            print("[ReportDataLoader] loadVitalsSummaryForEpisode using dbPath=\(dbPath)")
+#endif
             var db: OpaquePointer?
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
                 defer { sqlite3_close(db) }
@@ -5155,7 +5166,10 @@ extension ReportDataLoader {
     /// Robust to minor schema variants: tries common tables and patient FK names.
     private func patientIDForSickEpisode(_ episodeID: Int) -> Int64? {
         do {
-            let dbPath = try currentBundleDBPath()
+            let dbPath = try bundleDBPathWithDebug()
+#if DEBUG
+            print("[ReportDataLoader] patientIDForSickEpisode using dbPath=\(dbPath)")
+#endif
             var db: OpaquePointer?
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
                let db = db {
@@ -5306,18 +5320,18 @@ extension ReportDataLoader {
 }
 
 extension ReportDataLoader {
-
-
+    
+    
     // Decode + render problem_listing_tokens JSON for previous well visits.
     // Returns lines WITHOUT leading bullets (ReportBuilder adds bullets).
     private func renderPreviousWellProblemTokensJSONToLines(_ raw: String) -> [String] {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-
+        
         // Parse JSON array of token objects in a schema-tolerant way.
         guard let data = trimmed.data(using: .utf8) else { return [] }
         guard let arr = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]] else { return [] }
-
+        
         func strArray(_ dict: [String: Any], keys: [String]) -> [String] {
             for k in keys {
                 if let a = dict[k] as? [String] {
@@ -5331,18 +5345,18 @@ extension ReportDataLoader {
             }
             return []
         }
-
+        
         func loc(_ key: String) -> String {
             let v = NSLocalizedString(key, comment: "")
             return (v == key) ? key : v
         }
-
+        
         func format(_ fmt: String, args: [String]) -> String {
             guard !args.isEmpty else { return fmt }
             let vargs: [CVarArg] = args
             return String(format: fmt, locale: Locale.current, arguments: vargs)
         }
-
+        
         // Heuristic: if an argument is itself a localization key, localize it.
         func localizedArgs(_ args: [String]) -> [String] {
             args.map { a in
@@ -5352,20 +5366,20 @@ extension ReportDataLoader {
                 return (v == t) ? t : v
             }
         }
-
+        
         var out: [String] = []
         out.reserveCapacity(arr.count)
-
+        
         for d in arr {
             guard let keyRaw = d["key"] as? String else { continue }
             let key = keyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else { continue }
-
+            
             // Prefer already-rendered args when present; otherwise fall back to raw token args.
             let formatArgs = strArray(d, keys: ["formatArgs", "format_args", "renderArgs", "render_args"])
             let tokenArgs  = strArray(d, keys: ["args", "tokenArgs", "token_args", "tokenArguments", "token_arguments"])
             let argsToUse  = !formatArgs.isEmpty ? formatArgs : tokenArgs
-
+            
             // Special-case a few known token types so we *don't depend* on a localized format string.
             switch key {
             case "well_visit_form.problem_listing.token.pe_field_v1":
@@ -5379,7 +5393,7 @@ extension ReportDataLoader {
                     out.append(line.trimmingCharacters(in: .whitespacesAndNewlines))
                 }
                 continue
-
+                
             case "well_visit_form.problem_listing.token.pe_teeth_v1":
                 // args: [labelKey, presentKey, count, ...]
                 if argsToUse.count >= 3 {
@@ -5389,7 +5403,7 @@ extension ReportDataLoader {
                     out.append("\(label): \(present) (\(count))".trimmingCharacters(in: .whitespacesAndNewlines))
                 }
                 continue
-
+                
             case "well_visit_form.problem_listing.token.milestone_item_v1":
                 // args commonly: [code, status, label?] (robust)
                 if argsToUse.count >= 2 {
@@ -5401,15 +5415,15 @@ extension ReportDataLoader {
                     out.append("- \(title) – \(status)".trimmingCharacters(in: .whitespacesAndNewlines))
                 }
                 continue
-
+                
             default:
                 break
             }
-
+            
             // General path: localize format string + localize args that are themselves keys.
             let fmt = NSLocalizedString(key, comment: "")
             let args = localizedArgs(argsToUse)
-
+            
             let rendered: String
             if fmt == key {
                 // Missing localization key for the token format. Fall back to something readable.
@@ -5423,11 +5437,241 @@ extension ReportDataLoader {
             } else {
                 rendered = fmt
             }
-
+            
             let line = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
             if !line.isEmpty { out.append(line) }
         }
-
+        
         return out
+    }
+    
+    
+    // Load persisted WHO growth evaluation *problem-list* tokens for a given well visit.
+    // These tokens are saved by WellVisitForm into the `well_visit_growth_eval` table
+    // so reports (and PatientViewerApp) can render the same refined growth explanations
+    // without recomputing WHO metrics.
+    //
+    // NOTE:
+    // - `problem_tokens_json` is intended for the Problem Listing section.
+    // - `measurement_tokens_json` is intended for the Measurements section.
+    //   (See `loadWellVisitGrowthEvalMeasurementTokens(visitID:)` below.)
+    private func loadWellVisitGrowthEvalTokens(visitID: Int) -> [ProblemToken] {
+        do {
+            let dbPath = try currentBundleDBPath()
+            print("[ReportDataLoader] loadWellVisitGrowthEvalTokens using dbPath=\(dbPath)")
+#if DEBUG
+            print("[ReportDataLoader] loadWellVisitGrowthEvalTokens visitID=\(visitID)")
+#endif
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK || db == nil {
+                return []
+            }
+            guard let db = db else { return [] }
+            defer { sqlite3_close(db) }
+            
+            // Verify table exists
+            var hasTable = false
+            var tStmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='well_visit_growth_eval' LIMIT 1;", -1, &tStmt, nil) == SQLITE_OK,
+               let st = tStmt {
+                defer { sqlite3_finalize(st) }
+                if sqlite3_step(st) == SQLITE_ROW { hasTable = true }
+            }
+            if !hasTable { return [] }
+            
+            // Discover columns
+            var cols = Set<String>()
+            var cStmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, "PRAGMA table_info(well_visit_growth_eval);", -1, &cStmt, nil) == SQLITE_OK,
+               let st = cStmt {
+                defer { sqlite3_finalize(st) }
+                while sqlite3_step(st) == SQLITE_ROW {
+                    if let c = sqlite3_column_text(st, 1) {
+                        cols.insert(String(cString: c))
+                    }
+                }
+            }
+            if cols.isEmpty { return [] }
+            
+            // Schema (DrsMainApp):
+            //   PRIMARY KEY: well_visit_id
+            //   payload: problem_tokens_json, measurement_tokens_json
+            let visitFK = cols.contains("well_visit_id") ? "well_visit_id" : (cols.contains("visit_id") ? "visit_id" : "well_visit_id")
+            
+            // We only return ProblemToken(s) here, so we read the *problem token* payload.
+            let tokenColCandidates = [
+                // Preferred: problem-list payload
+                "problem_tokens_json",
+                "problem_token_json",
+                "problem_tokens",
+                "problemTokensJson",
+                "problemTokens",
+
+                // Legacy / defensive fallbacks (some early bundles misfiled these)
+                "measurement_tokens_json",
+                "measurement_token_json",
+                "measurement_tokens",
+                "measurementTokensJson",
+                "measurementTokens"
+            ]
+            guard let problemCol = tokenColCandidates.first(where: { cols.contains($0) }) else {
+#if DEBUG
+                print("[ReportDataLoader] loadWellVisitGrowthEvalTokens: no payload column found. cols=\(Array(cols).sorted())")
+#endif
+                // If the table exists but the expected payload column does not, nothing to render.
+                return []
+            }
+            
+            let sql = "SELECT \(problemCol) FROM well_visit_growth_eval WHERE \(visitFK) = ? LIMIT 1;"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK || stmt == nil {
+                return []
+            }
+            guard let stmt = stmt else { return [] }
+            defer { sqlite3_finalize(stmt) }
+            
+            sqlite3_bind_int64(stmt, 1, Int64(visitID))
+
+#if DEBUG
+            // If there is no row, help diagnose whether data was written at all.
+            var cntStmt: OpaquePointer?
+            let cntSQL = "SELECT COUNT(*) FROM well_visit_growth_eval WHERE \(visitFK) = ?;"
+            if sqlite3_prepare_v2(db, cntSQL, -1, &cntStmt, nil) == SQLITE_OK, let cs = cntStmt {
+                defer { sqlite3_finalize(cs) }
+                sqlite3_bind_int64(cs, 1, Int64(visitID))
+                if sqlite3_step(cs) == SQLITE_ROW {
+                    let c = sqlite3_column_int64(cs, 0)
+                    print("[ReportDataLoader] loadWellVisitGrowthEvalTokens: rowCount for visitID=\(visitID) is \(c)")
+                }
+            }
+#endif
+
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return [] }
+            guard sqlite3_column_type(stmt, 0) != SQLITE_NULL,
+                  let c = sqlite3_column_text(stmt, 0) else { return [] }
+            
+            let json = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !json.isEmpty, json != "[]" else { return [] }
+            
+            guard let data = json.data(using: .utf8) else { return [] }
+            do {
+                let decoded = try JSONDecoder().decode([ProblemToken].self, from: data)
+                return decoded
+            } catch {
+                if DEBUG_REPORT_EXPORT {
+                    print("[ReportDataLoader] loadWellVisitGrowthEvalTokens decode failed visitID=\(visitID): \(error)")
+                    print("[ReportDataLoader] loadWellVisitGrowthEvalTokens raw JSON (first 200 chars): \(String(json.prefix(200)))")
+                }
+                return []
+            }
+        } catch {
+            return []
+        }
+    }
+    
+    
+    // Load persisted WHO growth evaluation *measurement* tokens for a given well visit.
+    // Stored in the same `well_visit_growth_eval` table alongside problem tokens.
+    private func loadWellVisitGrowthEvalMeasurementTokens(visitID: Int) -> [ProblemToken] {
+        do {
+            let dbPath = try currentBundleDBPath()
+            print("[ReportDataLoader] loadWellVisitGrowthEvalMeasurementTokens using dbPath=\(dbPath)")
+#if DEBUG
+            print("[ReportDataLoader] loadWellVisitGrowthEvalMeasurementTokens visitID=\(visitID)")
+#endif
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK || db == nil {
+                return []
+            }
+            guard let db = db else { return [] }
+            defer { sqlite3_close(db) }
+            
+            // Verify table exists
+            var hasTable = false
+            var tStmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='well_visit_growth_eval' LIMIT 1;", -1, &tStmt, nil) == SQLITE_OK,
+               let st = tStmt {
+                defer { sqlite3_finalize(st) }
+                if sqlite3_step(st) == SQLITE_ROW { hasTable = true }
+            }
+            if !hasTable { return [] }
+            
+            // Discover columns
+            var cols = Set<String>()
+            var cStmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, "PRAGMA table_info(well_visit_growth_eval);", -1, &cStmt, nil) == SQLITE_OK,
+               let st = cStmt {
+                defer { sqlite3_finalize(st) }
+                while sqlite3_step(st) == SQLITE_ROW {
+                    if let c = sqlite3_column_text(st, 1) {
+                        cols.insert(String(cString: c))
+                    }
+                }
+            }
+            if cols.isEmpty { return [] }
+            
+            // Schema (DrsMainApp):
+            //   PRIMARY KEY: well_visit_id
+            //   payload: problem_tokens_json, measurement_tokens_json
+            let visitFK = cols.contains("well_visit_id") ? "well_visit_id" : (cols.contains("visit_id") ? "visit_id" : "well_visit_id")
+            
+            let measurementColCandidates = [
+                "measurement_tokens_json",
+                "measurement_token_json",
+                "measurement_tokens",
+                "measurementTokensJson",
+                "measurementTokens"
+            ]
+            guard let measurementCol = measurementColCandidates.first(where: { cols.contains($0) }) else {
+#if DEBUG
+                print("[ReportDataLoader] loadWellVisitGrowthEvalMeasurementTokens: no payload column found. cols=\(Array(cols).sorted())")
+#endif
+                return []
+            }
+            
+            let sql = "SELECT \(measurementCol) FROM well_visit_growth_eval WHERE \(visitFK) = ? LIMIT 1;"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK || stmt == nil {
+                return []
+            }
+            guard let stmt = stmt else { return [] }
+            defer { sqlite3_finalize(stmt) }
+            
+            sqlite3_bind_int64(stmt, 1, Int64(visitID))
+
+#if DEBUG
+            var cntStmt: OpaquePointer?
+            let cntSQL = "SELECT COUNT(*) FROM well_visit_growth_eval WHERE \(visitFK) = ?;"
+            if sqlite3_prepare_v2(db, cntSQL, -1, &cntStmt, nil) == SQLITE_OK, let cs = cntStmt {
+                defer { sqlite3_finalize(cs) }
+                sqlite3_bind_int64(cs, 1, Int64(visitID))
+                if sqlite3_step(cs) == SQLITE_ROW {
+                    let c = sqlite3_column_int64(cs, 0)
+                    print("[ReportDataLoader] loadWellVisitGrowthEvalMeasurementTokens: rowCount for visitID=\(visitID) is \(c)")
+                }
+            }
+#endif
+
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return [] }
+            guard sqlite3_column_type(stmt, 0) != SQLITE_NULL,
+                  let c = sqlite3_column_text(stmt, 0) else { return [] }
+            
+            let json = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !json.isEmpty, json != "[]" else { return [] }
+            
+            guard let data = json.data(using: .utf8) else { return [] }
+            do {
+                let decoded = try JSONDecoder().decode([ProblemToken].self, from: data)
+                return decoded
+            } catch {
+                if DEBUG_REPORT_EXPORT {
+                    print("[ReportDataLoader] loadWellVisitGrowthEvalMeasurementTokens decode failed visitID=\(visitID): \(error)")
+                    print("[ReportDataLoader] loadWellVisitGrowthEvalMeasurementTokens raw JSON (first 200 chars): \(String(json.prefix(200)))")
+                }
+                return []
+            }
+        } catch {
+            return []
+        }
     }
 }

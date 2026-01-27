@@ -918,6 +918,41 @@ struct WellVisitForm: View {
             func addOverallFlag(_ label: String) {
                 if !overallFlags.contains(label) { overallFlags.append(label) }
             }
+            
+            // Tokens persisted for PatientViewerApp (localization-proof)
+            // - problemTokens: only items representing an issue/flag
+            // - measurementTokens: all computed z/p info (even if normal)
+            var problemTokens: [ProblemToken] = []
+            var measurementTokens: [ProblemToken] = []
+
+            func median(_ xs: [Double]) -> Double? {
+                let a = xs.sorted()
+                guard !a.isEmpty else { return nil }
+                let n = a.count
+                if n % 2 == 1 { return a[n/2] }
+                return (a[n/2 - 1] + a[n/2]) / 2.0
+            }
+
+            func fmt2(_ v: Double) -> String { String(format: "%.2f", v) }
+            func fmt0(_ v: Double) -> String { String(format: "%.0f", v) }
+
+            func pushZP(metricId: String, z: Double, percentile: Double) {
+                measurementTokens.append(ProblemToken("growth.who.zp", [metricId, fmt2(z), fmt0(percentile)]))
+            }
+
+            func pushExtreme(metricId: String, z: Double, percentile: Double) {
+                problemTokens.append(ProblemToken("growth.who.extreme", [metricId, fmt2(z), fmt0(percentile)]))
+            }
+
+            func pushShift(metricId: String, deltaZ: Double, thresholdZ: Double, percentile: Double) {
+                // store both signed and abs delta for future localization
+                problemTokens.append(
+                    ProblemToken(
+                        "growth.who.shift",
+                        [metricId, fmt2(deltaZ), fmt2(abs(deltaZ)), fmt2(thresholdZ), fmt0(percentile)]
+                    )
+                )
+            }
 
             if includeWHO, let dob, let sex, let current {
                 func buildPrior(_ extract: (GrowthPoint) -> Double?) -> [(ageMonths: Double, value: Double)] {
@@ -932,6 +967,7 @@ struct WellVisitForm: View {
                 }
 
                 let currentAgeM = ageMonths(dob: dob, at: current.recordedDate)
+                let trendThresholdZ: Double = 1.0
                 var wflZForNutrition: Double? = nil
                 var bmiZForNutrition: Double? = nil
 
@@ -946,11 +982,30 @@ struct WellVisitForm: View {
                         let zStr = String(format: "%.2f", r.zScore)
                         let pStr = String(format: "%.0f", r.percentile)
                         whoZLines.append("**\(wfaLabel):** z=\(zStr) P\(pStr)")
+                        pushZP(metricId: "wfa", z: r.zScore, percentile: r.percentile)
+
+                        // Median-based shift vs prior history (localization-proof)
+                        let priorZs: [Double] = points
+                            .filter { $0.recordedDate < current.recordedDate }
+                            .sorted(by: { $0.recordedDate < $1.recordedDate })
+                            .compactMap { p -> Double? in
+                                guard let pw = p.weightKg else { return nil }
+                                let am = ageMonths(dob: dob, at: p.recordedDate)
+                                return (try? WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: am, value: pw).zScore)
+                            }
+
+                        if priorZs.count >= 3, let medZ = median(priorZs) {
+                            let dZ = r.zScore - medZ
+                            if abs(dZ) >= trendThresholdZ {
+                                pushShift(metricId: "wfa", deltaZ: dZ, thresholdZ: trendThresholdZ, percentile: r.percentile)
+                            }
+                        }
 
                         let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
                         if extreme {
                             whoTrendIsFlagged = true
                             addOverallFlag(wfaLabel)
+                            pushExtreme(metricId: "wfa", z: r.zScore, percentile: r.percentile)
                         }
 
                         let prior = buildPrior { $0.weightKg }
@@ -974,11 +1029,29 @@ struct WellVisitForm: View {
                         let zStr = String(format: "%.2f", r.zScore)
                         let pStr = String(format: "%.0f", r.percentile)
                         whoZLines.append("**\(lhfaLabel):** z=\(zStr) P\(pStr)")
+                        pushZP(metricId: "lhfa", z: r.zScore, percentile: r.percentile)
+
+                        let priorZs: [Double] = points
+                            .filter { $0.recordedDate < current.recordedDate }
+                            .sorted(by: { $0.recordedDate < $1.recordedDate })
+                            .compactMap { p -> Double? in
+                                guard let ph = p.heightCm else { return nil }
+                                let am = ageMonths(dob: dob, at: p.recordedDate)
+                                return (try? WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: am, value: ph).zScore)
+                            }
+
+                        if priorZs.count >= 3, let medZ = median(priorZs) {
+                            let dZ = r.zScore - medZ
+                            if abs(dZ) >= trendThresholdZ {
+                                pushShift(metricId: "lhfa", deltaZ: dZ, thresholdZ: trendThresholdZ, percentile: r.percentile)
+                            }
+                        }
 
                         let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
                         if extreme {
                             whoTrendIsFlagged = true
                             addOverallFlag(lhfaLabel)
+                            pushExtreme(metricId: "lhfa", z: r.zScore, percentile: r.percentile)
                         }
 
                         let prior = buildPrior { $0.heightCm }
@@ -1002,12 +1075,30 @@ struct WellVisitForm: View {
                         let zStr = String(format: "%.2f", r.zScore)
                         let pStr = String(format: "%.0f", r.percentile)
                         whoZLines.append("**\(hcfaLabel):** z=\(zStr) P\(pStr)")
+                        pushZP(metricId: "hcfa", z: r.zScore, percentile: r.percentile)
+
+                        let priorZs: [Double] = points
+                            .filter { $0.recordedDate < current.recordedDate }
+                            .sorted(by: { $0.recordedDate < $1.recordedDate })
+                            .compactMap { p -> Double? in
+                                guard let phc = p.headCircCm else { return nil }
+                                let am = ageMonths(dob: dob, at: p.recordedDate)
+                                return (try? WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: am, value: phc).zScore)
+                            }
+
+                        if priorZs.count >= 3, let medZ = median(priorZs) {
+                            let dZ = r.zScore - medZ
+                            if abs(dZ) >= trendThresholdZ {
+                                pushShift(metricId: "hcfa", deltaZ: dZ, thresholdZ: trendThresholdZ, percentile: r.percentile)
+                            }
+                        }
 
 
                         let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
                         if extreme {
                             whoTrendIsFlagged = true
                             addOverallFlag(hcfaLabel)
+                            pushExtreme(metricId: "hcfa", z: r.zScore, percentile: r.percentile)
                         }
 
                         let prior = buildPrior { $0.headCircCm }
@@ -1040,11 +1131,28 @@ struct WellVisitForm: View {
                             let pStr = String(format: "%.0f", wfl.percentile)
                             whoZLines.append("**\(wflLabel):** z=\(zStr) P\(pStr)")
                             wflZForNutrition = wfl.zScore
+                            pushZP(metricId: "wfl", z: wfl.zScore, percentile: wfl.percentile)
+
+                            let priorZs: [Double] = points
+                                .filter { $0.recordedDate < current.recordedDate }
+                                .sorted(by: { $0.recordedDate < $1.recordedDate })
+                                .compactMap { p -> Double? in
+                                    guard let pw = p.weightKg, let ph = p.heightCm else { return nil }
+                                    return (try? WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: ph, weightKG: pw).zScore)
+                                }
+
+                            if priorZs.count >= 3, let medZ = median(priorZs) {
+                                let dZ = wfl.zScore - medZ
+                                if abs(dZ) >= trendThresholdZ {
+                                    pushShift(metricId: "wfl", deltaZ: dZ, thresholdZ: trendThresholdZ, percentile: wfl.percentile)
+                                }
+                            }
 
                             let extreme = abs(wfl.zScore) >= 2.0 || wfl.percentile <= 3.0 || wfl.percentile >= 97.0
                             if extreme {
                                 whoTrendIsFlagged = true
                                 addOverallFlag(wflLabel)
+                                pushExtreme(metricId: "wfl", z: wfl.zScore, percentile: wfl.percentile)
                             }
 
                             let priorWFL: [(lengthCM: Double, weightKG: Double)] = points
@@ -1079,11 +1187,30 @@ struct WellVisitForm: View {
                                 let pStr = String(format: "%.0f", r.percentile)
                                 whoZLines.append("**\(bmifaLabel):** z=\(zStr) P\(pStr)")
                                 bmiZForNutrition = r.zScore
+                                pushZP(metricId: "bmifa", z: r.zScore, percentile: r.percentile)
+
+                                let priorZs: [Double] = points
+                                    .filter { $0.recordedDate < current.recordedDate }
+                                    .sorted(by: { $0.recordedDate < $1.recordedDate })
+                                    .compactMap { p -> Double? in
+                                        guard let pw = p.weightKg, let ph = p.heightCm,
+                                              let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
+                                        let am = ageMonths(dob: dob, at: p.recordedDate)
+                                        return (try? WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: am, value: pbmi).zScore)
+                                    }
+
+                                if priorZs.count >= 3, let medZ = median(priorZs) {
+                                    let dZ = r.zScore - medZ
+                                    if abs(dZ) >= trendThresholdZ {
+                                        pushShift(metricId: "bmifa", deltaZ: dZ, thresholdZ: trendThresholdZ, percentile: r.percentile)
+                                    }
+                                }
 
                                 let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
                                 if extreme {
                                     whoTrendIsFlagged = true
                                     addOverallFlag(bmifaLabel)
+                                    pushExtreme(metricId: "bmifa", z: r.zScore, percentile: r.percentile)
                                 }
 
                                 let prior = points
@@ -1140,6 +1267,8 @@ struct WellVisitForm: View {
                     whoTrendLines = ["WHO evaluation failed: \(error.localizedDescription)"]
                     whoTrendIsFlagged = false
                     whoNutritionLine = ""
+                    problemTokens = []
+                    measurementTokens = []
                 }
             }
 
@@ -1217,6 +1346,8 @@ struct WellVisitForm: View {
 
                 self.growthWHOTrendIsFlagged = whoTrendIsFlagged
                 self.growthWHOOverallFlags = overallFlags
+                self.growthWHOProblemTokens = problemTokens
+                self.growthWHOMeasurementTokens = measurementTokens
 
                 self.growthSnapshotIsLoading = false
             }
@@ -1279,9 +1410,11 @@ struct WellVisitForm: View {
         measurementTokens: [ProblemToken]
     ) {
         ensureWellVisitGrowthEvalTable(db: db)
+        print("🧩 saveWellVisitGrowthEval: wellVisitID=\(wellVisitID) problemTokens=\(problemTokens.count) measurementTokens=\(measurementTokens.count)")
 
         let problemJSON = encodeTokensJSON(problemTokens)
         let measJSON = encodeTokensJSON(measurementTokens)
+        print("🧩 saveWellVisitGrowthEval: problemJSON.len=\(problemJSON.utf8.count) measJSON.len=\(measJSON.utf8.count)")
 
         let upsertSQL = """
         INSERT INTO well_visit_growth_eval (
@@ -1297,7 +1430,11 @@ struct WellVisitForm: View {
         """
 
         var stmt: OpaquePointer?
-        if sqlite3_prepare_v2(db, upsertSQL, -1, &stmt, nil) != SQLITE_OK {
+        let rcUpsert = sqlite3_prepare_v2(db, upsertSQL, -1, &stmt, nil)
+        if rcUpsert != SQLITE_OK {
+            let err1 = String(cString: sqlite3_errmsg(db))
+            print("⚠️ saveWellVisitGrowthEval: prepare UPSERT failed rc=\(rcUpsert) err=\(err1)")
+
             let replaceSQL = """
             REPLACE INTO well_visit_growth_eval (
                 well_visit_id,
@@ -1306,17 +1443,30 @@ struct WellVisitForm: View {
                 updated_at
             ) VALUES (?, ?, ?, CURRENT_TIMESTAMP);
             """
-            _ = sqlite3_prepare_v2(db, replaceSQL, -1, &stmt, nil)
+            let rcReplace = sqlite3_prepare_v2(db, replaceSQL, -1, &stmt, nil)
+            if rcReplace != SQLITE_OK {
+                let err2 = String(cString: sqlite3_errmsg(db))
+                print("❌ saveWellVisitGrowthEval: prepare REPLACE failed rc=\(rcReplace) err=\(err2)")
+            }
         }
 
-        guard let stmt else { return }
+        guard let stmt else {
+            print("❌ saveWellVisitGrowthEval: stmt is nil after prepare")
+            return
+        }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_int64(stmt, 1, sqlite3_int64(wellVisitID))
         _ = problemJSON.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
         _ = measJSON.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
 
-        _ = sqlite3_step(stmt)
+        let rcStep = sqlite3_step(stmt)
+        if rcStep != SQLITE_DONE {
+            let err = String(cString: sqlite3_errmsg(db))
+            print("❌ saveWellVisitGrowthEval: step failed rc=\(rcStep) err=\(err)")
+        } else {
+            print("✅ saveWellVisitGrowthEval: wrote tokens for wellVisitID=\(wellVisitID)")
+        }
     }
 
     private var visitTypes: [WellVisitType] { WELL_VISIT_TYPES }
@@ -5552,7 +5702,14 @@ struct WellVisitForm: View {
 
         // Save milestones for this visit (delete old, insert new)
         saveMilestones(db: db, visitID: visitID)
-        
+        // Persist WHO growth evaluation tokens for PatientViewerApp reports
+        // (store empty arrays too, to avoid stale data when a visit is edited)
+        saveWellVisitGrowthEval(
+            db: db,
+            wellVisitID: visitID,
+            problemTokens: growthWHOProblemTokens,
+            measurementTokens: growthWHOMeasurementTokens
+        )
         let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - t0) * 1000.0)
         AppLog.db.notice("WellVisitForm: saveTapped done | mode=\(editingVisitID == nil ? "INSERT" : "UPDATE", privacy: .public) pid=\(String(describing: patientID), privacy: .public) visitID=\(visitID, privacy: .public) ms=\(elapsedMs, privacy: .public)")
 

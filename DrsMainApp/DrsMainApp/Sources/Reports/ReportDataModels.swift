@@ -72,6 +72,7 @@ struct WellReportData {
     let physicalExamGroups: [(group: String, lines: [String])]
     let problemListing: String?
     let problemListingTokens: [ProblemToken]
+    let growthEvalTokens: [ProblemToken]
     let conclusions: String?
     let anticipatoryGuidance: String?
     let clinicianComments: String?

@@ -876,28 +876,60 @@ if visibility?.showMilestones ?? true {
     content.append(NSAttributedString(string: "\n"))
 }
 
-        if visibility?.showMeasurements ?? true {
-            para(L("report.well.section.measurements", comment: "Section title: measurements"), font: headerFont, background: subSectionBG)
-            if data.measurements.isEmpty {
-                para("—", font: bodyFont)
-            } else {
-                let measOrder = ["Weight","Length","Head Circumference","Weight gain since discharge"]
-                for key in measOrder {
-                    if let v = data.measurements[key], !v.isEmpty {
-                        para("\(measurementLabel(key)): \(v)", font: bodyFont)
-                    }
-                }
-                let extra = data.measurements.keys
-                    .filter { !["Weight","Length","Head Circumference","Weight gain since discharge"].contains($0) }
-                    .sorted()
-                for key in extra {
-                    if let v = data.measurements[key], !v.isEmpty {
-                        para("\(measurementLabel(key)): \(v)", font: bodyFont)
-                    }
-                }
-            }
-            content.append(NSAttributedString(string: "\n"))
+if visibility?.showMeasurements ?? true {
+    para(L("report.well.section.measurements", comment: "Section title: measurements"), font: headerFont, background: subSectionBG)
+    if data.measurements.isEmpty {
+        para("—", font: bodyFont)
+    } else {
+        let measOrder = ["Weight","Length","Head Circumference","Weight gain since discharge"]
+        #if DEBUG
+        NSLog("[ReportDebug][Measurements] measurements dict = %@", "\(data.measurements)")
+        NSLog("[ReportDebug][Measurements] growthEvalTokens count = %d", data.growthEvalTokens.count)
+        if let first = data.growthEvalTokens.first {
+            let firstArgs = problemTokenStringArray(first, names: ["tokenArgs", "args", "arguments", "tokens"])
+            NSLog("[ReportDebug][Measurements] growthEvalTokens first key=%@ args=%@", "\(first.key)", firstArgs.joined(separator: "|"))
         }
+        #endif
+        for key in measOrder {
+            if let v = data.measurements[key], !v.isEmpty {
+                para("\(measurementLabel(key)): \(v)", font: bodyFont)
+            }
+        }
+        let extra = data.measurements.keys
+            .filter { !["Weight","Length","Head Circumference","Weight gain since discharge"].contains($0) }
+            .sorted()
+        for key in extra {
+            if let v = data.measurements[key], !v.isEmpty {
+                para("\(measurementLabel(key)): \(v)", font: bodyFont)
+            }
+        }
+    }
+    // Persisted WHO growth interpretation (tokenized) — rendered here so PatientViewerApp
+    // can show the same interpretation without recomputing WHO metrics.
+    if !data.growthEvalTokens.isEmpty {
+        content.append(NSAttributedString(
+            string: L("report.well.measurements.growth_interpretation", comment: "Measurements subsection title: interpretation of growth parameters") + "\n",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                .foregroundColor: NSColor.labelColor
+            ]
+        ))
+        for t in data.growthEvalTokens {
+            let rendered = renderProblemTokenLine(t)
+            #if DEBUG
+            NSLog("[ReportDebug][Measurements] growthEvalToken key=%@ rendered=%@", "\(t.key)", rendered ?? "<nil>")
+            #endif
+            if let rendered = rendered {
+                para(rendered, font: bodyFont)
+            }
+        }
+    } else {
+        #if DEBUG
+        NSLog("[ReportDebug][Measurements] growthEvalTokens is EMPTY — nothing to render")
+        #endif
+    }
+    content.append(NSAttributedString(string: "\n"))
+}
 
         if visibility?.showPhysicalExam ?? true {
             para(L("report.well.section.physical_exam", comment: "Section title: physical examination"), font: headerFont, background: subSectionBG)
