@@ -1552,6 +1552,87 @@ extension ReportBuilder {
             return outLine.hasPrefix("•") ? outLine : ("• " + outLine)
         }
 
+        // Helper: ensure we show an explicit sign for deltas (e.g. +0.42, -1.08)
+        func ensureSigned(_ s: String) -> String {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return t }
+            if t.hasPrefix("-") || t.hasPrefix("−") { return t }
+            if t.hasPrefix("+") { return t }
+            return "+" + t
+        }
+
+        // WHO growth shift token (v2): args are [metricId, deltaZ, deltaPercentile, currentPercentile, priorsCount]
+        // Render via a dedicated localized format string to avoid the legacy "z-score A → B" confusion.
+        if key == "growth.who.shift.v2" {
+            let metricId   = rawArgs.count > 0 ? rawArgs[0].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let deltaZRaw  = rawArgs.count > 1 ? rawArgs[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let deltaPRaw  = rawArgs.count > 2 ? rawArgs[2].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let curPRaw    = rawArgs.count > 3 ? rawArgs[3].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let priorsRaw  = rawArgs.count > 4 ? rawArgs[4].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+
+            let metricLabel = localizedGrowthMetricCode(metricId)
+            let dz = ensureSigned(deltaZRaw)
+            let dP = ensureSigned(deltaPRaw)
+            let curP = curPRaw.isEmpty ? "—" : curPRaw
+            let priors = priorsRaw.isEmpty ? "—" : priorsRaw
+
+            let fmtKey = "growth.who.shift.v2"
+            let fmt = NSLocalizedString(fmtKey, comment: "WHO growth shift (v2): delta z, delta percentile, current percentile, priors count")
+            let line: String
+            if fmt == fmtKey {
+                // Safe fallback if localization key is missing
+                line = "WHO \(metricLabel): Δz=\(dz), ΔP=\(dP), P\(curP) (priors=\(priors))"
+            } else {
+                line = String(format: fmt, metricLabel, dz, dP, curP, priors)
+            }
+
+            let outLine = stripLeadingDash(line)
+            return outLine.hasPrefix("•") ? outLine : ("• " + outLine)
+        }
+
+        // WHO growth trajectory anomaly token (v1): args are [metricId, direction, residualZ, score, threshold, priorsCount]
+        // direction is expected to be "up" or "down".
+        if key == "growth.who.traj.v1" {
+            let metricId     = rawArgs.count > 0 ? rawArgs[0].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let dirRaw       = rawArgs.count > 1 ? rawArgs[1].trimmingCharacters(in: .whitespacesAndNewlines).lowercased() : ""
+            let residualZRaw = rawArgs.count > 2 ? rawArgs[2].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let scoreRaw     = rawArgs.count > 3 ? rawArgs[3].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let thRaw        = rawArgs.count > 4 ? rawArgs[4].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let priorsRaw    = rawArgs.count > 5 ? rawArgs[5].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+
+            let metricLabel = localizedGrowthMetricCode(metricId)
+
+            // Direction: prefer localization keys if present, else fall back to English.
+            // Expected keys (optional): growth.who.traj.dir.up / growth.who.traj.dir.down
+            let dirKey = "growth.who.traj.dir.\(dirRaw)"
+            let dirLocalized = localizedIfExists(dirKey)
+            let directionText: String = {
+                if let d = dirLocalized { return d }
+                if dirRaw == "up" { return "higher than expected" }
+                if dirRaw == "down" { return "lower than expected" }
+                return dirRaw.isEmpty ? "trajectory concern" : dirRaw
+            }()
+
+            let residualZ = ensureSigned(residualZRaw)
+            let score = scoreRaw.isEmpty ? "—" : scoreRaw
+            let threshold = thRaw.isEmpty ? "—" : thRaw
+            let priors = priorsRaw.isEmpty ? "—" : priorsRaw
+
+            let fmtKey = "growth.who.traj.v1"
+            let fmt = NSLocalizedString(fmtKey, comment: "WHO growth trajectory anomaly (v1): direction, residual z, score, threshold, priors count")
+            let line: String
+            if fmt == fmtKey {
+                // Safe fallback if localization key is missing
+                line = "WHO \(metricLabel): \(directionText) (residual z=\(residualZ), score=\(score), th=\(threshold), priors=\(priors))"
+            } else {
+                // Suggested placeholder order: metric, direction, residualZ, score, threshold, priors
+                line = String(format: fmt, metricLabel, directionText, residualZ, score, threshold, priors)
+            }
+
+            let outLine = stripLeadingDash(line)
+            return outLine.hasPrefix("•") ? outLine : ("• " + outLine)
+        }
+
         let args: [CVarArg] = rawArgs.map { localizeProblemTokenArg($0, tokenKey: key) }
 
         // New milestone token pipeline (v1): token args are [code, statusCode, optionalNote]
@@ -4637,7 +4718,9 @@ private func renderProblemTokenLine(token: ProblemToken) -> String {
         let key = token.key
         // TEMP DEBUG: WHO token args (to verify if the report is rendering stored/frozen values)
         if key.hasPrefix("well_visit_form.problem_listing.token.who_") ||
-           key.hasPrefix("well_visit_form.problem_listing.token.oms_") {
+           key.hasPrefix("well_visit_form.problem_listing.token.oms_") ||
+           key.hasPrefix("growth.who.") ||
+           key.hasPrefix("growth.oms.") {
             NSLog("[ReportDebug][WHO_TOKEN] key=%@ args=%@",
                   key,
                   token.args.joined(separator: " | "))

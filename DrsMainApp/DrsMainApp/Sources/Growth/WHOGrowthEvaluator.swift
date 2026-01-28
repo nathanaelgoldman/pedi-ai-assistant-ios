@@ -115,7 +115,10 @@ enum WHOGrowthEvaluator {
         /// current.z - previousMedianZ
         let deltaZFromMedian: Double?
 
-        /// True if abs(deltaZFromMedian) >= threshold (default 0.67 ≈ 1 centile band).
+        /// Threshold used to decide whether a median-based z-shift is significant.
+        let thresholdZ: Double
+
+        /// True if abs(deltaZFromMedian) >= thresholdZ.
         let isSignificantShift: Bool
 
         /// Number of prior points used.
@@ -123,6 +126,12 @@ enum WHOGrowthEvaluator {
 
         /// Plain English summary for UI/notes.
         let narrative: String
+
+        /// Convenience: abs(deltaZFromMedian)
+        var absDeltaZFromMedian: Double? {
+            guard let d = deltaZFromMedian, d.isFinite else { return nil }
+            return abs(d)
+        }
     }
 
     // MARK: - Nutritional status (WHO z-score categories)
@@ -358,6 +367,7 @@ enum WHOGrowthEvaluator {
                 current: currentRes,
                 previousMedianZ: nil,
                 deltaZFromMedian: nil,
+                thresholdZ: thresholdZ,
                 isSignificantShift: false,
                 priorCount: 0,
                 narrative: L("well_visit_form.growth_trend.only_one_point")
@@ -520,6 +530,7 @@ enum WHOGrowthEvaluator {
             current: currentRes,
             previousMedianZ: med,
             deltaZFromMedian: delta,
+            thresholdZ: thresholdZ,
             isSignificantShift: overallSignificant,
             priorCount: priorZ.count,
             narrative: narrative
@@ -805,6 +816,12 @@ enum WHOGrowthEvaluator {
         // clamp
         let p = max(0.0, min(1.0, cdf))
         return p * 100.0
+    }
+
+    /// Public helper: convert a z-score to percentile (0..100).
+    /// Exposes the same internal mapping used by this evaluator.
+    static func percentileFromZScore(_ z: Double) -> Double {
+        percentileFromZ(z)
     }
 
     /// Standard normal CDF approximation using erf.

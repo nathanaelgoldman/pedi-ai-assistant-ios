@@ -2838,8 +2838,35 @@
 /* fr.lproj/Localizable.strings */
 
 "growth.metric.wfa" = "Poids pour l’âge";
-"growth.metric.lhfa" = "Longueur / Taille pour l’âge";
+"growth.metric.lhfa" = "Taille pour l’âge";
 "growth.metric.hcfa" = "Périmètre crânien pour l’âge";
-"growth.metric.wfl" = "Poids pour la longueur";
+"growth.metric.wfl" = "Poids pour la taille";
 "growth.metric.bmi" = "IMC pour l’âge";
 "growth.metric.unknown" = "Indicateur de croissance";
+
+"growth.who.shift.v2" = "• OMS %@ : Δz=%@, ΔP=%@, P%@ (nb de mesures précédentes =%@)";
+
+/* =========================
+   FR — fr.lproj/Localizable.strings
+   ========================= */
+
+"growth.who.traj.v1" = "OMS %@ : trajectoire %@ (Δz %@, seuil %@)";
+
+"growth.who.traj.dir.up"   = "en hausse";
+"growth.who.traj.dir.down" = "en baisse";
+"growth.who.traj.dir.flat" = "stable";
+
+/* WHO shift (v2): metricLabel, deltaZ, deltaPercentile, currentPercentile, priorsCount */
+"growth.who.shift.v2" = "OMS %@ : Δz %@, ΔP %@, P%@ (mesures=%@)";
+
+/* Optional but commonly used by your token pipeline */
+"growth.who.zp"      = "OMS %@ : z=%@, P%@";
+"growth.who.extreme" = "OMS %@ : extrême (z=%@, P%@)";
+
+/* Metric labels */
+"growth.metric.wfa"   = "Poids pour l’âge";
+"growth.metric.lhfa"  = "Taille pour l’âge";
+"growth.metric.hcfa"  = "Périmètre crânien pour l’âge";
+"growth.metric.wfl"   = "Poids pour la taille";
+"growth.metric.bmifa" = "IMC pour l’âge";
+"growth.metric.bmi"   = "IMC";
