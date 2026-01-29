@@ -2848,7 +2848,7 @@
 
 /* Legacy (v1) — kept only for backward compatibility; new code should use growth.who.shift.v2 */
 "growth.who.shift" = "• WHO %@: z-score %@ → %@ (threshold %@; n=%@)";
-"growth.who.shift.v2" = "• WHO %@: Δz=%@, ΔP=%@, P%@ (priors=%@)";
+
 
 /* en.lproj/Localizable.strings */
 
@@ -2873,7 +2873,7 @@
 "growth.who.traj.dir.flat" = "stable";
 
 /* WHO shift (v2): metricLabel, deltaZ, deltaPercentile, currentPercentile, priorsCount */
-"growth.who.shift.v2" = "WHO %@: Δz %@, ΔP %@, P%@ (priors=%@)";
+"growth.who.shift.v2" = "WHO %@: Δz-score %@, ΔPercentile %@, P%@ (priors=%@)";
 
 /* Optional but commonly used by your token pipeline */
 "growth.who.zp"      = "WHO %@: z=%@, P%@";

@@ -2810,7 +2810,7 @@
 "well_visit_form.growth_trend.wfa_weight_loss" = "Diminution du poids sur la période : %@ kg sur %@ mois.";
 
 "well_visit_form.growth_trend.concern" = "Tendance de croissance à surveiller ou réévaluer.";
-"well_visit_form.growth_trend.trajectory_deviation" = "La trajectoire est %@ qu'attendue, de %@(robust SD), seuil %@.";
+"well_visit_form.growth_trend.trajectory_deviation" = "La trajectoire est %@ qu'attendue, de %@(Déviation standard robuste), seuil %@.";
 
 /* Overall growth trend summary (header line when something is flagged). */
 "well_visit_form.growth_snapshot.overall_concern" = "En dehors de la tendance attendue et à surveiller:%@";
@@ -2818,7 +2818,7 @@
 /* Overall growth trend summary (header line when nothing is flagged). */
 "well_visit_form.growth_snapshot.overall_ok" = "Tendance globale rassurante";
 
-"who_growth.result.summary_line" = "%@ %@ %@ à %@ mois → z=%@, p=%@";
+"who_growth.result.summary_line" = "%@ %@ %@ à %@ mois → z-score=%@, percentile=%@";
 "who_growth.detail.tried_paths"  = "Emplacements testés : %@";
 
 "who.growth.kind.weight_for_length" = "Poids-pour-Taille";
@@ -2844,20 +2844,20 @@
 "growth.metric.bmi" = "IMC pour l’âge";
 "growth.metric.unknown" = "Indicateur de croissance";
 
-"growth.who.shift.v2" = "• OMS %@ : Δz=%@, ΔP=%@, P%@ (nb de mesures précédentes =%@)";
+
 
 /* =========================
    FR — fr.lproj/Localizable.strings
    ========================= */
 
-"growth.who.traj.v1" = "OMS %@ : trajectoire %@ (Δz %@, seuil %@)";
+"growth.who.traj.v1" = "OMS %@ : trajectoire %@ (Δz-score %@, seuil %@)";
 
 "growth.who.traj.dir.up"   = "en hausse";
 "growth.who.traj.dir.down" = "en baisse";
 "growth.who.traj.dir.flat" = "stable";
 
 /* WHO shift (v2): metricLabel, deltaZ, deltaPercentile, currentPercentile, priorsCount */
-"growth.who.shift.v2" = "OMS %@ : Δz=%@, ΔP=%@, P%@ (mesures=%@)";
+"growth.who.shift.v2" = "OMS %@ : Δz-score=%@, ΔPercentile=%@, P%@ (nb de mesures=%@)";
 
 /* Optional but commonly used by your token pipeline */
 "growth.who.zp"      = "OMS %@ : z=%@, P%@";

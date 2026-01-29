@@ -1573,7 +1573,34 @@ extension ReportBuilder {
             let metricLabel = localizedGrowthMetricCode(metricId)
             let dz = ensureSigned(deltaZRaw)
             let dP = ensureSigned(deltaPRaw)
-            let curP = curPRaw.isEmpty ? "—" : curPRaw
+
+            // Current percentile display: prefer a readable "P<0.1" when extremely low.
+            // Note: upstream currently stores `curPRaw` already rounded (e.g. "0.0"), so we treat "0.0" as <0.1.
+            let curPDisplay: String = {
+                let t = curPRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !t.isEmpty else { return "—" }
+
+                // Normalize decimal separator for parsing.
+                let normalized = t.replacingOccurrences(of: ",", with: ".")
+                if let v = Double(normalized) {
+                    // If it's strictly between 0 and 0.1, show as <0.1
+                    if v > 0 && v < 0.1 { return "<0.1" }
+                }
+
+                // If upstream rounded to "0.0" for a tiny percentile, show <0.1
+                if t == "0" || t == "0.0" { return "<0.1" }
+
+                return t
+            }()
+
+            // Keep existing Localizable strings compatible: they currently use `P%@` (no '=').
+            // So we include the '=' in the arg, except when using a "<" form.
+            let curP: String = {
+                if curPDisplay == "—" { return "—" }
+                if curPDisplay.hasPrefix("<") { return curPDisplay }
+                return "=" + curPDisplay
+            }()
+
             let priors = priorsRaw.isEmpty ? "—" : priorsRaw
 
             let fmtKey = "growth.who.shift.v2"
@@ -1581,7 +1608,7 @@ extension ReportBuilder {
             let line: String
             if fmt == fmtKey {
                 // Safe fallback if localization key is missing
-                line = "WHO \(metricLabel): Δz=\(dz), ΔP=\(dP), P\(curP) (priors=\(priors))"
+                line = "OMS \(metricLabel): Δz=\(dz), ΔP=\(dP), P\(curP) (mesures=\(priors))"
             } else {
                 line = String(format: fmt, metricLabel, dz, dP, curP, priors)
             }
@@ -1639,7 +1666,7 @@ extension ReportBuilder {
             let line: String
             if fmt == fmtKey {
                 // Safe fallback if localization key is missing
-                line = "WHO \(metricLabel): \(directionText) (residual z=\(residualZ), score=\(score), th=\(threshold), priors=\(priors))"
+                line = "OMS \(metricLabel): trajectoire \(directionText) (Δz=\(residualZ), seuil=\(threshold), mesures=\(priors))"
             } else {
                 // Suggested placeholder order: metric, direction, residualZ, score, threshold, priors
                 line = String(format: fmt, metricLabel, directionText, residualZ, score, threshold, priors)
