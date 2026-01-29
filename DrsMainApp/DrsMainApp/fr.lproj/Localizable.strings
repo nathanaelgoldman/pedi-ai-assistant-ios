@@ -2857,7 +2857,7 @@
 "growth.who.traj.dir.flat" = "stable";
 
 /* WHO shift (v2): metricLabel, deltaZ, deltaPercentile, currentPercentile, priorsCount */
-"growth.who.shift.v2" = "OMS %@ : Δz %@, ΔP %@, P%@ (mesures=%@)";
+"growth.who.shift.v2" = "OMS %@ : Δz=%@, ΔP=%@, P%@ (mesures=%@)";
 
 /* Optional but commonly used by your token pipeline */
 "growth.who.zp"      = "OMS %@ : z=%@, P%@";

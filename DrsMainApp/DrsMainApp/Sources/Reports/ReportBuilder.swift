@@ -1591,10 +1591,10 @@ extension ReportBuilder {
         }
 
         // WHO growth trajectory anomaly token (v1): args are [metricId, direction, residualZ, score, threshold, priorsCount]
-        // direction is expected to be "up" or "down".
+        // direction may be a raw code ("up"/"down"/"flat") OR a localization key ("growth.who.traj.dir.down").
         if key == "growth.who.traj.v1" {
             let metricId     = rawArgs.count > 0 ? rawArgs[0].trimmingCharacters(in: .whitespacesAndNewlines) : ""
-            let dirRaw       = rawArgs.count > 1 ? rawArgs[1].trimmingCharacters(in: .whitespacesAndNewlines).lowercased() : ""
+            let dirRaw       = rawArgs.count > 1 ? rawArgs[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
             let residualZRaw = rawArgs.count > 2 ? rawArgs[2].trimmingCharacters(in: .whitespacesAndNewlines) : ""
             let scoreRaw     = rawArgs.count > 3 ? rawArgs[3].trimmingCharacters(in: .whitespacesAndNewlines) : ""
             let thRaw        = rawArgs.count > 4 ? rawArgs[4].trimmingCharacters(in: .whitespacesAndNewlines) : ""
@@ -1602,15 +1602,31 @@ extension ReportBuilder {
 
             let metricLabel = localizedGrowthMetricCode(metricId)
 
-            // Direction: prefer localization keys if present, else fall back to English.
-            // Expected keys (optional): growth.who.traj.dir.up / growth.who.traj.dir.down
-            let dirKey = "growth.who.traj.dir.\(dirRaw)"
-            let dirLocalized = localizedIfExists(dirKey)
+            // Direction can be stored either as a raw code ("up"/"down"/"flat") OR as a localization key
+            // (e.g. "growth.who.traj.dir.down"). Handle both.
             let directionText: String = {
-                if let d = dirLocalized { return d }
-                if dirRaw == "up" { return "higher than expected" }
-                if dirRaw == "down" { return "lower than expected" }
-                return dirRaw.isEmpty ? "trajectory concern" : dirRaw
+                let d0 = dirRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !d0.isEmpty else {
+                    return localizedIfExists("growth.who.traj.dir.flat") ?? "stable"
+                }
+
+                // 1) If the arg already looks like a localization key, localize it directly.
+                if d0.hasPrefix("growth.who.traj.dir.") {
+                    return localizedIfExists(d0) ?? d0
+                }
+
+                // 2) Otherwise treat it as a raw direction code.
+                let d = d0.lowercased()
+                let mappedKey: String
+                switch d {
+                case "up":   mappedKey = "growth.who.traj.dir.up"
+                case "down": mappedKey = "growth.who.traj.dir.down"
+                case "flat", "stable": mappedKey = "growth.who.traj.dir.flat"
+                default:
+                    // Unknown direction code; return as-is so we don't hide data.
+                    return d0
+                }
+                return localizedIfExists(mappedKey) ?? mappedKey
             }()
 
             let residualZ = ensureSigned(residualZRaw)
@@ -4724,6 +4740,55 @@ private func renderProblemTokenLine(token: ProblemToken) -> String {
             NSLog("[ReportDebug][WHO_TOKEN] key=%@ args=%@",
                   key,
                   token.args.joined(separator: " | "))
+        }
+        // Growth trajectory token (v1): args = [metricCode, dirKeyOrCode, dzText, thresholdText]
+        // Example: ["wfa", "growth.who.traj.dir.down", "-1.24", "2.50"]
+        // Render fully localized (FR shows "OMS …"; avoids debug-like residual/priors placeholders).
+        if key == "growth.who.traj.v1" || key == "growth.oms.traj.v1" {
+            let a = token.args
+            let metricCode = (a.count > 0 ? a[0] : "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let dirRaw     = (a.count > 1 ? a[1] : "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let dzText     = (a.count > 2 ? a[2] : "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let thText     = (a.count > 3 ? a[3] : "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+            func whoMetricLabel(_ code: String) -> String {
+                switch code.lowercased() {
+                case "wfa":  return L("growth.who.metric.wfa", comment: "WHO metric label: weight-for-age")
+                case "lhfa": return L("growth.who.metric.lhfa", comment: "WHO metric label: length/height-for-age")
+                case "hcfa": return L("growth.who.metric.hcfa", comment: "WHO metric label: head-circumference-for-age")
+                case "bfa":  return L("growth.who.metric.bfa", comment: "WHO metric label: BMI-for-age")
+                case "wfl":  return L("growth.who.metric.wfl", comment: "WHO metric label: weight-for-length")
+                case "wfh":  return L("growth.who.metric.wfh", comment: "WHO metric label: weight-for-height")
+                default:
+                    // If no dedicated key exists, fall back to the raw metric code.
+                    return code.isEmpty ? L("growth.who.metric.unknown", comment: "WHO metric label: unknown") : code
+                }
+            }
+
+            func whoTrajDirLabel(_ raw: String) -> String {
+                if raw.hasPrefix("growth.") {
+                    // Stored as localization key (preferred)
+                    return L(raw)
+                }
+                switch raw.lowercased() {
+                case "up":   return L("growth.who.traj.dir.up")
+                case "down": return L("growth.who.traj.dir.down")
+                case "flat": return L("growth.who.traj.dir.flat")
+                default:      return raw
+                }
+            }
+
+            let metricLabel = whoMetricLabel(metricCode)
+            let dirLabel = whoTrajDirLabel(dirRaw)
+
+            // Preferred localized format key (you maintain strings in Localizable).
+            let fmt = L("growth.who.traj.v1", comment: "WHO trajectory line: OMS %@ : trajectoire %@ (Δz %@, seuil %@)")
+            if fmt != "growth.who.traj.v1" {
+                return String(format: fmt, metricLabel, dirLabel, dzText, thText)
+            }
+
+            // Safe fallback if the format key is missing.
+            return "OMS \(metricLabel) : trajectoire \(dirLabel) (Δz \(dzText), seuil \(thText))"
         }
         // ... other token keys ...
         if key == "well_visit_form.problem_listing.token.pe_teeth_V1" ||

@@ -728,6 +728,7 @@ struct WellVisitForm: View {
     private func fetchGrowthPoints(
         dbURL: URL,
         patientID: Int,
+        visitDate: Date,
         lookbackDays: Int = 3650,
         forwardDays: Int = 3,
         limit: Int = 200
@@ -803,7 +804,7 @@ struct WellVisitForm: View {
     }
 
     /// Pick the best “current” point: closest within ±3 days of visit date; else latest on/before visit.
-    private func selectCurrentGrowthPoint(_ points: [GrowthPoint]) -> GrowthPoint? {
+    private func selectCurrentGrowthPoint(_ points: [GrowthPoint], visitDate: Date) -> GrowthPoint? {
         guard !points.isEmpty else { return nil }
 
         let visitDay = Calendar.current.startOfDay(for: visitDate)
@@ -892,8 +893,9 @@ struct WellVisitForm: View {
         let includeWHO = self.showsWHOGrowthEvaluation
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let points = fetchGrowthPoints(dbURL: dbURL, patientID: patientID)
-            let current = selectCurrentGrowthPoint(points)
+            let visitDateSnapshot = self.visitDate
+            let points = fetchGrowthPoints(dbURL: dbURL, patientID: patientID, visitDate: visitDateSnapshot)
+            let current = selectCurrentGrowthPoint(points, visitDate: visitDateSnapshot)
 
             // previous point = last point strictly before the current point
             let previous: GrowthPoint? = {
@@ -982,7 +984,14 @@ struct WellVisitForm: View {
             }
 
             func pushZP(metricId: String, z: Double, percentile: Double) {
-                measurementTokens.append(ProblemToken("growth.who.zp", [metricId, fmt2(z), fmt0(percentile)]))
+                // Percentiles can be very small (e.g., 0.1). Avoid rounding to 0.
+                let pStr: String = {
+                    if percentile.isFinite, percentile > 0, percentile < 1 {
+                        return String(format: "%.1f", percentile)
+                    }
+                    return fmt0(percentile)
+                }()
+                measurementTokens.append(ProblemToken("growth.who.zp", [metricId, fmt2(z), pStr]))
             }
 
             func pushExtreme(metricId: String, z: Double, percentile: Double) {
@@ -995,7 +1004,14 @@ struct WellVisitForm: View {
             func pushShift(metricId: String, deltaZ: Double, deltaP: Double, currentP: Double, priorCount: Int) {
                 // Store signed deltas for clear interpretation (drop vs rise)
                 // Args v2: [metricId, deltaZ_signed, deltaPercentile_signed, currentPercentile, priorsCount]
-                let args = [metricId, fmt2s(deltaZ), fmt0s(deltaP), fmt0(currentP), String(priorCount)]
+                // Percentiles can be very small (e.g., 0.1). Avoid rounding to 0.
+                let pStr: String = {
+                    if currentP.isFinite, currentP > 0, currentP < 1 {
+                        return String(format: "%.1f", currentP)
+                    }
+                    return fmt0(currentP)
+                }()
+                let args = [metricId, fmt2s(deltaZ), fmt0s(deltaP), pStr, String(priorCount)]
                 print("🧪 WHO pushShift(v2) metric=\(metricId) Δz=\(deltaZ) ΔP=\(deltaP) P=\(currentP) priors=\(priorCount) args=\(args)")
                 problemTokens.append(ProblemToken("growth.who.shift.v2", args))
             }
@@ -1183,10 +1199,10 @@ struct WellVisitForm: View {
                         }
 
                         let prior = buildPrior { $0.heightCm }
-                        let t = try WHOGrowthEvaluator.assessTrendLastN(
+                        let t = try WHOGrowthEvaluator.assessTrend(
                             kind: .lhfa, sex: sex, prior: prior,
                             current: (ageMonths: currentAgeM, value: h),
-                            lastN: prior.count, thresholdZ: 1.0
+                            thresholdZ: 1.0
                         )
 
                         // Prefer evaluator-computed shift stats for tokenization.
@@ -1274,10 +1290,10 @@ struct WellVisitForm: View {
                         }
 
                         let prior = buildPrior { $0.headCircCm }
-                        let t = try WHOGrowthEvaluator.assessTrendLastN(
+                        let t = try WHOGrowthEvaluator.assessTrend(
                             kind: .hcfa, sex: sex, prior: prior,
                             current: (ageMonths: currentAgeM, value: hc),
-                            lastN: prior.count, thresholdZ: 1.0
+                            thresholdZ: 1.0
                         )
 
                         if t.priorCount > 0 {
@@ -1357,11 +1373,10 @@ struct WellVisitForm: View {
                                     return (ph, pw)
                                 }
 
-                            let t = try WHOGrowthEvaluator.assessTrendWeightForLengthLastN(
+                            let t = try WHOGrowthEvaluator.assessTrendWeightForLength(
                                 sex: sex,
                                 prior: priorWFL,
                                 current: (lengthCM: h, weightKG: w),
-                                lastN: priorWFL.count,
                                 thresholdZ: 1.0
                             )
 
@@ -1437,10 +1452,10 @@ struct WellVisitForm: View {
                                         return (ageMonths(dob: dob, at: p.recordedDate), pbmi)
                                     }
 
-                                let t = try WHOGrowthEvaluator.assessTrendLastN(
+                                let t = try WHOGrowthEvaluator.assessTrend(
                                     kind: .bmifa, sex: sex, prior: prior,
                                     current: (ageMonths: currentAgeM, value: bmi),
-                                    lastN: prior.count, thresholdZ: 1.0
+                                    thresholdZ: 1.0
                                 )
 
                                 if t.priorCount > 0 {
@@ -1603,8 +1618,15 @@ struct WellVisitForm: View {
     ) -> (problemTokens: [ProblemToken], measurementTokens: [ProblemToken]) {
         guard includeWHO else { return ([], []) }
 
-        let points = fetchGrowthPoints(dbURL: dbURL, patientID: patientID)
-        guard let current = selectCurrentGrowthPoint(points) else { return ([], []) }
+        let visitDateSnapshot = self.visitDate
+        let points = fetchGrowthPoints(
+            dbURL: dbURL,
+            patientID: patientID,
+            visitDate: visitDateSnapshot,
+            lookbackDays: 3650,
+            forwardDays: 3
+        )
+        guard let current = selectCurrentGrowthPoint(points, visitDate: visitDateSnapshot) else { return ([], []) }
         guard let dob = fetchDOB(dbURL: dbURL, patientID: patientID) else { return ([], []) }
         guard let sex = fetchWHOSex(dbURL: dbURL, patientID: patientID) else { return ([], []) }
 
@@ -1649,7 +1671,14 @@ struct WellVisitForm: View {
         }
 
         func pushZP(metricId: String, z: Double, percentile: Double) {
-            measurementTokens.append(ProblemToken("growth.who.zp", [metricId, fmt2(z), fmt0(percentile)]))
+            // Percentiles can be very small (e.g., 0.1). Avoid rounding to 0.
+            let pStr: String = {
+                if percentile.isFinite, percentile > 0, percentile < 1 {
+                    return String(format: "%.1f", percentile)
+                }
+                return fmt0(percentile)
+            }()
+            measurementTokens.append(ProblemToken("growth.who.zp", [metricId, fmt2(z), pStr]))
         }
 
         func pushTrajectory(metricId: String, residualZ: Double, threshold: Double) {
@@ -1661,6 +1690,36 @@ struct WellVisitForm: View {
             }()
             let args = [metricId, dirKey, fmt2s(residualZ), fmt2(threshold)]
             problemTokens.append(ProblemToken("growth.who.traj.v1", args))
+        }
+
+        func fmt0s(_ v: Double) -> String { String(format: "%+.0f", v) }
+
+        func pushShift(metricId: String, deltaZ: Double, deltaP: Double, currentP: Double, priorCount: Int) {
+            // Args v2 (5): [metricId, deltaZ_signed, deltaPercentile_signed, currentPercentile, priorsCount]
+            // Percentiles can be very small (e.g., 0.1). Avoid rounding to 0.
+            let pStr: String = {
+                if currentP.isFinite, currentP > 0, currentP < 1 {
+                    return String(format: "%.1f", currentP)
+                }
+                return fmt0(currentP)
+            }()
+            let args = [
+                metricId,
+                fmt2s(deltaZ),
+                fmt0s(deltaP),
+                pStr,
+                String(priorCount)
+            ]
+            problemTokens.append(ProblemToken("growth.who.shift.v2", args))
+            print("🧪 WHO pushShift(v2) metric=\(metricId) Δz=\(deltaZ) ΔP=\(deltaP) P=\(currentP) priors=\(priorCount) args=\(args)")
+        }
+
+        func median(_ xs: [Double]) -> Double? {
+            guard !xs.isEmpty else { return nil }
+            let s = xs.sorted()
+            let n = s.count
+            if n % 2 == 1 { return s[n/2] }
+            return 0.5 * (s[n/2 - 1] + s[n/2])
         }
 
         // --- Trajectory anomaly (local computation; avoids Mirror on evaluator result)
@@ -1723,6 +1782,26 @@ struct WellVisitForm: View {
                 let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
                 pushZP(metricId: "wfa", z: r.zScore, percentile: r.percentile)
 
+                let priorZs: [Double] = points
+                    .filter { $0.recordedDate < current.recordedDate }
+                    .sorted(by: { $0.recordedDate < $1.recordedDate })
+                    .compactMap { p -> Double? in
+                        guard let pw = p.weightKg else { return nil }
+                        let am = ageM(p.recordedDate)
+                        return (try? WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: am, value: pw).zScore)
+                    }
+
+                if priorZs.count >= 3, let medZ = median(priorZs) {
+                    let dZ = r.zScore - medZ
+                    let th = 1.0
+                    if abs(dZ) >= th {
+                        let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
+                        let dP = r.percentile - medP
+                        pushShift(metricId: "wfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
+                        print("WHO wfa ageMo=\(currentAgeM) value=\(w) z=\(r.zScore) | priors=\(priorZs.count) medZ=\(medZ) dZ=\(dZ) th=\(th)")
+                    }
+                }
+
                 let priorTrajWFA: [(x: Double, z: Double)] = points
                     .filter { $0.recordedDate < current.recordedDate }
                     .sorted(by: { $0.recordedDate < $1.recordedDate })
@@ -1744,6 +1823,26 @@ struct WellVisitForm: View {
                 let r = try WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: currentAgeM, value: h)
                 pushZP(metricId: "lhfa", z: r.zScore, percentile: r.percentile)
 
+                let priorZs: [Double] = points
+                    .filter { $0.recordedDate < current.recordedDate }
+                    .sorted(by: { $0.recordedDate < $1.recordedDate })
+                    .compactMap { p -> Double? in
+                        guard let ph = p.heightCm else { return nil }
+                        let am = ageM(p.recordedDate)
+                        return (try? WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: am, value: ph).zScore)
+                    }
+
+                if priorZs.count >= 3, let medZ = median(priorZs) {
+                    let dZ = r.zScore - medZ
+                    let th = 1.0
+                    if abs(dZ) >= th {
+                        let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
+                        let dP = r.percentile - medP
+                        pushShift(metricId: "lhfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
+                        print("WHO lhfa ageMo=\(currentAgeM) value=\(h) z=\(r.zScore) | priors=\(priorZs.count) medZ=\(medZ) dZ=\(dZ) th=\(th)")
+                    }
+                }
+
                 let priorTrajLHFA: [(x: Double, z: Double)] = points
                     .filter { $0.recordedDate < current.recordedDate }
                     .sorted(by: { $0.recordedDate < $1.recordedDate })
@@ -1764,6 +1863,26 @@ struct WellVisitForm: View {
             if let hc = current.headCircCm {
                 let r = try WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: currentAgeM, value: hc)
                 pushZP(metricId: "hcfa", z: r.zScore, percentile: r.percentile)
+
+                let priorZs: [Double] = points
+                    .filter { $0.recordedDate < current.recordedDate }
+                    .sorted(by: { $0.recordedDate < $1.recordedDate })
+                    .compactMap { p -> Double? in
+                        guard let phc = p.headCircCm else { return nil }
+                        let am = ageM(p.recordedDate)
+                        return (try? WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: am, value: phc).zScore)
+                    }
+
+                if priorZs.count >= 3, let medZ = median(priorZs) {
+                    let dZ = r.zScore - medZ
+                    let th = 1.0
+                    if abs(dZ) >= th {
+                        let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
+                        let dP = r.percentile - medP
+                        pushShift(metricId: "hcfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
+                        print("WHO hcfa ageMo=\(currentAgeM) value=\(hc) z=\(r.zScore) | priors=\(priorZs.count) medZ=\(medZ) dZ=\(dZ) th=\(th)")
+                    }
+                }
 
                 let priorTrajHCFA: [(x: Double, z: Double)] = points
                     .filter { $0.recordedDate < current.recordedDate }
@@ -1787,6 +1906,25 @@ struct WellVisitForm: View {
                     let wfl = try WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: h, weightKG: w)
                     pushZP(metricId: "wfl", z: wfl.zScore, percentile: wfl.percentile)
 
+                    let priorZs: [Double] = points
+                        .filter { $0.recordedDate < current.recordedDate }
+                        .sorted(by: { $0.recordedDate < $1.recordedDate })
+                        .compactMap { p -> Double? in
+                            guard let pw = p.weightKg, let ph = p.heightCm else { return nil }
+                            return (try? WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: ph, weightKG: pw).zScore)
+                        }
+
+                    if priorZs.count >= 3, let medZ = median(priorZs) {
+                        let dZ = wfl.zScore - medZ
+                        let th = 1.0
+                        if abs(dZ) >= th {
+                            let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
+                            let dP = wfl.percentile - medP
+                            pushShift(metricId: "wfl", deltaZ: dZ, deltaP: dP, currentP: wfl.percentile, priorCount: priorZs.count)
+                            print("WHO wfl len=\(h) wt=\(w) z=\(wfl.zScore) | priors=\(priorZs.count) medZ=\(medZ) dZ=\(dZ) th=\(th)")
+                        }
+                    }
+
                     let priorTrajWFL: [(x: Double, z: Double)] = points
                         .filter { $0.recordedDate < current.recordedDate }
                         .sorted(by: { $0.recordedDate < $1.recordedDate })
@@ -1803,6 +1941,27 @@ struct WellVisitForm: View {
                 } else if let bmi = bmiKgM2(weightKg: w, heightCm: h) {
                     let r = try WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: currentAgeM, value: bmi)
                     pushZP(metricId: "bmifa", z: r.zScore, percentile: r.percentile)
+
+                    let priorZs: [Double] = points
+                        .filter { $0.recordedDate < current.recordedDate }
+                        .sorted(by: { $0.recordedDate < $1.recordedDate })
+                        .compactMap { p -> Double? in
+                            guard let pw = p.weightKg, let ph = p.heightCm,
+                                  let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
+                            let am = ageM(p.recordedDate)
+                            return (try? WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: am, value: pbmi).zScore)
+                        }
+
+                    if priorZs.count >= 3, let medZ = median(priorZs) {
+                        let dZ = r.zScore - medZ
+                        let th = 1.0
+                        if abs(dZ) >= th {
+                            let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
+                            let dP = r.percentile - medP
+                            pushShift(metricId: "bmifa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
+                            print("WHO bmifa ageMo=\(currentAgeM) bmi=\(bmi) z=\(r.zScore) | priors=\(priorZs.count) medZ=\(medZ) dZ=\(dZ) th=\(th)")
+                        }
+                    }
 
                     let priorTrajBMIFA: [(x: Double, z: Double)] = points
                         .filter { $0.recordedDate < current.recordedDate }
@@ -1903,8 +2062,7 @@ struct WellVisitForm: View {
         let problemJSON = encodeTokensJSON(problemTokens)
         let measJSON = encodeTokensJSON(measurementTokens)
         print("🧩 saveWellVisitGrowthEval: problemJSON.len=\(problemJSON.utf8.count) measJSON.len=\(measJSON.utf8.count)")
-        if let firstShift = problemTokens.first(where: { $0.key == "growth.who.shift.v2" })
-            ?? problemTokens.first(where: { $0.key == "growth.who.shift" }) {
+        if let firstShift = problemTokens.first(where: { $0.key == "growth.who.shift.v2" }) {
             print("🧪 saveWellVisitGrowthEval: first shift token key=\(firstShift.key) args=\(firstShift.args)")
         } else {
             print("🧪 saveWellVisitGrowthEval: no shift token present")
@@ -1969,6 +2127,43 @@ struct WellVisitForm: View {
             print("❌ saveWellVisitGrowthEval: step failed rc=\(rcStep) err=\(err)")
         } else {
             print("✅ saveWellVisitGrowthEval: wrote tokens for wellVisitID=\(wellVisitID)")
+            // After successful write, immediately read back and log a short summary
+            do {
+                let checkSQL = """
+                SELECT problem_tokens_json, measurement_tokens_json
+                FROM well_visit_growth_eval
+                WHERE well_visit_id = ?;
+                """
+                var q: OpaquePointer?
+                guard sqlite3_prepare_v2(db, checkSQL, -1, &q, nil) == SQLITE_OK, let q else {
+                    print("⚠️ read-back: prepare failed err=\(String(cString: sqlite3_errmsg(db)))")
+                    return
+                }
+                defer { sqlite3_finalize(q) }
+
+                sqlite3_bind_int64(q, 1, sqlite3_int64(wellVisitID))
+
+                if sqlite3_step(q) == SQLITE_ROW {
+                    let pStr = sqlite3_column_text(q, 0).map { String(cString: $0) } ?? "[]"
+                    let mStr = sqlite3_column_text(q, 1).map { String(cString: $0) } ?? "[]"
+
+                    let pData = Data(pStr.utf8)
+                    let mData = Data(mStr.utf8)
+
+                    let pTokens = (try? JSONDecoder().decode([ProblemToken].self, from: pData)) ?? []
+                    let mTokens = (try? JSONDecoder().decode([ProblemToken].self, from: mData)) ?? []
+
+                    print("🧪 read-back OK: wellVisitID=\(wellVisitID) problem=\(pTokens.count) meas=\(mTokens.count)")
+                    if let s = pTokens.first(where: { $0.key == "growth.who.shift.v2" }) {
+                        print("🧪 read-back shift: \(s.args)")
+                    }
+                    if let t = pTokens.first(where: { $0.key == "growth.who.traj.v1" }) {
+                        print("🧪 read-back traj: \(t.args)")
+                    }
+                } else {
+                    print("⚠️ read-back: no row found for wellVisitID=\(wellVisitID)")
+                }
+            }
         }
     }
 
@@ -5282,6 +5477,14 @@ struct WellVisitForm: View {
         let headCircCm: Double?
     }
 
+    /// Window (in days) considered “near the visit date” for manual_growth selection.
+    /// Used both for the single snapshot (±window) and the forward window for series queries.
+    private static let manualGrowthNearVisitWindowDays: Int = 3
+
+    /// Max lookback window for AI manual_growth series (≈ 60 months).
+    /// We use days because SQLite date modifiers operate in days.
+    private static let manualGrowthAIMaxLookbackDays: Int = 1827
+
     /// Query manual growth rows around the current `visitDate`.
     ///
     /// IMPORTANT: We intentionally exclude any vitals-mirrored rows (`source` LIKE 'vitals%').
@@ -5290,9 +5493,8 @@ struct WellVisitForm: View {
     private func fetchManualGrowthSeriesForAI(
         dbURL: URL,
         patientID: Int,
-        lookbackDays: Int = 365,
-        forwardDays: Int = 3,
-        limit: Int = 6
+        lookbackDays: Int = Self.manualGrowthAIMaxLookbackDays,
+        forwardDays: Int = Self.manualGrowthNearVisitWindowDays
     ) -> [ManualGrowthSnapshot] {
 
         var db: OpaquePointer?
@@ -5313,8 +5515,7 @@ struct WellVisitForm: View {
           AND COALESCE(source,'manual') NOT LIKE 'vitals%'
           AND date(recorded_at) >= date(?, ?)
           AND date(recorded_at) <= date(?, ?)
-        ORDER BY datetime(recorded_at) ASC
-        LIMIT ?;
+        ORDER BY datetime(recorded_at) ASC;
         """
 
         var stmt: OpaquePointer?
@@ -5328,7 +5529,6 @@ struct WellVisitForm: View {
         _ = lowerMod.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
         _ = visitISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
         _ = upperMod.withCString { sqlite3_bind_text(stmt, 5, $0, -1, SQLITE_TRANSIENT) }
-        sqlite3_bind_int(stmt, 6, Int32(limit))
 
         func colDoubleOrNil(_ idx: Int32) -> Double? {
             if sqlite3_column_type(stmt, idx) == SQLITE_NULL { return nil }
@@ -5390,16 +5590,14 @@ struct WellVisitForm: View {
         baseProblems: String,
         dbURL: URL,
         patientID: Int,
-        lookbackDays: Int = 365,
-        forwardDays: Int = 3,
-        limit: Int = 6
+        lookbackDays: Int = Self.manualGrowthAIMaxLookbackDays,
+        forwardDays: Int = Self.manualGrowthNearVisitWindowDays
     ) -> String {
         let series = fetchManualGrowthSeriesForAI(
             dbURL: dbURL,
             patientID: patientID,
             lookbackDays: lookbackDays,
-            forwardDays: forwardDays,
-            limit: limit
+            forwardDays: forwardDays
         )
 
         guard !series.isEmpty else { return baseProblems }
@@ -5411,7 +5609,7 @@ struct WellVisitForm: View {
     /// Fetch a manual growth entry that best matches the current `visitDate`.
     ///
     /// Strategy:
-    /// 1) Prefer the closest record within a small window around the visit date (±3 days)
+    /// 1) Prefer the closest record within a small window around the visit date (±window days)
     ///    so same-day (or near) measurements are used even if a later measurement exists.
     /// 2) If nothing exists in the window, fall back to the most recent record on or before
     ///    the visit date.
@@ -5426,7 +5624,7 @@ struct WellVisitForm: View {
         defer { sqlite3_close(db) }
 
         let visitISO = Self.isoDateOnly.string(from: visitDate)
-        let windowDays: Int32 = 3
+        let windowDays: Int32 = Int32(Self.manualGrowthNearVisitWindowDays)
 
         func colDoubleOrNil(_ stmt: OpaquePointer?, _ idx: Int32) -> Double? {
             guard let stmt else { return nil }
@@ -5466,7 +5664,7 @@ struct WellVisitForm: View {
             )
         }
 
-        // 1) Prefer the closest measurement within ±3 days of the visit date.
+        // 1) Prefer the closest measurement within ±window days of the visit date.
         let closestSQL = """
         SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
         FROM manual_growth

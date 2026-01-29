@@ -1,4 +1,4 @@
-/* 
+/*
   Localizable.strings
   DrsMainApp
 
@@ -2846,7 +2846,9 @@
 
 "report.well.measurements.growth_interpretation" = "Interpretation";
 
+/* Legacy (v1) — kept only for backward compatibility; new code should use growth.who.shift.v2 */
 "growth.who.shift" = "• WHO %@: z-score %@ → %@ (threshold %@; n=%@)";
+"growth.who.shift.v2" = "• WHO %@: Δz=%@, ΔP=%@, P%@ (priors=%@)";
 
 /* en.lproj/Localizable.strings */
 
@@ -2857,13 +2859,14 @@
 "growth.metric.bmi" = "BMI-for-age";
 "growth.metric.unknown" = "Growth metric";
 
-"growth.who.shift.v2" = "• WHO %@: Δz=%@, ΔP=%@, P%@ (priors=%@)";
+/* Legacy (v1) — kept only for backward compatibility; new code should use growth.who.shift.v2 */
+"growth.who.shift" = "• WHO %@: z-score %@ → %@ (threshold %@; n=%@)";
 
 /* =========================
    EN — en.lproj/Localizable.strings
    ========================= */
 
-"growth.who.traj.v1" = "WHO %@: trajectory %@ (Δz %@, threshold %@)";
+"growth.who.traj.dir.v1" = "WHO %@: trajectory %@ (Δz %@, threshold %@)";
 
 "growth.who.traj.dir.up"   = "upward";
 "growth.who.traj.dir.down" = "downward";

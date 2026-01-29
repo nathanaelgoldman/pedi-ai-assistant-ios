@@ -318,6 +318,9 @@ enum WHOGrowthEvaluator {
         return try assessTrend(kind: .wfl, sex: sex, prior: mappedPrior, current: mappedCurrent, thresholdZ: thresholdZ, bundle: bundle)
     }
 
+    // LAME (legacy): "LastN" trend pipeline. Do not use for WellVisitForm/UI or DB.
+    // Contract now is: use ALL priors via `assessTrendWeightForLength(...)`.
+    @available(*, deprecated, message: "Legacy LastN pipeline. Use assessTrendWeightForLength(...) with ALL priors.")
     /// Convenience: assess WFL trend using only the last N prior points.
     static func assessTrendWeightForLengthLastN(
         sex: Sex,
@@ -547,6 +550,9 @@ enum WHOGrowthEvaluator {
     ///
     /// - Parameters:
     ///   - lastN: How many prior points to consider (most recent by age). Typical 3–6.
+    // LAME (legacy): "LastN" trend pipeline. Do not use for WellVisitForm/UI or DB.
+    // Contract now is: use ALL priors via `assessTrend(...)`.
+    @available(*, deprecated, message: "Legacy LastN pipeline. Use assessTrend(...) with ALL priors.")
     static func assessTrendLastN(
         kind: Kind,
         sex: Sex,
@@ -972,5 +978,179 @@ enum WHOGrowthEvaluator {
         } else {
             return 0.5 * (s[n/2 - 1] + s[n/2])
         }
+    }
+}
+
+// MARK: - WHO Growth token helpers (single source of truth)
+private enum WHOGrowthTokenFactory {
+
+    // Localized metric label used in shift/traj tokens.
+    static func metricLabel(for kind: WHOGrowthEvaluator.Kind, bundle: Bundle = .main) -> String {
+        // Prefer the growth.metric.* vocabulary used by your token strings.
+        let key: String
+        switch kind {
+        case .wfa:   key = "growth.metric.wfa"
+        case .lhfa:  key = "growth.metric.lhfa"
+        case .hcfa:  key = "growth.metric.hcfa"
+        case .wfl:   key = "growth.metric.wfl"
+        case .bmifa: key = "growth.metric.bmifa"
+        }
+        let v = NSLocalizedString(key, bundle: bundle, comment: "")
+        // If key is missing, NSLocalizedString returns the key itself.
+        if v == key {
+            return kind.displayName(bundle: bundle)
+        }
+        return v
+    }
+
+    // Compute baseline from ALL priors (contract: no lastN slicing).
+    // Baseline is the median prior z, with percentile derived from that median z.
+    static func computeShift(
+        kind: WHOGrowthEvaluator.Kind,
+        sex: WHOGrowthEvaluator.Sex,
+        prior: [(x: Double, value: Double)],
+        current: (x: Double, value: Double),
+        xIsLengthForWFL: Bool,
+        bundle: Bundle = .main
+    ) -> (metricLabel: String, deltaZ: Double, deltaP: Double, currentP: Double, priorsCount: Int)? {
+
+        // Need at least 1 prior to compute a shift.
+        guard !prior.isEmpty else { return nil }
+
+        // Evaluate current.
+        let currentZ: Double
+        let currentP: Double
+        do {
+            if xIsLengthForWFL {
+                let r = try WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: current.x, weightKG: current.value, bundle: bundle)
+                currentZ = r.zScore
+                currentP = r.percentile
+            } else {
+                let r = try WHOGrowthEvaluator.evaluate(kind: kind, sex: sex, ageMonths: current.x, value: current.value, bundle: bundle)
+                currentZ = r.zScore
+                currentP = r.percentile
+            }
+        } catch {
+            return nil
+        }
+
+        // Evaluate priors z-scores (ALL priors).
+        var priorZ: [Double] = []
+        priorZ.reserveCapacity(prior.count)
+        for p in prior {
+            do {
+                if xIsLengthForWFL {
+                    let r = try WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: p.x, weightKG: p.value, bundle: bundle)
+                    priorZ.append(r.zScore)
+                } else {
+                    let r = try WHOGrowthEvaluator.evaluate(kind: kind, sex: sex, ageMonths: p.x, value: p.value, bundle: bundle)
+                    priorZ.append(r.zScore)
+                }
+            } catch {
+                // skip bad points
+                continue
+            }
+        }
+        guard !priorZ.isEmpty else { return nil }
+
+        let baselineZ = median(priorZ)
+        let baselineP = WHOGrowthEvaluator.percentileFromZScore(baselineZ)
+
+        let deltaZ = currentZ - baselineZ
+        let deltaP = currentP - baselineP
+
+        return (
+            metricLabel: metricLabel(for: kind, bundle: bundle),
+            deltaZ: deltaZ,
+            deltaP: deltaP,
+            currentP: currentP,
+            priorsCount: priorZ.count
+        )
+    }
+
+    // Create shift + traj tokens from the evaluator’s single assessment.
+    // Contract:
+    // - Uses ALL priors (no lastN).
+    // - Emits ONLY v2 shift token key.
+    // - Emits traj v1 token when trajectory direction is meaningful.
+    static func makeTokens(
+        kind: WHOGrowthEvaluator.Kind,
+        sex: WHOGrowthEvaluator.Sex,
+        prior: [(x: Double, value: Double)],
+        current: (x: Double, value: Double),
+        thresholdZ: Double,
+        xIsLengthForWFL: Bool,
+        bundle: Bundle = .main
+    ) -> [ProblemToken] {
+
+        var out: [ProblemToken] = []
+        let metric = metricLabel(for: kind, bundle: bundle)
+
+        // SHIFT (median-based) — v2 only.
+        if let shift = computeShift(kind: kind, sex: sex, prior: prior, current: current, xIsLengthForWFL: xIsLengthForWFL, bundle: bundle) {
+            let dz = String(format: "%+.2f", shift.deltaZ)
+            let dP = String(format: "%+.1f", shift.deltaP)
+            let p  = String(format: "%.1f", shift.currentP)
+            let n  = "\(shift.priorsCount)"
+            out.append(ProblemToken("growth.who.shift.v2", [metric, dz, dP, p, n]))
+        }
+
+        // TREND / TRAJ (one canonical evaluator).
+        do {
+            let assessment: WHOGrowthEvaluator.TrendAssessment
+            if xIsLengthForWFL {
+                // WFL trend uses the WFL helper (x is lengthCM, value is weightKG).
+                let mappedPrior = prior.map { (lengthCM: $0.x, weightKG: $0.value) }
+                let mappedCur = (lengthCM: current.x, weightKG: current.value)
+                assessment = try WHOGrowthEvaluator.assessTrendWeightForLength(
+                    sex: sex,
+                    prior: mappedPrior,
+                    current: mappedCur,
+                    thresholdZ: thresholdZ,
+                    bundle: bundle
+                )
+            } else {
+                let mappedPrior = prior.map { (ageMonths: $0.x, value: $0.value) }
+                let mappedCur = (ageMonths: current.x, value: current.value)
+                assessment = try WHOGrowthEvaluator.assessTrend(
+                    kind: kind,
+                    sex: sex,
+                    prior: mappedPrior,
+                    current: mappedCur,
+                    thresholdZ: thresholdZ,
+                    bundle: bundle
+                )
+            }
+
+            // Trajectory direction based on deltaZ-from-median if available.
+            if let d = assessment.deltaZFromMedian, d.isFinite {
+                let dirKey: String
+                if abs(d) < 0.05 {
+                    dirKey = "growth.who.traj.dir.flat"
+                } else if d > 0 {
+                    dirKey = "growth.who.traj.dir.up"
+                } else {
+                    dirKey = "growth.who.traj.dir.down"
+                }
+
+                let dir = NSLocalizedString(dirKey, bundle: bundle, comment: "")
+                let dzAbs = String(format: "%.2f", abs(d))
+                let th = String(format: "%.2f", thresholdZ)
+                out.append(ProblemToken("growth.who.traj.v1", [metric, dir, dzAbs, th]))
+            }
+        } catch {
+            // best-effort; no traj token
+        }
+
+        return out
+    }
+
+    // Local median helper (avoid relying on WHOGrowthEvaluator’s private median).
+    private static func median(_ xs: [Double]) -> Double {
+        guard !xs.isEmpty else { return 0 }
+        let s = xs.sorted()
+        let n = s.count
+        if n % 2 == 1 { return s[n/2] }
+        return 0.5 * (s[n/2 - 1] + s[n/2])
     }
 }
