@@ -6393,6 +6393,8 @@ struct WellVisitForm: View {
         return out
     }
 
+
+
     // MARK: - WHO Growth Trend Mirror Helpers
 
     private func mirrorValue(_ trend: Any, labels: [String]) -> Double? {
