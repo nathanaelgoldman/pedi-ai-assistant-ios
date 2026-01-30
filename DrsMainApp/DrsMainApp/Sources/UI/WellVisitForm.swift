@@ -622,13 +622,15 @@ struct WellVisitForm: View {
 
     // MARK: - Growth snapshot helpers (manual_growth)
 
-    private struct GrowthPoint {
+    fileprivate struct GrowthPoint {
         let recordedAtRaw: String
         let recordedDate: Date
         let weightKg: Double?
         let heightCm: Double?
         let headCircCm: Double?
     }
+    
+
 
     private func fmt(_ v: Double?, decimals: Int) -> String {
         guard let v else { return "—" }
@@ -872,6 +874,247 @@ struct WellVisitForm: View {
         return Text(trimmed)
     }
 
+    // MARK: - WHO growth evaluation helper (pure computation)
+
+    private struct WHOComputeOutput {
+        var whoZLines: [String] = []
+        var whoTrendLines: [String] = []
+        var whoTrendIsFlagged: Bool = false
+        var whoNutritionLine: String = ""
+        var overallFlags: [String] = []
+        var problemTokens: [ProblemToken] = []
+        var measurementTokens: [ProblemToken] = []
+    }
+
+    /// Pure computation helper used to build WHO summaries + tokens.
+    ///
+    /// IMPORTANT: This function must NOT touch any @State.
+    /// It returns all computed outputs so callers can decide how to display/store them.
+    private func computeWHOForSnapshot(
+        includeWHO: Bool,
+        points: [GrowthPoint],
+        current: GrowthPoint?,
+        dob: Date?,
+        sex: WHOGrowthEvaluator.Sex?
+    ) -> WHOComputeOutput
+    {
+        guard includeWHO, let current, let dob, let sex else { return WHOComputeOutput() }
+
+        var out = WHOComputeOutput()
+
+        // Local helpers (self-contained; no @State writes)
+        func fmt2(_ v: Double) -> String { String(format: "%.2f", v) }
+        func fmt0(_ v: Double) -> String { String(format: "%.0f", v) }
+        func fmt2s(_ v: Double) -> String { String(format: "%+.2f", v) }
+        func fmt0s(_ v: Double) -> String { String(format: "%+.0f", v) }
+
+        func median(_ xs: [Double]) -> Double? {
+            let a = xs.sorted()
+            guard !a.isEmpty else { return nil }
+            let n = a.count
+            if n % 2 == 1 { return a[n/2] }
+            return (a[n/2 - 1] + a[n/2]) / 2.0
+        }
+
+        func addOverallFlag(_ label: String) {
+            if !out.overallFlags.contains(label) { out.overallFlags.append(label) }
+        }
+
+        func pushZP(metricId: String, z: Double, percentile: Double) {
+            // Percentiles can be very small (e.g., 0.1). Avoid rounding to 0.
+            let pStr: String = {
+                if percentile.isFinite, percentile > 0, percentile < 1 {
+                    return String(format: "%.1f", percentile)
+                }
+                return fmt0(percentile)
+            }()
+            out.measurementTokens.append(ProblemToken("growth.who.zp", [metricId, fmt2(z), pStr]))
+        }
+
+        func pushExtreme(metricId: String, z: Double, percentile: Double) {
+            out.problemTokens.append(ProblemToken("growth.who.extreme", [metricId, fmt2(z), fmt0(percentile)]))
+        }
+
+        func pushShift(metricId: String, deltaZ: Double, deltaP: Double, currentP: Double, priorCount: Int) {
+            // Args v2: [metricId, deltaZ_signed, deltaPercentile_signed, currentPercentile, priorsCount]
+            // Percentiles can be very small (e.g., 0.1). Avoid rounding to 0.
+            let pStr: String = {
+                if currentP.isFinite, currentP > 0, currentP < 1 {
+                    return String(format: "%.1f", currentP)
+                }
+                return fmt0(currentP)
+            }()
+            let args = [metricId, fmt2s(deltaZ), fmt0s(deltaP), pStr, String(priorCount)]
+            out.problemTokens.append(ProblemToken("growth.who.shift.v2", args))
+        }
+
+        func pushTrajectory(metricId: String, residualZ: Double, threshold: Double) {
+            // Args v1 (4): [metricId, directionKey, residualZ_signed, threshold]
+            let dirKey: String = {
+                if residualZ > 0.10 { return "growth.who.traj.dir.up" }
+                if residualZ < -0.10 { return "growth.who.traj.dir.down" }
+                return "growth.who.traj.dir.flat"
+            }()
+            let args = [metricId, dirKey, fmt2s(residualZ), fmt2(threshold)]
+            out.problemTokens.append(ProblemToken("growth.who.traj.v1", args))
+        }
+
+        // Trajectory anomaly (same math as UI path; keeps helper independent from TrendResult internals)
+        func computeTrajectoryAnomaly(
+            prior: [(x: Double, z: Double)],
+            currentX: Double,
+            currentZ: Double
+        ) -> (residualZ: Double, sigma: Double, score: Double)? {
+            guard prior.count >= 4 else { return nil }
+
+            let n = Double(prior.count)
+            let meanX = prior.reduce(0.0) { $0 + $1.x } / n
+            let meanZ = prior.reduce(0.0) { $0 + $1.z } / n
+
+            var varX = 0.0
+            var covXZ = 0.0
+            for p in prior {
+                let dx = p.x - meanX
+                let dz = p.z - meanZ
+                varX += dx * dx
+                covXZ += dx * dz
+            }
+            if varX < 1e-9 { return nil }
+
+            let slope = covXZ / varX
+            let intercept = meanZ - slope * meanX
+            let expectedZ = intercept + slope * currentX
+            let residualZ = currentZ - expectedZ
+
+            var rss = 0.0
+            for p in prior {
+                let pred = intercept + slope * p.x
+                let r = p.z - pred
+                rss += r * r
+            }
+            let df = max(1.0, n - 2.0)
+            var sigma = sqrt(rss / df)
+            if sigma < 0.05 { sigma = 0.05 }
+
+            let score = abs(residualZ) / sigma
+            return (residualZ: residualZ, sigma: sigma, score: score)
+        }
+
+        let currentAgeM = ageMonths(dob: dob, at: current.recordedDate)
+        let trendThresholdZ: Double = 1.0
+
+        do {
+            // Step 6: Compute ONLY WFA here (weight-for-age). Other metrics remain in refreshGrowthSnapshotCard().
+            let wfaLabel = WHOGrowthEvaluator.Kind.wfa.displayName()
+
+            if let w = current.weightKg {
+                let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
+
+                // Z/P display + measurement token
+                out.whoZLines.append("**\(wfaLabel):** z=\(fmt2(r.zScore)) P\(fmt0(r.percentile))")
+                pushZP(metricId: "wfa", z: r.zScore, percentile: r.percentile)
+
+                // Median-based shift token (uses prior history)
+                let priorZs: [Double] = points
+                    .filter { $0.recordedDate < current.recordedDate }
+                    .sorted(by: { $0.recordedDate < $1.recordedDate })
+                    .compactMap { p -> Double? in
+                        guard let pw = p.weightKg else { return nil }
+                        let am = ageMonths(dob: dob, at: p.recordedDate)
+                        return (try? WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: am, value: pw).zScore)
+                    }
+
+                if priorZs.count >= 3, let medZ = median(priorZs) {
+                    let dZ = r.zScore - medZ
+                    if abs(dZ) >= trendThresholdZ {
+                        let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
+                        let dP = r.percentile - medP
+                        pushShift(metricId: "wfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
+                    }
+                }
+
+                // Extreme flag/token
+                let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
+                if extreme {
+                    out.whoTrendIsFlagged = true
+                    addOverallFlag(wfaLabel)
+                    pushExtreme(metricId: "wfa", z: r.zScore, percentile: r.percentile)
+                }
+
+                // Trend narrative (uses evaluator)
+                let prior: [(ageMonths: Double, value: Double)] = points
+                    .filter { $0.recordedDate < current.recordedDate }
+                    .sorted(by: { $0.recordedDate < $1.recordedDate })
+                    .compactMap { p -> (Double, Double)? in
+                        guard let pw = p.weightKg else { return nil }
+                        return (ageMonths(dob: dob, at: p.recordedDate), pw)
+                    }
+                    .map { (ageMonths: $0.0, value: $0.1) }
+
+                let t = try WHOGrowthEvaluator.assessTrendLastN(
+                    kind: .wfa,
+                    sex: sex,
+                    prior: prior,
+                    current: (ageMonths: currentAgeM, value: w),
+                    lastN: prior.count,
+                    thresholdZ: trendThresholdZ
+                )
+
+                if t.priorCount > 0 {
+                    out.whoTrendLines.append("**\(wfaLabel):** " + t.narrative)
+
+                    if t.isSignificantShift {
+                        out.whoTrendIsFlagged = true
+                        addOverallFlag(wfaLabel)
+                    }
+
+                    // Trajectory anomaly token (higher/lower than expected)
+                    let priorTrajWFA: [(x: Double, z: Double)] = points
+                        .filter { $0.recordedDate < current.recordedDate }
+                        .sorted(by: { $0.recordedDate < $1.recordedDate })
+                        .compactMap { p -> (Double, Double)? in
+                            guard let pw = p.weightKg else { return nil }
+                            let am = ageMonths(dob: dob, at: p.recordedDate)
+                            guard let z = try? WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: am, value: pw).zScore else { return nil }
+                            return (am, z)
+                        }
+
+                    if let traj = computeTrajectoryAnomaly(prior: priorTrajWFA, currentX: currentAgeM, currentZ: r.zScore),
+                       traj.score >= 2.5 {
+                        out.whoTrendIsFlagged = true
+                        addOverallFlag(wfaLabel)
+                        pushTrajectory(metricId: "wfa", residualZ: traj.residualZ, threshold: 2.5)
+                    }
+                }
+            }
+
+            // Insert a temporary overall header so the caller can remove it and re-insert once at the end.
+            if !out.whoZLines.isEmpty {
+                if out.whoTrendIsFlagged {
+                    let list = out.overallFlags.isEmpty ? "" : " (" + out.overallFlags.joined(separator: ", ") + ")"
+                    out.whoTrendLines.insert(
+                        String(format: L10nWVF.s("well_visit_form.growth_snapshot.overall_concern"), list),
+                        at: 0
+                    )
+                } else {
+                    out.whoTrendLines.insert(
+                        L10nWVF.s("well_visit_form.growth_snapshot.overall_ok"),
+                        at: 0
+                    )
+                }
+            }
+
+            // Nutrition line intentionally left empty here (computed later in refresh via WFL/BMI).
+            out.whoNutritionLine = ""
+
+        } catch {
+            // If WFA computation fails, return empty output so the caller can continue with other metrics.
+            return WHOComputeOutput()
+        }
+
+        return out
+    }
+
     private func refreshGrowthSnapshotCard() {
         guard let dbURL = appState.currentDBURL,
               let patientID = appState.selectedPatientID else {
@@ -909,6 +1152,16 @@ struct WellVisitForm: View {
             let dob = fetchDOB(dbURL: dbURL, patientID: patientID)
             
             let sex = fetchWHOSex(dbURL: dbURL, patientID: patientID)
+
+            // Step 3 (safe wiring): call the pure WHO helper (currently stub).
+            // No behavior change yet; we will migrate the WHO block into the helper in the next step.
+            _ = computeWHOForSnapshot(
+                includeWHO: includeWHO,
+                points: points,
+                current: current,
+                dob: dob,
+                sex: sex
+            )
 
             // Build WHO z-score + trend summaries (best-effort)
             var whoZLines: [String] = []
@@ -1076,450 +1329,38 @@ struct WellVisitForm: View {
             }
 
             if includeWHO, let dob, let sex, let current {
-                func buildPrior(_ extract: (GrowthPoint) -> Double?) -> [(ageMonths: Double, value: Double)] {
-                    let priors = points
-                        .filter { $0.recordedDate < current.recordedDate }
-                        .sorted(by: { $0.recordedDate < $1.recordedDate })
-                        .compactMap { p -> (Double, Double)? in
-                            guard let v = extract(p) else { return nil }
-                            return (ageMonths(dob: dob, at: p.recordedDate), v)
-                        }
-                    return priors.map { (ageMonths: $0.0, value: $0.1) }
-                }
+                let input = WHOGrowthHub.Input(
+                    dob: dob,
+                    sex: sex,
+                    visitDate: visitDateSnapshot,
+                    points: points,
+                    current: current
+                )
 
-                let currentAgeM = ageMonths(dob: dob, at: current.recordedDate)
-                let trendThresholdZ: Double = 1.0
-                var wflZForNutrition: Double? = nil
-                var bmiZForNutrition: Double? = nil
+                let hub = WHOGrowthHub.evaluate(input)
 
-                do {
-                    let wfaLabel   = WHOGrowthEvaluator.Kind.wfa.displayName()
-                    let lhfaLabel  = WHOGrowthEvaluator.Kind.lhfa.displayName()
-                    let hcfaLabel  = WHOGrowthEvaluator.Kind.hcfa.displayName()
-                    let bmifaLabel = WHOGrowthEvaluator.Kind.bmifa.displayName()
-                    
-                    if let w = current.weightKg {
-                        let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
-                        let zStr = String(format: "%.2f", r.zScore)
-                        let pStr = String(format: "%.0f", r.percentile)
-                        whoZLines.append("**\(wfaLabel):** z=\(zStr) P\(pStr)")
-                        pushZP(metricId: "wfa", z: r.zScore, percentile: r.percentile)
+                whoZLines = hub.zSummaryLines
+                whoTrendLines = hub.trendLines
+                whoNutritionLine = hub.nutritionLine
+                whoTrendIsFlagged = hub.trendIsFlagged
+                overallFlags = hub.overallFlags
+                problemTokens = hub.problemTokens
+                measurementTokens = hub.measurementTokens
 
-                        // Median-based shift vs prior history (localization-proof)
-                        let priorZs: [Double] = points
-                            .filter { $0.recordedDate < current.recordedDate }
-                            .sorted(by: { $0.recordedDate < $1.recordedDate })
-                            .compactMap { p -> Double? in
-                                guard let pw = p.weightKg else { return nil }
-                                let am = ageMonths(dob: dob, at: p.recordedDate)
-                                return (try? WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: am, value: pw).zScore)
-                            }
-
-                        if priorZs.count >= 3, let medZ = median(priorZs) {
-                            let dZ = r.zScore - medZ
-                            if abs(dZ) >= trendThresholdZ {
-                                let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
-                                let dP = r.percentile - medP
-                                pushShift(metricId: "wfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
-                            }
-                        }
-
-                        let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
-                        if extreme {
-                            whoTrendIsFlagged = true
-                            addOverallFlag(wfaLabel)
-                            pushExtreme(metricId: "wfa", z: r.zScore, percentile: r.percentile)
-                        }
-
-                        let prior = buildPrior { $0.weightKg }
-                        let t = try WHOGrowthEvaluator.assessTrendLastN(
-                            kind: .wfa, sex: sex, prior: prior,
-                            current: (ageMonths: currentAgeM, value: w),
-                            lastN: prior.count, thresholdZ: 1.0
+                // Add the overall header line once (OK vs Concern)
+                if !whoZLines.isEmpty {
+                    if whoTrendIsFlagged {
+                        let list = overallFlags.isEmpty ? "" : " (" + overallFlags.joined(separator: ", ") + ")"
+                        whoTrendLines.insert(
+                            String(format: L10nWVF.s("well_visit_form.growth_snapshot.overall_concern"), list),
+                            at: 0
                         )
-
-                        if t.priorCount > 0 {
-                            whoTrendLines.append("**\(wfaLabel):** " + t.narrative)
-
-                            // Shift-based flag (existing behavior)
-                            if t.isSignificantShift {
-                                whoTrendIsFlagged = true
-                                addOverallFlag(wfaLabel)
-                            }
-
-                            // Trajectory anomaly token (higher/lower than expected) so reports can print it.
-                            let priorTrajWFA: [(x: Double, z: Double)] = points
-                                .filter { $0.recordedDate < current.recordedDate }
-                                .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                .compactMap { p -> (Double, Double)? in
-                                    guard let pw = p.weightKg else { return nil }
-                                    let am = ageMonths(dob: dob, at: p.recordedDate)
-                                    guard let z = try? WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: am, value: pw).zScore else { return nil }
-                                    return (am, z)
-                                }
-
-                            if let traj = computeTrajectoryAnomaly(prior: priorTrajWFA, currentX: currentAgeM, currentZ: r.zScore),
-                               traj.score >= 2.5 {
-                                whoTrendIsFlagged = true
-                                addOverallFlag(wfaLabel)
-                                pushTrajectory(metricId: "wfa", residualZ: traj.residualZ, threshold: 2.5)
-                            }
-                        }
-                    }
-
-                    if let h = current.heightCm {
-                        let r = try WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: currentAgeM, value: h)
-                        let zStr = String(format: "%.2f", r.zScore)
-                        let pStr = String(format: "%.0f", r.percentile)
-                        whoZLines.append("**\(lhfaLabel):** z=\(zStr) P\(pStr)")
-                        pushZP(metricId: "lhfa", z: r.zScore, percentile: r.percentile)
-
-                        let priorZs: [Double] = points
-                            .filter { $0.recordedDate < current.recordedDate }
-                            .sorted(by: { $0.recordedDate < $1.recordedDate })
-                            .compactMap { p -> Double? in
-                                guard let ph = p.heightCm else { return nil }
-                                let am = ageMonths(dob: dob, at: p.recordedDate)
-                                return (try? WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: am, value: ph).zScore)
-                            }
-
-                        // Median-based fallback (only used if we cannot read deltaZ/thresholdZ from evaluator trend result)
-                        var fallbackShiftLHFA: (deltaZ: Double, thresholdZ: Double)? = nil
-                        if priorZs.count >= 3, let medZ = median(priorZs) {
-                            let dZ = r.zScore - medZ
-                            print("🧪 WHO LHFA fallback shift inputs: z=\(r.zScore) medZ=\(medZ) dZ=\(dZ) th=\(trendThresholdZ) pct=\(r.percentile) priorCount=\(priorZs.count)")
-                            fallbackShiftLHFA = (dZ, trendThresholdZ)
-                        }
-
-                        let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
-                        if extreme {
-                            whoTrendIsFlagged = true
-                            addOverallFlag(lhfaLabel)
-                            pushExtreme(metricId: "lhfa", z: r.zScore, percentile: r.percentile)
-                        }
-
-                        let prior = buildPrior { $0.heightCm }
-                        let t = try WHOGrowthEvaluator.assessTrend(
-                            kind: .lhfa, sex: sex, prior: prior,
-                            current: (ageMonths: currentAgeM, value: h),
-                            thresholdZ: 1.0
+                    } else {
+                        whoTrendLines.insert(
+                            L10nWVF.s("well_visit_form.growth_snapshot.overall_ok"),
+                            at: 0
                         )
-
-                        // Prefer evaluator-computed shift stats for tokenization.
-                        // This ensures the live evaluator and the stored/report token share the same pipeline.
-                        if let dz = trendDeltaZ(t), let th = trendThresholdZFromTrend(t) {
-                            if abs(dz) >= th {
-                                let medZ = r.zScore - dz
-                                let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
-                                let dP = r.percentile - medP
-                                pushShift(metricId: "lhfa", deltaZ: dz, deltaP: dP, currentP: r.percentile, priorCount: t.priorCount)
-                                print("🧪 WHO LHFA shift chosen: evaluator dz=\(dz) th=\(th) priors=\(t.priorCount)")
-                            }
-                        } else if let fb = fallbackShiftLHFA {
-                            if abs(fb.deltaZ) >= fb.thresholdZ {
-                                let medZ = r.zScore - fb.deltaZ
-                                let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
-                                let dP = r.percentile - medP
-                                pushShift(metricId: "lhfa", deltaZ: fb.deltaZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
-                                print("🧪 WHO LHFA shift chosen: fallback dz=\(fb.deltaZ) th=\(fb.thresholdZ) priorCount=\(priorZs.count)")
-                            }
-                        } else {
-                            print("🧪 WHO LHFA shift: no usable prior history")
-                        }
-
-                        if t.priorCount > 0 {
-                            whoTrendLines.append("**\(lhfaLabel):** " + t.narrative)
-
-                            // Shift-based flag (existing behavior)
-                            if t.isSignificantShift {
-                                whoTrendIsFlagged = true
-                                addOverallFlag(lhfaLabel)
-                            }
-
-                            // Trajectory anomaly token (higher/lower than expected) so reports can print it.
-                            let priorTrajLHFA: [(x: Double, z: Double)] = points
-                                .filter { $0.recordedDate < current.recordedDate }
-                                .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                .compactMap { p -> (Double, Double)? in
-                                    guard let ph = p.heightCm else { return nil }
-                                    let am = ageMonths(dob: dob, at: p.recordedDate)
-                                    guard let z = try? WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: am, value: ph).zScore else { return nil }
-                                    return (am, z)
-                                }
-
-                            if let traj = computeTrajectoryAnomaly(prior: priorTrajLHFA, currentX: currentAgeM, currentZ: r.zScore),
-                               traj.score >= 2.5 {
-                                whoTrendIsFlagged = true
-                                addOverallFlag(lhfaLabel)
-                                pushTrajectory(metricId: "lhfa", residualZ: traj.residualZ, threshold: 2.5)
-                            }
-                        }
                     }
-
-                    if let hc = current.headCircCm {
-                        let r = try WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: currentAgeM, value: hc)
-                        let zStr = String(format: "%.2f", r.zScore)
-                        let pStr = String(format: "%.0f", r.percentile)
-                        whoZLines.append("**\(hcfaLabel):** z=\(zStr) P\(pStr)")
-                        pushZP(metricId: "hcfa", z: r.zScore, percentile: r.percentile)
-
-                        let priorZs: [Double] = points
-                            .filter { $0.recordedDate < current.recordedDate }
-                            .sorted(by: { $0.recordedDate < $1.recordedDate })
-                            .compactMap { p -> Double? in
-                                guard let phc = p.headCircCm else { return nil }
-                                let am = ageMonths(dob: dob, at: p.recordedDate)
-                                return (try? WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: am, value: phc).zScore)
-                            }
-
-                        if priorZs.count >= 3, let medZ = median(priorZs) {
-                            let dZ = r.zScore - medZ
-                            if abs(dZ) >= trendThresholdZ {
-                                let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
-                                let dP = r.percentile - medP
-                                pushShift(metricId: "hcfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
-                            }
-                        }
-
-
-                        let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
-                        if extreme {
-                            whoTrendIsFlagged = true
-                            addOverallFlag(hcfaLabel)
-                            pushExtreme(metricId: "hcfa", z: r.zScore, percentile: r.percentile)
-                        }
-
-                        let prior = buildPrior { $0.headCircCm }
-                        let t = try WHOGrowthEvaluator.assessTrend(
-                            kind: .hcfa, sex: sex, prior: prior,
-                            current: (ageMonths: currentAgeM, value: hc),
-                            thresholdZ: 1.0
-                        )
-
-                        if t.priorCount > 0 {
-                            whoTrendLines.append("**\(hcfaLabel):** " + t.narrative)
-
-                            // Shift-based flag (existing behavior)
-                            if t.isSignificantShift {
-                                whoTrendIsFlagged = true
-                                addOverallFlag(hcfaLabel)
-                            }
-
-                            // Trajectory anomaly token (higher/lower than expected) so reports can print it.
-                            let priorTrajHCFA: [(x: Double, z: Double)] = points
-                                .filter { $0.recordedDate < current.recordedDate }
-                                .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                .compactMap { p -> (Double, Double)? in
-                                    guard let phc = p.headCircCm else { return nil }
-                                    let am = ageMonths(dob: dob, at: p.recordedDate)
-                                    guard let z = try? WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: am, value: phc).zScore else { return nil }
-                                    return (am, z)
-                                }
-
-                            if let traj = computeTrajectoryAnomaly(prior: priorTrajHCFA, currentX: currentAgeM, currentZ: r.zScore),
-                               traj.score >= 2.5 {
-                                whoTrendIsFlagged = true
-                                addOverallFlag(hcfaLabel)
-                                pushTrajectory(metricId: "hcfa", residualZ: traj.residualZ, threshold: 2.5)
-                            }
-                        }
-                    }
-
-                    // Use WFL for < 24 months; BMI-for-age for >= 24 months.
-                    if let w = current.weightKg, let h = current.heightCm {
-                        if currentAgeM < 24.0 {
-                            // Weight-for-length (WFL)
-                            let wflLabel = WHOGrowthEvaluator.Kind.wfl.displayName()
-                            let wfl = try WHOGrowthEvaluator.evaluateWeightForLength(
-                                sex: sex,
-                                lengthCM: h,
-                                weightKG: w
-                            )
-                            let zStr = String(format: "%.2f", wfl.zScore)
-                            let pStr = String(format: "%.0f", wfl.percentile)
-                            whoZLines.append("**\(wflLabel):** z=\(zStr) P\(pStr)")
-                            wflZForNutrition = wfl.zScore
-                            pushZP(metricId: "wfl", z: wfl.zScore, percentile: wfl.percentile)
-
-                            let priorZs: [Double] = points
-                                .filter { $0.recordedDate < current.recordedDate }
-                                .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                .compactMap { p -> Double? in
-                                    guard let pw = p.weightKg, let ph = p.heightCm else { return nil }
-                                    return (try? WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: ph, weightKG: pw).zScore)
-                                }
-
-                            if priorZs.count >= 3, let medZ = median(priorZs) {
-                                let dZ = wfl.zScore - medZ
-                                if abs(dZ) >= trendThresholdZ {
-                                    let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
-                                    let dP = wfl.percentile - medP
-                                    pushShift(metricId: "wfl", deltaZ: dZ, deltaP: dP, currentP: wfl.percentile, priorCount: priorZs.count)
-                                }
-                            }
-
-                            let extreme = abs(wfl.zScore) >= 2.0 || wfl.percentile <= 3.0 || wfl.percentile >= 97.0
-                            if extreme {
-                                whoTrendIsFlagged = true
-                                addOverallFlag(wflLabel)
-                                pushExtreme(metricId: "wfl", z: wfl.zScore, percentile: wfl.percentile)
-                            }
-
-                            let priorWFL: [(lengthCM: Double, weightKG: Double)] = points
-                                .filter { $0.recordedDate < current.recordedDate }
-                                .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                .compactMap { p -> (Double, Double)? in
-                                    guard let pw = p.weightKg, let ph = p.heightCm else { return nil }
-                                    return (ph, pw)
-                                }
-
-                            let t = try WHOGrowthEvaluator.assessTrendWeightForLength(
-                                sex: sex,
-                                prior: priorWFL,
-                                current: (lengthCM: h, weightKG: w),
-                                thresholdZ: 1.0
-                            )
-
-                            if t.priorCount > 0 {
-                                whoTrendLines.append("**\(wflLabel):** " + t.narrative)
-
-                                // Shift-based flag (existing behavior)
-                                if t.isSignificantShift {
-                                    whoTrendIsFlagged = true
-                                    addOverallFlag(wflLabel)
-                                }
-
-                                // Trajectory anomaly token (higher/lower than expected) so reports can print it.
-                                let priorTrajWFL: [(x: Double, z: Double)] = points
-                                    .filter { $0.recordedDate < current.recordedDate }
-                                    .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                    .compactMap { p -> (Double, Double)? in
-                                        guard let pw = p.weightKg, let ph = p.heightCm else { return nil }
-                                        guard let z = try? WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: ph, weightKG: pw).zScore else { return nil }
-                                        return (ph, z) // x = length (cm)
-                                    }
-
-                                if let traj = computeTrajectoryAnomaly(prior: priorTrajWFL, currentX: h, currentZ: wfl.zScore),
-                                   traj.score >= 2.5 {
-                                    whoTrendIsFlagged = true
-                                    addOverallFlag(wflLabel)
-                                    pushTrajectory(metricId: "wfl", residualZ: traj.residualZ, threshold: 2.5)
-                                }
-                            }
-                        } else {
-                            // BMI-for-age (BMIFA)
-                            if let bmi = bmiKgM2(weightKg: w, heightCm: h) {
-                                let bmifaLabel = WHOGrowthEvaluator.Kind.bmifa.displayName()
-                                let r = try WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: currentAgeM, value: bmi)
-                                let zStr = String(format: "%.2f", r.zScore)
-                                let pStr = String(format: "%.0f", r.percentile)
-                                whoZLines.append("**\(bmifaLabel):** z=\(zStr) P\(pStr)")
-                                bmiZForNutrition = r.zScore
-                                pushZP(metricId: "bmifa", z: r.zScore, percentile: r.percentile)
-
-                                let priorZs: [Double] = points
-                                    .filter { $0.recordedDate < current.recordedDate }
-                                    .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                    .compactMap { p -> Double? in
-                                        guard let pw = p.weightKg, let ph = p.heightCm,
-                                              let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
-                                        let am = ageMonths(dob: dob, at: p.recordedDate)
-                                        return (try? WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: am, value: pbmi).zScore)
-                                    }
-
-                                if priorZs.count >= 3, let medZ = median(priorZs) {
-                                    let dZ = r.zScore - medZ
-                                    if abs(dZ) >= trendThresholdZ {
-                                        let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
-                                        let dP = r.percentile - medP
-                                        pushShift(metricId: "bmifa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
-                                    }
-                                }
-
-                                let extreme = abs(r.zScore) >= 2.0 || r.percentile <= 3.0 || r.percentile >= 97.0
-                                if extreme {
-                                    whoTrendIsFlagged = true
-                                    addOverallFlag(bmifaLabel)
-                                    pushExtreme(metricId: "bmifa", z: r.zScore, percentile: r.percentile)
-                                }
-
-                                let prior = points
-                                    .filter { $0.recordedDate < current.recordedDate }
-                                    .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                    .compactMap { p -> (ageMonths: Double, value: Double)? in
-                                        guard let pw = p.weightKg, let ph = p.heightCm,
-                                              let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
-                                        return (ageMonths(dob: dob, at: p.recordedDate), pbmi)
-                                    }
-
-                                let t = try WHOGrowthEvaluator.assessTrend(
-                                    kind: .bmifa, sex: sex, prior: prior,
-                                    current: (ageMonths: currentAgeM, value: bmi),
-                                    thresholdZ: 1.0
-                                )
-
-                                if t.priorCount > 0 {
-                                    whoTrendLines.append("**\(bmifaLabel):** " + t.narrative)
-
-                                    // Shift-based flag (existing behavior)
-                                    if t.isSignificantShift {
-                                        whoTrendIsFlagged = true
-                                        addOverallFlag(bmifaLabel)
-                                    }
-
-                                    // Trajectory anomaly token (higher/lower than expected) so reports can print it.
-                                    let priorTrajBMIFA: [(x: Double, z: Double)] = points
-                                        .filter { $0.recordedDate < current.recordedDate }
-                                        .sorted(by: { $0.recordedDate < $1.recordedDate })
-                                        .compactMap { p -> (Double, Double)? in
-                                            guard let pw = p.weightKg, let ph = p.heightCm,
-                                                  let pbmi = bmiKgM2(weightKg: pw, heightCm: ph) else { return nil }
-                                            let am = ageMonths(dob: dob, at: p.recordedDate)
-                                            guard let z = try? WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: am, value: pbmi).zScore else { return nil }
-                                            return (am, z)
-                                        }
-
-                                    if let traj = computeTrajectoryAnomaly(prior: priorTrajBMIFA, currentX: currentAgeM, currentZ: r.zScore),
-                                       traj.score >= 2.5 {
-                                        whoTrendIsFlagged = true
-                                        addOverallFlag(bmifaLabel)
-                                        pushTrajectory(metricId: "bmifa", residualZ: traj.residualZ, threshold: 2.5)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if !whoZLines.isEmpty {
-                        if whoTrendIsFlagged {
-                            let list = overallFlags.isEmpty ? "" : " (" + overallFlags.joined(separator: ", ") + ")"
-                            whoTrendLines.insert(
-                                String(format: L10nWVF.s("well_visit_form.growth_snapshot.overall_concern"), list),
-                                at: 0
-                            )
-                        } else {
-                            whoTrendLines.insert(
-                                L10nWVF.s("well_visit_form.growth_snapshot.overall_ok"),
-                                at: 0
-                            )
-                        }
-                    }
-
-                    if let nut = WHOGrowthEvaluator.assessNutritionStatus(
-                        ageMonths: currentAgeM,
-                        wflZ: wflZForNutrition,
-                        bmiZ: bmiZForNutrition
-                    ) {
-                        whoNutritionLine = nut.summaryLine()
-                    }
-
-                } catch {
-                    whoZLines = []
-                    whoTrendLines = ["WHO evaluation failed: \(error.localizedDescription)"]
-                    whoTrendIsFlagged = false
-                    whoNutritionLine = ""
-                    problemTokens = []
-                    measurementTokens = []
                 }
             }
 
@@ -6497,58 +6338,59 @@ struct WellVisitForm: View {
 
     // MARK: - WHO Growth Evaluation (per-metric shift/trajectory token emission)
 
-    // Example: Call this after computing WHO trend for each metric
-    private func evaluateWHOTrendsAndEmitTokens(
-        metrics: [String],
-        trends: [String: Any], // metric -> trend result
-        currentPercentiles: [String: Double],
-        currentZs: [String: Double]
-    ) {
-        // This is a placeholder for the actual evaluation loop.
-        // Insert this logic where you already loop through wfa/lhfa/hcfa/wfl/bmifa metrics.
-        for metric in metrics {
-            var didEmitShiftForThisMetric = false
+    // Helper function: Compute WHO output for a visit snapshot (pure, no state mutation)
+    private func computeWHOForSnapshot(
+            includeWHO: Bool,
+            dob: Date,
+            sex: WHOGrowthEvaluator.Sex,
+            points: [GrowthPoint],
+            current: GrowthPoint
+        ) -> WHOComputeOutput
+    {
+        guard includeWHO else { return WHOComputeOutput() }
 
-            // ... your code to compute the trend, e.g. let trend = trends[metric]
-            guard let trend = trends[metric] else { continue }
+        // Single source of truth: compute everything via WHOGrowthHub.
+        let hubInput = WHOGrowthHub.Input(
+            dob: dob,
+            sex: sex,
+            visitDate: current.recordedDate,
+            points: points,
+            current: current
+        )
 
-            // Example: append shift token (simulate existing logic)
-            // pushShiftV2(metric: metric, args: [...], didEmitShift: &didEmitShiftForThisMetric)
+        let r = WHOGrowthHub.evaluate(hubInput)
 
-            // After computing trend, check for significant shift but no shift token
-            let isSignificantShift = (mirrorDouble(trend, labels: ["isSignificantShift"]) ?? 0) != 0
-            let priorCount = Int(mirrorDouble(trend, labels: ["priorCount", "n", "count"]) ?? 0)
-            let currentPercentile = currentPercentiles[metric] ?? 0
-            let currentZ = currentZs[metric] ?? 0
+        var out = WHOComputeOutput()
+        out.whoZLines = r.zSummaryLines
 
-            // Score/threshold/direction extraction using helper functions
-            let score = trendTrajectoryScore(trend)
-            let threshold = trendTrajectoryThreshold(trend)
-            var direction: String? = mirrorString(trend, labels: ["trajectoryDirection","direction","trajDirection"])
-            if direction == nil {
-                // Try to infer direction if not present
-                let expectedZ = mirrorDouble(trend, labels: ["expectedZ","expZ","expectedZScore"])
-                let residual = trendTrajectoryResidual(trend)
-                if let res = residual {
-                    direction = res > 0 ? "higher" : "lower"
-                } else if let expZ = expectedZ {
-                    direction = (currentZ > expZ) ? "higher" : "lower"
-                }
+        // Keep the SAME overall header behavior as before.
+        if !r.zSummaryLines.isEmpty {
+            if r.trendIsFlagged {
+                let list = r.overallFlags.isEmpty ? "" : " (" + r.overallFlags.joined(separator: ", ") + ")"
+                out.whoTrendLines = [
+                    String(format: L10nWVF.s("well_visit_form.growth_snapshot.overall_concern"), list)
+                ] + r.trendLines
+            } else {
+                out.whoTrendLines = [
+                    L10nWVF.s("well_visit_form.growth_snapshot.overall_ok")
+                ] + r.trendLines
             }
-            // Only emit trajectory token if significant shift, no shift token, and have score/threshold/direction
-            if isSignificantShift && !didEmitShiftForThisMetric {
-                if let score, let threshold, let direction, priorCount > 0 {
-                    pushTrajectoryV1(
-                        metric: metric,
-                        direction: direction,
-                        score: score,
-                        threshold: threshold,
-                        currentPercentile: currentPercentile,
-                        priorCount: priorCount
-                    )
-                }
-            }
+        } else {
+            out.whoTrendLines = r.trendLines
         }
+
+        out.whoNutritionLine = r.nutritionLine
+        out.whoTrendIsFlagged = r.trendIsFlagged
+        out.overallFlags = r.overallFlags
+        out.problemTokens = r.problemTokens
+        out.measurementTokens = r.measurementTokens
+
+        // If hub only produced debug notes, show them (best-effort).
+        if out.whoZLines.isEmpty, out.whoTrendLines.isEmpty, !r.debugNotes.isEmpty {
+            out.whoTrendLines = r.debugNotes
+        }
+
+        return out
     }
 
     // MARK: - WHO Growth Trend Mirror Helpers
@@ -6921,6 +6763,8 @@ struct WellVisitForm: View {
     }
 }
 
+// MARK: - WHOGrowthHub bridging
+extension WellVisitForm.GrowthPoint: WHOGrowthPointLike {}
 
 // MARK: - SwiftUI compatibility helpers
 
@@ -6940,6 +6784,8 @@ private extension View {
         }
     }
 }
+
+
 
 // MARK: - WellVisit Form Save Action Growth Eval Integration
 
