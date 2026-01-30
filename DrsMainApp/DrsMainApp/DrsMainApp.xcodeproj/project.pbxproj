@@ -60,6 +60,7 @@
 		BBE216B82ECF344D00D4C281 /* WellVisitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B72ECF344600D4C281 /* WellVisitStore.swift */; };
 		BBE216BA2ECF4A9C00D4C281 /* WellVisitForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */; };
 		E90B87422F162E4700D093D7 /* PromptRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90B87412F162E3B00D093D7 /* PromptRenderer.swift */; };
+		E91960B62F2C25BF00D65B06 /* WHOGrowthHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */; };
 		E93EDEC82F2201E0002A0381 /* WHOGrowthEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */; };
 		E98BC2692F1B5EB9002A5207 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98BC2682F1B5EAC002A5207 /* AppLog.swift */; };
 /* End PBXBuildFile section */
@@ -118,6 +119,7 @@
 		BBE216B72ECF344600D4C281 /* WellVisitStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitStore.swift; sourceTree = "<group>"; };
 		BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitForm.swift; sourceTree = "<group>"; };
 		E90B87412F162E3B00D093D7 /* PromptRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRenderer.swift; sourceTree = "<group>"; };
+		E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WHOGrowthHub.swift; sourceTree = "<group>"; };
 		E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WHOGrowthEvaluator.swift; sourceTree = "<group>"; };
 		E98BC2682F1B5EAC002A5207 /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -286,6 +288,7 @@
 		BB96A5692EBB32F0003F5C44 /* Growth */ = {
 			isa = PBXGroup;
 			children = (
+				E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */,
 				E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */,
 				BB96A56E2EBB3350003F5C44 /* GrowthChartRenderer.swift */,
 				BB96A56C2EBB332E003F5C44 /* GrowthWHO.swift */,
@@ -412,6 +415,7 @@
 				BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */,
 				BBCEA8502EB32B57009A9386 /* ClinicianStore.swift in Sources */,
 				BB3E15AE2EB89905008E1472 /* ReportDataLoader.swift in Sources */,
+				E91960B62F2C25BF00D65B06 /* WHOGrowthHub.swift in Sources */,
 				BB654B1D2EB4619900FDAA71 /* DocumentListView.swift in Sources */,
 				BBE216B82ECF344D00D4C281 /* WellVisitStore.swift in Sources */,
 				BB9186872EC6E9F100A8AA8A /* PmhForm.swift in Sources */,
