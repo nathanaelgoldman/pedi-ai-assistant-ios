@@ -123,12 +123,23 @@ struct WHOGrowthHub {
             result.measurementTokens.append(ProblemToken("growth.who.zp", [metricId, fmt(z, decimals: policy.zDecimals), pStr]))
         }
 
+        // UI helper: render percentile with an explicit '=' unless it is a "<cutoff" form.
+        // Tokens persist the raw fragment ("<0.1" or "0.1" or "12") without '='.
+        func pInline(_ percentile: Double) -> String {
+            let frag = fmtPercentile(percentile, policy: policy)
+            if frag.hasPrefix("<") || frag == "—" { return frag }
+            return "=" + frag
+        }
+
         func pushExtreme(metricId: String, z: Double, percentile: Double) {
-            // Extreme token keeps numeric percentile (rounded integer) for stable reporting.
+            // Extreme token must be report-ready because ReportBuilder uses the generic formatter
+            // (no dedicated handler). So we store a comparator-aware fragment:
+            //   "<0.1" or "=0.1" or "=12"
+            let pStr = pInline(percentile)
             result.problemTokens.append(
                 ProblemToken(
                     "growth.who.extreme",
-                    [metricId, fmt(z, decimals: policy.zDecimals), String(format: "%.0f", percentile)]
+                    [metricId, fmt(z, decimals: policy.zDecimals), pStr]
                 )
             )
         }
@@ -136,11 +147,23 @@ struct WHOGrowthHub {
         func pushShift(metricId: String, deltaZ: Double, deltaP: Double, currentP: Double, priorCount: Int) {
             // Args v2: [metricId, deltaZ_signed, deltaPercentile_signed, currentPercentile, priorsCount]
             // Percentile uses hub display policy (may produce "<0.1").
+            let pStr = fmtPercentile(currentP, policy: policy)
+
+            #if DEBUG
+            if pStr.hasPrefix("=") {
+                NSLog("[WHOGrowthHub][shift.v2] ⚠️ hub produced leading '=' metricId=%@ pStr=%@ currentP=%.6f",
+                      metricId, pStr, currentP)
+            } else {
+                NSLog("[WHOGrowthHub][shift.v2] metricId=%@ pStr=%@ currentP=%.6f",
+                      metricId, pStr, currentP)
+            }
+            #endif
+
             let args = [
                 metricId,
                 fmtSigned(deltaZ, decimals: policy.zDecimals),
                 fmtSigned(deltaP, decimals: 0),
-                fmtPercentile(currentP, policy: policy),
+                pStr,
                 String(priorCount)
             ]
             result.problemTokens.append(ProblemToken("growth.who.shift.v2", args))
@@ -243,10 +266,11 @@ struct WHOGrowthHub {
                 let label = WHOGrowthEvaluator.Kind.wfa.displayName()
                 let r = try WHOGrowthEvaluator.evaluate(kind: .wfa, sex: sex, ageMonths: currentAgeM, value: w)
 
-                result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(fmtPercentile(r.percentile, policy: policy))")
+                result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(pInline(r.percentile))")
                 pushZP(metricId: "wfa", z: r.zScore, percentile: r.percentile)
 
                 // Median-based shift (local, deterministic)
+                var medianShiftWFA = false
                 let priorZs: [Double] = points
                     .filter { $0.date < current.date }
                     .compactMap { p -> Double? in
@@ -257,7 +281,8 @@ struct WHOGrowthHub {
 
                 if priorZs.count >= 3, let medZ = median(priorZs) {
                     let dZ = r.zScore - medZ
-                    if abs(dZ) >= policy.shiftThresholdZ {
+                    medianShiftWFA = abs(dZ) >= policy.shiftThresholdZ
+                    if medianShiftWFA {
                         let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
                         let dP = r.percentile - medP
                         pushShift(metricId: "wfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
@@ -276,10 +301,13 @@ struct WHOGrowthHub {
                     current: (ageMonths: currentAgeM, value: w),
                     thresholdZ: policy.shiftThresholdZ
                 )
-
+#if DEBUG
+                NSLog("[WHOGrowthHub][trend] kind=%@ metricId=%@ prior.count=%d t.priorCount=%d sig=%d",
+                      "wfa", "wfa", prior.count, t.priorCount, t.isSignificantShift ? 1 : 0)
+#endif
                 if t.priorCount > 0 {
                     result.trendLines.append("**\(label):** " + t.narrative)
-                    if t.isSignificantShift {
+                    if medianShiftWFA {
                         result.trendIsFlagged = true
                         addOverallFlag(label)
                     }
@@ -294,11 +322,20 @@ struct WHOGrowthHub {
                         }
                         .sorted(by: { $0.0 < $1.0 })
 
-                    if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore),
-                       traj.score >= policy.trajectoryScoreThreshold {
-                        result.trendIsFlagged = true
-                        addOverallFlag(label)
-                        pushTrajectory(metricId: "wfa", residualZ: traj.residualZ)
+                    if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore) {
+#if DEBUG
+                        NSLog("[WHOGrowthHub][traj] metricId=%@ priorTraj.count=%d score=%.2f th=%.2f residualZ=%.3f sigma=%.3f",
+                              "wfa", priorTraj.count, traj.score, policy.trajectoryScoreThreshold, traj.residualZ, traj.sigma)
+#endif
+                        if traj.score >= policy.trajectoryScoreThreshold {
+                            result.trendIsFlagged = true
+                            addOverallFlag(label)
+                            pushTrajectory(metricId: "wfa", residualZ: traj.residualZ)
+#if DEBUG
+                            NSLog("[WHOGrowthHub][traj] PUSHED token metricId=%@ key=%@",
+                                  "wfa", "growth.who.traj.v1")
+#endif
+                        }
                     }
                 }
             }
@@ -308,9 +345,10 @@ struct WHOGrowthHub {
                 let label = WHOGrowthEvaluator.Kind.lhfa.displayName()
                 let r = try WHOGrowthEvaluator.evaluate(kind: .lhfa, sex: sex, ageMonths: currentAgeM, value: h)
 
-                result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(fmtPercentile(r.percentile, policy: policy))")
+                result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(pInline(r.percentile))")
                 pushZP(metricId: "lhfa", z: r.zScore, percentile: r.percentile)
 
+                var medianShiftLHFA = false
                 let priorZs: [Double] = points
                     .filter { $0.date < current.date }
                     .compactMap { p -> Double? in
@@ -321,7 +359,8 @@ struct WHOGrowthHub {
 
                 if priorZs.count >= 3, let medZ = median(priorZs) {
                     let dZ = r.zScore - medZ
-                    if abs(dZ) >= policy.shiftThresholdZ {
+                    medianShiftLHFA = abs(dZ) >= policy.shiftThresholdZ
+                    if medianShiftLHFA {
                         let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
                         let dP = r.percentile - medP
                         pushShift(metricId: "lhfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
@@ -340,10 +379,13 @@ struct WHOGrowthHub {
                     current: (ageMonths: currentAgeM, value: h),
                     thresholdZ: policy.shiftThresholdZ
                 )
-
+#if DEBUG
+                NSLog("[WHOGrowthHub][trend] kind=%@ metricId=%@ prior.count=%d t.priorCount=%d sig=%d",
+                      "lhfa", "lhfa", prior.count, t.priorCount, t.isSignificantShift ? 1 : 0)
+#endif
                 if t.priorCount > 0 {
                     result.trendLines.append("**\(label):** " + t.narrative)
-                    if t.isSignificantShift {
+                    if medianShiftLHFA {
                         result.trendIsFlagged = true
                         addOverallFlag(label)
                     }
@@ -358,11 +400,20 @@ struct WHOGrowthHub {
                         }
                         .sorted(by: { $0.0 < $1.0 })
 
-                    if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore),
-                       traj.score >= policy.trajectoryScoreThreshold {
-                        result.trendIsFlagged = true
-                        addOverallFlag(label)
-                        pushTrajectory(metricId: "lhfa", residualZ: traj.residualZ)
+                    if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore) {
+#if DEBUG
+                        NSLog("[WHOGrowthHub][traj] metricId=%@ priorTraj.count=%d score=%.2f th=%.2f residualZ=%.3f sigma=%.3f",
+                              "lhfa", priorTraj.count, traj.score, policy.trajectoryScoreThreshold, traj.residualZ, traj.sigma)
+#endif
+                        if traj.score >= policy.trajectoryScoreThreshold {
+                            result.trendIsFlagged = true
+                            addOverallFlag(label)
+                            pushTrajectory(metricId: "lhfa", residualZ: traj.residualZ)
+#if DEBUG
+                            NSLog("[WHOGrowthHub][traj] PUSHED token metricId=%@ key=%@",
+                                  "lhfa", "growth.who.traj.v1")
+#endif
+                        }
                     }
                 }
             }
@@ -372,9 +423,10 @@ struct WHOGrowthHub {
                 let label = WHOGrowthEvaluator.Kind.hcfa.displayName()
                 let r = try WHOGrowthEvaluator.evaluate(kind: .hcfa, sex: sex, ageMonths: currentAgeM, value: hc)
 
-                result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(fmtPercentile(r.percentile, policy: policy))")
+                result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(pInline(r.percentile))")
                 pushZP(metricId: "hcfa", z: r.zScore, percentile: r.percentile)
 
+                var medianShiftHCFA = false
                 let priorZs: [Double] = points
                     .filter { $0.date < current.date }
                     .compactMap { p -> Double? in
@@ -385,7 +437,8 @@ struct WHOGrowthHub {
 
                 if priorZs.count >= 3, let medZ = median(priorZs) {
                     let dZ = r.zScore - medZ
-                    if abs(dZ) >= policy.shiftThresholdZ {
+                    medianShiftHCFA = abs(dZ) >= policy.shiftThresholdZ
+                    if medianShiftHCFA {
                         let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
                         let dP = r.percentile - medP
                         pushShift(metricId: "hcfa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
@@ -404,10 +457,13 @@ struct WHOGrowthHub {
                     current: (ageMonths: currentAgeM, value: hc),
                     thresholdZ: policy.shiftThresholdZ
                 )
-
+#if DEBUG
+                NSLog("[WHOGrowthHub][trend] kind=%@ metricId=%@ prior.count=%d t.priorCount=%d sig=%d",
+                      "hcfa", "hcfa", prior.count, t.priorCount, t.isSignificantShift ? 1 : 0)
+#endif
                 if t.priorCount > 0 {
                     result.trendLines.append("**\(label):** " + t.narrative)
-                    if t.isSignificantShift {
+                    if medianShiftHCFA {
                         result.trendIsFlagged = true
                         addOverallFlag(label)
                     }
@@ -422,11 +478,20 @@ struct WHOGrowthHub {
                         }
                         .sorted(by: { $0.0 < $1.0 })
 
-                    if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore),
-                       traj.score >= policy.trajectoryScoreThreshold {
-                        result.trendIsFlagged = true
-                        addOverallFlag(label)
-                        pushTrajectory(metricId: "hcfa", residualZ: traj.residualZ)
+                    if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore) {
+#if DEBUG
+                        NSLog("[WHOGrowthHub][traj] metricId=%@ priorTraj.count=%d score=%.2f th=%.2f residualZ=%.3f sigma=%.3f",
+                              "hcfa", priorTraj.count, traj.score, policy.trajectoryScoreThreshold, traj.residualZ, traj.sigma)
+#endif
+                        if traj.score >= policy.trajectoryScoreThreshold {
+                            result.trendIsFlagged = true
+                            addOverallFlag(label)
+                            pushTrajectory(metricId: "hcfa", residualZ: traj.residualZ)
+#if DEBUG
+                            NSLog("[WHOGrowthHub][traj] PUSHED token metricId=%@ key=%@",
+                                  "hcfa", "growth.who.traj.v1")
+#endif
+                        }
                     }
                 }
             }
@@ -437,10 +502,11 @@ struct WHOGrowthHub {
                     let label = WHOGrowthEvaluator.Kind.wfl.displayName()
                     let wfl = try WHOGrowthEvaluator.evaluateWeightForLength(sex: sex, lengthCM: h, weightKG: w)
 
-                    result.zSummaryLines.append("**\(label):** z=\(fmt(wfl.zScore, decimals: policy.zDecimals)) P\(fmtPercentile(wfl.percentile, policy: policy))")
+                    result.zSummaryLines.append("**\(label):** z=\(fmt(wfl.zScore, decimals: policy.zDecimals)) P\(pInline(wfl.percentile))")
                     wflZForNutrition = wfl.zScore
                     pushZP(metricId: "wfl", z: wfl.zScore, percentile: wfl.percentile)
 
+                    var medianShiftWFL = false
                     let priorZs: [Double] = points
                         .filter { $0.date < current.date }
                         .compactMap { p -> Double? in
@@ -450,7 +516,8 @@ struct WHOGrowthHub {
 
                     if priorZs.count >= 3, let medZ = median(priorZs) {
                         let dZ = wfl.zScore - medZ
-                        if abs(dZ) >= policy.shiftThresholdZ {
+                        medianShiftWFL = abs(dZ) >= policy.shiftThresholdZ
+                        if medianShiftWFL {
                             let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
                             let dP = wfl.percentile - medP
                             pushShift(metricId: "wfl", deltaZ: dZ, deltaP: dP, currentP: wfl.percentile, priorCount: priorZs.count)
@@ -477,10 +544,13 @@ struct WHOGrowthHub {
                         current: (lengthCM: h, weightKG: w),
                         thresholdZ: policy.shiftThresholdZ
                     )
-
+#if DEBUG
+                    NSLog("[WHOGrowthHub][trendWFL] kind=%@ metricId=%@ priorWFL.count=%d t.priorCount=%d sig=%d",
+                          "wfl", "wfl", priorWFL.count, t.priorCount, t.isSignificantShift ? 1 : 0)
+#endif
                     if t.priorCount > 0 {
                         result.trendLines.append("**\(label):** " + t.narrative)
-                        if t.isSignificantShift {
+                        if medianShiftWFL {
                             result.trendIsFlagged = true
                             addOverallFlag(label)
                         }
@@ -494,11 +564,20 @@ struct WHOGrowthHub {
                             }
                             .sorted(by: { $0.0 < $1.0 })
 
-                        if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: h, currentZ: wfl.zScore),
-                           traj.score >= policy.trajectoryScoreThreshold {
-                            result.trendIsFlagged = true
-                            addOverallFlag(label)
-                            pushTrajectory(metricId: "wfl", residualZ: traj.residualZ)
+                        if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: h, currentZ: wfl.zScore) {
+#if DEBUG
+                            NSLog("[WHOGrowthHub][traj] metricId=%@ priorTraj.count=%d score=%.2f th=%.2f residualZ=%.3f sigma=%.3f",
+                                  "wfl", priorTraj.count, traj.score, policy.trajectoryScoreThreshold, traj.residualZ, traj.sigma)
+#endif
+                            if traj.score >= policy.trajectoryScoreThreshold {
+                                result.trendIsFlagged = true
+                                addOverallFlag(label)
+                                pushTrajectory(metricId: "wfl", residualZ: traj.residualZ)
+#if DEBUG
+                                NSLog("[WHOGrowthHub][traj] PUSHED token metricId=%@ key=%@",
+                                      "wfl", "growth.who.traj.v1")
+#endif
+                            }
                         }
                     }
 
@@ -507,10 +586,11 @@ struct WHOGrowthHub {
                         let label = WHOGrowthEvaluator.Kind.bmifa.displayName()
                         let r = try WHOGrowthEvaluator.evaluate(kind: .bmifa, sex: sex, ageMonths: currentAgeM, value: bmi)
 
-                        result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(fmtPercentile(r.percentile, policy: policy))")
+                        result.zSummaryLines.append("**\(label):** z=\(fmt(r.zScore, decimals: policy.zDecimals)) P\(pInline(r.percentile))")
                         bmiZForNutrition = r.zScore
                         pushZP(metricId: "bmifa", z: r.zScore, percentile: r.percentile)
 
+                        var medianShiftBMIFA = false
                         let priorZs: [Double] = points
                             .filter { $0.date < current.date }
                             .compactMap { p -> Double? in
@@ -522,7 +602,8 @@ struct WHOGrowthHub {
 
                         if priorZs.count >= 3, let medZ = median(priorZs) {
                             let dZ = r.zScore - medZ
-                            if abs(dZ) >= policy.shiftThresholdZ {
+                            medianShiftBMIFA = abs(dZ) >= policy.shiftThresholdZ
+                            if medianShiftBMIFA {
                                 let medP = WHOGrowthEvaluator.percentileFromZScore(medZ)
                                 let dP = r.percentile - medP
                                 pushShift(metricId: "bmifa", deltaZ: dZ, deltaP: dP, currentP: r.percentile, priorCount: priorZs.count)
@@ -549,10 +630,13 @@ struct WHOGrowthHub {
                             current: (ageMonths: currentAgeM, value: bmi),
                             thresholdZ: policy.shiftThresholdZ
                         )
-
+#if DEBUG
+                        NSLog("[WHOGrowthHub][trend] kind=%@ metricId=%@ prior.count=%d t.priorCount=%d sig=%d",
+                              "bmifa", "bmifa", prior.count, t.priorCount, t.isSignificantShift ? 1 : 0)
+#endif
                         if t.priorCount > 0 {
                             result.trendLines.append("**\(label):** " + t.narrative)
-                            if t.isSignificantShift {
+                            if medianShiftBMIFA {
                                 result.trendIsFlagged = true
                                 addOverallFlag(label)
                             }
@@ -568,11 +652,20 @@ struct WHOGrowthHub {
                                 }
                                 .sorted(by: { $0.0 < $1.0 })
 
-                            if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore),
-                               traj.score >= policy.trajectoryScoreThreshold {
-                                result.trendIsFlagged = true
-                                addOverallFlag(label)
-                                pushTrajectory(metricId: "bmifa", residualZ: traj.residualZ)
+                            if let traj = computeTrajectoryAnomaly(prior: priorTraj, currentX: currentAgeM, currentZ: r.zScore) {
+#if DEBUG
+                                NSLog("[WHOGrowthHub][traj] metricId=%@ priorTraj.count=%d score=%.2f th=%.2f residualZ=%.3f sigma=%.3f",
+                                      "bmifa", priorTraj.count, traj.score, policy.trajectoryScoreThreshold, traj.residualZ, traj.sigma)
+#endif
+                                if traj.score >= policy.trajectoryScoreThreshold {
+                                    result.trendIsFlagged = true
+                                    addOverallFlag(label)
+                                    pushTrajectory(metricId: "bmifa", residualZ: traj.residualZ)
+#if DEBUG
+                                    NSLog("[WHOGrowthHub][traj] PUSHED token metricId=%@ key=%@",
+                                          "bmifa", "growth.who.traj.v1")
+#endif
+                                }
                             }
                         }
                     }
@@ -593,6 +686,12 @@ struct WHOGrowthHub {
             // Keep the result otherwise empty/partial.
         }
 
+#if DEBUG
+        let keys = result.problemTokens.map { $0.key }
+        let keyPreview = keys.prefix(8).joined(separator: ",")
+        NSLog("[WHOGrowthHub][eval.done] problemTokens=%d measurementTokens=%d keys=%@",
+              result.problemTokens.count, result.measurementTokens.count, keyPreview)
+#endif
         return result
     }
 
@@ -656,12 +755,19 @@ struct WHOGrowthHub {
 
     static func fmtPercentile(_ p: Double, policy: Policy) -> String {
         guard p.isFinite else { return "—" }
-        if p <= 0 { return "0" }
 
-        // Prefer readable "<cutoff" when extremely small.
-        if p > 0, p < policy.percentileLtCutoff {
-            let c = fmt(policy.percentileLtCutoff, decimals: policy.tinyPercentileDecimals)
+        // Return a fragment WITHOUT the leading '='.
+        // - Below cutoff: "<0.1"
+        // - Otherwise: "0.1" or "12"
+        let cut = policy.percentileLtCutoff
+
+        if p <= 0 || p < cut {
+            let c = fmt(cut, decimals: policy.tinyPercentileDecimals)
             return "<" + c
+        }
+
+        if p < 1.0 {
+            return fmt(p, decimals: policy.tinyPercentileDecimals)
         }
 
         return String(format: "%.0f", p)

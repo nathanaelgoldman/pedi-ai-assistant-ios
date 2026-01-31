@@ -10,4 +10,10 @@
    <FileRef
       location = "group:PatientViewerApp/PatientViewerApp.xcodeproj">
    </FileRef>
+   <FileRef
+      location = "group:CODEX_CONTEXT.md">
+   </FileRef>
+   <FileRef
+      location = "group:AGENTS.md">
+   </FileRef>
 </Workspace>

@@ -1576,9 +1576,25 @@ extension ReportBuilder {
 
             // Current percentile display: prefer a readable "P<0.1" when extremely low.
             // Note: upstream currently stores `curPRaw` already rounded (e.g. "0.0"), so we treat "0.0" as <0.1.
+            #if DEBUG
+            NSLog("[ReportDebug][WHO][shift.v2] rawArgs=%@", rawArgs.description)
+            NSLog("[ReportDebug][WHO][shift.v2] curPRaw='[%@]'", curPRaw)
+            #endif
             let curPDisplay: String = {
-                let t = curPRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                var t = curPRaw.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !t.isEmpty else { return "—" }
+
+                // 🔧 Defensive normalization: some legacy/ghost pipelines may already prefix the stored percentile with "=".
+                // If we don't strip it, we can end up rendering "P==0.1".
+                if t.hasPrefix("=") {
+                    #if DEBUG
+                    NSLog("[ReportDebug][WHO][shift.v2] WARNING: curPRaw had leading '=' -> '%@'", t)
+                    #endif
+                    while t.hasPrefix("=") {
+                        t.removeFirst()
+                        t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
 
                 // Normalize decimal separator for parsing.
                 let normalized = t.replacingOccurrences(of: ",", with: ".")
@@ -1600,11 +1616,45 @@ extension ReportBuilder {
                 if curPDisplay.hasPrefix("<") { return curPDisplay }
                 return "=" + curPDisplay
             }()
+#if DEBUG
+            NSLog("[WHO][shift.v2] rawArgs curPRaw=\"%@\"", curPRaw)
+            NSLog("[WHO][shift.v2] computed curPDisplay=\"%@\" curP=\"%@\"", curPDisplay, curP)
+#endif
 
             let priors = priorsRaw.isEmpty ? "—" : priorsRaw
 
             let fmtKey = "growth.who.shift.v2"
             let fmt = NSLocalizedString(fmtKey, comment: "WHO growth shift (v2): delta z, delta percentile, current percentile, priors count")
+#if DEBUG
+            NSLog("[WHO][shift.v2] localized fmt=\"%@\"", fmt)
+#endif
+            #if DEBUG
+            // 🔎 Report-time tracer: prove which localized string is actually used, and from where.
+            let bundleID = Bundle.main.bundleIdentifier ?? "<no.bundle.id>"
+            let prefs = Bundle.main.preferredLocalizations.joined(separator: ",")
+            let mainLocs = Bundle.main.localizations.joined(separator: ",")
+
+            func locStringsPath(_ loc: String) -> String {
+                if let p = Bundle.main.path(forResource: "Localizable",
+                                            ofType: "strings",
+                                            inDirectory: nil,
+                                            forLocalization: loc) {
+                    return p
+                }
+                return "<missing>"
+            }
+
+            let frPath = locStringsPath("fr")
+            let firstPref = Bundle.main.preferredLocalizations.first ?? "<none>"
+            let firstPrefPath = (firstPref == "<none>") ? "<none>" : locStringsPath(firstPref)
+
+            let hasPEquals = fmt.contains("P=%@") ? 1 : 0
+            let hasPPlain  = fmt.contains("P%@") ? 1 : 0
+
+            NSLog("[ReportDebug][WHO][shift.v2] bundle=%@ prefs=%@ locs=%@", bundleID, prefs, mainLocs)
+            NSLog("[ReportDebug][WHO][shift.v2] fmtKey=%@ fmt=\"%@\" hasPEquals=%d hasPplain=%d", fmtKey, fmt, hasPEquals, hasPPlain)
+            NSLog("[ReportDebug][WHO][shift.v2] Localizable.strings fr=%@ firstPref=%@ path=%@", frPath, firstPref, firstPrefPath)
+            #endif
             let line: String
             if fmt == fmtKey {
                 // Safe fallback if localization key is missing
@@ -1612,6 +1662,10 @@ extension ReportBuilder {
             } else {
                 line = String(format: fmt, metricLabel, dz, dP, curP, priors)
             }
+
+            #if DEBUG
+            NSLog("[ReportDebug][WHO][shift.v2] renderedLine=\"%@\"", line)
+            #endif
 
             let outLine = stripLeadingDash(line)
             return outLine.hasPrefix("•") ? outLine : ("• " + outLine)

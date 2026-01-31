@@ -4698,9 +4698,10 @@ extension ReportDataLoader {
                     }
                 }
 
-                // --- Primary source: manual_growth (same-day as visit) ---
+                // --- Primary source: manual_growth (prefer same-day; fallback to ±3 days closest-to-visit) ---
                 let mgCols = columns(in: "manual_growth")
                 if !mgCols.isEmpty, let pid = patientID, let day = visitDate {
+
                     // Determine which date-like column exists.
                     let dateCol: String? = {
                         if mgCols.contains("date") { return "date" }
@@ -4711,11 +4712,18 @@ extension ReportDataLoader {
                         return nil
                     }()
 
+                    // Helper: do we already have all 3 core metrics?
+                    func hasAllCore() -> Bool {
+                        return out[L("report.well.measurement.weight")] != nil
+                            && out[L("report.well.measurement.length")] != nil
+                            && out[L("report.well.measurement.headCircumference")] != nil
+                    }
+
                     if let dc = dateCol {
-                        // We match on same calendar day: substr(col,1,10) == YYYY-MM-DD
-                        let sql = "SELECT * FROM manual_growth WHERE patient_id = ? AND substr(\(dc),1,10) = ? ORDER BY \(dc) DESC, id DESC LIMIT 1;"
+                        // 1) Try same calendar day first: substr(col,1,10) == YYYY-MM-DD
+                        let sqlSameDay = "SELECT * FROM manual_growth WHERE patient_id = ? AND substr(\(dc),1,10) = ? ORDER BY \(dc) DESC, id DESC LIMIT 1;"
                         var stmtMG: OpaquePointer?
-                        if sqlite3_prepare_v2(db, sql, -1, &stmtMG, nil) == SQLITE_OK, let st = stmtMG {
+                        if sqlite3_prepare_v2(db, sqlSameDay, -1, &stmtMG, nil) == SQLITE_OK, let st = stmtMG {
                             defer { sqlite3_finalize(st) }
                             sqlite3_bind_int64(st, 1, Int64(pid))
                             sqlite3_bind_text(st, 2, day, -1, SQLITE_TRANSIENT)
@@ -4731,6 +4739,54 @@ extension ReportDataLoader {
                                     }
                                 }
                                 fillCore(from: row)
+                            }
+                        }
+
+                        // 2) If still missing any core measurement, try closest row within ±3 days.
+                        if !hasAllCore() {
+                            // Use SQL date arithmetic so we don't depend on Swift date parsing.
+                            // We compare by calendar day (substr(...,1,10)) for robustness across timestamp formats.
+                            let sqlWindow = """
+                            SELECT *
+                            FROM manual_growth
+                            WHERE patient_id = ?
+                              AND date(substr(\(dc),1,10)) BETWEEN date(?, '-3 day') AND date(?, '+3 day')
+                            ORDER BY
+                              abs(julianday(date(substr(\(dc),1,10))) - julianday(date(?))) ASC,
+                              \(dc) DESC,
+                              id DESC
+                            LIMIT 1;
+                            """
+
+                            var stmtWin: OpaquePointer?
+                            if sqlite3_prepare_v2(db, sqlWindow, -1, &stmtWin, nil) == SQLITE_OK, let stw = stmtWin {
+                                defer { sqlite3_finalize(stw) }
+                                sqlite3_bind_int64(stw, 1, Int64(pid))
+                                // bind day three times (for BETWEEN start/end and for ordering reference)
+                                sqlite3_bind_text(stw, 2, day, -1, SQLITE_TRANSIENT)
+                                sqlite3_bind_text(stw, 3, day, -1, SQLITE_TRANSIENT)
+                                sqlite3_bind_text(stw, 4, day, -1, SQLITE_TRANSIENT)
+
+                                if sqlite3_step(stw) == SQLITE_ROW {
+                                    var row: [String:String] = [:]
+                                    let n = sqlite3_column_count(stw)
+                                    for i in 0..<n {
+                                        guard let cname = sqlite3_column_name(stw, i) else { continue }
+                                        let key = String(cString: cname)
+                                        if sqlite3_column_type(stw, i) != SQLITE_NULL, let cval = sqlite3_column_text(stw, i) {
+                                            let val = String(cString: cval).trimmingCharacters(in: .whitespacesAndNewlines)
+                                            if !val.isEmpty { row[key] = val }
+                                        }
+                                    }
+
+                                    #if DEBUG
+                                    // Helpful tracer: confirms we used the ±3-day fallback path.
+                                    let picked = row[dc] ?? row["date"] ?? row["visit_date"] ?? row["measured_at"] ?? row["recorded_at"] ?? row["created_at"] ?? "?"
+                                    print("[ReportDataLoader] manual_growth fallback ±3d picked \(picked) for visitDay=\(day)")
+                                    #endif
+
+                                    fillCore(from: row)
+                                }
                             }
                         }
                     }
