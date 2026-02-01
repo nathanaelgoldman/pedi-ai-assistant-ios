@@ -1313,6 +1313,25 @@ private func computeWHOGrowthTokensForSave(
     private var showsAISection: Bool {
         layout.showsAISection
     }
+    
+// MARK: - Problem listing header (sex + visit type)
+private var problemListingHeaderLine: String {
+    let sexWord: String = {
+        switch whoSex {
+        case .female: return L10nWVF.s("well_visit_form.problem_listing.header.sex.girl")
+        case .male:   return L10nWVF.s("well_visit_form.problem_listing.header.sex.boy")
+        default:      return L10nWVF.s("well_visit_form.problem_listing.header.sex.child")
+        }
+    }()
+
+    let visitTitle = visitTypes.first(where: { $0.id == visitTypeID })?.title ?? visitTypeID
+    // Format: "%@, %@:" (sex word, visit title)
+    return String(
+        format: L10nWVF.s("well_visit_form.problem_listing.header.line"),
+        sexWord,
+        visitTitle
+    )
+}
 
     private var isSolidsVisit: Bool {
         // Solid-food infancy block only for 4-, 6- and 9-month visits
@@ -2572,6 +2591,10 @@ private func computeWHOGrowthTokensForSave(
                     if layout.showsProblemListing {
                         GroupBox(L10nWVF.k("well_visit_form.problem_listing.title")) {
                             VStack(alignment: .leading, spacing: 8) {
+                                Text(problemListingHeaderLine)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+
                                 TextEditor(text: $problemListing)
                                     .frame(minHeight: 140)
 
@@ -3837,6 +3860,15 @@ private func computeWHOGrowthTokensForSave(
         )
         return (line, token)
     }
+    
+    private func mergeProblemListingTokens(_ tokens: [ProblemToken]) {
+        guard !tokens.isEmpty else { return }
+        var seen = Set(problemListingTokens)
+        for t in tokens where !seen.contains(t) {
+            problemListingTokens.append(t)
+            seen.insert(t)
+        }
+    }
 
     /// Rebuilds the problem listing from abnormal fields / comments.
     /// This does NOT touch the database – it only updates the TextEditor content.
@@ -4061,7 +4093,9 @@ private func computeWHOGrowthTokensForSave(
         }
         
         // 3b) Growth (WHO) – only when flagged
-        if showsWHOGrowthEvaluation && growthWHOTrendIsFlagged {
+        if showsWHOGrowthEvaluation && !growthWHOProblemTokens.isEmpty {
+            mergeProblemListingTokens(growthWHOProblemTokens)
+            tokens.append(contentsOf: growthWHOProblemTokens)
             let flagged = growthWHOOverallFlags
             let list = flagged.isEmpty
                 ? ""

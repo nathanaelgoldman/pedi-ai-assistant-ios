@@ -212,6 +212,18 @@ final class ReportDataLoader {
         let problemListing = repairWellProblemListing(visitID: visitID,
                                                       rawProblemListing: pePack.problem,
                                                       ageMonths: ageMonthsDouble) ?? pePack.problem
+
+        // Prefix problem listing with a header line: "Girl/Boy/Child, <visit title>:" (localized)
+        var problemListingWithHeader = problemListing
+        if let pid = patientIDForWellVisit(visitID),
+           let header = buildWellProblemListingHeaderLine(patientID: pid, visitTitle: currentVisitTitle) {
+            if let pl = problemListingWithHeader?.trimmingCharacters(in: .whitespacesAndNewlines), !pl.isEmpty {
+                // Avoid double-prefixing if already present
+                if !pl.hasPrefix(header) {
+                    problemListingWithHeader = header + "\n" + pl
+                }
+            }
+        }
         // STEP 7b: Problem listing tokens (localization-proof)
         let problemListingTokens = loadProblemListingTokensForWellVisit(visitID: visitID)
         // STEP 7c: Persisted WHO growth evaluation tokens (for report + PatientViewerApp)
@@ -248,7 +260,7 @@ final class ReportDataLoader {
             milestoneFlags: milestoneFlags,
             measurements: measurements,
             physicalExamGroups: physicalExamGroups,
-            problemListing: problemListing,
+            problemListing: problemListingWithHeader,
             problemListingTokens: problemListingTokens,
             growthEvalTokens: growthEvalTokens,
             conclusions: conclusions,
@@ -1263,6 +1275,79 @@ final class ReportDataLoader {
         }
 
         return out
+    }
+
+    // MARK: - Well problem listing header (sex + visit title)
+    private func buildWellProblemListingHeaderLine(patientID: Int64, visitTitle: String) -> String? {
+        // Reuse the same localization keys as the live UI.
+        let sexWordKey: String = {
+            switch fetchSexFromPatients(patientID: patientID) {
+            case "female": return "well_visit_form.problem_listing.header.sex.girl"
+            case "male":   return "well_visit_form.problem_listing.header.sex.boy"
+            default:       return "well_visit_form.problem_listing.header.sex.child"
+            }
+        }()
+
+        let sexWord = L(sexWordKey)
+        let title = visitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+
+        // Format: "%@, %@:" (localized)
+        return LF("well_visit_form.problem_listing.header.line", sexWord, title)
+    }
+
+    // Best-effort fetch of patient sex from the patients table.
+    // Returns "female", "male", or nil.
+    private func fetchSexFromPatients(patientID: Int64) -> String? {
+        do {
+            let dbPath = try bundleDBPathWithDebug()
+            var db: OpaquePointer?
+            if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
+                defer { sqlite3_close(db) }
+
+                // Discover columns
+                var cols = Set<String>()
+                var stmtCols: OpaquePointer?
+                if sqlite3_prepare_v2(db, "PRAGMA table_info(patients);", -1, &stmtCols, nil) == SQLITE_OK, let s = stmtCols {
+                    defer { sqlite3_finalize(s) }
+                    while sqlite3_step(s) == SQLITE_ROW {
+                        if let c = sqlite3_column_text(s, 1) { cols.insert(String(cString: c)) }
+                    }
+                }
+
+                // Common column names across schemas
+                let sexCol = [
+                    "sex",
+                    "sex_at_birth",
+                    "sexAtBirth",
+                    "gender",
+                    "patient_sex",
+                    "patientSex"
+                ].first(where: { cols.contains($0) })
+
+                guard let col = sexCol else { return nil }
+
+                let sql = "SELECT \(col) FROM patients WHERE id = ? LIMIT 1;"
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let st = stmt {
+                    defer { sqlite3_finalize(st) }
+                    sqlite3_bind_int64(st, 1, patientID)
+                    if sqlite3_step(st) == SQLITE_ROW, let c = sqlite3_column_text(st, 0) {
+                        let raw = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let lower = raw.lowercased()
+
+                        // Normalize a few common encodings
+                        if ["f", "female", "girl", "femme", "fille"].contains(lower) { return "female" }
+                        if ["m", "male", "boy", "homme", "garcon", "garçon"].contains(lower) { return "male" }
+                        if ["1"].contains(lower) { return "male" }
+                        if ["2"].contains(lower) { return "female" }
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return nil
     }
 
     // Fetch patient's DOB (ISO-like string) from patients table, trying common column names.
@@ -3454,6 +3539,15 @@ final class ReportDataLoader {
                 return d <= cut
             }
 
+            /// For well-visit growth *reporting*, accept measurements recorded shortly
+            /// after the visit date (e.g., taken the next day) as belonging to the visit.
+            /// We use a small +3 day window to avoid missing the visit's point.
+            func withinVisitPlus3Days(_ d: Date) -> Bool {
+                guard let cut = visitCut else { return true }
+                let cutPlus = cut.addingTimeInterval(3 * 86400) // +3 calendar days (seconds)
+                return d <= cutPlus
+            }
+
             var wfa: [ReportGrowth.Point] = []
             var lhfa: [ReportGrowth.Point] = []
             var hcfa: [ReportGrowth.Point] = []
@@ -3529,7 +3623,7 @@ final class ReportDataLoader {
                         }
                         // Date
                         let dateRaw = dateCols.compactMap { row[$0] }.first
-                        guard let dateStr = dateRaw, let d = parseDateFlexible(dateStr), withinVisit(d) else { continue }
+                        guard let dateStr = dateRaw, let d = parseDateFlexible(dateStr), withinVisitPlus3Days(d) else { continue }
                         let ageM = months(from: dobDate, to: d)
 
                         // Weights
@@ -3575,7 +3669,7 @@ final class ReportDataLoader {
                         let ageM: Double? = {
                             if let a = row["age_months"], let dv = Double(a) { return dv }
                             if let ds = dateCols.compactMap({ row[$0] }).first, let d = parseDateFlexible(ds) {
-                                return withinVisit(d) ? months(from: dobDate, to: d) : nil
+                                return withinVisitPlus3Days(d) ? months(from: dobDate, to: d) : nil
                             }
                             return nil
                         }()
@@ -4817,9 +4911,6 @@ extension ReportDataLoader {
             // IMPORTANT: Always resolve the DB path from the *active bundle*.
             // Avoid any staging/import paths that may exist elsewhere in the app.
             let dbPath = try currentBundleDBPath()
-#if DEBUG
-            print("[ReportDataLoader] rawVisitTypeIDForWell using dbPath=\(dbPath)")
-#endif
             var db: OpaquePointer?
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db {
                 defer { sqlite3_close(db) }
@@ -4840,13 +4931,9 @@ extension ReportDataLoader {
                 }
 
                 let table = ["well_visits", "visits"].first { !columns(in: $0).isEmpty } ?? "well_visits"
-                #if DEBUG
-                print("[ReportDataLoader] rawVisitTypeIDForWell: using table=\(table)")
-                #endif
+                
                 let cols = columns(in: table)
-                #if DEBUG
-                print("[ReportDataLoader] rawVisitTypeIDForWell: columns=\(Array(cols).sorted())")
-                #endif
+                
                 // If there is no visit_type column, we cannot resolve a canonical ID
                 guard cols.contains("visit_type") else { return nil }
 
@@ -4857,9 +4944,7 @@ extension ReportDataLoader {
                     sqlite3_bind_int64(st, 1, Int64(visitID))
                     if sqlite3_step(st) == SQLITE_ROW, let c = sqlite3_column_text(st, 0) {
                         let raw = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
-                        #if DEBUG
-                        print("[ReportDataLoader] rawVisitTypeIDForWell visitID=\(visitID) raw='\(raw)'")
-                        #endif
+                        
                         return raw.isEmpty ? nil : raw
                     }
                 }
@@ -5514,10 +5599,7 @@ extension ReportDataLoader {
     private func loadWellVisitGrowthEvalTokens(visitID: Int) -> [ProblemToken] {
         do {
             let dbPath = try currentBundleDBPath()
-            print("[ReportDataLoader] loadWellVisitGrowthEvalTokens using dbPath=\(dbPath)")
-#if DEBUG
-            print("[ReportDataLoader] loadWellVisitGrowthEvalTokens visitID=\(visitID)")
-#endif
+            
             var db: OpaquePointer?
             if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK || db == nil {
                 return []
@@ -5571,9 +5653,7 @@ extension ReportDataLoader {
                 "measurementTokens"
             ]
             guard let problemCol = tokenColCandidates.first(where: { cols.contains($0) }) else {
-#if DEBUG
-                print("[ReportDataLoader] loadWellVisitGrowthEvalTokens: no payload column found. cols=\(Array(cols).sorted())")
-#endif
+
                 // If the table exists but the expected payload column does not, nothing to render.
                 return []
             }
@@ -5588,19 +5668,7 @@ extension ReportDataLoader {
             
             sqlite3_bind_int64(stmt, 1, Int64(visitID))
 
-#if DEBUG
-            // If there is no row, help diagnose whether data was written at all.
-            var cntStmt: OpaquePointer?
-            let cntSQL = "SELECT COUNT(*) FROM well_visit_growth_eval WHERE \(visitFK) = ?;"
-            if sqlite3_prepare_v2(db, cntSQL, -1, &cntStmt, nil) == SQLITE_OK, let cs = cntStmt {
-                defer { sqlite3_finalize(cs) }
-                sqlite3_bind_int64(cs, 1, Int64(visitID))
-                if sqlite3_step(cs) == SQLITE_ROW {
-                    let c = sqlite3_column_int64(cs, 0)
-                    print("[ReportDataLoader] loadWellVisitGrowthEvalTokens: rowCount for visitID=\(visitID) is \(c)")
-                }
-            }
-#endif
+
 
             guard sqlite3_step(stmt) == SQLITE_ROW else { return [] }
             guard sqlite3_column_type(stmt, 0) != SQLITE_NULL,
@@ -5614,10 +5682,7 @@ extension ReportDataLoader {
                 let decoded = try JSONDecoder().decode([ProblemToken].self, from: data)
                 return decoded
             } catch {
-                if DEBUG_REPORT_EXPORT {
-                    print("[ReportDataLoader] loadWellVisitGrowthEvalTokens decode failed visitID=\(visitID): \(error)")
-                    print("[ReportDataLoader] loadWellVisitGrowthEvalTokens raw JSON (first 200 chars): \(String(json.prefix(200)))")
-                }
+                
                 return []
             }
         } catch {

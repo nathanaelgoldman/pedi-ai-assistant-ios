@@ -371,7 +371,7 @@
 
 // MARK: - Choice vocab: infection risk
 
-"perinatal.choice.infrisk.prom" = "RPM (rupture prématurée des membranes)";
+"perinatal.choice.infrisk.prom" = "Rupture prématurée de la poche des eaux";
 "perinatal.choice.infrisk.seroconversion_torch" = "Séroconversion TORCH";
 "perinatal.choice.infrisk.gbs_no_treatment" = "SGB+ sans traitement";
 "perinatal.choice.infrisk.gbs_treatment" = "SGB+ avec traitement";
@@ -2870,3 +2870,9 @@
 "growth.metric.wfl"   = "Poids pour la taille";
 "growth.metric.bmifa" = "IMC pour l’âge";
 "growth.metric.bmi"   = "IMC";
+
+"well_visit_form.problem_listing.header.sex.girl" = "Fille";
+"well_visit_form.problem_listing.header.sex.boy" = "Garçon";
+"well_visit_form.problem_listing.header.sex.child" = "Enfant";
+
+"well_visit_form.problem_listing.header.line" = "%@, %@:";

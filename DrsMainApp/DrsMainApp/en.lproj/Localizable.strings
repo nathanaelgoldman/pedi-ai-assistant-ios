@@ -2886,3 +2886,11 @@
 "growth.metric.wfl"   = "Weight-for-length";
 "growth.metric.bmifa" = "BMI-for-age";
 "growth.metric.bmi"   = "BMI";
+
+"well_visit_form.problem_listing.header.sex.girl" = "Girl";
+"well_visit_form.problem_listing.header.sex.boy" = "Boy";
+"well_visit_form.problem_listing.header.sex.child" = "Child";
+
+"well_visit_form.problem_listing.header.line" = "%@, %@:";
+
+

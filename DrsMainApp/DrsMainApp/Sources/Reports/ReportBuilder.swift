@@ -955,11 +955,26 @@ if visibility?.showMeasurements ?? true {
         if visibility?.showProblemListing ?? true {
             para(L("report.well.section.problem_listing", comment: "Section title: problem listing"), font: headerFont, background: subSectionBG)
 
+            // Match the live UI: a short header line (sex word + visit title) followed by the problem list.
+            let headerLine = buildWellProblemListingHeaderLineForReport(sexRaw: data.meta.sex,
+                                                                        visitTitle: data.currentVisitTitle)
+
             let rendered = renderProblemListing(tokens: data.problemListingTokens,
                                                 fallback: data.problemListing)
-            let trimmed = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
-            para(trimmed.isEmpty ? "—" : trimmed, font: bodyFont)
+            let trimmedList = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
 
+            let combined: String = {
+                let h = headerLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmedList.isEmpty {
+                    return h.isEmpty ? "—" : h
+                }
+                if h.isEmpty {
+                    return trimmedList
+                }
+                return h + "\n" + trimmedList
+            }()
+
+            para(combined, font: bodyFont)
             content.append(NSAttributedString(string: "\n"))
         }
 
@@ -1167,6 +1182,47 @@ if visibility?.showMeasurements ?? true {
 // MARK: - Content assembly from AppState
 
 extension ReportBuilder {
+
+    // MARK: - Problem listing header (sex + visit type) — report variant
+
+    /// Returns a localized word for "Girl"/"Boy"/"Child" used in the Problem Listing header.
+    /// Uses tolerant decoding of stored sex values (e.g. "female", "Female", "F", etc.).
+    private func localizedProblemListingSexWord(sexRaw: String) -> String {
+        let raw = sexRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let v = raw.lowercased()
+
+        let isFemale = (v == "female" || v == "f" || v == "girl")
+        let isMale   = (v == "male" || v == "m" || v == "boy")
+
+        let key: String
+        if isFemale {
+            key = "well_visit_form.problem_listing.header.sex.girl"
+        } else if isMale {
+            key = "well_visit_form.problem_listing.header.sex.boy"
+        } else {
+            key = "well_visit_form.problem_listing.header.sex.child"
+        }
+
+        let s = NSLocalizedString(key, comment: "Problem listing header sex word")
+        if s != key { return s }
+
+        // Safe English fallback if localization keys are missing.
+        if isFemale { return "Girl" }
+        if isMale { return "Boy" }
+        return "Child"
+    }
+
+    /// Builds the header line shown at the top of the Problem Listing section.
+    /// Example: "Girl, 5-year visit:" then a newline then the list.
+    private func buildWellProblemListingHeaderLineForReport(sexRaw: String, visitTitle: String) -> String {
+        let sexWord = localizedProblemListingSexWord(sexRaw: sexRaw)
+        let vt = visitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if vt.isEmpty {
+            return "\(sexWord):"
+        }
+        return "\(sexWord), \(vt):"
+    }
+
     /// Localizes WHO growth metric short codes used in token args (e.g. wfa, lhfa, hcfa, bmifa, wfl).
     /// Uses keys like: growth.metric.lhfa, growth.metric.wfa, ...
     private func localizedGrowthMetricCode(_ raw: String) -> String {
@@ -1625,36 +1681,8 @@ extension ReportBuilder {
 
             let fmtKey = "growth.who.shift.v2"
             let fmt = NSLocalizedString(fmtKey, comment: "WHO growth shift (v2): delta z, delta percentile, current percentile, priors count")
-#if DEBUG
-            NSLog("[WHO][shift.v2] localized fmt=\"%@\"", fmt)
-#endif
-            #if DEBUG
-            // 🔎 Report-time tracer: prove which localized string is actually used, and from where.
-            let bundleID = Bundle.main.bundleIdentifier ?? "<no.bundle.id>"
-            let prefs = Bundle.main.preferredLocalizations.joined(separator: ",")
-            let mainLocs = Bundle.main.localizations.joined(separator: ",")
 
-            func locStringsPath(_ loc: String) -> String {
-                if let p = Bundle.main.path(forResource: "Localizable",
-                                            ofType: "strings",
-                                            inDirectory: nil,
-                                            forLocalization: loc) {
-                    return p
-                }
-                return "<missing>"
-            }
-
-            let frPath = locStringsPath("fr")
-            let firstPref = Bundle.main.preferredLocalizations.first ?? "<none>"
-            let firstPrefPath = (firstPref == "<none>") ? "<none>" : locStringsPath(firstPref)
-
-            let hasPEquals = fmt.contains("P=%@") ? 1 : 0
-            let hasPPlain  = fmt.contains("P%@") ? 1 : 0
-
-            NSLog("[ReportDebug][WHO][shift.v2] bundle=%@ prefs=%@ locs=%@", bundleID, prefs, mainLocs)
-            NSLog("[ReportDebug][WHO][shift.v2] fmtKey=%@ fmt=\"%@\" hasPEquals=%d hasPplain=%d", fmtKey, fmt, hasPEquals, hasPPlain)
-            NSLog("[ReportDebug][WHO][shift.v2] Localizable.strings fr=%@ firstPref=%@ path=%@", frPath, firstPref, firstPrefPath)
-            #endif
+            
             let line: String
             if fmt == fmtKey {
                 // Safe fallback if localization key is missing
@@ -1663,9 +1691,7 @@ extension ReportBuilder {
                 line = String(format: fmt, metricLabel, dz, dP, curP, priors)
             }
 
-            #if DEBUG
-            NSLog("[ReportDebug][WHO][shift.v2] renderedLine=\"%@\"", line)
-            #endif
+            
 
             let outLine = stripLeadingDash(line)
             return outLine.hasPrefix("•") ? outLine : ("• " + outLine)
