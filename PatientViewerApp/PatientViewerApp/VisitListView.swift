@@ -378,7 +378,8 @@ struct VisitListView: SwiftUI.View {
         }
         .navigationTitle(L("patient_viewer.visits.list.nav_title", comment: "Navigation title"))
         .onAppear {
-            logVisits.info("VisitListView appeared | bundle=\(dbURL.lastPathComponent, privacy: .private) db=\("db.sqlite", privacy: .public)")
+            let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+            logVisits.info("VisitListView appeared | db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
             loadVisits()
         }
         .onDisappear {
@@ -397,7 +398,8 @@ struct VisitListView: SwiftUI.View {
         let start = Date()
         
         let dbPath = dbURL.appendingPathComponent("db.sqlite").path
-        logVisits.info("Loading visits | bundle=\(dbURL.lastPathComponent, privacy: .private) db=\("db.sqlite", privacy: .public)")
+        let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+        logVisits.info("Loading visits | db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
         do {
             let db = try Connection(dbPath)
 

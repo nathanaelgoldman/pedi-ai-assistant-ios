@@ -143,7 +143,7 @@ private let isoFormatter: ISO8601DateFormatter = {
 
     private func loadNotes() {
         do {
-            notesLog.debug("Attempting to load db from base URL: \(dbURL.lastPathComponent, privacy: .public)")
+            notesLog.debug("Attempting to load DB | base=BUNDLE#\(AppLog.token(dbURL.lastPathComponent), privacy: .public)")
             guard let dbFileURL = resolveDBURL() else {
                 alertMessage = LF("parentNotes.error.dbNotFoundUnder_fmt", dbURL.lastPathComponent)
                 showAlert = true

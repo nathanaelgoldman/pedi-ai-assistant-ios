@@ -118,6 +118,7 @@ struct GrowthTableView: View {
                         p: p,
                         formatDate: formatDate,
                         formatNumber: formatNumber,
+                        formatSource: formatSource,
                         onDelete: {
                             do {
                                 try appState.deleteGrowthPointIfManual(p)
@@ -258,18 +259,57 @@ struct GrowthTableView: View {
         // Sort newest first by ISO string (YYYY-MM-DD or full ISO)
         rows.sort { $0.recordedAtISO > $1.recordedAtISO }
     }
+    
+    private func formatSource(_ raw: String) -> String {
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch key {
+        case "manual":
+            return NSLocalizedString(
+                "growth.source.manual",
+                comment: "Growth source label shown in the table for manually entered points"
+            )
+        case "vitals":
+            return NSLocalizedString(
+                "growth.source.vitals",
+                comment: "Growth source label shown in the table for points coming from vitals"
+            )
+        case "episode":
+            return NSLocalizedString(
+                "growth.source.episode",
+                comment: "Growth source label shown in the table for points coming from sick episodes"
+            )
+        default:
+            return raw.isEmpty ? "—" : raw
+        }
+    }
 
     private func formatDate(_ iso: String) -> String {
-        // Try full ISO first, then fallback to YYYY-MM-DD prefix
-        if let d = ISO8601DateFormatter().date(from: iso) {
-            let df = DateFormatter()
-            df.calendar = Calendar(identifier: .iso8601)
-            df.locale = Locale(identifier: "en_US_POSIX")
-            df.timeZone = TimeZone(secondsFromGMT: 0)
-            df.dateFormat = "yyyy-MM-dd"
-            return df.string(from: d)
+        let trimmed = iso.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "—" }
+
+        // 1) Try full ISO8601 (with fractional seconds)
+        let isoFull = ISO8601DateFormatter()
+        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = isoFull.date(from: trimmed) {
+            return DateFormatter.localizedString(from: d, dateStyle: .medium, timeStyle: .short)
         }
-        return iso.count >= 10 ? String(iso.prefix(10)) : iso
+
+        // 2) Try full ISO8601 (no fractional seconds)
+        let isoNoFrac = ISO8601DateFormatter()
+        isoNoFrac.formatOptions = [.withInternetDateTime]
+        if let d = isoNoFrac.date(from: trimmed) {
+            return DateFormatter.localizedString(from: d, dateStyle: .medium, timeStyle: .short)
+        }
+
+        // 3) Try date-only (YYYY-MM-DD) — Growth points are typically date-based
+        let isoDateOnly = ISO8601DateFormatter()
+        isoDateOnly.formatOptions = [.withFullDate]
+        if let d = isoDateOnly.date(from: trimmed) {
+            return DateFormatter.localizedString(from: d, dateStyle: .medium, timeStyle: .none)
+        }
+
+        // 4) Fallback: show YYYY-MM-DD prefix if present
+        return trimmed.count >= 10 ? String(trimmed.prefix(10)) : trimmed
     }
 
     private func formatNumber(_ x: Double?) -> String {
@@ -287,6 +327,7 @@ private struct GrowthRowView: View {
     let p: GrowthPoint
     let formatDate: (String) -> String
     let formatNumber: (Double?) -> String
+    let formatSource: (String) -> String
     let onDelete: () -> Void
 
     private var isManual: Bool { p.source.lowercased() == "manual" }
@@ -301,7 +342,7 @@ private struct GrowthRowView: View {
                 .frame(width: 100, alignment: .trailing)
             Text(formatNumber(p.headCircumferenceCm)).monospacedDigit()
                 .frame(width: 110, alignment: .trailing)
-            Text(p.source)
+            Text(formatSource(p.source))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 4)

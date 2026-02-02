@@ -116,7 +116,7 @@ struct SickVisitPDFGenerator {
             dobFormatter.locale = Locale(identifier: "en_US_POSIX")
 
             guard let dobDate = dobFormatter.date(from: dobString) else {
-                SickVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse DOB='\(dobString)'")
+                SickVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse DOB (token=\(AppLog.token(dobString), privacy: .public))")
                 return nil
             }
 
@@ -151,14 +151,16 @@ struct SickVisitPDFGenerator {
             }
 
             guard let finalVisitDate = visitDate else {
-                SickVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse visitDate='\(visitDateString)'")
+                SickVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse visitDate (token=\(AppLog.token(visitDateString), privacy: .public))")
                 return nil
             }
 
             let interval = finalVisitDate.timeIntervalSince(dobDate)
             let days = interval / 86_400.0
             if days < 0 {
-                SickVisitPDFGenerator.log.warning("computeAgeMonths: negative age days=\(days) for DOB='\(dobString)' visit='\(visitDateString)'")
+                SickVisitPDFGenerator.log.warning(
+                    "computeAgeMonths: negative age days=\(days) for DOB(token=\(AppLog.token(dobString), privacy: .public)) visit(token=\(AppLog.token(visitDateString), privacy: .public))"
+                )
             }
             return max(0.0, days / 30.0)
         }
@@ -347,8 +349,11 @@ struct SickVisitPDFGenerator {
             // Fetch patient info
             let dbPath = dbURL.appendingPathComponent("db.sqlite").path
             do {
-                Self.log.debug("Opening SQLite at path=\(dbPath, privacy: .private)")
-                let db = try Connection(dbPath)
+                let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+                Self.log.debug("Opening SQLite | db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
+
+                let db = try Connection(dbFileURL.path)
+
                 let episodes = Table("episodes")
                 let episodeID = Expression<Int64>("id")
                 let patientID = Expression<Int64>("patient_id")
@@ -391,7 +396,8 @@ struct SickVisitPDFGenerator {
                 let mrnText = patientRow[mrn]
 
                 let ageMonthsForVisit = computeAgeMonths(dobString: dobText, visitDateString: visit.date)
-                Self.log.debug("Patient alias=\(aliasText, privacy: .public) name=\(name, privacy: .public) dob=\(dobText, privacy: .public) sex=\(sexText, privacy: .public)")
+                let aliasRef = (aliasText == L("common.placeholder")) ? "ALIAS#nil" : AppLog.aliasRef(aliasText)
+                Self.log.debug("Patient loaded | pid=\(pid, privacy: .private) alias=\(aliasRef, privacy: .public)")
 
                 // 3. Render
                 y += 12

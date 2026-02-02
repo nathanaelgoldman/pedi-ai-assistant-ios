@@ -619,6 +619,15 @@ struct WellVisitForm: View {
         f.formatOptions = [.withFullDate]
         return f
     }()
+    
+    private static let displayDate: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = .current
+        df.timeZone = .current
+        df.dateStyle = .medium     // e.g. "21 janv. 2026" in FR, "2026年1月21日" in zh-Hans
+        df.timeStyle = .none
+        return df
+    }()
 
     // MARK: - Growth snapshot helpers (manual_growth)
 
@@ -839,7 +848,7 @@ struct WellVisitForm: View {
     private func buildGrowthSummaryLine(labelKey: String, _ p: GrowthPoint) -> String {
         return String(
             format: L10nWVF.s(labelKey),
-            p.recordedAtRaw,
+            Self.displayDate.string(from: p.recordedDate),
             fmt(p.weightKg, decimals: 2),
             fmt(p.heightCm, decimals: 1),
             fmt(p.headCircCm, decimals: 1)
@@ -2899,27 +2908,28 @@ private var problemListingHeaderLine: String {
             return
         }
 
-        func cleanDate(_ raw: String) -> String {
+        func formatDisplayDate(_ raw: String) -> String {
             let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if s.isEmpty { return "" }
+            guard !s.isEmpty else { return "" }
 
-            // ISO8601: 2025-12-29T09:30:41Z  →  2025-12-29
-            if let t = s.firstIndex(of: "T") {
-                return String(s[..<t])
+            // Use the existing parser you already have below
+            if let d = parseVisitDate(s) {
+                let df = DateFormatter()
+                df.locale = .current
+                df.dateStyle = .medium
+                df.timeStyle = .none
+                return df.string(from: d)
             }
 
-            // Legacy: 2025-12-29 09:30:41  →  2025-12-29
-            if let space = s.firstIndex(of: " ") {
-                return String(s[..<space])
-            }
-
-            // Already date-only
+            // Fallback: keep your original safe behavior
+            if let t = s.firstIndex(of: "T") { return String(s[..<t]) }
+            if let space = s.firstIndex(of: " ") { return String(s[..<space]) }
             return s
         }
 
         let latest = points[0]
         let latestKg = latest.weightG / 1000.0
-        let latestDateDisplay = cleanDate(latest.dateStr)
+        let latestDateDisplay = formatDisplayDate(latest.dateStr)
         latestWeightSummary = String(
             format: NSLocalizedString("well_visit_form.weight_trend.weight_at_date_format", comment: ""),
             latestKg,
@@ -2936,7 +2946,7 @@ private var problemListingHeaderLine: String {
 
         let previous = points[1]
         let previousKg = previous.weightG / 1000.0
-        let previousDateDisplay = cleanDate(previous.dateStr)
+        let previousDateDisplay = formatDisplayDate(previous.dateStr)
         previousWeightSummary = String(
             format: NSLocalizedString("well_visit_form.weight_trend.weight_at_date_format", comment: ""),
             previousKg,

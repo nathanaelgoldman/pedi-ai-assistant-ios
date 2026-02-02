@@ -18,6 +18,7 @@
 
 import OSLog
 import Foundation
+import CryptoKit
 
 enum AppLog {
     // One subsystem for the whole app (stable across files)
@@ -34,6 +35,42 @@ enum AppLog {
     /// Convenience: make a feature-specific logger with a consistent subsystem
     static func feature(_ name: String) -> Logger {
         Logger(subsystem: subsystem, category: name)
+    }
+    
+    // MARK: - Redaction helpers (stable, non-identifying references)
+
+    /// Stable short token (hex) for correlating logs without leaking raw identifiers.
+    /// NOTE: This is NOT a security feature; it's a log-safety feature.
+    static func token(_ raw: String, length: Int = 16) -> String {
+        let data = Data(raw.utf8)
+        let digest = SHA256.hash(data: data)
+        let hex = digest.compactMap { String(format: "%02x", $0) }.joined()
+        return String(hex.prefix(max(4, length)))
+    }
+
+    /// A log-safe bundle reference derived from the bundle folder name.
+    /// Example: "BUNDLE#20acc340c59be1df"
+    static func bundleRef(_ bundleRoot: URL) -> String {
+        let name = bundleRoot.lastPathComponent
+        return "BUNDLE#\(token(name))"
+    }
+
+    /// A log-safe file reference: bundleRef + filename (no full paths).
+    /// Example: "BUNDLE#.../db.sqlite"
+    static func fileRef(_ fileURL: URL) -> String {
+        let bundle = fileURL.deletingLastPathComponent()
+        return "\(bundleRef(bundle))/\(fileURL.lastPathComponent)"
+    }
+
+    /// A log-safe DB reference for logs like "Using DB: ...".
+    static func dbRef(_ dbURL: URL) -> String {
+        fileRef(dbURL)
+    }
+
+    /// Optional: a short, log-safe alias label token.
+    /// Example: "ALIAS#bcdebd14d2ad2930"
+    static func aliasRef(_ alias: String) -> String {
+        "ALIAS#\(token(alias))"
     }
 
     // MARK: - Scoped helpers (baseline logging)
@@ -70,6 +107,11 @@ enum AppLog {
         func dbTarget(_ filename: String) {
             // Filename only, no path.
             AppLog.db.debug("\(component, privacy: .public): db=\(filename, privacy: .public)")
+        }
+        
+        func dbTarget(_ dbURL: URL) {
+            // Prefer a stable, non-identifying reference rather than a filesystem path.
+            AppLog.db.debug("\(component, privacy: .public): db=\(AppLog.dbRef(dbURL), privacy: .public)")
         }
 
         func saveFailed(idLabel: String, id: Int?, error: Error) {

@@ -208,7 +208,8 @@ struct PatientDocumentsView: View {
         }
         .onAppear {
             guard !didLoadOnce else { return }
-            documentsLog.info("Documents view appeared. Base=\(dbURL.lastPathComponent, privacy: .public)")
+            let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+            documentsLog.info("Documents view appeared | db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
             loadManifest()
             didLoadOnce = true
         }
@@ -256,11 +257,11 @@ struct PatientDocumentsView: View {
                 documentsLog.debug("Ignoring preview tap while another preview is active.")
                 return
             }
-            documentsLog.info("Presenting QuickLook for: \(fileURL.lastPathComponent, privacy: .public)")
+            documentsLog.info("Presenting QuickLook | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
             isPreviewing = true
             wrappedPreviewURL = IdentifiableURL(url: fileURL)
         } else {
-            documentsLog.error("File not found: \(fileURL.lastPathComponent, privacy: .public)")
+            documentsLog.error("File not found | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
             alertMessage = LF("patientDocs.error.fileNotFound_fmt", record.originalName)
             showAlert = true
         }

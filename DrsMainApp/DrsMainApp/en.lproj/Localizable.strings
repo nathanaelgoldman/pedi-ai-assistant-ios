@@ -2893,4 +2893,6 @@
 
 "well_visit_form.problem_listing.header.line" = "%@, %@:";
 
-
+"growth.source.manual" = "Manually added parameters";
+"growth.source.vitals" = "Vitals added in episodes";
+"growth.source.episode" = "Episode";

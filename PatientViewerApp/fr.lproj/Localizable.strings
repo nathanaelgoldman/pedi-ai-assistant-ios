@@ -754,3 +754,21 @@
 /* Types de visites de suivi */
 "well_report.visit_type.four_year" = "Visite des 4 ans";
 "well_report.visit_type.five_year" = "Visite des 5 ans";
+
+"well_report.measurements.growth_eval.title" = "Évaluation de la croissance";
+
+"growth.who.zp" = "WHO %@: z=%@, P=%@";
+
+/* Metric labels */
+"growth.metric.wfa"   = "Poids pour l’âge";
+"growth.metric.lhfa"  = "Taille pour l’âge";
+"growth.metric.hcfa"  = "Périmètre crânien pour l’âge";
+"growth.metric.wfl"   = "Poids pour la taille";
+"growth.metric.bmifa" = "IMC pour l’âge";
+"growth.metric.bmi"   = "IMC";
+
+"well_visit_form.problem_listing.header.sex.girl" = "Fille";
+"well_visit_form.problem_listing.header.sex.boy" = "Garçon";
+"well_visit_form.problem_listing.header.sex.child" = "Enfant";
+
+"well_visit_form.problem_listing.header.line" = "%@, %@:";

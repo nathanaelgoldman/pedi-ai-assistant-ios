@@ -165,7 +165,8 @@ struct WellVisitPDFGenerator {
     }
     
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
-       WellVisitPDFGenerator.log.info("Generating WellVisit PDF | id=\(visit.id, privacy: .public) bundle=\(dbURL.lastPathComponent, privacy: .public)")
+        let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+        WellVisitPDFGenerator.log.info("Generating WellVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
         let pdfMetaData = [
             kCGPDFContextCreator: WellVisitPDFGenerator.L("well_report.pdf.meta.creator", "Patient Viewer"),
             kCGPDFContextAuthor:  WellVisitPDFGenerator.L("well_report.pdf.meta.author",  "Patient App"),
@@ -223,7 +224,9 @@ struct WellVisitPDFGenerator {
             dobFormatter.locale = Locale(identifier: "en_US_POSIX")
 
             guard let dobDate = dobFormatter.date(from: dobString) else {
-                WellVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse DOB='\(dobString)'")
+                WellVisitPDFGenerator.log.warning(
+                    "computeAgeMonths: unable to parse DOB(token=\(AppLog.token(dobString), privacy: .public))"
+                )
                 return nil
             }
 
@@ -262,7 +265,9 @@ struct WellVisitPDFGenerator {
             let interval = finalVisitDate.timeIntervalSince(dobDate)
             let days = interval / (60.0 * 60.0 * 24.0)
             if days < 0 {
-                WellVisitPDFGenerator.log.warning("computeAgeMonths: negative age (days=\(days)) for DOB='\(dobString)' visitDate='\(visitDateString)'")
+                WellVisitPDFGenerator.log.warning(
+                    "computeAgeMonths: negative age days=\(days, privacy: .public) dobTok=\(AppLog.token(dobString), privacy: .public) visitTok=\(AppLog.token(visitDateString), privacy: .public)"
+                )
             }
             // Clamp at 0 months so misconfigured dates don't hide age-gated content
             return max(0.0, days / 30.0)
@@ -709,12 +714,34 @@ struct WellVisitPDFGenerator {
                     }
                     return localized
                 }
+                
+                // MARK: - Well problem listing header (sex + visit title)
+                func buildWellProblemListingHeaderLine(sexRaw: String, visitTitle: String) -> String? {
+                    let sexKey: String = {
+                        let s = sexRaw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                        // Handle common representations in bundles/DB
+                        if s == "female" || s == "f" || s == "girl" { return "well_visit_form.problem_listing.header.sex.girl" }
+                        if s == "male"   || s == "m" || s == "boy"  { return "well_visit_form.problem_listing.header.sex.boy" }
+                        return "well_visit_form.problem_listing.header.sex.child"
+                    }()
+
+                    let sexWord = WellVisitPDFGenerator.L(sexKey, "Child")
+                    let title = visitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty else { return nil }
+
+                    return String(
+                        format: WellVisitPDFGenerator.L("well_visit_form.problem_listing.header.line", "%@, %@:"),
+                        sexWord,
+                        title
+                    )
+                }
 
                 let aliasText = patientRow[alias] ?? placeholderDash
                 let dobText = patientRow[dob]
                 let sexText = patientRow[sex]
                 let mrnText = patientRow[mrn]
-                WellVisitPDFGenerator.log.debug("Patient alias=\(aliasText, privacy: .public) name=\(name, privacy: .public) dob=\(dobText, privacy: .public) sex=\(sexText, privacy: .public)")
+                let aliasToken = AppLog.token(aliasText)
+                WellVisitPDFGenerator.log.debug("Patient loaded | aliasToken=\(aliasToken, privacy: .public)")
 
                 let visitDate = visitRow[Expression<String>("visit_date")]
                 let visitType = visitRow[Expression<String>("visit_type")]
@@ -1750,19 +1777,20 @@ struct WellVisitPDFGenerator {
 
                 // If we have a parsed visit date, filter manual_growth rows to those up to visitDate+24h
                 if let visitDateDate = visitDateParsed {
-                    let cutoffDate = visitDateDate.addingTimeInterval(24 * 60 * 60) // +24h
-                    let rows = try? db.prepare(manualGrowth.filter(mgPatientID == pid))
+                    let windowStart = visitDateDate.addingTimeInterval(-3 * 24 * 60 * 60) // -3 days
+                    let windowEnd   = visitDateDate.addingTimeInterval( 3 * 24 * 60 * 60) // +3 days
 
+                    let rows = try? db.prepare(manualGrowth.filter(mgPatientID == pid))
                     if let rows = rows {
                         let isoFormatter = ISO8601DateFormatter()
                         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-                        var latestDate: Date? = nil
+                        var bestAbsDelta: TimeInterval? = nil
+                        var bestDate: Date? = nil
 
                         for row in rows {
                             let recordedAtRaw = row[mgRecordedAt]
 
-                            // Try ISO8601 with and without fractional seconds, then plain date-only format
                             var recDate: Date? = isoFormatter.date(from: recordedAtRaw)
                             if recDate == nil {
                                 isoFormatter.formatOptions = [.withInternetDateTime]
@@ -1776,17 +1804,26 @@ struct WellVisitPDFGenerator {
                             }
 
                             guard let recDateFinal = recDate else { continue }
+                            guard recDateFinal >= windowStart && recDateFinal <= windowEnd else { continue }
 
-                            if recDateFinal <= cutoffDate {
-                                if let currentLatest = latestDate {
-                                    if recDateFinal > currentLatest {
-                                        latestDate = recDateFinal
+                            let absDelta = abs(recDateFinal.timeIntervalSince(visitDateDate))
+
+                            if let currentBest = bestAbsDelta {
+                                if absDelta < currentBest {
+                                    bestAbsDelta = absDelta
+                                    bestDate = recDateFinal
+                                    selectedMGRow = row
+                                } else if absDelta == currentBest {
+                                    // tie-breaker: prefer later measurement
+                                    if let bd = bestDate, recDateFinal > bd {
+                                        bestDate = recDateFinal
                                         selectedMGRow = row
                                     }
-                                } else {
-                                    latestDate = recDateFinal
-                                    selectedMGRow = row
                                 }
+                            } else {
+                                bestAbsDelta = absDelta
+                                bestDate = recDateFinal
+                                selectedMGRow = row
                             }
                         }
                     }
@@ -2003,6 +2040,96 @@ struct WellVisitPDFGenerator {
                     }
                     if let hc = visitRow[Expression<Double?>("head_circ_today_cm")] {
                         measurementLines.append(String(format: fmtTodayHeadCirc, hc))
+                    }
+                }
+                
+                // --- Growth evaluation (precomputed in DrsMainApp) ----------------------------
+                // Reads well_visit_growth_eval.measurement_tokens_json and appends rendered lines.
+
+                let growthEvalTable = Table("well_visit_growth_eval")
+                let geVisitID = Expression<Int64>("well_visit_id")
+                let geMeasurementTokensJSON = Expression<String>("measurement_tokens_json")
+
+                func renderMeasurementTokens(_ json: String) -> [String] {
+                    let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return [] }
+                    guard let data = trimmed.data(using: .utf8) else { return [] }
+
+                    // 1) Try simplest: ["some already-rendered line", ...]
+                    if let arr = try? JSONDecoder().decode([String].self, from: data) {
+                        return arr.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                    }
+
+                    // 2) Flexible token objects (fail-open)
+                    // Expected-ish shape (we keep it tolerant):
+                    // { "key": "well_report.growth_eval.xyz", "fallback": "Some text", "args": [ ... ] }
+                    if let obj = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                        var out: [String] = []
+                        for tok in obj {
+                            let key = (tok["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            let fallback = (tok["fallback"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            let argsAny = tok["args"] as? [Any] ?? []
+
+                            // If there’s no key, show fallback (or the raw token as last resort).
+                            if key.isEmpty {
+                                if !fallback.isEmpty { out.append(fallback); continue }
+                                out.append(String(describing: tok))
+                                continue
+                            }
+
+                            // Localize template. If not found, use fallback or key.
+                            let template = WellVisitPDFGenerator.L(key, fallback.isEmpty ? key : fallback)
+
+                            // If args exist, attempt String(format:) with CVarArg list.
+                            if !argsAny.isEmpty {
+                                var cargs: [CVarArg] = []
+
+                                for (idx, anyVal) in argsAny.enumerated() {
+                                    if let n = anyVal as? NSNumber {
+                                        cargs.append(n)
+                                        continue
+                                    }
+
+                                    if let s = anyVal as? String {
+                                        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                                        // If first arg is a growth metric code, localize it
+                                        if idx == 0 {
+                                            let metricKey = "growth.metric.\(trimmed)"
+                                            let localizedMetric = WellVisitPDFGenerator.L(metricKey, trimmed)
+                                            cargs.append(localizedMetric)
+                                        } else {
+                                            cargs.append(trimmed)
+                                        }
+                                        continue
+                                    }
+
+                                    cargs.append(String(describing: anyVal))
+                                }
+
+                                out.append(String(format: template, arguments: cargs))
+                            } else {
+                                out.append(template)
+                            }
+                        }
+
+                        return out.filter { !$0.isEmpty }
+                    }
+
+                    return []
+                }
+
+                if let geRow = try? db.pluck(growthEvalTable.filter(geVisitID == visit.id)),
+                   let tokensJson = try? geRow.get(geMeasurementTokensJSON) {
+                    let extraLines = renderMeasurementTokens(tokensJson)
+                    if !extraLines.isEmpty {
+                        // Optional tiny header inside Measurements section (keeps layout clear)
+                        let growthEvalTitle = WellVisitPDFGenerator.L(
+                            "well_report.measurements.growth_eval.title",
+                            "Growth evaluation"
+                        )
+                        measurementLines.append(growthEvalTitle + ":")
+                        measurementLines.append(contentsOf: extraLines.map { "• \($0)" })
                     }
                 }
 
@@ -2319,6 +2446,14 @@ struct WellVisitPDFGenerator {
                 y += 12
                 ensureSpace(for: 18)
                 drawText(secProblemListing, font: UIFont.boldSystemFont(ofSize: 15))
+                if let headerLine = buildWellProblemListingHeaderLine(
+                    sexRaw: sexText,
+                    visitTitle: visitTypeReadableCurrent
+                ) {
+                    ensureSpace(for: 16)
+                    drawWrappedText(headerLine, font: UIFont.italicSystemFont(ofSize: 14), in: pageRect, at: &y, using: context)
+                    y += 2
+                }
 
                 let rawProblems = visitRow[Expression<String?>("problem_listing")] ?? ""
                 let trimmedProblems = rawProblems.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -7,6 +7,7 @@
 
 
 import SwiftUI
+import Foundation
 
 // MARK: - Light-blue section card styling (matches PerinatalHistoryForm section blocks)
 fileprivate struct LightBlueSectionCardStyle: ViewModifier {
@@ -37,9 +38,42 @@ struct VitalsTableView: View {
     @State private var vitals: [VitalsPoint] = []
 
     // Sort newest first by recordedAtISO (String is Comparable → fine for KeyPathComparator)
-    @State private var sortOrder: [KeyPathComparator<VitalsPoint>] = [
-        .init(\.recordedAtISO, order: .reverse)
-    ]
+    
+    
+    // MARK: - Date formatting (ISO8601 -> user-friendly, localized)
+    private static let isoParsers: [ISO8601DateFormatter] = {
+        // Support both with and without fractional seconds.
+        let f1 = ISO8601DateFormatter()
+        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let f2 = ISO8601DateFormatter()
+        f2.formatOptions = [.withInternetDateTime]
+
+        return [f1, f2]
+    }()
+
+    private static let displayDateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = .current
+        df.dateStyle = .medium
+        df.timeStyle = .short
+        return df
+    }()
+
+    private func parseISODate(_ iso: String) -> Date? {
+        guard !iso.isEmpty else { return nil }
+        for f in Self.isoParsers {
+            if let d = f.date(from: iso) { return d }
+        }
+        return nil
+    }
+
+    private func displayRecordedAt(_ iso: String) -> String {
+        guard let d = parseISODate(iso) else {
+            return iso.isEmpty ? "—" : iso   // fallback if parsing fails
+        }
+        return Self.displayDateFormatter.string(from: d)
+    }
 
     var body: some View {
         NavigationStack {
@@ -154,7 +188,7 @@ struct VitalsTableView: View {
                             List {
                                 ForEach(vitals) { item in
                                     HStack {
-                                        Text(item.recordedAtISO.isEmpty ? "—" : item.recordedAtISO)
+                                        Text(displayRecordedAt(item.recordedAtISO))
                                             .monospacedDigit()
                                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -194,9 +228,7 @@ struct VitalsTableView: View {
                             .scrollContentBackground(.hidden)
                         }
                         .frame(maxHeight: .infinity)
-                        .onChange(of: sortOrder) { _, newOrder in
-                            vitals.sort(using: newOrder)
-                        }
+                        
                     }
                 }
                 .padding(16)
@@ -226,7 +258,21 @@ struct VitalsTableView: View {
             }
             .onAppear {
                 vitals = appState.loadVitalsForSelectedPatient()
-                vitals.sort(using: sortOrder)
+                vitals.sort { a, b in
+                    let da = parseISODate(a.recordedAtISO)
+                    let db = parseISODate(b.recordedAtISO)
+
+                    switch (da, db) {
+                    case let (x?, y?):
+                        return x > y
+                    case (_?, nil):
+                        return true
+                    case (nil, _?):
+                        return false
+                    default:
+                        return a.recordedAtISO > b.recordedAtISO
+                    }
+                }
             }
         }
     }

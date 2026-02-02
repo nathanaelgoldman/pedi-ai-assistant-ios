@@ -4,4 +4,765 @@
 //
 //  Created by Nathanael on 1/5/26.
 //
+"patient_viewer.content.nav_title" = "病历";
+"patient_viewer.content.app_title" = "患者查看器";
+"patient_viewer.content.intro" = "加载患者数据包以查看就诊记录、生长曲线和文档。";
 
+"patient_viewer.content.action.load_new.title" = "从设备加载新数据包";
+"patient_viewer.content.action.load_new.subtitle" = "从“文件”或 iCloud 导入 .peMR.zip 文件。";
+"patient_viewer.content.action.load_saved.title" = "从已保存的数据包加载";
+"patient_viewer.content.action.load_saved.subtitle" = "打开本设备上已保存的患者数据包。";
+"patient_viewer.content.action.settings.title" = "设置";
+"patient_viewer.content.action.settings.subtitle" = "管理应用锁和查看器偏好设置。";
+
+"patient_viewer.content.import.duplicate.title" = "该患者的数据包已存在。";
+"patient_viewer.content.import.duplicate.overwrite" = "覆盖（归档之前的版本）";
+
+"patient_viewer.content.error.title" = "错误";
+"patient_viewer.content.common.ok" = "确定";
+"patient_viewer.content.common.cancel" = "取消";
+
+"patient_viewer.content.placeholder.unknown" = "未知";
+"patient_viewer.content.placeholder.unknown_patient" = "未知患者";
+"patient_viewer.content.placeholder.unknown_dob" = "出生日期未知";
+
+"patient_viewer.content.patient.sex" = "性别：%@";
+
+"patient_viewer.content.card.visits.title" = "查看就诊记录";
+"patient_viewer.content.card.visits.subtitle" = "浏览所有就诊记录、摘要和临床记录。";
+"patient_viewer.content.card.growth.title" = "查看生长曲线";
+"patient_viewer.content.card.growth.subtitle" = "查看体重、身高和头围随时间的变化。";
+"patient_viewer.content.card.parent_notes.title" = "家长备注";
+"patient_viewer.content.card.parent_notes.subtitle" = "查看并添加家长撰写的备注。";
+"patient_viewer.content.card.documents.title" = "患者文档";
+"patient_viewer.content.card.documents.subtitle" = "打开扫描件、疫苗记录及其他文件。";
+"patient_viewer.content.card.export.title" = "导出数据包";
+"patient_viewer.content.card.export.subtitle" = "创建加密的 .peMR 数据包用于分享或归档。";
+
+"patient_viewer.content.clear_button" = "清除当前数据包";
+"patient_viewer.content.clear_note" = "这会保留你已保存的数据包；只会清除当前打开的工作副本。";
+
+"patient_viewer.content.export.default_filename" = "patientviewer";
+
+
+// VisitListView + VisitDetail + PDF Preview + fallback PDF
+"patient_viewer.common.ok" = "确定";
+"patient_viewer.common.done" = "完成";
+
+"patient_viewer.visits.list.nav_title" = "就诊摘要";
+"patient_viewer.visits.list.title" = "就诊摘要";
+"patient_viewer.visits.list.subtitle" = "浏览该患者的健康随访与疾病就诊记录。";
+"patient_viewer.visits.list.picker.label" = "就诊类型";
+"patient_viewer.visits.list.segment.well" = "🧒 健康随访";
+"patient_viewer.visits.list.segment.sick" = "🤒 疾病就诊";
+"patient_viewer.visits.list.empty.well" = "暂无健康随访记录。";
+"patient_viewer.visits.list.empty.sick" = "暂无疾病就诊记录。";
+"patient_viewer.visits.list.empty.hint" = "一旦在医生端应用中记录，新就诊将显示在这里。";
+
+"patient_viewer.visits.card.category.well" = "健康随访";
+"patient_viewer.visits.card.category.sick" = "疾病就诊";
+"patient_viewer.visits.card.no_title" = "未记录标题";
+
+"patient_viewer.visit_detail.nav_title" = "就诊详情";
+"patient_viewer.visit_detail.section.info" = "就诊信息";
+"patient_viewer.visit_detail.section.report" = "报告";
+"patient_viewer.visit_detail.field.date" = "日期：%@";
+"patient_viewer.visit_detail.field.diagnosis" = "诊断：%@";
+"patient_viewer.visit_detail.field.category" = "类别：%@";
+"patient_viewer.visit_detail.action.preview_pdf" = "预览 PDF 报告";
+"patient_viewer.visit_detail.alert.pdf_generated.title" = "✅ 已生成 PDF";
+"patient_viewer.visit_detail.alert.pdf_generated.message" = "报告已保存到“文件”App。";
+
+"patient_viewer.pdf_preview.nav_title" = "PDF 预览";
+"patient_viewer.pdf_preview.error.could_not_load" = "❌ 无法加载 PDF。";
+"patient_viewer.pdf_preview.label.path" = "路径：";
+
+"patient_viewer.pdf.meta.creator" = "患者查看器";
+"patient_viewer.pdf.meta.author" = "患者端应用";
+"patient_viewer.pdf.meta.title" = "就诊报告";
+
+"patient_viewer.pdf.fallback.title" = "就诊报告";
+"patient_viewer.pdf.fallback.date" = "日期：%@";
+"patient_viewer.pdf.fallback.diagnosis" = "诊断：%@";
+"patient_viewer.pdf.fallback.category" = "类别：%@";
+
+"patient_viewer.well_visit.title.default" = "健康随访";
+"patient_viewer.sick_visit.title.default" = "疾病就诊";
+
+"patient_viewer.well_visit.title.one_month" = "1个月随访";
+"patient_viewer.well_visit.title.two_month" = "2个月随访";
+"patient_viewer.well_visit.title.four_month" = "4个月随访";
+"patient_viewer.well_visit.title.six_month" = "6个月随访";
+"patient_viewer.well_visit.title.nine_month" = "9个月随访";
+"patient_viewer.well_visit.title.twelve_month" = "12个月随访";
+"patient_viewer.well_visit.title.fifteen_month" = "15个月随访";
+"patient_viewer.well_visit.title.eighteen_month" = "18个月随访";
+"patient_viewer.well_visit.title.twentyfour_month" = "24个月随访";
+"patient_viewer.well_visit.title.thirty_month" = "30个月随访";
+"patient_viewer.well_visit.title.thirtysix_month" = "36个月随访";
+"patient_viewer.well_visit.title.newborn_first" = "产后首次随访";
+
+//BundleLibraryView
+"patient_viewer.bundle_library.title" = "📚 已保存的患者数据包";
+"patient_viewer.bundle_library.subtitle" = "打开已保存的数据包以查看就诊、生长和文档。";
+"patient_viewer.bundle_library.action.import" = "导入 .peMR";
+"patient_viewer.bundle_library.empty.title" = "暂无已保存的数据包";
+"patient_viewer.bundle_library.empty.message" = "导入的患者数据包会显示在这里，方便以后再次打开。";
+// BundleLibraryView — Delete flow
+"patient_viewer.bundle_library.action.delete" = "删除";
+"patient_viewer.bundle_library.delete_confirm.title" = "删除此已保存的数据包？";
+"patient_viewer.bundle_library.delete_confirm.delete" = "删除";
+"patient_viewer.bundle_library.delete_confirm.cancel" = "取消";
+"patient_viewer.bundle_library.delete_confirm.message_specific" = "永久移除“%@”。这将从“已保存的数据包”中删除，并删除 ActiveBundle 中的任何活动副本。";
+"patient_viewer.bundle_library.delete_confirm.message_generic" = "永久移除此已保存的数据包。";
+// BundleLibraryView - duplicate-import confirmation dialog
+"patient_viewer.bundle_library.duplicate_import.title" = "该患者的数据包已存在。";
+"patient_viewer.bundle_library.duplicate_import.overwrite" = "覆盖（归档之前的版本）";
+"patient_viewer.bundle_library.duplicate_import.cancel" = "取消";
+"patient_viewer.bundle_library.duplicate_import.message_specific" = "患者：%@\n出生日期：%@\n如果继续，现有已保存的数据包将被归档并替换。";
+"patient_viewer.bundle_library.duplicate_import.message_generic" = "如果继续，现有已保存的数据包将被归档并替换。";
+// BundleLibraryView - user-facing error strings
+"patient_viewer.bundle_library.error.folder_missing" = "文件夹“%@”已不存在。";
+"patient_viewer.bundle_library.error.load_failed" = "加载数据包失败：%@";
+"patient_viewer.bundle_library.error.import_failed" = "导入失败：%@";
+"patient_viewer.bundle_library.error.overwrite_failed" = "覆盖失败：%@";
+"patient_viewer.bundle_library.error.delete_failed" = "删除数据包失败：%@";
+// BundleLibraryView - DOB label / Created / Imported / Last save strings in metaLine
+"patient_viewer.bundle_library.dob" = "出生日期：%@";
+
+"patient_viewer.bundle_library.meta.created" = "创建：%@";
+"patient_viewer.bundle_library.meta.imported" = "导入：%@";
+"patient_viewer.bundle_library.meta.last_save" = "上次保存：%@";
+// BundleLibraryView — DB / validation / activation errors (NSError localizedDescription)
+"patient_viewer.bundle_library.error.db_not_found" = "在导入的数据包中未找到 db.sqlite";
+"patient_viewer.bundle_library.error.db_open_failed" = "无法打开 SQLite 数据库";
+"patient_viewer.bundle_library.error.db_prepare_failed" = "准备验证查询失败";
+"patient_viewer.bundle_library.error.db_missing_patients_table" = "无效的数据包：缺少“patients”表";
+"patient_viewer.bundle_library.error.db_empty_patients_table" = "无效的数据包：“patients”表为空";
+"patient_viewer.bundle_library.error.active_bundle_missing_db" = "活动数据包缺少 db.sqlite";
+"patient_viewer.bundle_library.error.persistent_bundle_not_found" = "未找到所选 ZIP 对应的持久化数据包。";
+
+// ExportBundleView
+"patient_viewer.export_bundle.title" = "📤 导出患者数据包";
+"patient_viewer.export_bundle.subtitle" = "将当前的病历和文档导出为可携带的 `.peMR` 文件。该文件可用于分享、保存或传输到其他设备。";
+"patient_viewer.export_bundle.action.export" = "导出数据包";
+"patient_viewer.export_bundle.progress.exporting" = "正在导出…";
+"patient_viewer.export_bundle.error.format" = "❌ %@";
+
+/* AppSettingsView */
+"patient_viewer.app_settings.nav_title" = "设置";
+"patient_viewer.app_settings.done" = "完成";
+
+"patient_viewer.app_settings.app_lock.header" = "应用锁";
+"patient_viewer.app_settings.app_lock.status_enabled" = "应用锁已启用";
+"patient_viewer.app_settings.app_lock.status_disabled" = "应用锁已关闭";
+"patient_viewer.app_settings.app_lock.subtitle" = "使用简单的密码保护对本应用的访问。";
+
+"patient_viewer.app_settings.change_passcode.section" = "更改密码";
+"patient_viewer.app_settings.turn_off.section" = "关闭应用锁";
+"patient_viewer.app_settings.setup.section" = "设置应用锁";
+
+"patient_viewer.app_settings.field.current_passcode" = "当前密码";
+"patient_viewer.app_settings.field.new_passcode" = "新密码";
+"patient_viewer.app_settings.field.confirm_new_passcode" = "确认新密码";
+
+"patient_viewer.app_settings.action.change_passcode" = "更改密码";
+"patient_viewer.app_settings.action.remove_passcode" = "移除密码";
+"patient_viewer.app_settings.action.set_passcode" = "设置密码";
+
+/* Errors */
+"patient_viewer.app_settings.error.passcodes_do_not_match" = "两次输入的密码不一致。";
+"patient_viewer.app_settings.error.passcode_cannot_be_empty" = "密码不能为空。";
+"patient_viewer.app_settings.error.current_passcode_incorrect" = "当前密码不正确。";
+"patient_viewer.app_settings.error.new_passcodes_do_not_match" = "新密码不一致。";
+"patient_viewer.app_settings.error.new_passcode_cannot_be_empty" = "新密码不能为空。";
+"patient_viewer.app_settings.error.failed_to_set_passcode" = "设置密码失败：%@";
+"patient_viewer.app_settings.error.failed_to_update_passcode" = "更新密码失败：%@";
+
+/* Success */
+"patient_viewer.app_settings.success.passcode_set_enabled" = "密码已设置，应用锁已启用。";
+"patient_viewer.app_settings.success.passcode_updated" = "密码已更新。";
+"patient_viewer.app_settings.success.passcode_removed_disabled" = "密码已移除，应用锁已关闭。";
+
+/* GrowthChartScreen */
+"patient_viewer.growth_chart.title" = "生长曲线";
+"patient_viewer.growth_chart.picker.measurement" = "测量项目";
+
+"patient_viewer.growth_chart.measurement.weight" = "体重";
+"patient_viewer.growth_chart.measurement.height" = "身高";
+"patient_viewer.growth_chart.measurement.head_circ" = "头围";
+"patient_viewer.growth_chart.measurement.bmi" = "BMI";
+
+"patient_viewer.growth_chart.empty_bmi.title" = "暂无 BMI 数据";
+"patient_viewer.growth_chart.empty_bmi.message" = "请添加体重和身高测量值以显示 BMI 曲线。";
+
+"patient_viewer.growth_chart.empty.title" = "暂无测量数据";
+
+"patient_viewer.growth_chart.reference_unavailable.title" = "参考曲线不可用";
+"patient_viewer.growth_chart.reference_unavailable.message" = "缺少“%@”的 WHO 参考曲线。曲线可用后将显示图表。";
+
+/* GrowthChartView */
+"patient_viewer.growth_chart.axis.age_months" = "年龄（月）";
+"patient_viewer.growth_chart.axis.value" = "数值";
+"patient_viewer.growth_chart.axis.curve" = "曲线";
+
+"patient_viewer.growth_chart.title.hc_for_age" = "按年龄的头围";
+"patient_viewer.growth_chart.title.generic" = "生长曲线";
+
+"patient_viewer.growth_chart.y_axis.weight" = "体重（kg）";
+"patient_viewer.growth_chart.y_axis.height" = "身高/身长（cm）";
+"patient_viewer.growth_chart.y_axis.head_circ" = "头围（cm）";
+"patient_viewer.growth_chart.y_axis.bmi" = "BMI（kg/m²）";
+"patient_viewer.growth_chart.y_axis.generic" = "测量值";
+
+/* Parent Notes */
+"parentNotes.title" = "📓 家长备注";
+"parentNotes.saveNote" = "💾 保存备注";
+"parentNotes.empty" = "尚未添加任何备注。";
+"parentNotes.notesHeader" = "🗒️ 备注";
+"parentNotes.deleteIcon" = "🗑";
+"parentNotes.deleteNote.accessibilityLabel" = "删除备注";
+
+/* Parent Notes - Errors */
+"parentNotes.error.dbNotFoundUnder_fmt" = "无法在 %@ 下找到 db.sqlite。";
+"parentNotes.error.dbNotFoundToSave" = "无法找到 db.sqlite 以保存数据。";
+"parentNotes.error.dbNotFoundToDelete" = "无法找到 db.sqlite 以删除备注。";
+"parentNotes.error.noPatientFound" = "未找到患者。";
+"parentNotes.error.loadFailed_fmt" = "加载备注失败：%@";
+"parentNotes.error.saveFailed_fmt" = "保存备注失败：%@";
+"parentNotes.error.deleteFailed_fmt" = "删除备注失败：%@";
+
+/* Common */
+"common.error" = "错误";
+"common.ok" = "确定";
+"common.cancel" = "取消";
+"common.unknown" = "未知";
+"common.placeholder" = "—";
+
+/* PatientDocumentsView */
+"patientDocs.title" = "患者文档";
+"patientDocs.subtitle" = "查看、上传并分享与该患者相关的文档。";
+"patientDocs.upload" = "上传文档";
+"patientDocs.empty.title" = "暂无文档";
+"patientDocs.empty.body" = "可上传化验报告、疫苗接种记录、出院小结或任何希望与该患者保存的文件。";
+"patientDocs.uploaded_fmt" = "上传时间：%@";
+"patientDocs.preview" = "预览";
+"patientDocs.delete" = "删除";
+"patientDocs.confirmDelete.title" = "删除此文档？";
+"patientDocs.error.fileNotFound_fmt" = "未找到文件：%@";
+"patientDocs.error.deleteFailed_fmt" = "删除失败：%@";
+"patientDocs.error.importFailed_fmt" = "导入失败：%@";
+"patientDocs.error.saveManifestFailed" = "保存清单失败。";
+
+/* PDF metadata */
+"pdf.meta.creator" = "患者查看器";
+"pdf.meta.author" = "患者端应用";
+
+/* Sick visit PDF */
+"pdf.sick.title" = "疾病就诊报告";
+"pdf.sick.visitDate.fmt" = "就诊日期：%@";
+"pdf.sick.generated.fmt" = "报告生成时间：%@";
+"pdf.sick.labelValue.fmt" = "%@：%@";
+
+/* Errors */
+"pdf.sick.error.episodeNotFound" = "❌ 错误：未找到本次就诊记录";
+"pdf.sick.error.patientNotFound" = "❌ 错误：未找到患者";
+"pdf.sick.error.dbError.fmt" = "❌ 数据库错误：%@";
+
+/* Patient section */
+"pdf.sick.section.patientInfo" = "患者信息";
+"pdf.sick.patient.alias" = "别名";
+"pdf.sick.patient.name" = "姓名";
+"pdf.sick.patient.dob" = "出生日期";
+"pdf.sick.patient.ageAtVisit" = "就诊时年龄";
+"pdf.sick.patient.sex" = "性别";
+"pdf.sick.patient.mrn" = "病历号";
+"pdf.sick.patient.clinician" = "医生";
+
+/* Chief complaint & history */
+"pdf.sick.section.chiefComplaintHistory" = "主诉与病史";
+"pdf.sick.hx.mainComplaint" = "主要症状";
+"pdf.sick.hx.history" = "病史";
+"pdf.sick.hx.duration" = "持续时间";
+"pdf.sick.hx.feeding" = "喂养";
+"pdf.sick.hx.urination" = "排尿";
+"pdf.sick.hx.breathing" = "呼吸";
+"pdf.sick.hx.pain" = "疼痛";
+"pdf.sick.hx.context" = "相关情况";
+
+/* Vaccination */
+"pdf.sick.section.vaccinationStatus" = "疫苗接种情况";
+
+/* Past medical history */
+"pdf.sick.section.pastMedicalHistory" = "既往病史";
+"pdf.sick.perinatal.line.fmt" = "围产期：%@";
+"pdf.sick.pmh.line.fmt" = "病史：%@";
+"pdf.sick.perinatal.lineWithValue.fmt" = "围产期：%@";
+"pdf.sick.pmh.lineWithValue.fmt" = "病史：%@";
+
+"pdf.sick.perinatal.pregnancy.fmt" = "妊娠：%@";
+"pdf.sick.perinatal.birthMode.fmt" = "分娩方式：%@";
+"pdf.sick.perinatal.gaWeeks.fmt" = "胎龄：%d 周";
+"pdf.sick.perinatal.resuscitation.fmt" = "复苏：%@";
+"pdf.sick.perinatal.infectionRisk.fmt" = "感染风险：%@";
+"pdf.sick.perinatal.birthWeightG.fmt" = "出生体重：%d g";
+"pdf.sick.perinatal.birthLengthCm.fmt" = "出生身长：%@ cm";
+"pdf.sick.perinatal.birthHcCm.fmt" = "出生头围：%@ cm";
+"pdf.sick.perinatal.dischargeWeightG.fmt" = "出院体重：%d g";
+"pdf.sick.perinatal.feeding.fmt" = "喂养：%@";
+"pdf.sick.perinatal.vaccinations.fmt" = "疫苗接种：%@";
+"pdf.sick.perinatal.events.fmt" = "事件：%@";
+"pdf.sick.perinatal.hearing.fmt" = "听力：%@";
+"pdf.sick.perinatal.heart.fmt" = "心脏：%@";
+"pdf.sick.perinatal.metabolic.fmt" = "代谢筛查：%@";
+"pdf.sick.perinatal.afterBirth.fmt" = "出生后：%@";
+"pdf.sick.perinatal.motherVacc.fmt" = "母亲疫苗：%@";
+
+"pdf.sick.pmh.asthma" = "哮喘";
+"pdf.sick.pmh.otitis" = "中耳炎";
+"pdf.sick.pmh.uti" = "尿路感染";
+"pdf.sick.pmh.allergies" = "过敏";
+"pdf.sick.pmh.allergyDetails.fmt" = "过敏详情：%@";
+
+/* Vitals */
+"pdf.sick.section.vitals" = "生命体征";
+"pdf.sick.vitals.weightKg.fmt" = "体重：%.1f kg";
+"pdf.sick.vitals.heightCm.fmt" = "身长/身高：%.1f cm";
+"pdf.sick.vitals.headCircCm.fmt" = "头围：%.1f cm";
+"pdf.sick.vitals.tempC.fmt" = "体温：%.1f °C";
+"pdf.sick.vitals.hrBpm.fmt" = "心率：%d 次/分";
+"pdf.sick.vitals.rrPerMin.fmt" = "呼吸频率：%d 次/分";
+"pdf.sick.vitals.spo2Pct.fmt" = "SpO₂：%d %%";
+"pdf.sick.vitals.bpMmhg.fmt" = "血压：%d/%d mmHg";
+
+/* Physical exam */
+"pdf.sick.section.physicalExam" = "体格检查";
+"pdf.sick.pe.group.general" = "一般情况";
+"pdf.sick.pe.group.ent" = "头部 / 耳鼻喉 / 眼";
+"pdf.sick.pe.group.cardioresp" = "心肺";
+"pdf.sick.pe.group.abdomen" = "腹部";
+"pdf.sick.pe.group.genitalia" = "生殖系统";
+"pdf.sick.pe.group.neuroMskLymph" = "神经 / 肌骨 / 淋巴";
+
+/* Problem + extra sections */
+"pdf.sick.section.problemListing" = "问题列表";
+"pdf.sick.section.investigations" = "检查";
+"pdf.sick.section.diagnosis" = "诊断";
+"pdf.sick.section.icd10" = "ICD10";
+"pdf.sick.section.medications" = "用药";
+"pdf.sick.section.anticipatoryGuidance" = "预期指导";
+"pdf.sick.section.comments" = "备注";
+"pdf.sick.section.aiAssistantInput" = "AI 助手输入";
+
+/* Age formatting */
+"age.day.one" = "1 天";
+"age.days.fmt" = "%d 天";
+"age.month.one" = "1 个月";
+"age.months.fmt" = "%d 个月";
+"age.year.one" = "1 岁";
+"age.years.fmt" = "%d 岁";
+"age.compound.fmt" = "%@ %@";
+
+/* Sick visit PDF — PE field labels (episodes table keys) */
+"pdf.sick.pe.field.general_appearance" = "一般外观";
+"pdf.sick.pe.field.hydration" = "水合状态";
+"pdf.sick.pe.field.color" = "肤色";
+"pdf.sick.pe.field.skin" = "皮肤";
+
+"pdf.sick.pe.field.ent" = "耳鼻喉";
+"pdf.sick.pe.field.right_ear" = "右耳";
+"pdf.sick.pe.field.left_ear" = "左耳";
+"pdf.sick.pe.field.right_eye" = "右眼";
+"pdf.sick.pe.field.left_eye" = "左眼";
+
+"pdf.sick.pe.field.heart" = "心脏";
+"pdf.sick.pe.field.lungs" = "肺";
+"pdf.sick.pe.field.abdomen" = "腹部";
+"pdf.sick.pe.field.peristalsis" = "肠蠕动";
+"pdf.sick.pe.field.genitalia" = "生殖器";
+"pdf.sick.pe.field.neurological" = "神经系统";
+"pdf.sick.pe.field.musculoskeletal" = "肌肉骨骼系统";
+"pdf.sick.pe.field.lymph_nodes" = "淋巴结";
+
+/* Well visit PDF */
+"pdf.well.title" = "常规体检报告";
+"pdf.well.generated.fmt" = "报告生成时间：%@";
+
+/* Well visit PDF — patient header labels */
+"pdf.well.patient.alias" = "别名";
+"pdf.well.patient.name" = "姓名";
+"pdf.well.patient.dob" = "出生日期";
+"pdf.well.patient.sex" = "性别";
+"pdf.well.patient.mrn" = "病历号";
+"pdf.well.patient.ageAtVisit" = "就诊时年龄";
+"pdf.well.patient.visitDate" = "就诊日期";
+"pdf.well.patient.visitType" = "随访类型";
+"pdf.well.patient.clinician" = "医生";
+
+/* Well visit - Sections headers */
+"well_report.section.perinatal_summary" = "围产期概述";
+"well_report.section.previous_well_visits" = "既往常规随访要点";
+"well_report.section.current_visit" = "本次随访";
+"well_report.section.parents_concerns" = "家长关注点";
+"well_report.section.feeding" = "喂养";
+"well_report.section.supplementation" = "补充剂";
+"well_report.section.stools" = "大便";
+"well_report.section.sleep" = "睡眠";
+"well_report.section.development_milestones" = "发育与里程碑";
+"well_report.section.measurements" = "测量";
+"well_report.section.physical_examination" = "体格检查";
+"well_report.section.problem_listing" = "问题列表";
+"well_report.section.conclusions" = "结论";
+"well_report.section.anticipatory_guidance" = "预期指导";
+"well_report.section.clinician_comments" = "医生备注";
+"well_report.section.ai_assistant_input" = "AI 助手输入";
+
+/* Well visit PDF — common values */
+"well_report.value.yes" = "是";
+"well_report.value.no" = "否";
+"well_report.value.appears_good" = "看起来良好";
+"well_report.value.probably_limited" = "可能有限";
+
+/* Well visit PDF — Feeding labels */
+"well_report.feeding.label.milk" = "奶";
+"well_report.feeding.label.regurgitation" = "反流";
+"well_report.feeding.label.feeding_issue" = "喂养问题";
+"well_report.feeding.label.solid_foods_started" = "已开始添加辅食";
+"well_report.feeding.label.solid_foods_since" = "开始辅食时间";
+"well_report.feeding.label.solid_food_quality" = "辅食品质";
+"well_report.feeding.label.solid_food_comment" = "辅食备注";
+"well_report.feeding.label.food_variety_quantity" = "食物种类 / 摄入量";
+
+/* Well visit PDF — Generic labels */
+"well_report.label.comment" = "备注";
+
+/* Well visit PDF — Feeding formatted lines */
+"well_report.feeding.fmt.typical_feed_volume_ml" = "每次典型喂养量：%.0f ml";
+"well_report.feeding.fmt.feeds_per_24h" = "24 小时喂养次数：%d 次";
+"well_report.feeding.fmt.estimated_total_intake_ml_per_24h" = "估算总摄入量：%.0f ml/24 小时";
+"well_report.feeding.fmt.estimated_intake_ml_per_kg_24h" = "估算摄入量：%.0f ml/kg/24 小时";
+"well_report.feeding.fmt.dairy_cups_or_bottles" = "每日奶制品摄入：%@ 杯或奶瓶";
+
+/* Perinatal Summary – content labels */
+"well_report.perinatal.label.pregnancy" = "妊娠";
+"well_report.perinatal.label.birth_mode" = "分娩方式";
+"well_report.perinatal.label.resuscitation" = "复苏";
+"well_report.perinatal.label.infection_risk" = "感染风险";
+"well_report.perinatal.label.feeding_in_maternity" = "喂养";
+"well_report.perinatal.label.maternity_vaccinations" = "疫苗接种";
+"well_report.perinatal.label.maternity_stay_events" = "住院期间事件";
+"well_report.perinatal.label.hearing_screening" = "听力";
+"well_report.perinatal.label.heart_screening" = "心脏";
+"well_report.perinatal.label.metabolic_screening" = "代谢筛查";
+"well_report.perinatal.label.illnesses_after_birth" = "出生后";
+"well_report.perinatal.label.mother_vaccinations" = "母亲疫苗接种";
+
+/* Perinatal Summary – formatted fields */
+"well_report.perinatal.fmt.ga_weeks" = "胎龄：%d 周";
+"well_report.perinatal.fmt.birth_weight_g" = "出生体重：%d g";
+"well_report.perinatal.fmt.birth_length_cm" = "出生身长：%.1f cm";
+"well_report.perinatal.fmt.birth_head_circumference_cm" = "出生头围：%.1f cm";
+"well_report.perinatal.fmt.discharge_weight_g" = "出院体重：%d g";
+
+/* ===== Visit type names ===== */
+"well_report.visit_type.well_visit" = "常规体检";
+"well_report.visit_type.first_visit_after_maternity" = "产后首次随访";
+"well_report.visit_type.one_month" = "1 个月随访";
+"well_report.visit_type.two_month" = "2 个月随访";
+"well_report.visit_type.four_month" = "4 个月随访";
+"well_report.visit_type.six_month" = "6 个月随访";
+"well_report.visit_type.nine_month" = "9 个月随访";
+"well_report.visit_type.twelve_month" = "12 个月随访";
+"well_report.visit_type.fifteen_month" = "15 个月随访";
+"well_report.visit_type.eighteen_month" = "18 个月随访";
+"well_report.visit_type.twentyfour_month" = "24 个月随访";
+"well_report.visit_type.thirty_month" = "30 个月随访";
+"well_report.visit_type.thirtysix_month" = "36 个月随访";
+
+/* WellVisitPDFGenerator - formatAgeString() */
+"well_report.age.day_singular" = "%d 天";
+"well_report.age.day_plural" = "%d 天";
+"well_report.age.month_singular" = "%d 个月";
+"well_report.age.month_plural" = "%d 个月";
+"well_report.age.year_singular" = "%d 岁";
+"well_report.age.year_plural" = "%d 岁";
+
+"well_report.age.format.month_day" = "%@ %@";
+"well_report.age.format.year_month" = "%@ %@";
+
+"well_report.supplementation.vitamin_d_given_fmt" = "已补充维生素 D：%@";
+
+"well_report.stools.pattern_fmt" = "排便情况：%@";
+"well_report.stools.comment_fmt" = "备注：%@";
+
+"well_report.sleep.fmt.range_hours" = "%@ 至 %@ 小时";
+"well_report.sleep.duration_fmt" = "睡眠时长：%@";
+"well_report.sleep.regularity_fmt" = "睡眠规律性：%@";
+"well_report.sleep.snoring_fmt" = "打鼾：%@";
+"well_report.sleep.issue_reported_yes" = "报告有睡眠问题：是";
+"well_report.sleep.issue_reported_no" = "报告有睡眠问题：否";
+"well_report.sleep.issue_reported_yes_detail_fmt" = "报告有睡眠问题：是 — %@";
+
+"well_report.development.devtest.result_score_fmt" = "发育测试：%@（评分 %d）";
+"well_report.development.devtest.score_only_fmt" = "发育测试评分：%d";
+"well_report.development.devtest.result_only_fmt" = "发育测试：%@";
+
+"well_report.development.mchat.result_score_fmt" = "M-CHAT：%@（评分 %d）";
+"well_report.development.mchat.score_only_fmt" = "M-CHAT 评分：%d";
+"well_report.development.mchat.result_only_fmt" = "M-CHAT：%@";
+
+"well_report.milestones.achieved_fmt" = "已达标：%d/%d";
+"well_report.milestones.achieved_none" = "已达标：—";
+"well_report.milestones.flags_title" = "提示项：";
+"well_report.milestones.flags_fmt" = "提示项：%@";
+"well_report.milestones.status.uncertain" = "不确定";
+"well_report.milestones.status.not_yet" = "尚未";
+
+/* Placeholders and dashes */
+"well_report.placeholder.dash" = "—";
+
+"well_report.error.visit_not_found" = "❌ 错误：未找到随访记录";
+"well_report.error.patient_not_found" = "❌ 错误：未找到患者";
+"well_report.error.db_error_fmt" = "❌ 数据库错误：%@";
+
+/* Charts */
+"well_report.growth_chart.title.weight_for_age" = "年龄别体重（0–60 月）";
+"well_report.growth_chart.title.length_for_age" = "年龄别身长/身高（0–60 月）";
+"well_report.growth_chart.title.head_circumference_for_age" = "年龄别头围（0–60 月）";
+"well_report.growth_chart.title.bmi_for_age" = "年龄别 BMI（0–60 月）";
+
+/* Growth chart screen titles */
+"patient_viewer.growth_chart.title.weight_for_age" = "年龄别体重（0–60 月）";
+"patient_viewer.growth_chart.title.length_for_age" = "年龄别身长/身高（0–60 月）";
+"patient_viewer.growth_chart.title.head_circumference_for_age" = "年龄别头围（0–60 月）";
+"patient_viewer.growth_chart.title.bmi_for_age" = "年龄别 BMI（0–60 月）";
+
+/* Empty state */
+"patient_viewer.growth_chart.empty.message" = "此图表暂无患者测量数据。";
+
+/* Y axis labels */
+"patient_viewer.growth_chart.y_axis.weight" = "体重（kg）";
+"patient_viewer.growth_chart.y_axis.height" = "身长/身高（cm）";
+"patient_viewer.growth_chart.y_axis.head_circ" = "头围（cm）";
+
+/* Measurements */
+"well_report.measurements.line.weight_measured_on_fmt" = "体重：%.2f kg（测量日期：%@）";
+"well_report.measurements.line.length_height_measured_on_fmt" = "身长/身高：%.1f cm（测量日期：%@）";
+"well_report.measurements.line.head_circ_measured_on_fmt" = "头围：%.1f cm（测量日期：%@）";
+
+"well_report.measurements.line.weight_today_fmt" = "今日体重：%.2f kg";
+"well_report.measurements.line.length_today_fmt" = "今日身长/身高：%.1f cm";
+"well_report.measurements.line.head_circ_today_fmt" = "今日头围：%.1f cm";
+
+/* Healthy conclusion */
+"well_report.conclusions.default.healthy_with_age_fmt" = "健康 %@";
+"well_report.conclusions.default.healthy" = "健康";
+
+/* WellVisitPDFGenerator — Physical Exam */
+/* Values */
+"well_report.value.normal" = "正常";
+"well_report.value.abnormal" = "异常";
+
+/* PE group titles */
+"well_report.pe.group.general" = "一般情况";
+"well_report.pe.group.cardiorespiratory" = "心肺";
+"well_report.pe.group.eyes_head" = "眼部与头部";
+"well_report.pe.group.abdomen_genitalia" = "腹部与生殖系统";
+"well_report.pe.group.skin" = "皮肤";
+"well_report.pe.group.msk" = "肌肉骨骼";
+
+/* PE field labels */
+"well_report.pe.field.trophic" = "营养状况";
+"well_report.pe.field.hydration" = "水合情况";
+"well_report.pe.field.color" = "肤色";
+"well_report.pe.field.tone" = "肌张力";
+"well_report.pe.field.wakefulness" = "清醒程度";
+"well_report.pe.field.breathing" = "呼吸";
+"well_report.pe.field.heart_sounds" = "心音";
+"well_report.pe.field.femoral_pulses" = "股动脉搏动";
+"well_report.pe.field.fontanelle" = "囟门";
+"well_report.pe.field.pupils_rr" = "瞳孔对光反射";
+"well_report.pe.field.ocular_motility" = "眼球运动";
+"well_report.pe.field.teeth_present" = "是否出牙";
+"well_report.pe.field.teeth_count" = "出牙数";
+"well_report.pe.field.liver_spleen" = "肝/脾";
+"well_report.pe.field.abdominal_mass" = "腹部肿块";
+"well_report.pe.field.genitalia" = "生殖器";
+"well_report.pe.field.umbilic" = "脐部";
+"well_report.pe.field.testicles_descended" = "睾丸已下降";
+"well_report.pe.field.skin_marks" = "皮肤标记";
+"well_report.pe.field.skin_integrity" = "皮肤完整性";
+"well_report.pe.field.skin_rash" = "皮疹";
+"well_report.pe.field.spine" = "脊柱";
+"well_report.pe.field.hips" = "髋关节";
+
+/* PE color enum values */
+"well_report.enum.pe_color.normal" = "正常";
+"well_report.enum.pe_color.jaundice" = "黄疸";
+"well_report.enum.pe_color.pale" = "苍白";
+
+/* Feeding — milk_types enum values */
+"well_report.enum.milk_types.breast" = "母乳";
+"well_report.enum.milk_types.formula" = "配方奶";
+
+/* solid_food_quality (stored enum) */
+"well_report.enum.solid_food_quality.appears_good" = "看起来良好";
+"well_report.enum.solid_food_quality.uncertain" = "不确定";
+"well_report.enum.solid_food_quality.probably_limited" = "可能较少";
+
+/* food_variety_quality (stored enum) */
+"well_report.enum.food_variety_quality.appears_good" = "看起来良好";
+"well_report.enum.food_variety_quality.uncertain" = "不确定";
+"well_report.enum.food_variety_quality.probably_limited" = "可能较少";
+
+"well_report.sleep.fmt.less_than_hours" = "少于 %d 小时";
+"well_report.sleep.fmt.more_than_hours" = "多于 %d 小时";
+/* Sleep regularity (stored enum) */
+"well_report.enum.sleep_regular.regular" = "规律";
+"well_report.enum.sleep_regular.irregular" = "不规律";
+
+"well_report.sleep.issue.wakes_per_night_fmt" = "每晚醒来次数：%d";
+/* Mchat and dev */
+"well_report.enum.mchat_result.low_risk" = "低风险";
+"well_report.enum.mchat_result.medium_risk" = "中风险";
+"well_report.enum.mchat_result.high_risk" = "高风险";
+
+"well_report.enum.devtest_result.normal" = "正常";
+"well_report.enum.devtest_result.abnormal" = "异常";
+
+/* meta */
+"well_report.pdf.meta.creator" = "患者查看器";
+"well_report.pdf.meta.author"  = "患者端应用";
+"well_report.pdf.meta.title"   = "儿保随访报告";
+
+/* Stool pattern (DB: poop_status) */
+"well_report.enum.poop_status.normal" = "正常（母乳喂养常见的典型大便）";
+"well_report.enum.poop_status.abnormal" = "异常（家长报告）";
+"well_report.enum.poop_status.hard" = "大便干硬 / 便秘";
+
+"well_report.enum.sex.M" = "男";
+"well_report.enum.sex.F" = "女";
+
+/* BundleImporter — UI */
+"bundle_importer.button.import" = "📦 导入 .peMR 病历包";
+"bundle_importer.ui.extracted_to" = "✅ 已解压到：%@";
+"bundle_importer.ui.import_failed" = "❌ 导入失败：%@";
+"bundle_importer.ui.failed_to_import" = "❌ 导入失败：%@";
+
+/* BundleImporter — values */
+"bundle_importer.value.none" = "<无>";
+
+/* BundleImporter — errors (thrown / surfaced) */
+"bundle_importer.error.db_too_small" = "db.sqlite 太小，无法作为有效的 SQLite 文件。";
+"bundle_importer.error.sqlite_header_mismatch" = "db.sqlite 头部不是 'SQLite format 3\\0'（实际为：%@）";
+"bundle_importer.error.corrupt_bundle_hash_mismatch" = "病历包损坏：db.sqlite 哈希不匹配。期望 %@…，实际 %@…";
+
+"bundle_importer.error.documents_dir_not_found" = "❌ 无法找到文档目录。";
+"bundle_importer.error.duplicate_bundle" = "同名病历包已存在。";
+"bundle_importer.error.missing_manifest" = "❌ 解压后的病历包缺少 manifest.json。";
+"bundle_importer.error.unsupported_encryption_scheme" = "❌ 不支持的加密方案：%@。";
+"bundle_importer.error.missing_db_enc" = "❌ 加密病历包缺少 db.sqlite.enc。";
+"bundle_importer.error.decrypt_failed" = "❌ 解密病历包数据库失败：%@";
+"bundle_importer.error.missing_db" = "❌ 解压后的病历包缺少 db.sqlite。";
+"bundle_importer.error.invalid_sqlite" = "❌ 不是有效的 SQLite 文件：%@";
+"bundle_importer.error.verification_failed" = "❌ 校验失败：%@";
+"bundle_importer.error.integrity_check_failed" = "❌ db.sqlite 完整性检查失败：%@";
+
+"bundle_importer.error.open_db_for_migration" = "无法打开数据库进行迁移：%@";
+"bundle_importer.error.add_parent_notes_failed" = "添加 parent_notes 列失败：%@";
+"bundle_importer.error.unable_open_db_at_path" = "无法打开路径 %@ 的数据库";
+
+"bundle_importer.error.open_db_for_integrity" = "无法打开数据库进行 integrity_check：%@";
+"bundle_importer.error.prepare_integrity_check_failed" = "运行 integrity_check 失败：%@";
+"bundle_importer.error.integrity_check_failed_details" = "integrity_check 失败：%@";
+
+/* BundleCrypto */
+"bundle_crypto.error.combined_box_failed" = "无法获取 %@ 的 AES-GCM 组合加密包";
+"bundle_crypto.error.file_too_short" = "加密文件太短，无法包含 HMAC 与密文（%@）";
+"bundle_crypto.error.hmac_failed" = "%@ 的 HMAC 校验失败";
+"bundle_crypto.error.remove_plain_failed" = "加密后删除明文 db.sqlite 失败：%@";
+"bundle_crypto.error.missing_db_both" = "在 %@ 下未找到 db.sqlite 或 db.sqlite.enc";
+
+/* BundleExporter */
+"bundle_exporter.error.open_input_stream" = "无法打开 %@ 的输入流。";
+"bundle_exporter.error.stream_read" = "读取 %@ 的数据流出错。";
+"bundle_exporter.error.missing_patient_id" = "缺少患者 ID。";
+"bundle_exporter.error.integrity_check_failed" = "导出副本的 SQLite 完整性检查失败。";
+"bundle_exporter.error.foreign_key_check_failed" = "导出副本的 SQLite 外键检查失败。";
+"bundle_exporter.error.encrypt_failed" = "导出时加密数据库失败。";
+"bundle_exporter.error.missing_db_files" = "导出病历包中未找到 db.sqlite 或 db.sqlite.enc。";
+
+/* AppLock biometrics prompt reason */
+"app_lock.biometrics.reason.unlock" = "解锁患者查看器";
+
+/* Keychain storage failure (OSStatus code) */
+"app_lock.keychain.store_failed" = "保存密码哈希失败（状态码 %d）";
+
+/* PatientViewerAppApp */
+"lock_screen.title" = "患者查看器已锁定";
+"lock_screen.subtitle" = "请输入密码，或使用 Face ID / Touch ID 继续。";
+"lock_screen.passcode.placeholder" = "密码";
+"lock_screen.action.unlock" = "解锁";
+"lock_screen.action.use_biometrics" = "使用 Face ID / Touch ID";
+"lock_screen.error.incorrect_passcode" = "密码错误，请重试。";
+"lock_screen.error.biometric_failed" = "生物识别验证失败。你可以重试或使用密码解锁。";
+
+/* GrowthChartRenderer */
+"growth_chart.placeholder.no_data" = "暂无%@数据";
+"growth_chart.placeholder.add_measurements" = "添加测量值以查看图表。";
+/* Chart axis label for age in months */
+"growth.chart.axis.ageMonths" = "年龄（月）";
+"growth_chart.measurement.weight" = "体重";
+"growth_chart.measurement.height" = "身长/身高";
+"growth_chart.measurement.head_circ" = "头围";
+"growth_chart.measurement.bmi" = "BMI";
+/* Chart axis label for the plotted measurement values */
+"growth.chart.axis.value" = "数值";
+
+/* Legend label for percentile/SD reference curves */
+"growth.chart.legend.percentile" = "百分位";
+
+/* Perinatal – additional fields (line formats) */
+"well_report.perinatal.fmt.vitamin_k" = "维生素K：%@";
+"well_report.perinatal.fmt.meconium_24h" = "24小时排胎便：%@";
+"well_report.perinatal.fmt.urination_24h" = "24小时排尿：%@";
+"well_report.perinatal.fmt.family_vaccinations" = "家庭成员疫苗：%@";
+"well_report.perinatal.fmt.maternity_discharge_date" = "出院日期：%@";
+"well_report.perinatal.fmt.nicu_stay" = "NICU住院：%@";
+
+/* Vaccination tokens */
+"well_report.enum.vaccination.none" = "无";
+"well_report.enum.vaccination.dtap" = "dTaP";
+"well_report.enum.vaccination.flu" = "流感";
+"well_report.enum.vaccination.covid" = "新冠";
+"well_report.enum.vaccination.rsv" = "RSV";
+
+"pdf.sick.pe.additional_info.title" = "体格检查补充信息";
+
+"pdf.section.addenda" = "附录";
+
+/* Well visit title */
+"patient_viewer.well_visit.title.four_year" = "4岁随访";
+"patient_viewer.well_visit.title.five_year" = "5岁随访";
+
+/* Well visit type labels */
+"well_report.visit_type.four_year" = "4岁随访";
+"well_report.visit_type.five_year" = "5岁随访";
+
+"well_report.measurements.growth_eval.title" = "生长评估";
+
+"growth.who.zp" = "WHO %@：z=%@，P=%@";
+
+/* Metric labels */
+"growth.metric.wfa"   = "体重-年龄";
+"growth.metric.lhfa"  = "身长/身高-年龄";
+"growth.metric.hcfa"  = "头围-年龄";
+"growth.metric.wfl"   = "体重-身长";
+"growth.metric.bmifa" = "BMI-年龄";
+"growth.metric.bmi"   = "BMI";
+
+"well_visit_form.problem_listing.header.sex.girl" = "女孩";
+"well_visit_form.problem_listing.header.sex.boy" = "男孩";
+"well_visit_form.problem_listing.header.sex.child" = "儿童";
+
+"well_visit_form.problem_listing.header.line" = "%@，%@：";

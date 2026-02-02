@@ -2876,3 +2876,7 @@
 "well_visit_form.problem_listing.header.sex.child" = "Enfant";
 
 "well_visit_form.problem_listing.header.line" = "%@, %@:";
+
+"growth.source.manual" = "Paramètres ajoutés manuellement";
+"growth.source.vitals" = "Constantes ajoutées lors d'un épisode de maladie";
+"growth.source.episode" = "Consultation";
