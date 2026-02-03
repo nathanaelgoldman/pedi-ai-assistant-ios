@@ -10,7 +10,6 @@ import SQLite
 import OSLog
 import UIKit
 
-import OSLog
 
 private let notesLog = AppLog.feature("ParentNotesView")
 

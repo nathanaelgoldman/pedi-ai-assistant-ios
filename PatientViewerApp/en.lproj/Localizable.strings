@@ -10,7 +10,7 @@
 "patient_viewer.content.intro" = "Load a patient bundle to review visits, growth charts and documents.";
 
 "patient_viewer.content.action.load_new.title" = "Load New Bundle from Device";
-"patient_viewer.content.action.load_new.subtitle" = "Import a .peMR.zip file from Files or iCloud.";
+"patient_viewer.content.action.load_new.subtitle" = "Import a .peMR file from Files or iCloud.";
 "patient_viewer.content.action.load_saved.title" = "Load from Saved Bundles";
 "patient_viewer.content.action.load_saved.subtitle" = "Open a previously stored patient bundle on this device.";
 "patient_viewer.content.action.settings.title" = "Settings";
@@ -771,3 +771,5 @@
 "well_visit_form.problem_listing.header.sex.child" = "Child";
 
 "well_visit_form.problem_listing.header.line" = "%@, %@:";
+
+"well_report.error.db_error" = "❌ Database error while generating the report.";

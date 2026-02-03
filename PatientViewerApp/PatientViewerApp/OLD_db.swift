@@ -1,5 +1,8 @@
 import Foundation
 import SQLite3
+import OSLog
+
+private let log = AppLog.feature("DBLegacy")
 
 func loadVitalsData(from dbURL: URL) -> [String: [GrowthDataPoint]] {
     var db: OpaquePointer?
@@ -10,7 +13,7 @@ func loadVitalsData(from dbURL: URL) -> [String: [GrowthDataPoint]] {
     ]
 
     if sqlite3_open(dbURL.path, &db) != SQLITE_OK {
-        print("❌ Failed to open database")
+        log.error("Failed to open database")
         return result
     }
 
@@ -39,7 +42,7 @@ func loadVitalsData(from dbURL: URL) -> [String: [GrowthDataPoint]] {
         }
         sqlite3_finalize(stmt)
     } else {
-        print("❌ Failed to prepare query")
+        log.error("Failed to prepare vitals query")
     }
 
     return result
@@ -50,7 +53,7 @@ func loadPatientSex(from dbURL: URL) -> String {
     var sex: String = "M"
 
     if sqlite3_open(dbURL.path, &db) != SQLITE_OK {
-        print("❌ Failed to open DB for sex check")
+        log.error("Failed to open DB for sex check")
         return sex
     }
 
@@ -74,10 +77,11 @@ func loadPatientSex(from dbURL: URL) -> String {
     }
 
     return sex
-}//
+}
+
+//
 //  db.swift
 //  PatientViewerApp
 //
 //  Created by yunastic on 10/12/25.
 //
-

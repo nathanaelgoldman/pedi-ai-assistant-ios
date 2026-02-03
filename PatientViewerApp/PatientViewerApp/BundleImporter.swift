@@ -318,7 +318,7 @@ struct BundleImporter: View {
             try? fm.removeItem(at: persistentFolder)
         }
         try? fm.copyItem(at: tempExtract, to: persistentFolder)
-        log.debug("Saved persistent bundle to: \(persistentFolder.path, privacy: .public)")
+        log.debug("Saved persistent bundle | bundle=\(AppLog.bundleRef(persistentFolder), privacy: .public)")
         // Ensure the persistent copy has the migration as well
         let persistentDBPath = persistentFolder.appendingPathComponent("db.sqlite").path
         do {
@@ -330,7 +330,7 @@ struct BundleImporter: View {
         // Check if a persistent ActiveBundle already exists for this alias
         let persistentBundlePath = docsURL.appendingPathComponent(activeBundleDirName).appendingPathComponent(safeAlias)
         if fm.fileExists(atPath: persistentBundlePath.path), force == false {
-            log.debug("Found existing ActiveBundle at \(persistentBundlePath.path, privacy: .public), skipping re-import.")
+            log.debug("Found existing ActiveBundle | bundle=\(AppLog.bundleRef(persistentBundlePath), privacy: .public) (skipping re-import)")
             log.debug("Fallback to previously extracted unzipped version triggered (re-import skipped).")
             UserDefaults.standard.set(persistentBundlePath.path, forKey: "lastLoadedBundleZipPath")
             UserDefaults.standard.set(persistentBundlePath.lastPathComponent, forKey: "lastLoadedWorkingFolderName")
@@ -342,12 +342,12 @@ struct BundleImporter: View {
             }
             // Cleanup temp artifacts when skipping re-import
             cleanupTempArtifacts(tempZip, tempExtract)
-            log.info("Import skipped; using existing ActiveBundle at \(persistentBundlePath.path, privacy: .public). Elapsed=\(Date().timeIntervalSince(start), privacy: .public)s")
+            log.info("Import skipped; using existing ActiveBundle | bundle=\(AppLog.bundleRef(persistentBundlePath), privacy: .public) elapsed=\(Date().timeIntervalSince(start), privacy: .public)s")
             return (persistentBundlePath, alias, dob)
         }
 
         // Insert debug logs for DB path verification
-        log.debug("Preparing ActiveBundle path for \(safeAlias, privacy: .public)")
+        log.debug("Preparing ActiveBundle path | alias=\(AppLog.aliasRef(safeAlias), privacy: .public)")
 
         // Copy working folder to ActiveBundle/{alias} for app access
         let activeBundleDir = docsURL.appendingPathComponent(activeBundleDirName).appendingPathComponent(safeAlias)
@@ -356,7 +356,7 @@ struct BundleImporter: View {
             try? fm.removeItem(at: activeBundleDir)
         }
         try fm.copyItem(at: tempExtract, to: activeBundleDir)
-        log.debug("Copied extracted folder to persistent ActiveBundle/\(safeAlias, privacy: .public)")
+        log.debug("Copied extracted folder to ActiveBundle | alias=\(AppLog.aliasRef(safeAlias), privacy: .public)")
 
         do {
             try ensureParentNotesColumn(dbPath: activeBundleDir.appendingPathComponent("db.sqlite").path)
@@ -370,7 +370,7 @@ struct BundleImporter: View {
         // Save an import metadata file next to the copied zip
         let importMetadata: [String: Any] = [
             "importedAt": ISO8601DateFormatter().string(from: Date()),
-            "sourceZip": zipURL.path,
+            "sourceZip": zipURL.lastPathComponent,
             "alias": alias,
             "dob": dob
         ]
@@ -398,7 +398,7 @@ struct BundleImporter: View {
         UserDefaults.standard.set(safeAlias, forKey: "lastLoadedWorkingFolderName")
 
         log.info("Import completed for \(safeAlias, privacy: .public) in \(Date().timeIntervalSince(start), privacy: .public)s")
-        log.debug("Imported and activated bundle at: \(activeBundleDir.path, privacy: .public)")
+        log.debug("Imported and activated bundle | bundle=\(AppLog.bundleRef(activeBundleDir), privacy: .public)")
         return (activeBundleDir, alias, dob)
     }
 
@@ -490,7 +490,8 @@ func ensureParentNotesColumn(dbPath: String) throws {
             let errMsg = String(cString: sqlite3_errmsg(db))
             throw NSError(domain: "BundleImporter", code: 7, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.add_parent_notes_failed", errMsg)])
         } else {
-            log.debug("Added missing parent_notes column at \(dbPath, privacy: .public)")
+            let dbURL = URL(fileURLWithPath: dbPath)
+            log.debug("Added missing parent_notes column | db=\(AppLog.dbRef(dbURL), privacy: .public)")
         }
     } else {
         // Already present; nothing to do.
@@ -522,7 +523,7 @@ func readAliasAndDOB(fromDBAt dbPath: String) throws -> (String, String) {
     } else {
         throw NSError(domain: "BundleImporter", code: 4, userInfo: [NSLocalizedDescriptionKey: LF("bundle_importer.error.unable_open_db_at_path", dbPath)])
     }
-    log.debug("Read alias: \(alias, privacy: .public), dob: \(dob, privacy: .public)")
+    log.debug("Read patient header | alias=\(AppLog.aliasRef(alias), privacy: .public) dob=\(dob, privacy: .private(mask: .hash))")
     return (alias, dob)
 }
 

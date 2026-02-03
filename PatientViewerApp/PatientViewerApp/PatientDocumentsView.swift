@@ -270,7 +270,9 @@ struct PatientDocumentsView: View {
     private func deleteRecord(_ record: DocumentRecord) {
         let docsFolder = dbURL.appendingPathComponent("docs")
         let fileURL = docsFolder.appendingPathComponent(record.filename)
-        documentsLog.info("Deleting document '\(record.originalName, privacy: .private)' (\(record.filename, privacy: .public))")
+        let nameTok = AppLog.token(record.originalName)
+        let ext = (record.originalName as NSString).pathExtension.lowercased()
+        documentsLog.info("Deleting document | nameTok=\(nameTok, privacy: .public) ext=\(ext, privacy: .public)")
 
         do {
             if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -341,7 +343,9 @@ struct PatientDocumentsView: View {
                 throw copyError
             }
 
-            documentsLog.info("Imported document '\(sourceURL.lastPathComponent, privacy: .public)' → \(filename, privacy: .public)")
+            let srcTok = AppLog.token(sourceURL.lastPathComponent)
+            let ext = sourceURL.pathExtension.lowercased()
+            documentsLog.info("Imported document | srcTok=\(srcTok, privacy: .public) ext=\(ext, privacy: .public) → stored=\(filename, privacy: .public)")
 
             let newRecord = DocumentRecord(
                 id: UUID(),
@@ -511,10 +515,7 @@ struct PatientDocumentsView: View {
 struct QuickLookPreview: UIViewControllerRepresentable {
     let url: URL
 
-    private static let log = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp",
-        category: "QuickLook"
-    )
+    private static let log = AppLog.feature("QuickLook")
 
     // We wrap the QLPreviewController in a UINavigationController so we can add our own bar buttons.
     func makeUIViewController(context: Context) -> UINavigationController {

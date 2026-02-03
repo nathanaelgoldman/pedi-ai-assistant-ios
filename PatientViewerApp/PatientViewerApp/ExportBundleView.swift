@@ -8,7 +8,6 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
-import OSLog
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -75,7 +74,8 @@ struct ExportBundleView: View {
     }
 
     private func exportBundle() async {
-        Self.log.info("Export started from db: \(self.dbURL.lastPathComponent, privacy: .public)")
+        let dbRef = AppLog.dbRef(self.dbURL)
+        Self.log.info("Export started | db=\(dbRef, privacy: .public)")
         await MainActor.run {
             exportInProgress = true
             exportSuccess = false
@@ -87,8 +87,9 @@ struct ExportBundleView: View {
             let exportURL = try await BundleExporter.exportBundle(from: dbURL)
             let size = (try? Data(contentsOf: exportURL).count) ?? 0
             let humanSize = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
-            Self.log.debug("Export zip ready: \(exportURL.lastPathComponent, privacy: .public)")
-            Self.log.info("Export finished: \(exportURL.lastPathComponent, privacy: .public) (\(humanSize, privacy: .public))")
+            let fileTok = AppLog.token(exportURL.lastPathComponent)
+            Self.log.debug("Export zip ready | fileTok=\(fileTok, privacy: .public)")
+            Self.log.info("Export finished | fileTok=\(fileTok, privacy: .public) size=\(humanSize, privacy: .public)")
 
             await MainActor.run {
                 exportedFileURL = exportURL

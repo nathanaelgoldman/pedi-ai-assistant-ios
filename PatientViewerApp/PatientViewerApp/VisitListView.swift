@@ -146,7 +146,8 @@ struct VisitDetailView: SwiftUI.View {
                     Button(action: {
                         logVisits.info("Preview PDF tapped for visit id=\(visit.id, privacy: .public) category=\(visit.category, privacy: .public)")
                         if visit.category == "sick" {
-                            logVisits.info("Generating SickVisit PDF for id=\(visit.id, privacy: .public)")
+                            let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+                            logVisits.info("Generating SickVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
                             if let fileURL = SickVisitPDFGenerator.generate(for: visit, dbURL: dbURL) {
                                 logVisits.info("SickVisit PDF prepared at \(fileURL.lastPathComponent, privacy: .public)")
                                 DispatchQueue.main.async {
@@ -629,7 +630,8 @@ private func makeNamedShareCopy(originalURL: URL, visit: VisitSummary, bundleRoo
             try fm.removeItem(at: dest)
         }
         try fm.copyItem(at: originalURL, to: dest)
-        logVisits.info("Prepared share copy: \(dest.lastPathComponent, privacy: .public)")
+        let tok = AppLog.token(dest.lastPathComponent)
+        logVisits.info("Prepared share copy | nameTok=\(tok, privacy: .public)")
         return dest
     } catch {
         logVisits.error("Failed to create share copy (using original): \(String(describing: error))")

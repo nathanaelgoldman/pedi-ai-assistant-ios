@@ -24,7 +24,7 @@ struct WhoReferenceLoader {
 
         // Cache hit (keyed by name + sex)
         if let cached = cache[cacheKey] {
-            log.debug("Cache hit for \(cacheKey, privacy: .public)")
+            log.debug("Cache hit for \(cacheKey, privacy: .private)")
             return cached
         }
 
@@ -125,7 +125,7 @@ struct WhoReferenceLoader {
             log.debug("Parsed \(curves.count, privacy: .public) curve(s) from \(url.lastPathComponent, privacy: .public)")
             return curves
         } catch {
-            log.error("Failed reading \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            log.error("Failed reading \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .private)")
             return []
         }
     }

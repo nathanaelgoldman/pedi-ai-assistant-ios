@@ -9,7 +9,7 @@
 "patient_viewer.content.intro" = "加载患者数据包以查看就诊记录、生长曲线和文档。";
 
 "patient_viewer.content.action.load_new.title" = "从设备加载新数据包";
-"patient_viewer.content.action.load_new.subtitle" = "从“文件”或 iCloud 导入 .peMR.zip 文件。";
+"patient_viewer.content.action.load_new.subtitle" = "从“文件”或 iCloud 导入 .peMR 文件。";
 "patient_viewer.content.action.load_saved.title" = "从已保存的数据包加载";
 "patient_viewer.content.action.load_saved.subtitle" = "打开本设备上已保存的患者数据包。";
 "patient_viewer.content.action.settings.title" = "设置";
@@ -766,3 +766,5 @@
 "well_visit_form.problem_listing.header.sex.child" = "儿童";
 
 "well_visit_form.problem_listing.header.line" = "%@，%@：";
+
+"well_report.error.db_error" = "❌ 生成报告时发生数据库错误。";

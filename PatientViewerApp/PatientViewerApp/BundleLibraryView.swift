@@ -95,17 +95,11 @@ enum BundleIO {
 
             // Determine the extracted root that actually contains the bundle
             let root = findExtractedRoot(in: tempDir, zipURL: url)
-            let rootLabel = root.lastPathComponent
-            log.debug("📂 Selected extracted root | folder=\(rootLabel, privacy: .private)")
-            log.debug("🚩 [Import] Stage 1: about to extract identity | folder=\(rootLabel, privacy: .private)")
-
-            #if DEBUG
-            log.debug("📂 Selected extracted root (full path): \(root.path, privacy: .private)")
-            log.debug("🚩 [Import] Stage 1: about to extract identity (full path): \(root.path, privacy: .private)")
-            #endif
+            log.debug("📂 Selected extracted root | bundle=\(AppLog.bundleRef(root), privacy: .public)")
+            log.debug("🚩 [Import] Stage 1: about to extract identity | bundle=\(AppLog.bundleRef(root), privacy: .public)")
 
             let identity = try extractIdentity(from: root)
-            log.debug("✅ [Import] Stage 1 OK — alias: \(identity.alias, privacy: .private(mask: .hash)), dob: \(identity.dob ?? "nil", privacy: .private)")
+            log.debug("✅ [Import] Stage 1 OK — alias=\(AppLog.aliasRef(identity.alias), privacy: .public), dob=\(identity.dob ?? "nil", privacy: .private(mask: .hash))")
             try validateBundleDB(at: root)
             let persistentBase = docs.appendingPathComponent("PersistentBundles", isDirectory: true)
             let dest = persistentBase.appendingPathComponent(identity.slug, isDirectory: true)
@@ -240,7 +234,7 @@ enum BundleIO {
 
             // NEW: ensure we have a plain db.sqlite to work with (decrypt if needed).
             let resolvedRoot = try ensurePlainDB(at: root)
-            log.debug("📂 Resolved root for db.sqlite | folder=\(resolvedRoot.lastPathComponent, privacy: .private)")
+            log.debug("📂 Resolved root for db.sqlite | bundle=\(AppLog.bundleRef(resolvedRoot), privacy: .public)")
 
             var dbURL = resolvedRoot.appendingPathComponent("db.sqlite")
             if !fm.fileExists(atPath: dbURL.path) {
@@ -620,7 +614,7 @@ enum BundleIO {
 
             // read alias/dob to return
             let (alias, _, dob, _) = try readIdentity(from: activeDBBase)
-            log.debug("📌 Active base set | bundle=\(activeDBBase.lastPathComponent, privacy: .private)")
+            log.debug("📌 Active base set | bundle=\(AppLog.bundleRef(activeDBBase), privacy: .public)")
             return Activation(activeBase: activeDBBase, alias: alias, dob: dob)
         }
 
@@ -1095,7 +1089,7 @@ private struct BundleRowCard: View {
 
         // Persist the active base and log
         ActiveBundleLocator.setCurrentBaseURL(activeDBBase)
-        log.debug("📌 Active base set | folder=\(activeDBBase.lastPathComponent, privacy: .private)")
+        log.debug("📌 Active base set | bundle=\(AppLog.bundleRef(activeDBBase), privacy: .public)")
 
         // Force UI refresh even if the user re-selects the same patient; then dismiss the sheet.
         extractedFolderURL = nil
@@ -1340,17 +1334,17 @@ private struct BundleRowCard: View {
     private func ensurePlainDBLocal(at root: URL) throws -> URL {
         let fm = FileManager.default
 
-        log.debug("🔎 [Local] ensurePlainDB starting | root=\(root.lastPathComponent, privacy: .private)")
+        log.debug("🔎 [Local] ensurePlainDB starting | bundle=\(AppLog.bundleRef(root), privacy: .public)")
 
         // 1) If a plain db.sqlite already exists anywhere under root, prefer that.
         if fm.fileExists(atPath: root.appendingPathComponent("db.sqlite").path) {
-            log.debug("✅ [Local] Found db.sqlite at root | root=\(root.lastPathComponent, privacy: .private)")
+            log.debug("✅ [Local] Found db.sqlite at root | bundle=\(AppLog.bundleRef(root), privacy: .public)")
             return root
         }
         if let e = fm.enumerator(at: root, includingPropertiesForKeys: nil) {
             for case let u as URL in e where u.lastPathComponent == "db.sqlite" {
                 let base = u.deletingLastPathComponent()
-                log.debug("✅ [Local] Found nested db.sqlite | base=\(base.lastPathComponent, privacy: .private)")
+                log.debug("✅ [Local] Found nested db.sqlite | bundle=\(AppLog.bundleRef(base), privacy: .public)")
                 return base
             }
         }
@@ -1367,7 +1361,7 @@ private struct BundleRowCard: View {
         }
 
         if let encBase = encryptedBase {
-            log.debug("🧩 [Local] Found db.sqlite.enc | base=\(encBase.lastPathComponent, privacy: .private) | attempting decryption")
+            log.debug("🧩 [Local] Found db.sqlite.enc | bundle=\(AppLog.bundleRef(encBase), privacy: .public) | attempting decryption")
 
             // This is a no-op for legacy plain bundles if manifest says not encrypted.
             try BundleCrypto.decryptDatabaseIfNeeded(at: encBase)
@@ -1375,18 +1369,18 @@ private struct BundleRowCard: View {
             // After decryption, look for db.sqlite starting from the encrypted base first.
             let candidate = encBase.appendingPathComponent("db.sqlite")
             if fm.fileExists(atPath: candidate.path) {
-                log.debug("✅ [Local] Decrypted db.sqlite | base=\(encBase.lastPathComponent, privacy: .private)")
+                log.debug("✅ [Local] Decrypted db.sqlite | bundle=\(AppLog.bundleRef(encBase), privacy: .public)")
                 return encBase
             }
             if let e2 = fm.enumerator(at: encBase, includingPropertiesForKeys: nil) {
                 for case let u as URL in e2 where u.lastPathComponent == "db.sqlite" {
                     let base = u.deletingLastPathComponent()
-                    log.debug("✅ [Local] Decrypted nested db.sqlite | base=\(base.lastPathComponent, privacy: .private)")
+                    log.debug("✅ [Local] Decrypted nested db.sqlite | bundle=\(AppLog.bundleRef(base), privacy: .public)")
                     return base
                 }
             }
         } else {
-            log.debug("ℹ️ [Local] No db.sqlite.enc found | root=\(root.lastPathComponent, privacy: .private)")
+            log.debug("ℹ️ [Local] No db.sqlite.enc found | bundle=\(AppLog.bundleRef(root), privacy: .public)")
         }
 
         // 3) Final fallback: caller's validation will throw if this is wrong.
@@ -1400,11 +1394,11 @@ private struct BundleRowCard: View {
         let fm = FileManager.default
 
         // 1. Debug log at the very start
-        log.debug("🧪 [Local] validateBundleDB starting | root=\(root.lastPathComponent, privacy: .private)")
+        log.debug("🧪 [Local] validateBundleDB starting | bundle=\(AppLog.bundleRef(root), privacy: .public)")
 
         // NEW: ensure we have a plain db.sqlite to work with (decrypt if needed).
         let resolvedRoot = try ensurePlainDBLocal(at: root)
-        log.debug("📂 [Local] Resolved root for db.sqlite | root=\(resolvedRoot.lastPathComponent, privacy: .private)")
+        log.debug("📂 [Local] Resolved root for db.sqlite | bundle=\(AppLog.bundleRef(resolvedRoot), privacy: .public)")
 
         var dbURL = resolvedRoot.appendingPathComponent("db.sqlite")
         if !fm.fileExists(atPath: dbURL.path) {
@@ -1422,7 +1416,7 @@ private struct BundleRowCard: View {
 
         #if DEBUG
         if let e = fm.enumerator(at: resolvedRoot, includingPropertiesForKeys: nil) {
-            log.debug("📦 [Local] Scanning for DB markers under resolvedRoot=\(resolvedRoot.lastPathComponent, privacy: .public)")
+            log.debug("📦 [Local] Scanning for DB markers under bundle=\(AppLog.bundleRef(resolvedRoot), privacy: .public)")
             for case let u as URL in e {
                 let name = u.lastPathComponent
                 if name == "db.sqlite" || name == "db.sqlite.enc" || name == "manifest.json" {
@@ -1433,30 +1427,52 @@ private struct BundleRowCard: View {
         }
         #endif
 
-        guard fm.fileExists(atPath: dbURL.path) else {
-            throw NSError(domain: "BundleLibraryView",
-                          code: 100,
-                          userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")])
+        if !fm.fileExists(atPath: dbURL.path) {
+            // Avoid leaking paths; log only the bundle ref + filename.
+            log.error("❌ [Local] validateBundleDB missing db.sqlite | bundle=\(AppLog.bundleRef(resolvedRoot), privacy: .public)")
+            throw NSError(
+                domain: "BundleLibraryView",
+                code: 100,
+                userInfo: [NSLocalizedDescriptionKey: L(
+                    "patient_viewer.bundle_library.error.db_not_found",
+                    comment: "Error: imported bundle is missing db.sqlite"
+                )]
+            )
         }
 
         var db: OpaquePointer?
-        guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else {
-            throw NSError(domain: "BundleLibraryView",
-                          code: 101,
-                          userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_open_failed", comment: "Error: unable to open SQLite database")])
+        let openRC = sqlite3_open(dbURL.path, &db)
+        guard openRC == SQLITE_OK, db != nil else {
+            // sqlite3_errstr uses the return code; do not include filesystem paths.
+            let reason = String(cString: sqlite3_errstr(openRC))
+            log.error("❌ [Local] validateBundleDB failed to open db | rc=\(openRC, privacy: .public) reason=\(reason, privacy: .public)")
+            throw NSError(
+                domain: "BundleLibraryView",
+                code: 101,
+                userInfo: [NSLocalizedDescriptionKey: L(
+                    "patient_viewer.bundle_library.error.db_open_failed",
+                    comment: "Error: unable to open SQLite database"
+                )]
+            )
         }
         defer { sqlite3_close(db) }
 
         // Check that the patients table exists
         var stmt: OpaquePointer?
         let tableQuery = "SELECT name FROM sqlite_master WHERE type='table' AND name='patients' LIMIT 1;"
-        guard sqlite3_prepare_v2(db, tableQuery, -1, &stmt, nil) == SQLITE_OK else {
+        let prepRC = sqlite3_prepare_v2(db, tableQuery, -1, &stmt, nil)
+        guard prepRC == SQLITE_OK else {
+            let reason = String(cString: sqlite3_errmsg(db))
+            log.error("❌ [Local] validateBundleDB prepare failed | rc=\(prepRC, privacy: .public) reason=\(reason, privacy: .public)")
             throw NSError(domain: "BundleLibraryView",
                           code: 102,
                           userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_prepare_failed", comment: "Error: failed to prepare validation query")])
         }
         defer { sqlite3_finalize(stmt) }
-        guard sqlite3_step(stmt) == SQLITE_ROW else {
+        let stepRC = sqlite3_step(stmt)
+        guard stepRC == SQLITE_ROW else {
+            let reason = String(cString: sqlite3_errmsg(db))
+            log.error("❌ [Local] validateBundleDB missing patients table | rc=\(stepRC, privacy: .public) reason=\(reason, privacy: .public)")
             throw NSError(domain: "BundleLibraryView",
                           code: 103,
                           userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_missing_patients_table", comment: "Error: imported bundle is missing the patients table")])
@@ -1464,7 +1480,8 @@ private struct BundleRowCard: View {
 
         // Ensure there is at least one row
         var stmt2: OpaquePointer?
-        if sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM patients;", -1, &stmt2, nil) == SQLITE_OK {
+        let prep2RC = sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM patients;", -1, &stmt2, nil)
+        if prep2RC == SQLITE_OK {
             defer { sqlite3_finalize(stmt2) }
             if sqlite3_step(stmt2) == SQLITE_ROW {
                 let count = sqlite3_column_int(stmt2, 0)
@@ -1474,6 +1491,9 @@ private struct BundleRowCard: View {
                                   userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_empty_patients_table", comment: "Error: imported bundle has an empty patients table")])
                 }
             }
+        } else {
+            let reason = String(cString: sqlite3_errmsg(db))
+            log.error("❌ [Local] validateBundleDB count prepare failed | rc=\(prep2RC, privacy: .public) reason=\(reason, privacy: .public)")
         }
     }
     // MARK: - Identity helpers

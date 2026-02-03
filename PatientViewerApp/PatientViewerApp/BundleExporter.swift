@@ -222,7 +222,7 @@ struct BundleExporter {
         var sex: String? = nil
 
         do {
-            BundleExporter.log.debug("Attempting to open database: \(dbURL.lastPathComponent, privacy: .public)")
+            BundleExporter.log.debug("Attempting to open database | db=\(AppLog.dbRef(dbURL), privacy: .public)")
             let db = try Connection(dbURL.path)
             let patients = Table("patients")
             let idCol = Expression<Int64>("id")
@@ -237,7 +237,7 @@ struct BundleExporter {
                 sex = try row.get(sexCol)
             }
         } catch {
-            BundleExporter.log.error("Failed to read patient info from db: \(error.localizedDescription, privacy: .public)")
+            BundleExporter.log.error("Failed to read patient info from db | err=\(String(describing: error), privacy: .private(mask: .hash))")
         }
 
         guard let pid = patientID else {
@@ -367,7 +367,8 @@ struct BundleExporter {
         removeIfExists(bundleFolder)
 
         // Log without using file:// scheme to keep logs tidy
-        BundleExporter.log.info("Export bundle ready: \(bundleOutputURL.lastPathComponent, privacy: .public)")
+        let outTok = AppLog.token(bundleOutputURL.lastPathComponent)
+        BundleExporter.log.info("Export bundle ready | fileTok=\(outTok, privacy: .public)")
 
         return bundleOutputURL
     }

@@ -1,5 +1,4 @@
 import SwiftUI
-import OSLog
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -13,12 +12,11 @@ private func LF(_ key: String, _ args: CVarArg...) -> String {
 }
 
 struct GrowthChartScreen: View {
-    private let logger = AppLog.feature("GrowthChartScreen")
+    private let log = AppLog.feature("GrowthChartScreen")
     let patientSex: String
     let allPatientData: [String: [GrowthDataPoint]]
 
     @State private var selectedMeasurement = "weight"
-    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PatientViewerApp", category: "ui.growthChart")
 
     var body: some View {
         VStack {
@@ -84,13 +82,96 @@ struct GrowthChartScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear { log.error("reference curves empty for \(whoFileName, privacy: .public)") }
             } else {
-                GrowthChartView(
-                    dataPoints: patientData,
-                    referenceCurves: referenceCurves,
-                    measurement: selectedMeasurement
-                )
-                .onAppear {
-                    log.info("Chart appear: measurement=\(self.selectedMeasurement, privacy: .public) points=\(patientData.count) curves=\(referenceCurves.count)")
+                // Add left padding so the x=0 month tick/label isn't clipped.
+                // If the chart is scrollable, a larger pad is often needed to be noticeable.
+                let xPadMonths: Double = 1.0   // ~1 month; tweak if needed
+
+                let patientMinX = patientData.map { $0.ageMonths }.min() ?? 0
+                let patientMaxX = patientData.map { $0.ageMonths }.max() ?? 0
+
+                let refMinX = referenceCurves
+                    .flatMap { $0.points }
+                    .map { $0.ageMonths }
+                    .min() ?? 0
+
+                let refMaxX = referenceCurves
+                    .flatMap { $0.points }
+                    .map { $0.ageMonths }
+                    .max() ?? 0
+
+                // WHO curves start at 0; we allow a negative domain to create visual padding.
+                // Force the lower bound to be at most `-xPadMonths` so padding always exists.
+                let minX = min(patientMinX, refMinX, 0)
+                let maxX = max(patientMaxX, refMaxX)
+                let domainLower = min(minX - xPadMonths, -xPadMonths)
+                let domainUpper = maxX
+
+                // --- Y domain padding (prevents the top of the chart from being clipped) ---
+                let patientVals = patientData.map { $0.value }.filter { $0.isFinite }
+                let refVals = referenceCurves.flatMap { $0.points }.map { $0.value }.filter { $0.isFinite }
+                let allVals = patientVals + refVals
+
+                // If for some reason values are missing, fall back to automatic scaling.
+                if let vMin = allVals.min(), let vMax = allVals.max(), vMin.isFinite, vMax.isFinite {
+                    let span = max(0.0001, vMax - vMin)
+
+                    // Padding: give a bit more vertical headroom so curves/points never clip at the top.
+                    // (We prefer a slightly "roomy" chart over risking truncation.)
+                    let relPad = span * 0.12
+                    let absPad: Double = {
+                        switch selectedMeasurement {
+                        case "weight": return 0.5      // kg
+                        case "height": return 3.0      // cm (needs more headroom on 0–60m curves)
+                        case "head_circ": return 1.0   // cm
+                        case "bmi": return 1.0         // kg/m²
+                        default: return 1.0
+                        }
+                    }()
+                    let pad = max(relPad, absPad)
+
+                    // Keep lower bound sensible (avoid negative weights/lengths/head circumference/BMI).
+                    let yLower: Double = {
+                        let raw = vMin - pad
+                        switch selectedMeasurement {
+                        case "weight", "height", "head_circ", "bmi":
+                            return max(0.0, raw)
+                        default:
+                            return raw
+                        }
+                    }()
+
+                    // Add a touch more headroom than bottom padding.
+                    let baseUpper = vMax + (pad * 1.25)
+
+                    // For length/height, ensure the chart can accommodate tall 5‑year‑olds comfortably.
+                    // This prevents top curves from being clipped when the WHO reference extends higher.
+                    let yUpper = (selectedMeasurement == "height")
+                        ? max(baseUpper, 130.0)
+                        : baseUpper
+
+                    GrowthChartView(
+                        dataPoints: patientData,
+                        referenceCurves: referenceCurves,
+                        measurement: selectedMeasurement
+                    )
+                    .chartXScale(domain: domainLower...domainUpper)
+                    .chartYScale(domain: yLower...yUpper)
+                    .padding(.leading, 18)
+                    .onAppear {
+                        log.info("Chart appear: measurement=\(self.selectedMeasurement, privacy: .public) points=\(patientData.count) curves=\(referenceCurves.count)")
+                    }
+                } else {
+                    // Fallback: let Charts pick the Y-domain automatically.
+                    GrowthChartView(
+                        dataPoints: patientData,
+                        referenceCurves: referenceCurves,
+                        measurement: selectedMeasurement
+                    )
+                    .chartXScale(domain: domainLower...domainUpper)
+                    .padding(.leading, 18)
+                    .onAppear {
+                        log.info("Chart appear: measurement=\(self.selectedMeasurement, privacy: .public) points=\(patientData.count) curves=\(referenceCurves.count)")
+                    }
                 }
             }
         }

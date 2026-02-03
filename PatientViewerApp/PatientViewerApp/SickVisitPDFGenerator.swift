@@ -18,7 +18,8 @@ private func LF(_ formatKey: String, _ args: CVarArg...) -> String {
 struct SickVisitPDFGenerator {
     private static let log = AppLog.feature("pdf.sick")
     static func generate(for visit: VisitSummary, dbURL: URL) -> URL? {
-        Self.log.log("Generating SickVisit PDF for id=\(visit.id, privacy: .public) db=\(dbURL.path, privacy: .private)")
+        let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+        Self.log.info("Generating SickVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
         let pdfMetaData = [
             kCGPDFContextCreator: L("pdf.meta.creator"),
             kCGPDFContextAuthor: L("pdf.meta.author"),
@@ -347,7 +348,6 @@ struct SickVisitPDFGenerator {
             drawText(LF("pdf.sick.generated.fmt", formatDate(Date())), font: subFont)
 
             // Fetch patient info
-            let dbPath = dbURL.appendingPathComponent("db.sqlite").path
             do {
                 let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
                 Self.log.debug("Opening SQLite | db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
@@ -472,51 +472,49 @@ struct SickVisitPDFGenerator {
                     var perinatalLine = LF("pdf.sick.perinatal.line.fmt", L("common.placeholder"))
                     var pmhLine = LF("pdf.sick.pmh.line.fmt", L("common.placeholder"))
 
-                    // Age-gated perinatal summary (only if < 3 months)
-                    if let ageM = ageMonthsForVisit, ageM < 3.0 {
-                        let perinatal = Table("perinatal_history")
-                        let perinatalPID = Expression<Int64>("patient_id")
-                        let pregnancyRisk = Expression<String?>("pregnancy_risk")
-                        let birthMode = Expression<String?>("birth_mode")
-                        let term = Expression<Int?>("birth_term_weeks")
-                        let resuscitation = Expression<String?>("resuscitation")
-                        let infectionRisk = Expression<String?>("infection_risk")
-                        let birthWeight = Expression<Int?>("birth_weight_g")
-                        let birthLength = Expression<Double?>("birth_length_cm")
-                        let headCirc = Expression<Double?>("birth_head_circumference_cm")
-                        let dischargeWeight = Expression<Int?>("discharge_weight_g")
-                        let feedingMaternity = Expression<String?>("feeding_in_maternity")
-                        let vaccinations = Expression<String?>("maternity_vaccinations")
-                        let events = Expression<String?>("maternity_stay_events")
-                        let hearing = Expression<String?>("hearing_screening")
-                        let heart = Expression<String?>("heart_screening")
-                        let metabolic = Expression<String?>("metabolic_screening")
-                        let afterBirth = Expression<String?>("illnesses_after_birth")
-                        let motherVacc = Expression<String?>("mother_vaccinations")
+                    // Perinatal summary (always present; keep placeholder if not recorded)
+                    let perinatal = Table("perinatal_history")
+                    let perinatalPID = Expression<Int64>("patient_id")
+                    let pregnancyRisk = Expression<String?>("pregnancy_risk")
+                    let birthMode = Expression<String?>("birth_mode")
+                    let term = Expression<Int?>("birth_term_weeks")
+                    let resuscitation = Expression<String?>("resuscitation")
+                    let infectionRisk = Expression<String?>("infection_risk")
+                    let birthWeight = Expression<Int?>("birth_weight_g")
+                    let birthLength = Expression<Double?>("birth_length_cm")
+                    let headCirc = Expression<Double?>("birth_head_circumference_cm")
+                    let dischargeWeight = Expression<Int?>("discharge_weight_g")
+                    let feedingMaternity = Expression<String?>("feeding_in_maternity")
+                    let vaccinations = Expression<String?>("maternity_vaccinations")
+                    let events = Expression<String?>("maternity_stay_events")
+                    let hearing = Expression<String?>("hearing_screening")
+                    let heart = Expression<String?>("heart_screening")
+                    let metabolic = Expression<String?>("metabolic_screening")
+                    let afterBirth = Expression<String?>("illnesses_after_birth")
+                    let motherVacc = Expression<String?>("mother_vaccinations")
 
-                        if let peri = try? db.pluck(perinatal.filter(perinatalPID == pid)) {
-                            var parts: [String] = []
-                            if let v = try? peri.get(pregnancyRisk), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.pregnancy.fmt", v)) }
-                            if let v = try? peri.get(birthMode), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.birthMode.fmt", v)) }
-                            if let v = try? peri.get(term) { parts.append(LF("pdf.sick.perinatal.gaWeeks.fmt", v)) }
-                            if let v = try? peri.get(resuscitation), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.resuscitation.fmt", v)) }
-                            if let v = try? peri.get(infectionRisk), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.infectionRisk.fmt", v)) }
-                            if let v = try? peri.get(birthWeight) { parts.append(LF("pdf.sick.perinatal.birthWeightG.fmt", v)) }
-                            if let v = try? peri.get(birthLength) { parts.append(LF("pdf.sick.perinatal.birthLengthCm.fmt", String(format: "%.1f", v))) }
-                            if let v = try? peri.get(headCirc) { parts.append(LF("pdf.sick.perinatal.birthHcCm.fmt", String(format: "%.1f", v))) }
-                            if let v = try? peri.get(dischargeWeight) { parts.append(LF("pdf.sick.perinatal.dischargeWeightG.fmt", v)) }
-                            if let v = try? peri.get(feedingMaternity), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.feeding.fmt", v)) }
-                            if let v = try? peri.get(vaccinations), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.vaccinations.fmt", v)) }
-                            if let v = try? peri.get(events), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.events.fmt", v)) }
-                            if let v = try? peri.get(hearing), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.hearing.fmt", v)) }
-                            if let v = try? peri.get(heart), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.heart.fmt", v)) }
-                            if let v = try? peri.get(metabolic), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.metabolic.fmt", v)) }
-                            if let v = try? peri.get(afterBirth), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.afterBirth.fmt", v)) }
-                            if let v = try? peri.get(motherVacc), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.motherVacc.fmt", v)) }
+                    if let peri = try? db.pluck(perinatal.filter(perinatalPID == pid)) {
+                        var parts: [String] = []
+                        if let v = try? peri.get(pregnancyRisk), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.pregnancy.fmt", v)) }
+                        if let v = try? peri.get(birthMode), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.birthMode.fmt", v)) }
+                        if let v = try? peri.get(term) { parts.append(LF("pdf.sick.perinatal.gaWeeks.fmt", v)) }
+                        if let v = try? peri.get(resuscitation), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.resuscitation.fmt", v)) }
+                        if let v = try? peri.get(infectionRisk), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.infectionRisk.fmt", v)) }
+                        if let v = try? peri.get(birthWeight) { parts.append(LF("pdf.sick.perinatal.birthWeightG.fmt", v)) }
+                        if let v = try? peri.get(birthLength) { parts.append(LF("pdf.sick.perinatal.birthLengthCm.fmt", String(format: "%.1f", v))) }
+                        if let v = try? peri.get(headCirc) { parts.append(LF("pdf.sick.perinatal.birthHcCm.fmt", String(format: "%.1f", v))) }
+                        if let v = try? peri.get(dischargeWeight) { parts.append(LF("pdf.sick.perinatal.dischargeWeightG.fmt", v)) }
+                        if let v = try? peri.get(feedingMaternity), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.feeding.fmt", v)) }
+                        if let v = try? peri.get(vaccinations), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.vaccinations.fmt", v)) }
+                        if let v = try? peri.get(events), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.events.fmt", v)) }
+                        if let v = try? peri.get(hearing), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.hearing.fmt", v)) }
+                        if let v = try? peri.get(heart), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.heart.fmt", v)) }
+                        if let v = try? peri.get(metabolic), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.metabolic.fmt", v)) }
+                        if let v = try? peri.get(afterBirth), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.afterBirth.fmt", v)) }
+                        if let v = try? peri.get(motherVacc), !v.isEmpty { parts.append(LF("pdf.sick.perinatal.motherVacc.fmt", v)) }
 
-                            if !parts.isEmpty {
-                                perinatalLine = LF("pdf.sick.perinatal.lineWithValue.fmt", parts.joined(separator: "; "))
-                            }
+                        if !parts.isEmpty {
+                            perinatalLine = LF("pdf.sick.perinatal.lineWithValue.fmt", parts.joined(separator: "; "))
                         }
                     }
 
@@ -894,7 +892,9 @@ struct SickVisitPDFGenerator {
             let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
             let fileURL = docsURL.appendingPathComponent("VisitReport_\(visit.id).pdf")
             try data.write(to: fileURL)
-            Self.log.log("SickVisit PDF saved at \(fileURL.path, privacy: .private) (size=\(data.count, privacy: .public) bytes)")
+            Self.log.info(
+                "SickVisit PDF saved | file=\(AppLog.fileRef(fileURL), privacy: .public) size=\(data.count, privacy: .public)B"
+            )
             return fileURL
         } catch {
             Self.log.error("Failed to save sick visit PDF: \(error.localizedDescription, privacy: .public)")

@@ -90,7 +90,8 @@ struct ContentView: SwiftUI.View {
                 switch result {
                 case .success(let url):
                     let filename = url.lastPathComponent
-                    log.info("Exported bundle | file=\(filename, privacy: .public)")
+                    let fileTok = AppLog.token(filename)
+                    log.info("Exported bundle | fileTok=\(fileTok, privacy: .public)")
                 case .failure(let error):
                     let ns = error as NSError
                     log.error("Export failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")
@@ -496,16 +497,13 @@ struct ContentView: SwiftUI.View {
             log.debug("Pre-clear check: confirming DB exists.")
 
             let exists = FileManager.default.fileExists(atPath: dbURL.path)
-            let label = "\(url.lastPathComponent)/\(dbURL.lastPathComponent)"
+            let dbRef = AppLog.dbRef(dbURL)
 
             if exists {
-                log.info("Pre-clear check OK | file=\(label, privacy: .public)")
+                log.info("Pre-clear check OK | db=\(dbRef, privacy: .public)")
             } else {
-                log.error("Pre-clear check FAILED (missing DB) | file=\(label, privacy: .public)")
+                log.error("Pre-clear check FAILED (missing DB) | db=\(dbRef, privacy: .public)")
             }
-
-            // Keep the exact path available for debugging without exposing it publicly
-            log.debug("Pre-clear check | fullPath=\(dbURL.path, privacy: .private)")
 
             log.debug("Ensuring only temporary bundle is cleared. Persistent bundles remain untouched.")
 
@@ -516,18 +514,16 @@ struct ContentView: SwiftUI.View {
             if path.contains("tmp") || path.contains("Temporary") {
                 try? FileManager.default.removeItem(at: url)
                 log.info("Cleared volatile bundle | folder=\(folderLabel, privacy: .public)")
-                log.debug("Cleared volatile bundle | fullPath=\(path, privacy: .private)")
+                log.debug("Cleared volatile bundle | bundle=\(AppLog.bundleRef(url), privacy: .public)")
             } else {
-                log.debug("Skipped clearing persistent ActiveBundle | folder=\(folderLabel, privacy: .public)")
-                log.debug("Skipped clearing persistent ActiveBundle | fullPath=\(path, privacy: .private)")
+                log.debug("Skipped clearing persistent ActiveBundle | bundle=\(AppLog.bundleRef(url), privacy: .public)")
             }
         }
         // Flush DB to disk before clearing
         if let url = extractedFolderURL {
             let dbPath = url.appendingPathComponent("db.sqlite").path
-            let dbLabel = "\(url.lastPathComponent)/db.sqlite"
-            log.debug("Forcing DB flush before clear | file=\(dbLabel, privacy: .public)")
-            log.debug("Forcing DB flush before clear | fullPath=\(dbPath, privacy: .private)")
+            let dbURL = url.appendingPathComponent("db.sqlite")
+            log.debug("Forcing DB flush before clear | db=\(AppLog.dbRef(dbURL), privacy: .public)")
             let db = FMDatabase(path: dbPath)
             if db.open() {
                 db.executeUpdate("VACUUM;", withArgumentsIn: [])
@@ -608,8 +604,8 @@ struct ContentView: SwiftUI.View {
                 log.info("Saved manifest.json to persistent.")
             }
 
-            let persistentLabel = "PersistentBundles/\(alias)"
-            log.info("Saved active bundle back to persistent | folder=\(persistentLabel, privacy: .public)")
+            // Log-safe reference (no alias / full path)
+            log.info("Saved active bundle back to persistent | bundle=\(AppLog.bundleRef(persistentAlias), privacy: .public)")
         } catch {
             let ns = error as NSError
             log.error("Save to persistent failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")

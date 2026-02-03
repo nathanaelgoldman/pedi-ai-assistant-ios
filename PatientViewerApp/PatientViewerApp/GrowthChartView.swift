@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Charts
-import OSLog
 
 struct GrowthChartView: View {
     let dataPoints: [GrowthDataPoint]
@@ -64,7 +63,7 @@ struct GrowthChartView: View {
 
         // Clamp inside reasonable defaults
         lower = max(lower, def.lowerBound)
-        
+        upper = min(upper, def.upperBound)
 
         // Ensure at least 1 unit height
         if upper - lower < 1 { upper = lower + 1 }
@@ -121,15 +120,21 @@ struct GrowthChartView: View {
     }
 
     var body: some View {
-        VStack {
+        VStack(alignment: .leading, spacing: 0) {
             if hasAnyData {
                 Chart {
                     chartContent
                 }
+                // NOTE: Y-domain is intentionally controlled by the parent (GrowthChartScreen)
+                // so the screen can adapt the vertical range to the window/device.
                 .chartXScale(domain: xDom)
-                .chartYScale(domain: yDom)
                 .chartScrollableAxes(.horizontal)
                 .chartXVisibleDomain(length: 24)
+                .chartPlotStyle { plotArea in
+                    plotArea
+                        // Small visual breathing room so “0 month” and the first gridline aren’t clipped.
+                        .padding(.leading, 18)
+                }
                 .chartXAxisLabel(L("patient_viewer.growth_chart.axis.age_months", "Age (months)"))
                 .chartYAxisLabel(yAxisLabel(measurement))
                 .onAppear {
@@ -141,9 +146,6 @@ struct GrowthChartView: View {
                         "xVisible=\(self.xVisibleDom.lowerBound, privacy: .public)...\(self.xVisibleDom.upperBound, privacy: .public)"
                     )
                     Self.log.debug(
-                        "y=\(self.yDom.lowerBound, privacy: .public)...\(self.yDom.upperBound, privacy: .public)"
-                    )
-                    Self.log.debug(
                         "points=\(self.cleanData().count, privacy: .public) curves=\(self.cleanCurves().count, privacy: .public)"
                     )
                 }
@@ -153,7 +155,7 @@ struct GrowthChartView: View {
                         AxisTick()
                         AxisValueLabel {
                             if let intVal = value.as(Int.self), intVal % 2 == 0 {
-                                            Text("\(intVal)")
+                                Text("\(intVal)")
                             }
                         }
                     }
@@ -166,7 +168,11 @@ struct GrowthChartView: View {
                         AxisValueLabel()
                     }
                 }
-                .frame(height: 470)
+                // ✅ IMPORTANT: let the parent decide the height.
+                // This allows GrowthChartScreen (with the segmented control) to “push” the chart
+                // into available space without overlap on iPhone/Mac.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
@@ -177,13 +183,15 @@ struct GrowthChartView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                .frame(height: 300)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear {
                     Self.log.debug("No data to chart for \(self.measurement, privacy: .public)")
                 }
             }
         }
-        .padding()
+        // Avoid wasting vertical space; keep horizontal padding for readability.
+        .padding(.horizontal)
+        .padding(.vertical, 8)
         .navigationTitle(titleForMeasurement(measurement))
     }
 

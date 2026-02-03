@@ -36,7 +36,7 @@
 /* Begin PBXFileReference section */
 		BB01C9A32EC1855F00E2C067 /* libsqlite3.0.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.0.tbd; path = usr/lib/libsqlite3.0.tbd; sourceTree = SDKROOT; };
 		BB01C9A42EC1869900E2C067 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
-		BBCC54DC2E976199005002B9 /* PatientViewerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PatientViewerApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBCC54DC2E976199005002B9 /* CareView Kids.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "CareView Kids.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBCC54E92E97619A005002B9 /* PatientViewerAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PatientViewerAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E90370022F0BA54D009F4E1B /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -136,7 +136,7 @@
 		BBCC54DD2E976199005002B9 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				BBCC54DC2E976199005002B9 /* PatientViewerApp.app */,
+				BBCC54DC2E976199005002B9 /* CareView Kids.app */,
 				BBCC54E92E97619A005002B9 /* PatientViewerAppTests.xctest */,
 				BBCC54F32E97619A005002B9 /* PatientViewerAppUITests.xctest */,
 			);
@@ -171,7 +171,7 @@
 				BB01C9A02EC17F3800E2C067 /* SQLite */,
 			);
 			productName = PatientViewerApp;
-			productReference = BBCC54DC2E976199005002B9 /* PatientViewerApp.app */;
+			productReference = BBCC54DC2E976199005002B9 /* CareView Kids.app */;
 			productType = "com.apple.product-type.application";
 		};
 		BBCC54E82E97619A005002B9 /* PatientViewerAppTests */ = {
@@ -481,7 +481,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PatientViewerApp/Info.plist;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = PatientViewerApp;
+				INFOPLIST_KEY_CFBundleDisplayName = "CareView Kids";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock CareView Kids and protect medical reports on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -492,8 +493,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.yunastic.careviewkids;
+				PRODUCT_NAME = "CareView Kids";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -511,7 +512,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PatientViewerApp/Info.plist;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = PatientViewerApp;
+				INFOPLIST_KEY_CFBundleDisplayName = "CareView Kids";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock CareView Kids and protect medical reports on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -522,8 +524,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Yunastic.PatientViewerApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.yunastic.careviewkids;
+				PRODUCT_NAME = "CareView Kids";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

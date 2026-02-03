@@ -69,7 +69,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1001,
-                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.combined_box_failed", src.path)]
+                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.combined_box_failed", AppLog.fileRef(src))]
             )
         }
 
@@ -95,7 +95,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1501,
-                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.file_too_short", src.path)]
+                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.file_too_short", AppLog.fileRef(src))]
             )
         }
 
@@ -110,7 +110,7 @@ enum BundleCrypto {
             throw NSError(
                 domain: "BundleCrypto",
                 code: 1502,
-                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.hmac_failed", src.path)]
+                userInfo: [NSLocalizedDescriptionKey: LF("bundle_crypto.error.hmac_failed", AppLog.fileRef(src))]
             )
         }
 
@@ -181,7 +181,7 @@ enum BundleCrypto {
                     domain: "BundleCrypto",
                     code: 2003,
                     userInfo: [
-                        NSLocalizedDescriptionKey: LF("bundle_crypto.error.remove_plain_failed", plain.path)
+                        NSLocalizedDescriptionKey: LF("bundle_crypto.error.remove_plain_failed", AppLog.fileRef(plain))
                     ]
                 )
             }
@@ -194,7 +194,7 @@ enum BundleCrypto {
             domain: "BundleCrypto",
             code: 2004,
             userInfo: [
-                NSLocalizedDescriptionKey: LF("bundle_crypto.error.missing_db_both", bundleRoot.path)
+                NSLocalizedDescriptionKey: LF("bundle_crypto.error.missing_db_both", AppLog.bundleRef(bundleRoot))
             ]
         )
     }

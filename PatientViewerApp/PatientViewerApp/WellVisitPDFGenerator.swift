@@ -166,7 +166,7 @@ struct WellVisitPDFGenerator {
     
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
         let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
-        WellVisitPDFGenerator.log.info("Generating WellVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
+        WellVisitPDFGenerator.log.info("Generating WellVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .private)")
         let pdfMetaData = [
             kCGPDFContextCreator: WellVisitPDFGenerator.L("well_report.pdf.meta.creator", "Patient Viewer"),
             kCGPDFContextAuthor:  WellVisitPDFGenerator.L("well_report.pdf.meta.author",  "Patient App"),
@@ -258,7 +258,9 @@ struct WellVisitPDFGenerator {
             }
 
             guard let finalVisitDate = visitDate else {
-                WellVisitPDFGenerator.log.warning("computeAgeMonths: unable to parse visitDate='\(visitDateString)' with ISO8601, legacy, or date-only formatter")
+                WellVisitPDFGenerator.log.warning(
+                    "computeAgeMonths: unable to parse visitDate(token=\(AppLog.token(visitDateString), privacy: .public)) with ISO8601, legacy, or date-only formatter"
+                )
                 return nil
             }
 
@@ -281,7 +283,9 @@ struct WellVisitPDFGenerator {
             dobFormatter.locale = Locale(identifier: "en_US_POSIX")
 
             guard let dobDate = dobFormatter.date(from: dobString) else {
-                WellVisitPDFGenerator.log.warning("formatAgeString: unable to parse DOB='\(dobString)'")
+                WellVisitPDFGenerator.log.warning(
+                    "formatAgeString: unable to parse dobTok=\(AppLog.token(dobString), privacy: .public)"
+                )
                 return nil
             }
 
@@ -311,7 +315,9 @@ struct WellVisitPDFGenerator {
             }
 
             guard let finalVisitDate = visitDate else {
-                WellVisitPDFGenerator.log.warning("formatAgeString: unable to parse visitDate='\(visitDateString)'")
+                WellVisitPDFGenerator.log.warning(
+                    "formatAgeString: unable to parse visitDate(token=\(AppLog.token(visitDateString), privacy: .public))"
+                )
                 return nil
             }
 
@@ -480,7 +486,10 @@ struct WellVisitPDFGenerator {
                 }
             }
         } catch {
-            WellVisitPDFGenerator.log.error("Failed to read patient/sex for charts: \(error.localizedDescription, privacy: .public)")
+            let dbURLForLog = URL(fileURLWithPath: dbPath)
+            WellVisitPDFGenerator.log.error(
+                "Failed to read patient/sex for charts | db=\(AppLog.dbRef(dbURLForLog), privacy: .private) errType=\(String(describing: type(of: error)), privacy: .public)"
+            )
             sexTextForCharts = ""
         }
         if sexTextForCharts == "M" || sexTextForCharts == "F" {
@@ -1052,7 +1061,9 @@ struct WellVisitPDFGenerator {
                     let vTitle = vType.isEmpty ? defaultWellVisitTitle : (visitMap[vType] ?? defaultWellVisitTitle)
 
                     if vType.isEmpty || visitMap[vType] == nil {
-                        WellVisitPDFGenerator.log.warning("Previous well visit has unmapped/empty visit_type='\(vTypeRaw, privacy: .public)'")
+                        WellVisitPDFGenerator.log.warning(
+                            "Previous well visit has unmapped/empty visit_typeTok=\(AppLog.token(vTypeRaw), privacy: .public)"
+                        )
                     }
                     let vDate = v[visitDateCol]
                     let createdAt = v[visitCreatedAt]
@@ -1440,7 +1451,9 @@ struct WellVisitPDFGenerator {
                     }
                 } catch {
                     // If age_days is missing for some reason, we silently skip the Snoring line.
-                    WellVisitPDFGenerator.log.warning("Sleep section: unable to read age_days for snoring gating: \(error.localizedDescription, privacy: .public)")
+                    WellVisitPDFGenerator.log.warning(
+                        "Sleep section: unable to read age_days for snoring gating (errType=\(String(describing: type(of: error)), privacy: .public))"
+                    )
                 }
 
                 // 4. Sleep issue reported (explicit Yes/No, plus text if Yes)
@@ -1904,7 +1917,9 @@ struct WellVisitPDFGenerator {
 
                         deltaWeightCalc: do {
                             guard let currentDateParsed = currentDateFinal else {
-                                WellVisitPDFGenerator.log.warning("Measurements: couldn't parse current date from recorded_at='\(recordedAtRawForDelta, privacy: .public)' — skipping delta weight")
+                                WellVisitPDFGenerator.log.warning(
+                                    "Measurements: couldn't parse current date from recordedAtTok=\(AppLog.token(recordedAtRawForDelta), privacy: .public) — skipping delta weight"
+                                )
                                 break deltaWeightCalc
                             }
 
@@ -2650,9 +2665,11 @@ struct WellVisitPDFGenerator {
                 }
 
             } catch {
-                WellVisitPDFGenerator.log.error("DB error during PDF render: \(error.localizedDescription, privacy: .public)")
-                let fmtDBError = WellVisitPDFGenerator.L("well_report.error.db_error_fmt", "❌ DB Error: %@")
-                drawText(String(format: fmtDBError, error.localizedDescription), font: subFont)
+                WellVisitPDFGenerator.log.error(
+                    "DB error during PDF render (errType=\(String(describing: type(of: error)), privacy: .public))"
+                )
+                let dbErrorMsg = WellVisitPDFGenerator.L("well_report.error.db_error", "❌ DB Error")
+                drawText(dbErrorMsg, font: subFont)
             }
         }
 
