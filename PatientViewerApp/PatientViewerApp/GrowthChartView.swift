@@ -122,67 +122,90 @@ struct GrowthChartView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if hasAnyData {
-                Chart {
-                    chartContent
-                }
-                // NOTE: Y-domain is intentionally controlled by the parent (GrowthChartScreen)
-                // so the screen can adapt the vertical range to the window/device.
-                .chartXScale(domain: xDom)
-                .chartScrollableAxes(.horizontal)
-                .chartXVisibleDomain(length: 24)
-                .chartPlotStyle { plotArea in
-                    plotArea
-                        // Small visual breathing room so “0 month” and the first gridline aren’t clipped.
-                        .padding(.leading, 18)
-                }
-                .chartXAxisLabel(L("patient_viewer.growth_chart.axis.age_months", "Age (months)"))
-                .chartYAxisLabel(yAxisLabel(measurement))
-                .onAppear {
-                    Self.log.debug("Chart appear measurement=\(self.measurement, privacy: .public)")
-                    Self.log.debug(
-                        "xFull=\(self.xDom.lowerBound, privacy: .public)...\(self.xDom.upperBound, privacy: .public)"
-                    )
-                    Self.log.debug(
-                        "xVisible=\(self.xVisibleDom.lowerBound, privacy: .public)...\(self.xVisibleDom.upperBound, privacy: .public)"
-                    )
-                    Self.log.debug(
-                        "points=\(self.cleanData().count, privacy: .public) curves=\(self.cleanCurves().count, privacy: .public)"
-                    )
-                }
-                .chartXAxis {
-                    AxisMarks(preset: .aligned, values: .stride(by: 1)) { value in
-                        AxisGridLine()
-                        AxisTick()
-                        AxisValueLabel {
-                            if let intVal = value.as(Int.self), intVal % 2 == 0 {
-                                Text("\(intVal)")
+                ZStack {
+                    // Keep the chart itself on a white card so the app's blue theme
+                    // doesn't tint the plot/axes area.
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                        .fill(Color(.systemBackground))
+
+                    Chart {
+                        chartContent
+                    }
+                    // NOTE: Y-domain is intentionally controlled by the parent (GrowthChartScreen)
+                    // so the screen can adapt the vertical range to the window/device.
+                    .chartXScale(domain: xDom)
+                    .chartScrollableAxes(.horizontal)
+                    .chartXVisibleDomain(length: 24)
+                    .chartPlotStyle { plotArea in
+                        plotArea
+                            // Small visual breathing room so “0 month” and the first gridline aren’t clipped.
+                            .padding(.leading, 18)
+                    }
+                    .chartXAxisLabel(L("patient_viewer.growth_chart.axis.age_months", "Age (months)"))
+                    .chartYAxisLabel(yAxisLabel(measurement))
+                    .onAppear {
+                        Self.log.debug("Chart appear measurement=\(self.measurement, privacy: .public)")
+                        Self.log.debug(
+                            "xFull=\(self.xDom.lowerBound, privacy: .public)...\(self.xDom.upperBound, privacy: .public)"
+                        )
+                        Self.log.debug(
+                            "xVisible=\(self.xVisibleDom.lowerBound, privacy: .public)...\(self.xVisibleDom.upperBound, privacy: .public)"
+                        )
+                        Self.log.debug(
+                            "points=\(self.cleanData().count, privacy: .public) curves=\(self.cleanCurves().count, privacy: .public)"
+                        )
+                    }
+                    .chartXAxis {
+                        AxisMarks(preset: .aligned, values: .stride(by: 1)) { value in
+                            AxisGridLine()
+                            AxisTick()
+                            AxisValueLabel {
+                                if let intVal = value.as(Int.self), intVal % 2 == 0 {
+                                    Text("\(intVal)")
+                                }
                             }
                         }
                     }
-                }
-                .chartYAxis {
-                    AxisMarks(preset: .aligned,
-                              values: .stride(by: yStrideForMeasurement(measurement))) { value in
-                        AxisGridLine()
-                        AxisTick()
-                        AxisValueLabel()
+                    .chartYAxis {
+                        AxisMarks(preset: .aligned,
+                                  values: .stride(by: yStrideForMeasurement(measurement))) { value in
+                            AxisGridLine()
+                            AxisTick()
+                            AxisValueLabel()
+                        }
                     }
+                    // ✅ IMPORTANT: let the parent decide the height.
+                    // This allows GrowthChartScreen (with the segmented control) to “push” the chart
+                    // into available space without overlap on iPhone/Mac.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 10)
                 }
-                // ✅ IMPORTANT: let the parent decide the height.
-                // This allows GrowthChartScreen (with the segmented control) to “push” the chart
-                // into available space without overlap on iPhone/Mac.
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(1)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                        .stroke(AppTheme.cardStroke, lineWidth: 0.8)
+                )
             } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .imageScale(.large)
-                    Text(L("patient_viewer.growth_chart.empty.title", "No growth data"))
-                        .font(.headline)
-                    Text(L("patient_viewer.growth_chart.empty.message", "No patient measurements available for this chart."))
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                ZStack {
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                        .fill(Color(.systemBackground))
+
+                    VStack(spacing: 8) {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .imageScale(.large)
+                        Text(L("patient_viewer.growth_chart.empty.title", "No growth data"))
+                            .font(.headline)
+                        Text(L("patient_viewer.growth_chart.empty.message", "No patient measurements available for this chart."))
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(16)
                 }
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                        .stroke(AppTheme.cardStroke, lineWidth: 0.8)
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear {
                     Self.log.debug("No data to chart for \(self.measurement, privacy: .public)")

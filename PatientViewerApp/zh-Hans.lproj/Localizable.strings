@@ -768,3 +768,32 @@
 "well_visit_form.problem_listing.header.line" = "%@，%@：";
 
 "well_report.error.db_error" = "❌ 生成报告时发生数据库错误。";
+
+/* 关于 – 入口 */
+"patient_viewer.app_settings.about.title" = "关于";
+
+/* 关于 – 导航标题 */
+"patient_viewer.app_settings.about.nav_title" = "关于 CareView Kids";
+
+/* 关于 – 副标题 */
+"patient_viewer.app_settings.about.subtitle" = "为家庭设计的安全儿科健康记录。";
+
+/* 关于 – 分区 */
+"patient_viewer.app_settings.about.section.app_info" = "应用信息";
+"patient_viewer.app_settings.about.section.privacy" = "隐私";
+"patient_viewer.app_settings.about.section.support" = "支持";
+
+/* 关于 – 行 */
+"patient_viewer.app_settings.about.row.version" = "版本";
+"patient_viewer.app_settings.about.row.bundle_id" = "应用标识";
+
+/* 关于 – 隐私说明 */
+"patient_viewer.app_settings.about.privacy.body" = "CareView Kids 在您的设备本地存储和显示医疗数据。未经您的明确操作，任何患者数据都不会传输到外部服务器。";
+
+/* 关于 – 支持 */
+"patient_viewer.app_settings.about.support.whatsapp_fmt" = "WhatsApp：%@";
+"patient_viewer.app_settings.about.support.wechat_fmt" = "微信：%@";
+"patient_viewer.app_settings.about.support.tap_to_copy" = "点击复制联系方式。";
+
+/* 关于 – 版权 */
+"patient_viewer.app_settings.about.credits" = "© CareView Kids。用心为孩子与家庭打造。";

@@ -27,7 +27,16 @@ struct GrowthChartScreen: View {
                 Text(L("patient_viewer.growth_chart.measurement.bmi", comment: "Segment title")).tag("bmi")
             }
             .pickerStyle(.segmented)
-            .padding()
+            // Keep the segmented control on a themed card, but do NOT tint the chart itself.
+            .padding(8)
+            .background(AppTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.smallCornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.smallCornerRadius, style: .continuous)
+                    .stroke(AppTheme.cardStroke, lineWidth: 0.8)
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
             .onChange(of: selectedMeasurement) { _, newValue in
                 let file = "\(filePrefix(for: newValue))_0_24m_\(patientSex)"
                 log.debug("WHO file selected for \(newValue, privacy: .public): \(file, privacy: .public)")
@@ -175,6 +184,8 @@ struct GrowthChartScreen: View {
                 }
             }
         }
+        .appBackground()
+        .appNavBarBackground()
         .onAppear {
             log.info("GrowthChartScreen appeared for sex=\(self.patientSex, privacy: .public) initialMeasurement=\(self.selectedMeasurement, privacy: .public)")
         }

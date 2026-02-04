@@ -773,3 +773,32 @@
 "well_visit_form.problem_listing.header.line" = "%@, %@:";
 
 "well_report.error.db_error" = "❌ Database error while generating the report.";
+
+/* About – entry point */
+"patient_viewer.app_settings.about.title" = "About";
+
+/* About – navigation */
+"patient_viewer.app_settings.about.nav_title" = "About CareView Kids";
+
+/* About – header */
+"patient_viewer.app_settings.about.subtitle" = "Secure pediatric records, designed for families.";
+
+/* About – sections */
+"patient_viewer.app_settings.about.section.app_info" = "App information";
+"patient_viewer.app_settings.about.section.privacy" = "Privacy";
+"patient_viewer.app_settings.about.section.support" = "Support";
+
+/* About – rows */
+"patient_viewer.app_settings.about.row.version" = "Version";
+"patient_viewer.app_settings.about.row.bundle_id" = "Bundle identifier";
+
+/* About – privacy */
+"patient_viewer.app_settings.about.privacy.body" = "CareView Kids stores and displays medical data locally on your device. No patient data is transmitted to external servers without your explicit action.";
+
+/* About – support */
+"patient_viewer.app_settings.about.support.whatsapp_fmt" = "WhatsApp: %@";
+"patient_viewer.app_settings.about.support.wechat_fmt" = "WeChat: %@";
+"patient_viewer.app_settings.about.support.tap_to_copy" = "Tap to copy contact information.";
+
+/* About – credits */
+"patient_viewer.app_settings.about.credits" = "© CareView Kids. Built with care for children and families.";

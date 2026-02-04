@@ -51,6 +51,7 @@ struct ContentView: SwiftUI.View {
     @State private var showDuplicateDialog = false
     @State private var importError: String? = nil
     @Environment(\.scenePhase) private var scenePhase
+    
 
     init() {
         _extractedFolderURL = State(initialValue: nil)
@@ -58,6 +59,8 @@ struct ContentView: SwiftUI.View {
         _bundleDOB = State(initialValue: nil)
         _bundleFullName = State(initialValue: nil)
     }
+
+    
 
     var body: some SwiftUI.View {
         NavigationView {
@@ -156,6 +159,8 @@ struct ContentView: SwiftUI.View {
             }, message: {
                 Text(importError ?? "")
             })
+            .appBackground()
+            .appNavBarBackground()
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: scenePhase) { _, newPhase in
@@ -182,7 +187,7 @@ struct ContentView: SwiftUI.View {
         VStack(spacing: 32) {
             // Header / intro
             VStack(alignment: .leading, spacing: 10) {
-                CareViewKidsMark(style: .large)
+                CareViewKidsMark(style: .compact)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(L("patient_viewer.content.nav_title", comment: "Navigation title"))
@@ -223,7 +228,7 @@ struct ContentView: SwiftUI.View {
                     .frame(maxWidth: 520)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(.systemBackground))
+                            .fill(AppTheme.card)
                             .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
                     )
                 }
@@ -252,7 +257,7 @@ struct ContentView: SwiftUI.View {
                     .frame(maxWidth: 520)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(.systemBackground))
+                            .fill(AppTheme.card)
                             .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
                     )
                 }
@@ -281,7 +286,7 @@ struct ContentView: SwiftUI.View {
                     .frame(maxWidth: 520)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(.systemBackground))
+                            .fill(AppTheme.card)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .stroke(Color.secondary.opacity(0.12), lineWidth: 0.8)
@@ -294,17 +299,7 @@ struct ContentView: SwiftUI.View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(.systemGroupedBackground),
-                    Color(.secondarySystemGroupedBackground)
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
+        .appBackground()
     }
 
     @ViewBuilder
@@ -322,7 +317,7 @@ struct ContentView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 24) {
                 // Brand header (same “title-under-logo” as empty state)
                 VStack(alignment: .leading, spacing: 10) {
-                    CareViewKidsMark(style: .large)
+                    CareViewKidsMark(style: .compact)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     Text(L("patient_viewer.content.nav_title", comment: "Navigation title"))
@@ -385,7 +380,8 @@ struct ContentView: SwiftUI.View {
                         ActionCard(
                             systemImage: "list.bullet.rectangle",
                             title: L("patient_viewer.content.card.visits.title", comment: "Visits card title"),
-                            subtitle: L("patient_viewer.content.card.visits.subtitle", comment: "Visits card subtitle")
+                            subtitle: L("patient_viewer.content.card.visits.subtitle", comment: "Visits card subtitle"),
+                            background: AppTheme.card
                         )
                     }
                     .buttonStyle(.plain)
@@ -400,7 +396,8 @@ struct ContentView: SwiftUI.View {
                         ActionCard(
                             systemImage: "chart.bar.xaxis",
                             title: L("patient_viewer.content.card.growth.title", comment: "Growth card title"),
-                            subtitle: L("patient_viewer.content.card.growth.subtitle", comment: "Growth card subtitle")
+                            subtitle: L("patient_viewer.content.card.growth.subtitle", comment: "Growth card subtitle"),
+                            background: AppTheme.card
                         )
                     }
                     .buttonStyle(.plain)
@@ -421,7 +418,8 @@ struct ContentView: SwiftUI.View {
                             ActionCard(
                                 systemImage: "text.bubble.fill",
                                 title: L("patient_viewer.content.card.parent_notes.title", comment: "Parent notes card title"),
-                                subtitle: L("patient_viewer.content.card.parent_notes.subtitle", comment: "Parent notes card subtitle")
+                                subtitle: L("patient_viewer.content.card.parent_notes.subtitle", comment: "Parent notes card subtitle"),
+                                background: AppTheme.card
                             )
                         }
                         .buttonStyle(.plain)
@@ -434,7 +432,8 @@ struct ContentView: SwiftUI.View {
                         ActionCard(
                             systemImage: "paperclip",
                             title: L("patient_viewer.content.card.documents.title", comment: "Documents card title"),
-                            subtitle: L("patient_viewer.content.card.documents.subtitle", comment: "Documents card subtitle")
+                            subtitle: L("patient_viewer.content.card.documents.subtitle", comment: "Documents card subtitle"),
+                            background: AppTheme.card
                         )
                     }
                     .buttonStyle(.plain)
@@ -458,7 +457,8 @@ struct ContentView: SwiftUI.View {
                         ActionCard(
                             systemImage: "square.and.arrow.up",
                             title: L("patient_viewer.content.card.export.title", comment: "Export card title"),
-                            subtitle: L("patient_viewer.content.card.export.subtitle", comment: "Export card subtitle")
+                            subtitle: L("patient_viewer.content.card.export.subtitle", comment: "Export card subtitle"),
+                            background: AppTheme.card
                         )
                     }
                     .buttonStyle(.plain)
@@ -484,6 +484,7 @@ struct ContentView: SwiftUI.View {
             }
             .padding()
         }
+        .appBackground()
     }
 
     // MARK: - Clear helper (logic unchanged, just extracted for reuse)
@@ -580,7 +581,8 @@ struct ContentView: SwiftUI.View {
             }
             try fm.copyItem(at: srcDB, to: destDB)
             let destLabel = "PersistentBundles/\(alias)/\(destDB.lastPathComponent)"
-            log.info("Saved db.sqlite to persistent | file=\(destLabel, privacy: .public)")
+            let fileTok = AppLog.token(destDB.lastPathComponent)
+            log.info("Saved db.sqlite to persistent | fileTok=\(fileTok, privacy: .public)")
 
             // Copy docs folder if present (replace atomically)
             let srcDocs = activeURL.appendingPathComponent("docs", isDirectory: true)
@@ -624,7 +626,7 @@ private struct CareViewKidsMark: SwiftUI.View {
         var font: SwiftUI.Font {
             switch self {
             case .large:
-                return .system(.largeTitle, design: .default).weight(.bold)
+                return .system(.title2, design: .default).weight(.bold)
             case .compact:
                 return .system(.headline, design: .default).weight(.semibold)
             }
@@ -668,6 +670,9 @@ private struct CareViewKidsMark: SwiftUI.View {
             Capsule(style: .continuous)
                 .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
         )
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .fixedSize(horizontal: false, vertical: false)
         .accessibilityLabel(Text("CareView Kids"))
     }
 }
@@ -677,6 +682,7 @@ private struct ActionCard: SwiftUI.View {
     let systemImage: String
     let title: String
     let subtitle: String
+    let background: Color
 
     var body: some SwiftUI.View {
         HStack(alignment: .center, spacing: 14) {
@@ -710,7 +716,7 @@ private struct ActionCard: SwiftUI.View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.systemBackground))
+                .fill(background)
                 .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
         )
     }

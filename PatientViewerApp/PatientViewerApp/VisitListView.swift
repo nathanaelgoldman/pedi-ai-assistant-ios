@@ -31,6 +31,7 @@ let outputDateFormatter: DateFormatter = {
 
 private let logVisits = AppLog.feature("visits")
 
+
 // MARK: - Localization (file-local)
 @inline(__always)
 private func L(_ key: String, comment: String = "") -> String {
@@ -131,74 +132,95 @@ struct VisitDetailView: SwiftUI.View {
     @State private var showingPDFPreview = false
 
     var body: some SwiftUI.View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                GroupBox(label: Label(L("patient_viewer.visit_detail.section.info", comment: "Section title"), systemImage: "info.circle")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(LF("patient_viewer.visit_detail.field.date", formatDate(visit.date)), systemImage: "calendar")
-                        Label(LF("patient_viewer.visit_detail.field.diagnosis", visit.type), systemImage: "stethoscope")
-                        Label(LF("patient_viewer.visit_detail.field.category", visit.category.capitalized), systemImage: "folder")
-                    }
-                    .padding(.top, 4)
-                }
+        ZStack {
+            AppTheme.background
+                .ignoresSafeArea()
 
-                GroupBox(label: Label(L("patient_viewer.visit_detail.section.report", comment: "Section title"), systemImage: "doc.text")) {
-                    Button(action: {
-                        logVisits.info("Preview PDF tapped for visit id=\(visit.id, privacy: .public) category=\(visit.category, privacy: .public)")
-                        if visit.category == "sick" {
-                            let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
-                            logVisits.info("Generating SickVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
-                            if let fileURL = SickVisitPDFGenerator.generate(for: visit, dbURL: dbURL) {
-                                logVisits.info("SickVisit PDF prepared at \(fileURL.lastPathComponent, privacy: .public)")
-                                DispatchQueue.main.async {
-                                    self.generatedPDFURL = IdentifiableURL(url: fileURL)
-                                    self.showingPDFPreview = true
-                                }
-                            } else {
-                                logVisits.error("SickVisitPDFGenerator returned nil")
-                            }
-                        } else {
-                            if visit.category == "well" {
-                                Task {
-                                    logVisits.info("Generating WellVisit PDF for id=\(visit.id, privacy: .public)")
-                                    do {
-                                        if let fileURL = try await WellVisitPDFGenerator.generate(for: visit, dbURL: dbURL) {
-                                            logVisits.info("WellVisit PDF prepared at \(fileURL.lastPathComponent, privacy: .public)")
-                                            DispatchQueue.main.async {
-                                                self.generatedPDFURL = IdentifiableURL(url: fileURL)
-                                                self.showingPDFPreview = true
-                                            }
-                                        } else {
-                                            logVisits.error("WellVisitPDFGenerator returned nil")
-                                        }
-                                    } catch {
-                                        logVisits.error("Error generating Well Visit PDF: \(String(describing: error))")
-                                    }
-                                }
-                            } else {
-                                logVisits.info("Generating fallback simple PDF for id=\(visit.id, privacy: .public)")
-                                if let fileURL = PDFGenerator.generateVisitPDF(visit: visit) {
-                                    logVisits.info("Fallback PDF prepared at \(fileURL.lastPathComponent, privacy: .public)")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    GroupBox(label: Label(L("patient_viewer.visit_detail.section.info", comment: "Section title"), systemImage: "info.circle")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(LF("patient_viewer.visit_detail.field.date", formatDate(visit.date)), systemImage: "calendar")
+                            Label(LF("patient_viewer.visit_detail.field.diagnosis", visit.type), systemImage: "stethoscope")
+                            Label(LF("patient_viewer.visit_detail.field.category", visit.category.capitalized), systemImage: "folder")
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(12)
+                    .background(AppTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color(.quaternaryLabel), lineWidth: 0.8)
+                    )
+
+                    GroupBox(label: Label(L("patient_viewer.visit_detail.section.report", comment: "Section title"), systemImage: "doc.text")) {
+                        Button(action: {
+                            logVisits.info("Preview PDF tapped for visit id=\(visit.id, privacy: .public) category=\(visit.category, privacy: .public)")
+                            if visit.category == "sick" {
+                                let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
+                                logVisits.info("Generating SickVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
+                                if let fileURL = SickVisitPDFGenerator.generate(for: visit, dbURL: dbURL) {
+                                    logVisits.info("SickVisit PDF prepared at \(fileURL.lastPathComponent, privacy: .public)")
                                     DispatchQueue.main.async {
                                         self.generatedPDFURL = IdentifiableURL(url: fileURL)
                                         self.showingPDFPreview = true
                                     }
                                 } else {
-                                    logVisits.error("PDFGenerator returned nil")
+                                    logVisits.error("SickVisitPDFGenerator returned nil")
+                                }
+                            } else {
+                                if visit.category == "well" {
+                                    Task {
+                                        logVisits.info("Generating WellVisit PDF for id=\(visit.id, privacy: .public)")
+                                        do {
+                                            if let fileURL = try await WellVisitPDFGenerator.generate(for: visit, dbURL: dbURL) {
+                                                logVisits.info("WellVisit PDF prepared at \(fileURL.lastPathComponent, privacy: .public)")
+                                                DispatchQueue.main.async {
+                                                    self.generatedPDFURL = IdentifiableURL(url: fileURL)
+                                                    self.showingPDFPreview = true
+                                                }
+                                            } else {
+                                                logVisits.error("WellVisitPDFGenerator returned nil")
+                                            }
+                                        } catch {
+                                            logVisits.error("Error generating Well Visit PDF: \(String(describing: error))")
+                                        }
+                                    }
+                                } else {
+                                    logVisits.info("Generating fallback simple PDF for id=\(visit.id, privacy: .public)")
+                                    if let fileURL = PDFGenerator.generateVisitPDF(visit: visit) {
+                                        logVisits.info("Fallback PDF prepared at \(fileURL.lastPathComponent, privacy: .public)")
+                                        DispatchQueue.main.async {
+                                            self.generatedPDFURL = IdentifiableURL(url: fileURL)
+                                            self.showingPDFPreview = true
+                                        }
+                                    } else {
+                                        logVisits.error("PDFGenerator returned nil")
+                                    }
                                 }
                             }
+                        }) {
+                            Label(L("patient_viewer.visit_detail.action.preview_pdf", comment: "Button"), systemImage: "doc.richtext")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
                         }
-                    }) {
-                        Label(L("patient_viewer.visit_detail.action.preview_pdf", comment: "Button"), systemImage: "doc.richtext")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
                     }
+                    .padding(12)
+                    .background(AppTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color(.quaternaryLabel), lineWidth: 0.8)
+                    )
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
             }
-            .padding()
         }
         .onAppear {
             logVisits.info("VisitDetailView appeared id=\(visit.id, privacy: .public) date=\(visit.date, privacy: .public) category=\(visit.category, privacy: .public)")
@@ -207,7 +229,6 @@ struct VisitDetailView: SwiftUI.View {
         .sheet(item: $generatedPDFURL) { identifiableURL in
             PDFPreviewContainer(fileURL: identifiableURL.url, visit: visit, dbURL: dbURL)
         }
-        .padding()
         .alert(isPresented: $showExportAlert) {
             Alert(
                 title: Text(L("patient_viewer.visit_detail.alert.pdf_generated.title", comment: "Alert title")),
@@ -228,48 +249,53 @@ struct PDFPreviewContainer: SwiftUI.View {
 
     var body: some SwiftUI.View {
         NavigationView {
-            Group {
-                if let document = PDFDocument(url: fileURL) {
-                    PDFKitView(document: document)
-                        .navigationTitle(L("patient_viewer.pdf_preview.nav_title", comment: "Navigation title"))
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button(L("patient_viewer.common.done", comment: "Common")) {
-                                    logVisits.info("PDFPreview Done tapped for \(fileURL.lastPathComponent, privacy: .public)")
-                                    dismiss()
-                                }
-                            }
-                            ToolbarItem(placement: .primaryAction) {
-                                Button {
-                                    logVisits.info("PDFPreview Share tapped for \(fileURL.lastPathComponent, privacy: .public)")
+            ZStack {
+                AppTheme.background
+                    .ignoresSafeArea()
 
-                                    // Build the named copy first, then present using a non-nil Identifiable URL.
-                                    // Using `.sheet(item:)` avoids the “No items to share” first-tap race.
-                                    let shareCopyURL = makeNamedShareCopy(originalURL: fileURL, visit: visit, bundleRoot: dbURL)
-                                    DispatchQueue.main.async {
-                                        self.shareURL = IdentifiableURL(url: shareCopyURL)
+                Group {
+                    if let document = PDFDocument(url: fileURL) {
+                        PDFKitView(document: document)
+                            .navigationTitle(L("patient_viewer.pdf_preview.nav_title", comment: "Navigation title"))
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button(L("patient_viewer.common.done", comment: "Common")) {
+                                        logVisits.info("PDFPreview Done tapped for \(fileURL.lastPathComponent, privacy: .public)")
+                                        dismiss()
                                     }
-                                } label: {
-                                    Image(systemName: "square.and.arrow.up")
+                                }
+                                ToolbarItem(placement: .primaryAction) {
+                                    Button {
+                                        logVisits.info("PDFPreview Share tapped for \(fileURL.lastPathComponent, privacy: .public)")
+
+                                        // Build the named copy first, then present using a non-nil Identifiable URL.
+                                        // Using `.sheet(item:)` avoids the “No items to share” first-tap race.
+                                        let shareCopyURL = makeNamedShareCopy(originalURL: fileURL, visit: visit, bundleRoot: dbURL)
+                                        DispatchQueue.main.async {
+                                            self.shareURL = IdentifiableURL(url: shareCopyURL)
+                                        }
+                                    } label: {
+                                        Image(systemName: "square.and.arrow.up")
+                                    }
                                 }
                             }
-                        }
-                        .onAppear {
-                            logVisits.info("PDFPreview presented: \(fileURL.lastPathComponent, privacy: .public)")
-                        }
-                } else {
-                    VStack {
-                        Text(L("patient_viewer.pdf_preview.error.could_not_load", comment: "Error"))
-                            .foregroundColor(.red)
-                        Text(L("patient_viewer.pdf_preview.label.path", comment: "Label"))
-                        Text(fileURL.lastPathComponent)
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                            .onAppear {
+                                logVisits.info("PDFPreview presented: \(fileURL.lastPathComponent, privacy: .public)")
+                            }
+                    } else {
+                        VStack {
+                            Text(L("patient_viewer.pdf_preview.error.could_not_load", comment: "Error"))
+                                .foregroundColor(.red)
+                            Text(L("patient_viewer.pdf_preview.label.path", comment: "Label"))
+                            Text(fileURL.lastPathComponent)
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .padding()
+                            Button(L("patient_viewer.common.done", comment: "Common")) {
+                                dismiss()
+                            }
                             .padding()
-                        Button(L("patient_viewer.common.done", comment: "Common")) {
-                            dismiss()
                         }
-                        .padding()
                     }
                 }
             }
@@ -302,82 +328,79 @@ struct VisitListView: SwiftUI.View {
     }
 
     var body: some SwiftUI.View {
-        ZStack {
-            Color(.systemGroupedBackground)
-                .ignoresSafeArea()
+        VStack(alignment: .leading, spacing: 16) {
+            // Header
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("patient_viewer.visits.list.title", comment: "Screen title"))
+                    .font(.title2)
+                    .fontWeight(.semibold)
 
-            VStack(alignment: .leading, spacing: 16) {
-                // Header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L("patient_viewer.visits.list.title", comment: "Screen title"))
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                Text(L("patient_viewer.visits.list.subtitle", comment: "Screen subtitle"))
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.top, 4)
 
-                    Text(L("patient_viewer.visits.list.subtitle", comment: "Screen subtitle"))
-                        .font(.subheadline)
+            // Segmented picker in a subtle card
+            VStack {
+                Picker(L("patient_viewer.visits.list.picker.label", comment: "Picker label"), selection: $selectedCategory) {
+                    Text(L("patient_viewer.visits.list.segment.well", comment: "Segment")).tag("well")
+                    Text(L("patient_viewer.visits.list.segment.sick", comment: "Segment")).tag("sick")
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(8)
+            .background(AppTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .onChange(of: selectedCategory) { oldValue, newValue in
+                logVisits.info("VisitList filter changed from \(oldValue, privacy: .public) to \(newValue, privacy: .public)")
+            }
+
+            // Visits list as cards
+            if filteredVisits.isEmpty {
+                Spacer()
+
+                VStack(spacing: 8) {
+                    Image(systemName: selectedCategory == "well" ? "figure.child" : "bandage")
+                        .font(.system(size: 40, weight: .regular))
                         .foregroundColor(.secondary)
-                }
-                .padding(.top, 4)
 
-                // Segmented picker in a subtle card
-                VStack {
-                    Picker(L("patient_viewer.visits.list.picker.label", comment: "Picker label"), selection: $selectedCategory) {
-                        Text(L("patient_viewer.visits.list.segment.well", comment: "Segment")).tag("well")
-                        Text(L("patient_viewer.visits.list.segment.sick", comment: "Segment")).tag("sick")
-                    }
-                    .pickerStyle(.segmented)
-                }
-                .padding(8)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .onChange(of: selectedCategory) { oldValue, newValue in
-                    logVisits.info("VisitList filter changed from \(oldValue, privacy: .public) to \(newValue, privacy: .public)")
+                    Text(selectedCategory == "well"
+                        ? L("patient_viewer.visits.list.empty.well", comment: "Empty state")
+                        : L("patient_viewer.visits.list.empty.sick", comment: "Empty state")
+                    )
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    Text(L("patient_viewer.visits.list.empty.hint", comment: "Empty state hint"))
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
                 }
 
-                // Visits list as cards
-                if filteredVisits.isEmpty {
-                    Spacer()
-
-                    VStack(spacing: 8) {
-                        Image(systemName: selectedCategory == "well" ? "figure.child" : "bandage")
-                            .font(.system(size: 40, weight: .regular))
-                            .foregroundColor(.secondary)
-
-                        Text(selectedCategory == "well"
-                            ? L("patient_viewer.visits.list.empty.well", comment: "Empty state")
-                            : L("patient_viewer.visits.list.empty.sick", comment: "Empty state")
-                        )
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-
-                        Text(L("patient_viewer.visits.list.empty.hint", comment: "Empty state hint"))
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                    }
-
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filteredVisits) { visit in
-                                NavigationLink {
-                                    VisitDetailView(visit: visit, dbURL: dbURL)
-                                } label: {
-                                    VisitCard(visit: visit)
-                                }
-                                .buttonStyle(.plain)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(filteredVisits) { visit in
+                            NavigationLink {
+                                VisitDetailView(visit: visit, dbURL: dbURL)
+                            } label: {
+                                VisitCard(visit: visit)
                             }
+                            .buttonStyle(.plain)
                         }
-                        .padding(.top, 4)
                     }
+                    .padding(.top, 4)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
         .navigationTitle(L("patient_viewer.visits.list.nav_title", comment: "Navigation title"))
+        .appBackground()
+        .appNavBarBackground()
         .onAppear {
             let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
             logVisits.info("VisitListView appeared | db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
@@ -506,7 +529,7 @@ struct VisitCard: SwiftUI.View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.systemBackground))
+                .fill(AppTheme.card)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)

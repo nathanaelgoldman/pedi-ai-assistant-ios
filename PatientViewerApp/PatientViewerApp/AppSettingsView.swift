@@ -117,7 +117,21 @@ struct AppSettingsView: View {
                         .padding(.vertical, 2)
                     }
                 }
+
+                // MARK: - About
+                Section {
+                    NavigationLink {
+                        AboutCareViewKidsView()
+                    } label: {
+                        Label(
+                            L("patient_viewer.app_settings.about.title", comment: "About section title"),
+                            systemImage: "info.circle"
+                        )
+                    }
+                }
             }
+            .appListBackground()
+            .appNavBarBackground()
             .navigationTitle(L("patient_viewer.app_settings.nav_title", comment: "Navigation title"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -196,5 +210,123 @@ struct AppSettingsView: View {
     private func showSuccess(_ message: String) {
         statusMessage = message
         isError = false
+    }
+}
+
+
+// MARK: - About screen
+
+private struct AboutCareViewKidsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private var appName: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+        ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String)
+        ?? "CareView Kids"
+    }
+
+    private var versionString: String {
+        let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "-"
+        let build = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "-"
+        return "\(version) (\(build))"
+    }
+
+    private var bundleID: String {
+        Bundle.main.bundleIdentifier ?? "-"
+    }
+
+    // TODO: Replace placeholders with your real contacts.
+    private let whatsappContact = "+32475416394"   // E.164 recommended (e.g. +14155552671)
+    private let wechatContact = "yunastic"          // e.g. CareViewKids
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(appName)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .allowsTightening(true)
+
+                    Text(L("patient_viewer.app_settings.about.subtitle", comment: "About subtitle"))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section(L("patient_viewer.app_settings.about.section.app_info", comment: "About section")) {
+                AboutRow(labelKey: "patient_viewer.app_settings.about.row.version", value: versionString)
+                AboutRow(labelKey: "patient_viewer.app_settings.about.row.bundle_id", value: bundleID)
+            }
+
+            Section(L("patient_viewer.app_settings.about.section.privacy", comment: "About section")) {
+                Text(L("patient_viewer.app_settings.about.privacy.body", comment: "Privacy blurb"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(L("patient_viewer.app_settings.about.section.support", comment: "About section")) {
+
+                // WhatsApp
+                Button {
+                    copyToPasteboard(whatsappContact)
+                } label: {
+                    Label(
+                        String(format: L("patient_viewer.app_settings.about.support.whatsapp_fmt", comment: "WhatsApp label"), whatsappContact),
+                        systemImage: "message"
+                    )
+                }
+
+                // WeChat
+                Button {
+                    copyToPasteboard(wechatContact)
+                } label: {
+                    Label(
+                        String(format: L("patient_viewer.app_settings.about.support.wechat_fmt", comment: "WeChat label"), wechatContact),
+                        systemImage: "qrcode"
+                    )
+                }
+
+                Text(L("patient_viewer.app_settings.about.support.tap_to_copy", comment: "Support hint"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Text(L("patient_viewer.app_settings.about.credits", comment: "Credits"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .appListBackground()
+        .appNavBarBackground()
+        .navigationTitle(L("patient_viewer.app_settings.about.nav_title", comment: "About nav title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L("patient_viewer.app_settings.done", comment: "Done button")) { dismiss() }
+            }
+        }
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        UIPasteboard.general.string = text
+    }
+}
+
+private struct AboutRow: View {
+    let labelKey: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(L(labelKey, comment: "About row label"))
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }

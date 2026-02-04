@@ -779,7 +779,11 @@ struct BundleLibraryView: View {
                 .padding()
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
+                        .fill(AppTheme.card)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(AppTheme.cardStroke, lineWidth: 0.8)
                 )
             } else {
                 List {
@@ -818,10 +822,12 @@ struct BundleLibraryView: View {
                     }
                 }
                 .listStyle(.plain)
+                .appListBackground()
             }
         }
         .padding()
-        .background(Color(.systemGroupedBackground))
+        .appBackground()
+        .appNavBarBackground()
         .onAppear {
             ensureBaseDirectories()
             loadPersistentBundles()
@@ -961,10 +967,14 @@ private struct BundleRowCard: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            RoundedRectangle(cornerRadius: AppTheme.smallCornerRadius, style: .continuous)
+                .fill(AppTheme.card)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.smallCornerRadius, style: .continuous)
+                .stroke(AppTheme.cardStroke, lineWidth: 0.8)
+        )
+        .shadow(color: AppTheme.cardShadow, radius: 4, x: 0, y: 2)
     }
 }
 
@@ -1897,7 +1907,7 @@ private struct BundleRowCard: View {
     }
 
     private func extractPatientInfo(from bundleURL: URL) {
-        log.debug("🔍 Starting extractPatientInfo from folder: \(bundleURL.lastPathComponent, privacy: .public)")
+      log.debug("🔍 Starting extractPatientInfo | bundle=\(AppLog.bundleRef(bundleURL), privacy: .public)")
         let dbPath = bundleURL.appendingPathComponent("db.sqlite").path
         var db: OpaquePointer?
 
@@ -1914,7 +1924,9 @@ private struct BundleRowCard: View {
                     if let dobCStr = sqlite3_column_text(stmt, 1) {
                         bundleDOB = String(cString: dobCStr)
                     }
-                    log.debug("✅ Extracted alias: \(self.bundleAlias, privacy: .private(mask: .hash)), DOB: \(self.bundleDOB, privacy: .private)")
+                    let aliasTok = AppLog.token(self.bundleAlias)
+                    let dobTok = AppLog.token(self.bundleDOB)
+                    log.debug("✅ Extracted patient identity | aliasTok=\(aliasTok, privacy: .public) dobTok=\(dobTok, privacy: .public)")
                 }
                 sqlite3_finalize(stmt)
             }

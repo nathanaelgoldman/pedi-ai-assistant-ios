@@ -27,6 +27,32 @@ private let isoFormatter: ISO8601DateFormatter = {
     return f
 }()
 
+private let isoFormatterNoFrac: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime]
+    return f
+}()
+
+private let noteDisplayFormatter: DateFormatter = {
+    let df = DateFormatter()
+    df.locale = .current
+    df.timeZone = .current
+    df.dateStyle = .medium
+    df.timeStyle = .short
+    return df
+}()
+
+private extension SwiftUI.View {
+    @ViewBuilder
+    func scrollContentBackgroundCompatHidden() -> some SwiftUI.View {
+        if #available(iOS 16.0, *) {
+            self.scrollContentBackground(.hidden)
+        } else {
+            self
+        }
+    }
+}
+
 @MainActor struct ParentNotesView: SwiftUI.View {
     let dbURL: URL
     let patientId: Int64
@@ -38,45 +64,94 @@ private let isoFormatter: ISO8601DateFormatter = {
     @State private var alertMessage = ""
     @State private var refreshTrigger = false
 
+    // MARK: - Display helpers
+    private func parseISO8601(_ s: String) -> Date? {
+        if let d = isoFormatter.date(from: s) { return d }
+        if let d = isoFormatterNoFrac.date(from: s) { return d }
+        return nil
+    }
+
+    /// Converts stored notes like "[2026-02-04T08:35:16.134Z] Hello" into
+    /// "[Feb 4, 2026, 4:35 PM] Hello" using the current locale.
+    private func formatNoteForDisplay(_ raw: String) -> String {
+        guard raw.hasPrefix("[") else { return raw }
+        guard let end = raw.firstIndex(of: "]") else { return raw }
+
+        let tsStart = raw.index(after: raw.startIndex)
+        let ts = String(raw[tsStart..<end])
+        let remainderStart = raw.index(after: end)
+        let remainder = raw[remainderStart...].trimmingCharacters(in: .whitespaces)
+
+        guard let d = parseISO8601(ts) else { return raw }
+        let pretty = noteDisplayFormatter.string(from: d)
+
+        if remainder.isEmpty {
+            return "[\(pretty)]"
+        }
+        return "[\(pretty)] \(remainder)"
+    }
+
     var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("parentNotes.title")
-                .font(.title2)
-                .padding(.bottom, 8)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("parentNotes.title")
+                    .font(.title2)
+                    .padding(.bottom, 8)
 
-            TextEditor(text: $noteInput)
-                .frame(height: 100)
-                .border(Color.gray, width: 1)
-
-            HStack {
-                Spacer()
-                Button("parentNotes.saveNote") {
-                    saveNote()
+                // Rounded note input area (theme card)
+                VStack(alignment: .leading, spacing: 8) {
+                    TextEditor(text: $noteInput)
+                        .frame(minHeight: 110)
+                        .padding(10)
+                        .background(Color.clear)
+                        .scrollContentBackgroundCompatHidden()
                 }
-                .buttonStyle(.borderedProminent)
-            }
+                .background(
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                        .fill(AppTheme.card)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                        .stroke(AppTheme.cardStroke, lineWidth: 0.8)
+                )
 
-            Divider()
+                HStack {
+                    Spacer()
+                    Button("parentNotes.saveNote") {
+                        saveNote()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
 
-            if notes.isEmpty {
-                Text("parentNotes.empty")
-                    .foregroundColor(.gray)
-            } else {
-                Text("parentNotes.notesHeader")
-                    .font(.headline)
+                Divider()
 
-                ScrollView {
+                if notes.isEmpty {
+                    Text("parentNotes.empty")
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("parentNotes.notesHeader")
+                        .font(.headline)
+
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(notes.indices, id: \.self) { idx in
-                            HStack {
-                                Text(notes[idx])
+                            HStack(alignment: .top, spacing: 10) {
+                                Text(formatNoteForDisplay(notes[idx]))
                                     .font(.body)
-                                    .padding(8)
-                                    .background(Color(.secondarySystemBackground))
-                                    .cornerRadius(8)
-                                Spacer()
-                                Button("parentNotes.deleteIcon") {
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: AppTheme.smallCornerRadius, style: .continuous)
+                                            .fill(AppTheme.card)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: AppTheme.smallCornerRadius, style: .continuous)
+                                            .stroke(AppTheme.cardStroke, lineWidth: 0.8)
+                                    )
+
+                                Button {
                                     deleteNote(at: idx)
+                                } label: {
+                                    Image(systemName: "trash")
                                 }
                                 .accessibilityLabel(Text("parentNotes.deleteNote.accessibilityLabel"))
                                 .buttonStyle(.bordered)
@@ -85,8 +160,12 @@ private let isoFormatter: ISO8601DateFormatter = {
                     }
                 }
             }
+            .padding()
         }
-        .padding()
+        .appBackground()
+        .appNavBarBackground()
+        .navigationTitle(L("parentNotes.title"))
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             loadNotes()
         }

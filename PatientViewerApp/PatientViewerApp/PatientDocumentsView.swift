@@ -82,11 +82,11 @@ struct PatientDocumentsView: View {
                 HStack(alignment: .center, spacing: 12) {
                     ZStack {
                         Circle()
-                            .fill(Color(.systemBlue).opacity(0.1))
+                            .fill(Color.accentColor.opacity(0.12))
                             .frame(width: 44, height: 44)
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(.system(size: 22, weight: .semibold))
-                            .foregroundColor(Color(.systemBlue))
+                            .foregroundColor(.accentColor)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -145,7 +145,7 @@ struct PatientDocumentsView: View {
                     .padding(.vertical, 40)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
+                            .fill(AppTheme.card)
                     )
                 } else {
                     VStack(spacing: 12) {
@@ -153,7 +153,7 @@ struct PatientDocumentsView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(alignment: .firstTextBaseline) {
                                     Image(systemName: "doc.text")
-                                        .foregroundColor(Color(.systemBlue))
+                                        .foregroundColor(.accentColor)
 
                                     Text(record.originalName)
                                         .font(.headline)
@@ -194,7 +194,7 @@ struct PatientDocumentsView: View {
                             .padding(14)
                             .background(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color(.secondarySystemBackground))
+                                    .fill(AppTheme.card)
                             )
                         }
                     }
@@ -243,6 +243,7 @@ struct PatientDocumentsView: View {
         } message: { record in
             Text(record.originalName)
         }
+        .appBackground()
     }
 
     // MARK: - File Handling
@@ -250,7 +251,7 @@ struct PatientDocumentsView: View {
     private func openFile(record: DocumentRecord) {
         let docsFolder = dbURL.appendingPathComponent("docs")
         let fileURL = docsFolder.appendingPathComponent(record.filename)
-        documentsLog.debug("Attempting to open file: \(fileURL.lastPathComponent, privacy: .public)")
+        documentsLog.debug("Attempting to open file | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
             guard !isPreviewing else {
@@ -277,9 +278,9 @@ struct PatientDocumentsView: View {
         do {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 try FileManager.default.removeItem(at: fileURL)
-                documentsLog.debug("Removed file: \(fileURL.lastPathComponent, privacy: .public)")
+                documentsLog.debug("Removed file | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
             } else {
-                documentsLog.warning("File to delete not found: \(fileURL.lastPathComponent, privacy: .public)")
+                documentsLog.warning("File to delete not found | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
             }
 
             // If currently previewing this file, dismiss the preview.
@@ -369,7 +370,7 @@ struct PatientDocumentsView: View {
         let legacyManifest = dbURL.appendingPathComponent("docs/manifest.json")
 
         func loadFromRootManifest(url: URL) -> Bool {
-            documentsLog.debug("Attempting to read manifest from ROOT: \(url.lastPathComponent, privacy: .public)")
+            documentsLog.debug("Attempting to read manifest from ROOT | file=\(url.lastPathComponent, privacy: .public)")
             do {
                 let data = try Data(contentsOf: url)
                 // Expect object with "files" map: { "files": { "filename": { ...meta... } } }
@@ -404,7 +405,7 @@ struct PatientDocumentsView: View {
         }
 
         func loadFromLegacyManifest(url: URL) -> Bool {
-            documentsLog.debug("Attempting to read manifest from LEGACY docs/: \(url.lastPathComponent, privacy: .public)")
+            documentsLog.debug("Attempting to read manifest from LEGACY docs/ | file=\(url.lastPathComponent, privacy: .public)")
             do {
                 let data = try Data(contentsOf: url)
                 // Try legacy array schema first
@@ -549,7 +550,7 @@ struct QuickLookPreview: UIViewControllerRepresentable {
             preview.navigationItem.leftBarButtonItem = doneItem
         }
 
-        Self.log.debug("Prepared QLPreview for \(self.url.lastPathComponent, privacy: .public)")
+        Self.log.debug("Prepared QLPreview | file=DOC#\(AppLog.token(self.url.lastPathComponent), privacy: .public)")
         return nav
     }
 
@@ -580,7 +581,7 @@ struct QuickLookPreview: UIViewControllerRepresentable {
         // MARK: - Actions
 
         @objc func shareTapped() {
-            QuickLookPreview.log.info("Share tapped for \(self.url.lastPathComponent, privacy: .public)")
+            QuickLookPreview.log.info("Share tapped | file=DOC#\(AppLog.token(self.url.lastPathComponent), privacy: .public)")
 
             // Stage a copy in a temp location so any extension can read it safely.
             let tmpDir = FileManager.default.temporaryDirectory
@@ -593,7 +594,7 @@ struct QuickLookPreview: UIViewControllerRepresentable {
                 }
                 try FileManager.default.copyItem(at: self.url, to: stagedURL)
                 provider = NSItemProvider(contentsOf: stagedURL)
-                QuickLookPreview.log.debug("Staged share copy: \(stagedURL.lastPathComponent, privacy: .public)")
+                QuickLookPreview.log.debug("Staged share copy | file=DOC#\(AppLog.token(stagedURL.lastPathComponent), privacy: .public)")
             } catch {
                 QuickLookPreview.log.error("Failed to stage share copy: \(String(describing: error), privacy: .public). Falling back to direct provider.")
                 provider = NSItemProvider(contentsOf: self.url)

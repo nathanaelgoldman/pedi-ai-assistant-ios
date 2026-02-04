@@ -774,3 +774,34 @@
 "well_visit_form.problem_listing.header.line" = "%@, %@:";
 
 "well_report.error.db_error" = "❌ Erreur de base de données lors de la génération du rapport.";
+
+/* À propos – entrée */
+"patient_viewer.app_settings.about.title" = "À propos";
+
+/* À propos – navigation */
+"patient_viewer.app_settings.about.nav_title" = "À propos de CareView Kids";
+
+/* À propos – en-tête */
+"patient_viewer.app_settings.about.subtitle" = "Dossiers pédiatriques sécurisés, conçus pour les familles.";
+
+/* À propos – sections */
+"patient_viewer.app_settings.about.section.app_info" = "Informations sur l’application";
+"patient_viewer.app_settings.about.section.privacy" = "Confidentialité";
+"patient_viewer.app_settings.about.section.support" = "Support";
+
+/* À propos – lignes */
+"patient_viewer.app_settings.about.row.version" = "Version";
+"patient_viewer.app_settings.about.row.bundle_id" = "Identifiant de l’application";
+
+/* À propos – confidentialité */
+"patient_viewer.app_settings.about.privacy.body" = "CareView Kids stocke et affiche les données médicales localement sur votre appareil. Aucune donnée patient n’est transmise à des serveurs externes sans action explicite de votre part.";
+
+/* À propos – support */
+"patient_viewer.app_settings.about.support.whatsapp_fmt" = "WhatsApp : %@";
+"patient_viewer.app_settings.about.support.wechat_fmt" = "WeChat : %@";
+"patient_viewer.app_settings.about.support.tap_to_copy" = "Touchez pour copier les coordonnées.";
+
+/* À propos – crédits */
+"patient_viewer.app_settings.about.credits" = "© CareView Kids. Conçu avec soin pour les enfants et leurs familles.";
+
+
