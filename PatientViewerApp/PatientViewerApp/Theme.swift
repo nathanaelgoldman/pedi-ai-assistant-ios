@@ -7,15 +7,59 @@
 import SwiftUI
 
 enum AppTheme {
-    // MARK: - Core palette (your picked colors)
-    static let background = Color(red: 198.0/255.0, green: 223.0/255.0, blue: 255.0/255.0) // app background
-    static let card       = Color(red: 222.0/255.0, green: 227.0/255.0, blue: 243.0/255.0) // cards/buttons
-    static let cardStroke = Color(.quaternaryLabel)
+    // MARK: - Core palette (adaptive for Light/Dark)
+
+    /// App background
+    static var background: Color {
+        Color(UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                // Deeper blue-grey for dark mode
+                return UIColor(red: 20.0/255.0, green: 28.0/255.0, blue: 40.0/255.0, alpha: 1.0)
+            } else {
+                // Your picked light background
+                return UIColor(red: 198.0/255.0, green: 223.0/255.0, blue: 255.0/255.0, alpha: 1.0)
+            }
+        })
+    }
+
+    /// Cards / buttons background
+    static var card: Color {
+        Color(UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                // Slightly lighter than background so cards pop
+                return UIColor(red: 34.0/255.0, green: 45.0/255.0, blue: 62.0/255.0, alpha: 1.0)
+            } else {
+                // Your picked light card
+                return UIColor(red: 222.0/255.0, green: 227.0/255.0, blue: 243.0/255.0, alpha: 1.0)
+            }
+        })
+    }
+
+    /// Subtle stroke for cards (dynamic system color)
+    static var cardStroke: Color {
+        Color(UIColor { traits in
+            // Use a slightly stronger stroke in dark mode for definition
+            if traits.userInterfaceStyle == .dark {
+                return UIColor.separator.withAlphaComponent(0.45)
+            } else {
+                return UIColor.separator.withAlphaComponent(0.30)
+            }
+        })
+    }
 
     // Optional helpers (nice for consistent styling)
     static let cornerRadius: CGFloat = 18
     static let smallCornerRadius: CGFloat = 14
-    static let cardShadow = Color.black.opacity(0.05)
+
+    static var cardShadow: Color {
+        Color(UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                return UIColor.black.withAlphaComponent(0.35)
+            } else {
+                return UIColor.black.withAlphaComponent(0.05)
+            }
+        })
+    }
 }
 
 // MARK: - Reusable view modifiers
@@ -41,11 +85,14 @@ private struct AppListBackgroundModifier: ViewModifier {
 }
 
 private struct AppNavBarBackgroundModifier: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+
     func body(content: Content) -> some View {
         if #available(iOS 16.0, *) {
             content
                 .toolbarBackground(AppTheme.background, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarColorScheme(scheme, for: .navigationBar)
         } else {
             content
         }
