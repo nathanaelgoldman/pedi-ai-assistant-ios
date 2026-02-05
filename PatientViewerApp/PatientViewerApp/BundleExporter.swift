@@ -16,6 +16,17 @@ import os
 struct BundleExporter {
     // Unified logger for this component
     private static let log = AppLog.feature("BundleExporter")
+
+    // MARK: - SupportLog helpers (fire-and-forget to avoid MainActor issues)
+    private static func SLInfo(_ message: String) {
+        Task { await SupportLog.shared.info(message) }
+    }
+    private static func SLWarn(_ message: String) {
+        Task { await SupportLog.shared.warn(message) }
+    }
+    private static func SLError(_ message: String) {
+        Task { await SupportLog.shared.error(message) }
+    }
     /// Compute SHA-256 hex digest of a file on disk (streaming).
     private static func sha256Hex(ofFile url: URL) throws -> String {
         guard let stream = InputStream(url: url) else {
@@ -206,6 +217,8 @@ struct BundleExporter {
         return slug.isEmpty ? "export" : slug
     }
     static func exportBundle(from folderURL: URL) async throws -> URL {
+        let t0 = Date()
+        SLInfo("EXPORT start")
         let dbURL = folderURL.appendingPathComponent("db.sqlite")
         let docsURL = folderURL.appendingPathComponent("docs")
         let exportsDir = FileManager.default.temporaryDirectory.appendingPathComponent("exports", isDirectory: true)
@@ -224,6 +237,7 @@ struct BundleExporter {
         do {
             BundleExporter.log.debug("Attempting to open database | db=\(AppLog.dbRef(dbURL), privacy: .public)")
             let db = try Connection(dbURL.path)
+            SLInfo("EXPORT open db ok")
             let patients = Table("patients")
             let idCol = Expression<Int64>("id")
             let aliasCol = Expression<String?>("alias_label")
@@ -238,9 +252,11 @@ struct BundleExporter {
             }
         } catch {
             BundleExporter.log.error("Failed to read patient info from db | err=\(String(describing: error), privacy: .private(mask: .hash))")
+            SLError("EXPORT open db failed")
         }
 
         guard let pid = patientID else {
+            SLError("EXPORT missing patient id")
             throw NSError(
                 domain: "BundleExport",
                 code: 1,
@@ -258,15 +274,19 @@ struct BundleExporter {
 
         // Ensure source db.sqlite has all recent changes before copying
         checkpointSourceDBIfWAL(at: dbURL.path)
+        SLInfo("EXPORT checkpoint wal done")
 
         try FileManager.default.copyItem(at: dbURL, to: bundleFolder.appendingPathComponent("db.sqlite"))
+        SLInfo("EXPORT copy db ok")
         let dbFileInBundle = bundleFolder.appendingPathComponent("db.sqlite")
 
         // Validate DB health and attempt a safe repair on the export copy
         if !integrityCheckOK(dbPath: dbFileInBundle.path) {
             BundleExporter.log.warning("integrity_check failed on export copy — attempting VACUUM repair…")
+            SLWarn("EXPORT integrity_check failed; attempting repair")
             attemptRepair(dbPath: dbFileInBundle.path)
             guard integrityCheckOK(dbPath: dbFileInBundle.path) else {
+                SLError("EXPORT integrity_check failed after repair")
                 throw NSError(
                     domain: "BundleExport",
                     code: 2,
@@ -280,6 +300,7 @@ struct BundleExporter {
         // Also validate foreign key consistency — this catches orphan rows missed by integrity_check
         if !foreignKeyCheckOK(dbPath: dbFileInBundle.path) {
             BundleExporter.log.error("foreign_key_check failed for export copy — aborting export.")
+            SLError("EXPORT foreign_key_check failed")
             throw NSError(
                 domain: "BundleExport",
                 code: 3,
@@ -290,9 +311,11 @@ struct BundleExporter {
         // NEW: Encrypt the DB for transport if our crypto layer is enabled for this app.
         // This mirrors the DrsMainApp export format so that both apps can round‑trip bundles.
         do {
+            SLInfo("EXPORT encrypt db start")
             try BundleCrypto.encryptDatabaseIfNeeded(at: bundleFolder)
         } catch {
             BundleExporter.log.error("Encryption step failed; aborting export: \(error.localizedDescription, privacy: .public)")
+            SLError("EXPORT encrypt db failed")
             throw NSError(
                 domain: "BundleExport",
                 code: 4,
@@ -310,6 +333,7 @@ struct BundleExporter {
         } else if fm.fileExists(atPath: encryptedDBURL.path) {
             dbFileToHash = encryptedDBURL
         } else {
+            SLError("EXPORT missing db files to hash")
             throw NSError(
                 domain: "BundleExport",
                 code: 5,
@@ -328,6 +352,7 @@ struct BundleExporter {
             includesDocs = true
             // Compute per-file hashes for docs
             docsManifest = try docsFileHashes(in: targetDocs)
+            SLInfo("EXPORT docs included | files=\(docsManifest.count)")
         }
         if includesDocs {
             BundleExporter.log.debug("Included docs with \(docsManifest.count, privacy: .public) file(s) in manifest.")
@@ -362,6 +387,8 @@ struct BundleExporter {
         // Create zip (no preview/open here) – the underlying format is ZIP,
         // even though the outward extension is .pemr.
         try FileManager.default.zipItem(at: bundleFolder, to: bundleOutputURL, shouldKeepParent: false)
+        let elapsedMs = Int(Date().timeIntervalSince(t0) * 1000)
+        SLInfo("EXPORT zip ok | elapsedMs=\(elapsedMs)")
 
         // Clean up working directory to avoid clutter
         removeIfExists(bundleFolder)
@@ -369,6 +396,7 @@ struct BundleExporter {
         // Log without using file:// scheme to keep logs tidy
         let outTok = AppLog.token(bundleOutputURL.lastPathComponent)
         BundleExporter.log.info("Export bundle ready | fileTok=\(outTok, privacy: .public)")
+        SLInfo("EXPORT done")
 
         return bundleOutputURL
     }

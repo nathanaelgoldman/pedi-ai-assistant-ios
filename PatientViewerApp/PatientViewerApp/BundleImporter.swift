@@ -11,7 +11,24 @@ let bundlesDirectoryName = "Bundles"
 let activeBundleDirName = "ActiveBundle"
 let archiveDirName = "ArchivedZips"
 
+
 private let log = AppLog.feature("BundleImporter")
+
+// MARK: - SupportLog wiring (file-local)
+@inline(__always)
+private func SLInfo(_ msg: String) {
+    Task { await SupportLog.shared.info(msg) }
+}
+
+@inline(__always)
+private func SLWarn(_ msg: String) {
+    Task { await SupportLog.shared.warn(msg) }
+}
+
+@inline(__always)
+private func SLError(_ msg: String) {
+    Task { await SupportLog.shared.error(msg) }
+}
 
 @inline(__always)
 private func L(_ key: String) -> String {
@@ -139,6 +156,8 @@ struct BundleImporter: View {
         let fm = FileManager.default
         let start = Date()
         log.info("Import started for \(zipURL.lastPathComponent, privacy: .public)")
+        let ext = zipURL.pathExtension.lowercased()
+        SLInfo("IMPORT started | ext=\(ext)")
         guard let docsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
             throw NSError(domain: "BundleImporter", code: 1, userInfo: [NSLocalizedDescriptionKey: L("bundle_importer.error.documents_dir_not_found")])
         }
@@ -158,6 +177,7 @@ struct BundleImporter: View {
             if let existingDate = existingAttributes[.modificationDate] as? Date,
                let newDate = newAttributes[.modificationDate] as? Date,
                existingDate == newDate {
+                SLWarn("IMPORT duplicate | ext=\(zipURL.pathExtension.lowercased())")
                 throw NSError(domain: "BundleImporter", code: 2, userInfo: [
                     NSLocalizedDescriptionKey: L("bundle_importer.error.duplicate_bundle"),
                     "bundleURL": destinationZipPath,
@@ -177,6 +197,7 @@ struct BundleImporter: View {
         // Load manifest first (required, especially for encrypted bundles)
         let manifestURL = tempExtract.appendingPathComponent("manifest.json")
         guard fm.fileExists(atPath: manifestURL.path) else {
+            SLError("IMPORT failed | stage=missing_manifest")
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(domain: "BundleImporter", code: 3, userInfo: [NSLocalizedDescriptionKey: L("bundle_importer.error.missing_manifest")])
@@ -187,11 +208,13 @@ struct BundleImporter: View {
         let manifestJSON = (try? JSONSerialization.jsonObject(with: manifestData, options: [])) as? [String: Any]
         let isEncrypted = (manifestJSON?["encrypted"] as? Bool) ?? false
         let scheme = manifestJSON?["encryption_scheme"] as? String
+        SLInfo("IMPORT manifest loaded | encrypted=\(isEncrypted ? "yes" : "no") scheme=\(scheme ?? "nil")")
 
         // Resolve dbURL (decrypt if needed)
         let dbURL: URL
         if isEncrypted {
             guard scheme == "AES-GCM-v1" else {
+                SLError("IMPORT failed | stage=unsupported_encryption_scheme scheme=\(scheme ?? "nil")")
                 // Cleanup temp items before throwing
                 cleanupTempArtifacts(tempZip, tempExtract)
                 throw NSError(
@@ -205,6 +228,7 @@ struct BundleImporter: View {
 
             let encURL = tempExtract.appendingPathComponent("db.sqlite.enc")
             guard fm.fileExists(atPath: encURL.path) else {
+                SLError("IMPORT failed | stage=missing_db_enc")
                 // Cleanup temp items before throwing
                 cleanupTempArtifacts(tempZip, tempExtract)
                 throw NSError(
@@ -223,6 +247,8 @@ struct BundleImporter: View {
             do {
                 try BundleCrypto.decryptFile(at: encURL, to: plainURL)
             } catch {
+                let ns = error as NSError
+                SLError("IMPORT failed | stage=decrypt_failed domain=\(ns.domain) code=\(ns.code)")
                 // Cleanup temp items before throwing
                 cleanupTempArtifacts(tempZip, tempExtract)
                 throw NSError(
@@ -239,6 +265,7 @@ struct BundleImporter: View {
             // Legacy / unencrypted bundle: expect a plain db.sqlite
             let expectedDB = tempExtract.appendingPathComponent("db.sqlite")
             guard fm.fileExists(atPath: expectedDB.path) else {
+                SLError("IMPORT failed | stage=missing_db")
                 // Cleanup temp items before throwing
                 cleanupTempArtifacts(tempZip, tempExtract)
                 throw NSError(
@@ -256,7 +283,10 @@ struct BundleImporter: View {
         do {
             try validateSQLiteHeader(dbURL: dbURL)
             log.debug("SQLite header validated for \(dbURL.lastPathComponent, privacy: .public)")
+            SLInfo("IMPORT sqlite header ok")
         } catch {
+            let ns = error as NSError
+            SLError("IMPORT failed | stage=invalid_sqlite domain=\(ns.domain) code=\(ns.code)")
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(
@@ -273,7 +303,10 @@ struct BundleImporter: View {
             _ = try verifyExtractedBundle(root: tempExtract, dbURL: dbURL) { msg in
                 log.debug("\(msg, privacy: .public)")
             }
+            SLInfo("IMPORT verification ok")
         } catch {
+            let ns = error as NSError
+            SLError("IMPORT failed | stage=verification_failed domain=\(ns.domain) code=\(ns.code)")
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(
@@ -288,7 +321,10 @@ struct BundleImporter: View {
         // Run SQLite integrity check on the incoming DB before touching it
         do {
             try runIntegrityCheckOrThrow(dbPath: dbURL.path)
+            SLInfo("IMPORT integrity ok")
         } catch {
+            let ns = error as NSError
+            SLError("IMPORT failed | stage=integrity_check_failed domain=\(ns.domain) code=\(ns.code)")
             // Cleanup temp items before throwing
             cleanupTempArtifacts(tempZip, tempExtract)
             throw NSError(
@@ -331,6 +367,7 @@ struct BundleImporter: View {
         let persistentBundlePath = docsURL.appendingPathComponent(activeBundleDirName).appendingPathComponent(safeAlias)
         if fm.fileExists(atPath: persistentBundlePath.path), force == false {
             log.debug("Found existing ActiveBundle | bundle=\(AppLog.bundleRef(persistentBundlePath), privacy: .public) (skipping re-import)")
+            SLWarn("IMPORT skipped | reason=active_bundle_exists")
             log.debug("Fallback to previously extracted unzipped version triggered (re-import skipped).")
             UserDefaults.standard.set(persistentBundlePath.path, forKey: "lastLoadedBundleZipPath")
             UserDefaults.standard.set(persistentBundlePath.lastPathComponent, forKey: "lastLoadedWorkingFolderName")
@@ -397,6 +434,8 @@ struct BundleImporter: View {
         UserDefaults.standard.set(destinationZipPath.path, forKey: "lastLoadedBundleZipPath")
         UserDefaults.standard.set(safeAlias, forKey: "lastLoadedWorkingFolderName")
 
+        let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
+        SLInfo("IMPORT completed | elapsedMs=\(elapsedMs)")
         log.info("Import completed for \(safeAlias, privacy: .public) in \(Date().timeIntervalSince(start), privacy: .public)s")
         log.debug("Imported and activated bundle | bundle=\(AppLog.bundleRef(activeBundleDir), privacy: .public)")
         return (activeBundleDir, alias, dob)
@@ -406,6 +445,7 @@ struct BundleImporter: View {
     var body: some View {
         VStack {
             Button(L("bundle_importer.button.import")) {
+                Task { await SupportLog.shared.info("UI open file importer") }
                 isImporterPresented = true
             }
             .fileImporter(
@@ -420,6 +460,9 @@ struct BundleImporter: View {
                 case .success(let urls):
                     if let zipURL = urls.first {
                         log.info("User selected bundle: \(zipURL.lastPathComponent, privacy: .public)")
+                        let ext = zipURL.pathExtension.lowercased()
+                        Task { await SupportLog.shared.info("IMPORT tap | ext=\(ext)") }
+                        Task { await SupportLog.shared.info("IMPORT processing") }
                         Task {
                             do {
                                 let (folder, alias, dob) = try await BundleImporter.importBundle(from: zipURL)

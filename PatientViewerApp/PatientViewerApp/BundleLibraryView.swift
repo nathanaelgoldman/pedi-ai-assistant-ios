@@ -13,8 +13,24 @@ import UniformTypeIdentifiers
 import CryptoKit
 import os
 
+
 // Central logger for this file
 private let log = AppLog.feature("BundleLibraryView")
+
+// MARK: - SupportLog environment fallback
+// BundleLibraryView used to rely on @EnvironmentObject SupportLog, which crashes at runtime
+// if the ancestor view forgets to inject it. We provide a default via EnvironmentKey.
+private struct SupportLogEnvKey: EnvironmentKey {
+    static let defaultValue: SupportLog = .shared
+}
+
+private extension EnvironmentValues {
+    var supportLog: SupportLog {
+        get { self[SupportLogEnvKey.self] }
+        set { self[SupportLogEnvKey.self] = newValue }
+    }
+}
+
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -790,6 +806,7 @@ struct BundleLibraryView: View {
     @Binding var bundleDOB: String
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.supportLog) private var supportLog: SupportLog
 
     @State private var savedBundles: [SavedBundle] = []
     @State private var showAlert = false
@@ -800,6 +817,25 @@ struct BundleLibraryView: View {
     @State private var pendingDeletion: SavedBundle? = nil
     @State private var showDuplicateImportDialog = false
     @State private var pendingImport: PendingImport? = nil
+
+    // MARK: - SupportLog helpers (main-actor safe)
+    private func S(_ message: String) {
+        Task { @MainActor in
+            supportLog.add(message)
+        }
+    }
+
+    private func SWarn(_ message: String) {
+        Task { @MainActor in
+            supportLog.add("⚠️ " + message)
+        }
+    }
+
+    private func SError(_ message: String) {
+        Task { @MainActor in
+            supportLog.add("🛑 " + message)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -819,7 +855,10 @@ struct BundleLibraryView: View {
 
             // Toolbar row
             HStack {
-                Button(action: { isImportingZip = true }) {
+                Button(action: {
+                    S("BLV UI open file importer")
+                    isImportingZip = true
+                }) {
                     Label(L("patient_viewer.bundle_library.action.import", comment: "Button"), systemImage: "tray.and.arrow.down")
                         .font(.body.weight(.semibold))
                 }
@@ -860,6 +899,7 @@ struct BundleLibraryView: View {
                 List {
                     ForEach(savedBundles) { bundle in
                         Button(action: {
+                            S("BLV ACTIVATE tap | alias=\(bundle.alias)")
                             let fileManager = FileManager.default
                             guard fileManager.fileExists(atPath: bundle.folderURL.path) else {
                                 alertMessage = LF("patient_viewer.bundle_library.error.folder_missing", bundle.folderURL.lastPathComponent)
@@ -868,8 +908,10 @@ struct BundleLibraryView: View {
                             }
                             do {
                                 try activatePersistentBundle(at: bundle.folderURL)
+                                S("BLV ACTIVATE ok | alias=\(bundle.alias)")
                             } catch {
                                 log.error("Failed to load bundle: \(error.localizedDescription, privacy: .public)")
+                                SError("BLV ACTIVATE failed | alias=\(bundle.alias) | err=\(error.localizedDescription)")
                                 alertMessage = LF("patient_viewer.bundle_library.error.load_failed", error.localizedDescription)
                                 showAlert = true
                             }
@@ -885,6 +927,7 @@ struct BundleLibraryView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 pendingDeletion = bundle
+                                S("BLV DELETE confirm shown | alias=\(bundle.alias)")
                                 showDeleteConfirm = true
                             } label: {
                                 Label(L("patient_viewer.bundle_library.action.delete", comment: "Swipe action"), systemImage: "trash")
@@ -902,6 +945,7 @@ struct BundleLibraryView: View {
         .onAppear {
             ensureBaseDirectories()
             loadPersistentBundles()
+            S("BLV appeared")
         }
         .fileImporter(
             isPresented: $isImportingZip,
@@ -911,10 +955,12 @@ struct BundleLibraryView: View {
             switch result {
             case .success(let urls):
                 if let first = urls.first {
+                    S("BLV IMPORT tap | file=\(first.lastPathComponent)")
                     handleZipImport(url: first)
                 }
             case .failure(let error):
                 log.error("fileImporter failed: \(error.localizedDescription, privacy: .public)")
+                SError("BLV IMPORT picker failed | err=\(error.localizedDescription)")
                 alertMessage = LF("patient_viewer.bundle_library.error.import_failed", error.localizedDescription)
                 showAlert = true
             }
@@ -932,11 +978,13 @@ struct BundleLibraryView: View {
         ) {
             Button(L("patient_viewer.bundle_library.delete_confirm.delete", comment: "Delete button"), role: .destructive) {
                 if let bundle = pendingDeletion {
+                    S("BLV DELETE confirmed | alias=\(bundle.alias)")
                     deleteBundle(bundle)
                 }
                 pendingDeletion = nil
             }
             Button(L("patient_viewer.bundle_library.delete_confirm.cancel", comment: "Cancel button"), role: .cancel) {
+                SWarn("BLV DELETE cancelled")
                 pendingDeletion = nil
             }
         } message: {
@@ -952,6 +1000,7 @@ struct BundleLibraryView: View {
             titleVisibility: .visible
         ) {
             Button(L("patient_viewer.bundle_library.duplicate_import.overwrite", comment: "Duplicate import overwrite button"), role: .destructive) {
+                S("BLV IMPORT overwrite confirmed")
                 guard let pending = pendingImport else { return }
                 do {
                     try archiveExistingAndReplace(
@@ -961,14 +1010,17 @@ struct BundleLibraryView: View {
                         zipURL: pending.zipURL,
                         identity: pending.identity
                     )
+                    S("BLV IMPORT overwrite ok")
                     pendingImport = nil
                 } catch {
                     log.error("Overwrite failed: \(error.localizedDescription, privacy: .public)")
+                    SError("BLV IMPORT overwrite failed | err=\(error.localizedDescription)")
                     alertMessage = LF("patient_viewer.bundle_library.error.overwrite_failed", error.localizedDescription)
                     showAlert = true
                 }
             }
             Button(L("patient_viewer.bundle_library.duplicate_import.cancel", comment: "Duplicate import cancel button"), role: .cancel) {
+                SWarn("BLV IMPORT overwrite cancelled")
                 if let pending = pendingImport {
                     safelyRemoveImportTemp(for: pending.tempRoot)
                 }
@@ -2145,9 +2197,12 @@ private struct BundleRowCard: View {
 #if DEBUG
 struct BundleLibraryView_Previews: PreviewProvider {
     static var previews: some View {
-        BundleLibraryView(extractedFolderURL: .constant(nil),
-                          bundleAlias: .constant(""),
-                          bundleDOB: .constant(""))
+        BundleLibraryView(
+            extractedFolderURL: .constant(nil),
+            bundleAlias: .constant(""),
+            bundleDOB: .constant("")
+        )
+        .environmentObject(SupportLog.shared)
     }
 }
 #endif

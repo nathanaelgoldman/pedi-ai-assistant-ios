@@ -34,6 +34,11 @@ struct ExportBundleView: View {
     // Share sheet routing (lets user Save to Files or share to another app)
     @State private var shareItem: ExportShareItem?
 
+    // SupportLog helpers (fire-and-forget)
+    private func SLInfo(_ msg: String) { Task { await SupportLog.shared.info(msg) } }
+    private func SLWarn(_ msg: String) { Task { await SupportLog.shared.warn(msg) } }
+    private func SLError(_ msg: String) { Task { await SupportLog.shared.error(msg) } }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -50,6 +55,7 @@ struct ExportBundleView: View {
 
                 // Primary action
                 Button {
+                    SLInfo("EXPORT tap")
                     Task { await exportBundle() }
                 } label: {
                     HStack(spacing: 10) {
@@ -124,17 +130,23 @@ struct ExportBundleView: View {
         .navigationTitle(L("patient_viewer.export_bundle.nav_title", comment: "Navigation title"))
         .navigationBarTitleDisplayMode(.inline)
         .appNavBarBackground()
+        .onAppear {
+            SLInfo("UI open export")
+        }
         .sheet(item: $shareItem, onDismiss: {
             // Reset so the next export reliably re-opens the sheet
             shareItem = nil
+            SLInfo("UI share sheet dismissed")
         }) { item in
             ShareSheet(items: [item.url])
         }
     }
 
     private func exportBundle() async {
+        let t0 = Date()
         let dbRef = AppLog.dbRef(self.dbURL)
         Self.log.info("Export started | db=\(dbRef, privacy: .public)")
+        SLInfo("EXPORT start")
         await MainActor.run {
             exportInProgress = true
             exportSuccess = false
@@ -149,6 +161,8 @@ struct ExportBundleView: View {
             let fileTok = AppLog.token(exportURL.lastPathComponent)
             Self.log.debug("Export zip ready | fileTok=\(fileTok, privacy: .public)")
             Self.log.info("Export finished | fileTok=\(fileTok, privacy: .public) size=\(humanSize, privacy: .public)")
+            let elapsedMs = Int(Date().timeIntervalSince(t0) * 1000)
+            SLInfo("EXPORT ok | file=\(fileTok) size=\(humanSize) elapsedMs=\(elapsedMs)")
 
             await MainActor.run {
                 exportedFileURL = exportURL
@@ -162,8 +176,12 @@ struct ExportBundleView: View {
                 self.exportedFileURL = exportURL
                 self.shareItem = ExportShareItem(url: exportURL)
             }
+            SLInfo("UI share sheet present | file=\(fileTok)")
         } catch {
+            let nsErr = error as NSError
+            let elapsedMs = Int(Date().timeIntervalSince(t0) * 1000)
             Self.log.error("Export failed: \(error.localizedDescription, privacy: .private)")
+            SLError("EXPORT failed | err=\(nsErr.domain):\(nsErr.code) elapsedMs=\(elapsedMs)")
             await MainActor.run {
                 exportError = error.localizedDescription
             }
@@ -173,6 +191,7 @@ struct ExportBundleView: View {
             exportInProgress = false
         }
         Self.log.debug("Export flow ended.")
+        SLInfo("EXPORT end")
     }
 }
 
