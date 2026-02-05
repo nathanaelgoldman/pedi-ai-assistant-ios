@@ -787,13 +787,57 @@
 "patient_viewer.app_settings.about.row.version" = "版本";
 "patient_viewer.app_settings.about.row.bundle_id" = "应用标识";
 
-/* 关于 – 隐私说明 */
-"patient_viewer.app_settings.about.privacy.body" = "CareView Kids 在您的设备本地存储和显示医疗数据。未经您的明确操作，任何患者数据都不会传输到外部服务器。";
+/* About – privacy */
+"patient_viewer.app_settings.about.privacy.body" =
+"CareView Kids 会将医疗数据存储并显示在您的设备本地。除非您明确执行相关操作，否则任何患者数据都不会被传输到外部服务器。Bundle 文件只存在于本应用以及在就诊过程中生成该文件的医生端应用中。医生可在就诊后从其电脑中删除该文件，使您成为数据的唯一持有者。除非您自行上传，否则文件及其中的医疗数据不会存储在网络上。文件中的医疗信息经过加密，只能在您的设备上的本应用以及医生电脑上的医生端应用中读取，整个过程不涉及任何在线查询。";
 
-/* 关于 – 支持 */
+/* About – support */
 "patient_viewer.app_settings.about.support.whatsapp_fmt" = "WhatsApp：%@";
 "patient_viewer.app_settings.about.support.wechat_fmt" = "微信：%@";
-"patient_viewer.app_settings.about.support.tap_to_copy" = "点击复制联系方式。";
+"patient_viewer.app_settings.about.support.tap_to_copy" = "点击复制联系信息。";
 
-/* 关于 – 版权 */
-"patient_viewer.app_settings.about.credits" = "© CareView Kids。用心为孩子与家庭打造。";
+/* About – credits */
+"patient_viewer.app_settings.about.credits" =
+"© CareView Kids。用心为儿童和家庭打造。";
+
+/* Help section */
+"patient_viewer.app_settings.help.title" = "帮助";
+"patient_viewer.app_settings.help.nav_title" = "帮助";
+
+"patient_viewer.help.header.title" = "快速帮助";
+"patient_viewer.help.header.subtitle" =
+"一些离线提示，帮助您安全地使用孩子的医疗记录。";
+
+"patient_viewer.help.section.quick_start" = "快速开始";
+"patient_viewer.help.quick_start.item.open_bundle" =
+"从“已保存的 Bundles”中打开 .pemr 文件，或从“文件”应用中导入。该 bundle 由您的医生创建并私下分享给您，包含孩子的完整累积医疗记录。除非您自行创建备份，否则该 .pemr 文件是这些记录的唯一副本（医生电脑上可能仅存在临时副本）。";
+"patient_viewer.help.quick_start.item.import_bundle" =
+"导入：选择一个 .peMR 文件，然后打开。";
+"patient_viewer.help.quick_start.item.export_bundle" =
+"导出：将 bundle 分享给其他应用，或保存到“文件”中以便备份。医生需要您导出的文件，才能在医生端查看既往记录，并在每次就诊时更新内容，然后将更新后的文件返还给您。就诊结束后，您可以在手机上导入医生更新后的版本。您也可以将文件导出到安全的磁盘或电脑中作为备份。 .pemr 文件中的医疗数据是加密的，只能在本应用和生成该文件的医生端应用中读取。";
+
+"patient_viewer.help.section.what_you_can_do" = "您可以做什么";
+"patient_viewer.help.can_do.item.visits" =
+"查看就诊记录，并生成可分享的 PDF 就诊报告。";
+"patient_viewer.help.can_do.item.growth" =
+"查看生长曲线（体重、身高、头围、BMI）。";
+"patient_viewer.help.can_do.item.parent_notes" =
+"添加家长备注（保存在 bundle 中）。当您将文件分享给医生时，这些备注将对医生可见。";
+"patient_viewer.help.can_do.item.documents" =
+"添加文档（PDF、图片），例如疫苗接种记录或化验结果。";
+
+"patient_viewer.help.section.privacy" = "隐私";
+"patient_viewer.help.privacy.body" =
+"除非您导出并分享，否则所有数据都仅保存在本设备上。请妥善保管 bundle，并在需要时启用应用锁。";
+
+"patient_viewer.help.footer.tip" =
+"提示：如果显示异常（例如缺少就诊记录或生长曲线为空），请重新打开 bundle 或从“文件”中重新导入。";
+
+/* 支持日志 */
+"patient_viewer.app_settings.support_log.header" = "支持日志";
+"patient_viewer.app_settings.support_log.toggle" = "启用支持日志";
+"patient_viewer.app_settings.support_log.share" = "分享支持日志";
+"patient_viewer.app_settings.support_log.clear" = "清除支持日志";
+"patient_viewer.app_settings.support_log.hint" = "仅在技术支持要求时启用。日志仅保存在本设备上，并会在应用关闭时清除。";
+"patient_viewer.app_settings.support_log.cleared" = "支持日志已清除。";
+"patient_viewer.app_settings.support_log.error.export_failed_fmt" = "无法导出支持日志：%@";

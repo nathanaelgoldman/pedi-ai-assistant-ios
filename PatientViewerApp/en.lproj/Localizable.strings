@@ -36,7 +36,7 @@
 "patient_viewer.content.card.parent_notes.title" = "Parent Notes";
 "patient_viewer.content.card.parent_notes.subtitle" = "View and add notes written by parents.";
 "patient_viewer.content.card.documents.title" = "Patient Documents";
-"patient_viewer.content.card.documents.subtitle" = "Open scans, vaccination records and other files.";
+"patient_viewer.content.card.documents.subtitle" = "Add and open external files.";
 "patient_viewer.content.card.export.title" = "Export Bundle";
 "patient_viewer.content.card.export.subtitle" = "Create an encrypted .peMR bundle to share or archive.";
 
@@ -793,7 +793,7 @@
 "patient_viewer.app_settings.about.row.bundle_id" = "Bundle identifier";
 
 /* About – privacy */
-"patient_viewer.app_settings.about.privacy.body" = "CareView Kids stores and displays medical data locally on your device. No patient data is transmitted to external servers without your explicit action.";
+"patient_viewer.app_settings.about.privacy.body" = "CareView Kids stores and displays medical data locally on your device. No patient data is transmitted to external servers without your explicit action. The bundle file can only reside on this app and on the doctor's app that has produced it during the consultation. The file can then be deleted from the doctor's computer so that you are the sole owner of the data. The file / medical data in it is not stored online unless you put it there. The medical information in it is encrypted and can only be read by the app on your device and on the doctor's computer, with no online query involved.";
 
 /* About – support */
 "patient_viewer.app_settings.about.support.whatsapp_fmt" = "WhatsApp: %@";
@@ -802,3 +802,35 @@
 
 /* About – credits */
 "patient_viewer.app_settings.about.credits" = "© CareView Kids. Built with care for children and families.";
+
+/*Help section*/
+"patient_viewer.app_settings.help.title" = "Help";
+"patient_viewer.app_settings.help.nav_title" = "Help";
+
+"patient_viewer.help.header.title" = "Quick Help";
+"patient_viewer.help.header.subtitle" = "A few offline tips to use your child’s record safely.";
+
+"patient_viewer.help.section.quick_start" = "Quick start";
+"patient_viewer.help.quick_start.item.open_bundle" = "Open a bundle .pemr file from Saved Bundles or import one from Files. The bundle was created by your doctor and shared privately with you and contains the cumulative medical records of your child. Unless you make a backup copy of it, the .pemr file is the only existing copy of these records (beside a possible temporary copy on the dr's computer)";
+"patient_viewer.help.quick_start.item.import_bundle" = "Import: choose a .peMR file, then open it.";
+"patient_viewer.help.quick_start.item.export_bundle" = "Export: share the bundle or save it to Files for backup. Your doctor will need the file you export to see previous records on doctor's computer and update the file with new information udring each consultation, before sending the updated file back to you. After the consultation,you can then import the doctor's updated version of the file on your phone. You can also make a backup copy of the file by exporting / copying it to a safe place on a disk or computer. The medical data in the .pemr file is encrypted and can only be read in this app and in the doctor's app that has produced the file.";
+
+"patient_viewer.help.section.what_you_can_do" = "What you can do";
+"patient_viewer.help.can_do.item.visits" = "Read visit summaries and generate PDFs reports of consultations that you can share with your app.";
+"patient_viewer.help.can_do.item.growth" = "View growth charts (weight, height, head circumference, BMI).";
+"patient_viewer.help.can_do.item.parent_notes" = "Add parent notes (saved inside the bundle).These notes will be seen by the doctor once you have shared the file with your doctor.";
+"patient_viewer.help.can_do.item.documents" = "Attach documents (PDFs, images), such as vaccination records, or lab test results";
+
+"patient_viewer.help.section.privacy" = "Privacy";
+"patient_viewer.help.privacy.body" = "Everything stays on this device unless you export and share it. Keep bundles private and use App Lock if needed.";
+
+"patient_viewer.help.footer.tip" = "Tip: If something looks wrong (missing visits, empty charts), re-open the bundle or re-import it from Files.";
+
+/* Support log */
+"patient_viewer.app_settings.support_log.header" = "Support log";
+"patient_viewer.app_settings.support_log.toggle" = "Enable support logging";
+"patient_viewer.app_settings.support_log.share" = "Share support log";
+"patient_viewer.app_settings.support_log.clear" = "Clear support log";
+"patient_viewer.app_settings.support_log.hint" = "Enable this only if requested by support. Logs are stored locally and cleared when the app closes.";
+"patient_viewer.app_settings.support_log.cleared" = "Support log cleared.";
+"patient_viewer.app_settings.support_log.error.export_failed_fmt" = "Unable to export support log: %@";

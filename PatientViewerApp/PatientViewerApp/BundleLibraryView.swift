@@ -48,6 +48,7 @@ enum BundleIO {
         let alias: String
         let name: String?
         let dob: String?
+        let mrn: String?
         let patientId: Int?
         let patientKey: String
         let slug: String
@@ -59,6 +60,7 @@ enum BundleIO {
         let identity: Identity
         let destinationURL: URL
         let existingURL: URL
+        var matchedOn: String? = nil
     }
 
     struct Activation {
@@ -361,8 +363,12 @@ enum BundleIO {
         }
 
         // MARK: - Identity helpers
-        private static func computePatientKey(alias: String?, dob: String?, patientId: Int?) -> String {
-            if let pid = patientId { return "pid:\(pid)" }
+        private static func computePatientKey(alias: String?, dob: String?, mrn: String?) -> String {
+            // Prefer MRN because it is designed to be stable across exports.
+            if let m = mrn?.trimmingCharacters(in: .whitespacesAndNewlines), !m.isEmpty {
+                return "mrn:\(m.lowercased())"
+            }
+            // Fallback: alias + DOB (best-effort for legacy bundles without MRN)
             let a = (alias ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let d = (dob ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let raw = "\(a)|\(d)"
@@ -389,10 +395,16 @@ enum BundleIO {
             let resolvedRoot = try ensurePlainDB(at: root)
             log.debug("🧬 [Import] Using resolved root for identity | root=\(resolvedRoot.lastPathComponent, privacy: .private)")
 
-            let (alias, name, dob, pid) = try readIdentity(from: resolvedRoot)
-            let key = computePatientKey(alias: alias, dob: dob, patientId: pid)
-            let slug = sanitizedAlias(alias.isEmpty ? resolvedRoot.lastPathComponent : alias)
-            return Identity(alias: alias, name: name, dob: dob, patientId: pid, patientKey: key, slug: slug)
+            let (alias, name, dob, mrn, pid) = try readIdentity(from: resolvedRoot)
+            let key = computePatientKey(alias: alias, dob: dob, mrn: mrn)
+
+            // Folder name should be stable but also avoid collisions when two patients share an alias.
+            // Use patientKey prefix as a short disambiguator.
+            let base = sanitizedAlias(alias.isEmpty ? resolvedRoot.lastPathComponent : alias)
+            let shortKey = String(key.suffix(12)).replacingOccurrences(of: ":", with: "-")
+            let slug = sanitizedAlias("\(base)-\(shortKey)")
+
+            return Identity(alias: alias, name: name, dob: dob, mrn: mrn, patientId: pid, patientKey: key, slug: slug)
         }
 
         private static func existingBundleForPatientKey(_ key: String) -> URL? {
@@ -414,14 +426,14 @@ enum BundleIO {
                 }
                 // Fallback: compute from this folder's DB
                 if let info = try? readIdentity(from: folder) {
-                    let k2 = computePatientKey(alias: info.alias, dob: info.dob, patientId: info.patientId)
+                    let k2 = computePatientKey(alias: info.alias, dob: info.dob, mrn: info.mrn)
                     if k2 == key { return folder }
                 }
             }
             return nil
         }
 
-        private static func readIdentity(from folder: URL) throws -> (alias: String, name: String?, dob: String?, patientId: Int?) {
+        private static func readIdentity(from folder: URL) throws -> (alias: String, name: String?, dob: String?, mrn: String?, patientId: Int?) {
             let fm = FileManager.default
             var dbURL = folder.appendingPathComponent("db.sqlite")
             if !fm.fileExists(atPath: dbURL.path) {
@@ -431,40 +443,77 @@ enum BundleIO {
             }
             guard fm.fileExists(atPath: dbURL.path) else {
                 throw NSError(
-                                    domain: "BundleIO",
-                                    code: 2,
-                                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")]
-                                ) }
+                    domain: "BundleIO",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: L("patient_viewer.bundle_library.error.db_not_found", comment: "Error: imported bundle is missing db.sqlite")]
+                )
+            }
 
             var db: OpaquePointer?
             var alias = ""
             var dob: String? = nil
+            var mrn: String? = nil
             var first: String? = nil
             var last: String? = nil
             var pid: Int32 = -1
 
             if sqlite3_open(dbURL.path, &db) == SQLITE_OK {
                 defer { sqlite3_close(db) }
-                let wideQuery = "SELECT id, alias_label, dob, first_name, last_name FROM patients LIMIT 1;"
+
+                // 1) Detect whether the patients table has an "mrn" column.
+                var hasMRN = false
+                var pragma: OpaquePointer?
+                if sqlite3_prepare_v2(db, "PRAGMA table_info(patients);", -1, &pragma, nil) == SQLITE_OK {
+                    defer { sqlite3_finalize(pragma) }
+                    while sqlite3_step(pragma) == SQLITE_ROW {
+                        if let cName = sqlite3_column_text(pragma, 1) {
+                            let name = String(cString: cName)
+                            if name.lowercased() == "mrn" {
+                                hasMRN = true
+                                break
+                            }
+                        }
+                    }
+                }
+
+                // 2) Build query depending on MRN availability (older bundles won't have it).
+                let query: String
+                if hasMRN {
+                    query = "SELECT id, alias_label, dob, first_name, last_name, mrn FROM patients LIMIT 1;"
+                } else {
+                    query = "SELECT id, alias_label, dob, first_name, last_name FROM patients LIMIT 1;"
+                }
+
                 var stmt: OpaquePointer?
-                if sqlite3_prepare_v2(db, wideQuery, -1, &stmt, nil) == SQLITE_OK {
+                if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
+                    defer { sqlite3_finalize(stmt) }
                     if sqlite3_step(stmt) == SQLITE_ROW {
                         pid = sqlite3_column_int(stmt, 0)
                         if let aliasC = sqlite3_column_text(stmt, 1) { alias = String(cString: aliasC) }
                         if let dobC = sqlite3_column_text(stmt, 2) { dob = String(cString: dobC) }
                         if let fC = sqlite3_column_text(stmt, 3) { first = String(cString: fC) }
                         if let lC = sqlite3_column_text(stmt, 4) { last = String(cString: lC) }
+                        if hasMRN, let mC = sqlite3_column_text(stmt, 5) {
+                            let s = String(cString: mC).trimmingCharacters(in: .whitespacesAndNewlines)
+                            mrn = s.isEmpty ? nil : s
+                        }
                     }
-                    sqlite3_finalize(stmt)
                 } else {
-                    let fallback = "SELECT id, alias_label, dob FROM patients LIMIT 1;"
+                    // Fallback minimal query
+                    let fallback = hasMRN
+                        ? "SELECT id, alias_label, dob, mrn FROM patients LIMIT 1;"
+                        : "SELECT id, alias_label, dob FROM patients LIMIT 1;"
                     if sqlite3_prepare_v2(db, fallback, -1, &stmt, nil) == SQLITE_OK {
+                        defer { sqlite3_finalize(stmt) }
                         if sqlite3_step(stmt) == SQLITE_ROW {
                             pid = sqlite3_column_int(stmt, 0)
                             if let aliasC = sqlite3_column_text(stmt, 1) { alias = String(cString: aliasC) }
                             if let dobC = sqlite3_column_text(stmt, 2) { dob = String(cString: dobC) }
+                            if hasMRN, let mC = sqlite3_column_text(stmt, 3) {
+                                let s = String(cString: mC).trimmingCharacters(in: .whitespacesAndNewlines)
+                                mrn = s.isEmpty ? nil : s
+                            }
                         }
-                        sqlite3_finalize(stmt)
                     }
                 }
             }
@@ -478,7 +527,7 @@ enum BundleIO {
                 name = l
             }
             let idOpt: Int? = pid >= 0 ? Int(pid) : nil
-            return (alias, name, dob, idOpt)
+            return (alias, name, dob, mrn, idOpt)
         }
 
         private static func writeBundleMeta(to persistentFolder: URL, from zipURL: URL, rootExtractedURL: URL, identity: Identity) {
@@ -531,6 +580,7 @@ enum BundleIO {
             meta["alias"] = identity.alias
             if let name = identity.name { meta["name"] = name }
             if let dob = identity.dob { meta["dob"] = dob }
+            if let mrn = identity.mrn { meta["mrn"] = mrn }
             if let pid = identity.patientId { meta["patientId"] = pid }
 
             meta["importedAt"] = isoString(Date())
@@ -613,7 +663,7 @@ enum BundleIO {
             ActiveBundleLocator.setCurrentBaseURL(activeDBBase)
 
             // read alias/dob to return
-            let (alias, _, dob, _) = try readIdentity(from: activeDBBase)
+            let (alias, _, dob, _, _) = try readIdentity(from: activeDBBase)
             log.debug("📌 Active base set | bundle=\(AppLog.bundleRef(activeDBBase), privacy: .public)")
             return Activation(activeBase: activeDBBase, alias: alias, dob: dob)
         }
@@ -705,13 +755,34 @@ struct PatientIdentity {
     let slug: String
 }
 
+/// UI-local pending import payload (keeps BundleLibraryView decoupled from BundleIO types).
 private struct PendingImport {
     let zipURL: URL
     let tempRoot: URL
     let identity: PatientIdentity
     let destinationURL: URL
     let existingURL: URL
+
+    func asBundleIOPending() -> BundleIO.Pending {
+        BundleIO.Pending(
+            zipURL: zipURL,
+            tempRoot: tempRoot,
+            identity: BundleIO.Identity(
+                alias: identity.alias,
+                name: identity.name,
+                dob: identity.dob,
+                mrn: nil,
+                patientId: identity.patientId,
+                patientKey: identity.patientKey,
+                slug: identity.slug
+            ),
+            destinationURL: destinationURL,
+            existingURL: existingURL
+        )
+    }
 }
+
+
 
 struct BundleLibraryView: View {
     @Binding var extractedFolderURL: URL?

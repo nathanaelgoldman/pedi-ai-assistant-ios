@@ -14,10 +14,10 @@ enum AppTheme {
         Color(UIColor { traits in
             if traits.userInterfaceStyle == .dark {
                 // Deeper blue-grey for dark mode
-                return UIColor(red: 20.0/255.0, green: 28.0/255.0, blue: 40.0/255.0, alpha: 1.0)
+                return UIColor(red: 12.0/255.0, green: 22.0/255.0, blue: 38.0/255.0, alpha: 1.0)
             } else {
                 // Your picked light background
-                return UIColor(red: 198.0/255.0, green: 223.0/255.0, blue: 255.0/255.0, alpha: 1.0)
+                return UIColor(red: 173.0/255.0, green: 195.0/255.0, blue: 222.0/255.0, alpha: 1.0)
             }
         })
     }
@@ -27,10 +27,10 @@ enum AppTheme {
         Color(UIColor { traits in
             if traits.userInterfaceStyle == .dark {
                 // Slightly lighter than background so cards pop
-                return UIColor(red: 34.0/255.0, green: 45.0/255.0, blue: 62.0/255.0, alpha: 1.0)
+                return UIColor(red: 22.0/255.0, green: 36.0/255.0, blue: 58.0/255.0, alpha: 1.0)
             } else {
                 // Your picked light card
-                return UIColor(red: 222.0/255.0, green: 227.0/255.0, blue: 243.0/255.0, alpha: 1.0)
+                return UIColor(red: 242.0/255.0, green: 230.0/255.0, blue: 255.0/255.0, alpha: 1.0)
             }
         })
     }
@@ -43,6 +43,20 @@ enum AppTheme {
                 return UIColor.separator.withAlphaComponent(0.45)
             } else {
                 return UIColor.separator.withAlphaComponent(0.30)
+            }
+        })
+    }
+    
+    /// Special-case card color for the patient header card (so it can be tuned independently).
+    /// Default: same as `card`.
+    static var patientHeaderCard: Color {
+        Color(UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                // tweak these 3 numbers for dark mode
+                return UIColor(red: 22.0/255.0, green: 36.0/255.0, blue: 58.0/255.0, alpha: 1.0)
+            } else {
+                // tweak these 3 numbers for light mode
+                return UIColor(red: 242.0/255.0, green: 255.0/255.0, blue: 245.0/255.0, alpha: 1.0)
             }
         })
     }

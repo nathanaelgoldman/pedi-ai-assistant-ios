@@ -793,15 +793,59 @@
 "patient_viewer.app_settings.about.row.version" = "Version";
 "patient_viewer.app_settings.about.row.bundle_id" = "Identifiant de l’application";
 
-/* À propos – confidentialité */
-"patient_viewer.app_settings.about.privacy.body" = "CareView Kids stocke et affiche les données médicales localement sur votre appareil. Aucune donnée patient n’est transmise à des serveurs externes sans action explicite de votre part.";
+/* About – privacy */
+"patient_viewer.app_settings.about.privacy.body" =
+"CareView Kids stocke et affiche les données médicales localement sur votre appareil. Aucune donnée patient n’est transmise à des serveurs externes sans une action explicite de votre part. Le fichier bundle ne peut exister que dans cette application et dans l’application du médecin qui l’a créé lors de la consultation. Le fichier peut ensuite être supprimé de l’ordinateur du médecin afin que vous soyez l’unique détenteur des données. Le fichier et les données médicales qu’il contient ne sont pas stockés en ligne, sauf si vous choisissez vous-même de les y placer. Les informations médicales sont chiffrées et ne peuvent être lues que par l’application sur votre appareil et sur l’ordinateur du médecin, sans aucune requête en ligne.";
 
-/* À propos – support */
+/* About – support */
 "patient_viewer.app_settings.about.support.whatsapp_fmt" = "WhatsApp : %@";
 "patient_viewer.app_settings.about.support.wechat_fmt" = "WeChat : %@";
-"patient_viewer.app_settings.about.support.tap_to_copy" = "Touchez pour copier les coordonnées.";
+"patient_viewer.app_settings.about.support.tap_to_copy" = "Appuyez pour copier les informations de contact.";
 
-/* À propos – crédits */
-"patient_viewer.app_settings.about.credits" = "© CareView Kids. Conçu avec soin pour les enfants et leurs familles.";
+/* About – credits */
+"patient_viewer.app_settings.about.credits" =
+"© CareView Kids. Conçu avec soin pour les enfants et leurs familles.";
+
+/* Help section */
+"patient_viewer.app_settings.help.title" = "Aide";
+"patient_viewer.app_settings.help.nav_title" = "Aide";
+
+"patient_viewer.help.header.title" = "Aide rapide";
+"patient_viewer.help.header.subtitle" =
+"Quelques conseils hors ligne pour utiliser en toute sécurité le dossier médical de votre enfant.";
+
+"patient_viewer.help.section.quick_start" = "Démarrage rapide";
+"patient_viewer.help.quick_start.item.open_bundle" =
+"Ouvrez un fichier bundle .pemr depuis « Bundles enregistrés » ou importez-en un depuis l’app Fichiers. Le bundle est créé par votre médecin et partagé avec vous de manière privée. Il contient l’ensemble cumulatif du dossier médical de votre enfant. Sauf si vous effectuez une copie de sauvegarde, le fichier .pemr est l’unique copie existante de ces données (en dehors d’une éventuelle copie temporaire sur l’ordinateur du médecin).";
+"patient_viewer.help.quick_start.item.import_bundle" =
+"Importer : choisissez un fichier .peMR, puis ouvrez-le.";
+"patient_viewer.help.quick_start.item.export_bundle" =
+"Exporter : partagez le bundle ou enregistrez-le dans Fichiers pour le sauvegarder. Votre médecin aura besoin du fichier exporté pour consulter les antécédents sur son ordinateur et mettre à jour le dossier lors de chaque consultation, avant de vous renvoyer la version mise à jour. Après la consultation, vous pourrez importer cette nouvelle version sur votre téléphone. Vous pouvez également créer une copie de sauvegarde en exportant le fichier vers un emplacement sûr sur un disque ou un ordinateur. Les données médicales contenues dans le fichier .pemr sont chiffrées et ne peuvent être lues que dans cette application et dans celle du médecin qui a créé le fichier.";
+
+"patient_viewer.help.section.what_you_can_do" = "Ce que vous pouvez faire";
+"patient_viewer.help.can_do.item.visits" =
+"Lire les comptes rendus de consultation et générer des rapports PDF que vous pouvez partager.";
+"patient_viewer.help.can_do.item.growth" =
+"Consulter les courbes de croissance (poids, taille, périmètre crânien, IMC).";
+"patient_viewer.help.can_do.item.parent_notes" =
+"Ajouter des notes de parents (enregistrées dans le bundle). Ces notes seront visibles par le médecin lorsque vous partagerez le fichier avec lui.";
+"patient_viewer.help.can_do.item.documents" =
+"Joindre des documents (PDF, images), tels que des carnets de vaccination ou des résultats d’analyses.";
+
+"patient_viewer.help.section.privacy" = "Confidentialité";
+"patient_viewer.help.privacy.body" =
+"Tout reste sur cet appareil sauf si vous choisissez d’exporter et de partager les données. Gardez les bundles privés et utilisez le verrouillage de l’application si nécessaire.";
+
+"patient_viewer.help.footer.tip" =
+"Astuce : si quelque chose semble incorrect (visites manquantes, courbes vides), rouvrez le bundle ou réimportez-le depuis l’app Fichiers.";
+
+/* Journal de support */
+"patient_viewer.app_settings.support_log.header" = "Journal de support";
+"patient_viewer.app_settings.support_log.toggle" = "Activer le journal de support";
+"patient_viewer.app_settings.support_log.share" = "Partager le journal de support";
+"patient_viewer.app_settings.support_log.clear" = "Effacer le journal de support";
+"patient_viewer.app_settings.support_log.hint" = "À activer uniquement à la demande du support. Les journaux sont stockés localement et effacés à la fermeture de l’app.";
+"patient_viewer.app_settings.support_log.cleared" = "Journal de support effacé.";
+"patient_viewer.app_settings.support_log.error.export_failed_fmt" = "Impossible d’exporter le journal de support : %@";
 
 

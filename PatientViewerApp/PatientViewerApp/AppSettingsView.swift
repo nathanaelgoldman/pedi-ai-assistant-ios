@@ -5,6 +5,7 @@
 //  Created by yunastic on 12/12/25.
 //
 import SwiftUI
+import UIKit
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -27,6 +28,16 @@ struct AppSettingsView: View {
 
     @State private var statusMessage: String?
     @State private var isError: Bool = false
+
+    // MARK: - Support Log (off by default)
+    @StateObject private var supportLog = SupportLog.shared
+
+    private struct SupportSharePayload: Identifiable {
+        let id = UUID()
+        let items: [Any]
+    }
+
+    @State private var supportSharePayload: SupportSharePayload? = nil
 
     var body: some View {
         NavigationView {
@@ -118,8 +129,86 @@ struct AppSettingsView: View {
                     }
                 }
 
-                // MARK: - About
+                // MARK: - Support Log
                 Section {
+                    Toggle(isOn: Binding(
+                        get: { supportLog.isEnabled },
+                        set: { supportLog.setEnabled($0) }
+                    )) {
+                        HStack(spacing: 10) {
+                            Label(
+                                L("patient_viewer.app_settings.support_log.toggle", comment: "Support logging toggle"),
+                                systemImage: "doc.text.magnifyingglass"
+                            )
+
+                            Spacer(minLength: 8)
+
+                            // Visible state badge when enabled
+                            if supportLog.isEnabled {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("ON")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.yellow.opacity(0.22))
+                                )
+                                .foregroundColor(.orange)
+                                .accessibilityLabel(Text("Support logging is ON"))
+                            }
+                        }
+                    }
+
+                    Button {
+                        shareSupportLog()
+                    } label: {
+                        Label(
+                            L("patient_viewer.app_settings.support_log.share", comment: "Share support log button"),
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+                    .disabled(!supportLog.isEnabled)
+
+                    Button(role: .destructive) {
+                        supportLog.clear()
+                        showSuccess(L("patient_viewer.app_settings.support_log.cleared", comment: "Support log cleared"))
+                    } label: {
+                        Label(
+                            L("patient_viewer.app_settings.support_log.clear", comment: "Clear support log button"),
+                            systemImage: "trash"
+                        )
+                    }
+                    .disabled(!supportLog.isEnabled)
+
+                    if supportLog.isEnabled {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(L("patient_viewer.app_settings.support_log.hint", comment: "Support log hint"))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 2)
+                    }
+                } header: {
+                    Text(L("patient_viewer.app_settings.support_log.header", comment: "Support log section header"))
+                }
+
+                // MARK: - Help + About
+                Section {
+                    NavigationLink {
+                        HelpCareViewKidsView()
+                    } label: {
+                        Label(
+                            L("patient_viewer.app_settings.help.title", comment: "Help section title"),
+                            systemImage: "questionmark.circle"
+                        )
+                    }
+
                     NavigationLink {
                         AboutCareViewKidsView()
                     } label: {
@@ -137,6 +226,42 @@ struct AppSettingsView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L("patient_viewer.app_settings.done", comment: "Done button")) { dismiss() }
                 }
+            }
+            .sheet(item: $supportSharePayload, onDismiss: {
+                supportSharePayload = nil
+            }) { payload in
+                ShareSheet(activityItems: payload.items)
+            }
+        }
+    }
+
+    // MARK: - Support Log helpers
+    private func shareSupportLog() {
+        Task {
+            do {
+                // Generate the log file.
+                let url = try await Task.detached(priority: .utility) {
+                    try await supportLog.exportURL()
+                }.value
+
+                // Verify the file is readable and non-empty.
+                let data = try Data(contentsOf: url)
+                if data.isEmpty {
+                    throw NSError(domain: "SupportLog", code: 2, userInfo: [
+                        NSLocalizedDescriptionKey: "Support log is empty."
+                    ])
+                }
+
+                // Prefer sharing as plain text (most reliable).
+                let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+
+                await MainActor.run {
+                    // Creating a new payload forces the sheet (and UIActivityViewController) to be recreated.
+                    supportSharePayload = SupportSharePayload(items: [text])
+                }
+            } catch {
+                showError(LF("patient_viewer.app_settings.support_log.error.export_failed_fmt",
+                             error.localizedDescription))
             }
         }
     }
@@ -213,6 +338,82 @@ struct AppSettingsView: View {
     }
 }
 
+
+// MARK: - Help screen (offline)
+
+private struct HelpCareViewKidsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L("patient_viewer.help.header.title", comment: "Help header title"))
+                        .font(.headline)
+
+                    Text(L("patient_viewer.help.header.subtitle", comment: "Help header subtitle"))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section(L("patient_viewer.help.section.quick_start", comment: "Help section header")) {
+                HelpBullet("patient_viewer.help.quick_start.item.open_bundle", systemImage: "folder")
+                HelpBullet("patient_viewer.help.quick_start.item.import_bundle", systemImage: "tray.and.arrow.down")
+                HelpBullet("patient_viewer.help.quick_start.item.export_bundle", systemImage: "square.and.arrow.up")
+            }
+
+            Section(L("patient_viewer.help.section.what_you_can_do", comment: "Help section header")) {
+                HelpBullet("patient_viewer.help.can_do.item.visits", systemImage: "list.bullet.rectangle")
+                HelpBullet("patient_viewer.help.can_do.item.growth", systemImage: "chart.line.uptrend.xyaxis")
+                HelpBullet("patient_viewer.help.can_do.item.parent_notes", systemImage: "text.bubble")
+                HelpBullet("patient_viewer.help.can_do.item.documents", systemImage: "paperclip")
+            }
+
+            Section(L("patient_viewer.help.section.privacy", comment: "Help section header")) {
+                Text(L("patient_viewer.help.privacy.body", comment: "Help privacy body"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Text(L("patient_viewer.help.footer.tip", comment: "Help footer tip"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .appListBackground()
+        .appNavBarBackground()
+        .navigationTitle(L("patient_viewer.app_settings.help.nav_title", comment: "Help nav title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L("patient_viewer.app_settings.done", comment: "Done button")) { dismiss() }
+            }
+        }
+    }
+}
+
+private struct HelpBullet: View {
+    let key: String
+    let systemImage: String
+
+    init(_ key: String, systemImage: String) {
+        self.key = key
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        Label {
+            Text(L(key, comment: "Help bullet"))
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundColor(.accentColor)
+        }
+    }
+}
 
 // MARK: - About screen
 
@@ -328,5 +529,75 @@ private struct AboutRow: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
+    }
+}
+
+
+// MARK: - Share sheet (UIKit bridge)
+private struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    var excludedActivityTypes: [UIActivity.ActivityType]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let vc = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        vc.excludedActivityTypes = excludedActivityTypes
+
+        // iPad: must provide a popover anchor, otherwise UIActivityViewController can show a blank/white sheet.
+        if let popover = vc.popoverPresentationController {
+            if let anchor = UIApplication.shared._supportLogTopMostViewController()?.view {
+                popover.sourceView = anchor
+                popover.sourceRect = CGRect(
+                    x: anchor.bounds.midX,
+                    y: anchor.bounds.midY,
+                    width: 1,
+                    height: 1
+                )
+                popover.permittedArrowDirections = []
+            }
+        }
+
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+        // no-op
+    }
+}
+
+// Helper to locate a safe presentation anchor for popovers (iPad) and other modal UI.
+private extension UIApplication {
+    func _supportLogTopMostViewController() -> UIViewController? {
+        // Prefer the active foreground scene.
+        let scenes = connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+
+        for scene in scenes {
+            if let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController {
+                return root._supportLogTopMostPresented()
+            }
+        }
+
+        // Fallback: any key window we can find.
+        if let root = windows.first(where: { $0.isKeyWindow })?.rootViewController {
+            return root._supportLogTopMostPresented()
+        }
+
+        return nil
+    }
+}
+
+private extension UIViewController {
+    func _supportLogTopMostPresented() -> UIViewController {
+        if let presented = presentedViewController {
+            return presented._supportLogTopMostPresented()
+        }
+        if let nav = self as? UINavigationController, let visible = nav.visibleViewController {
+            return visible._supportLogTopMostPresented()
+        }
+        if let tab = self as? UITabBarController, let selected = tab.selectedViewController {
+            return selected._supportLogTopMostPresented()
+        }
+        return self
     }
 }

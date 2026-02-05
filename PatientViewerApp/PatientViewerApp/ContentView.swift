@@ -8,6 +8,30 @@ import SQLite
 import os
 
 private let log = AppLog.feature("ContentView")
+// SupportLog (optional; records only safe tokens)
+// SupportLog (optional; records only safe tokens)
+// NOTE: SupportLog is @MainActor. These helpers hop to the main actor so they are safe to call
+// from synchronous/nonisolated contexts (e.g. view builders, background tasks, callbacks).
+@inline(__always)
+private func S(_ message: String) {
+    Task { @MainActor in
+        SupportLog.shared.info(message)
+    }
+}
+
+@inline(__always)
+private func SWarn(_ message: String) {
+    Task { @MainActor in
+        SupportLog.shared.warn(message)
+    }
+}
+
+@inline(__always)
+private func SError(_ message: String) {
+    Task { @MainActor in
+        SupportLog.shared.error(message)
+    }
+}
 
 // MARK: - Localization (file-local)
 @inline(__always)
@@ -95,9 +119,11 @@ struct ContentView: SwiftUI.View {
                     let filename = url.lastPathComponent
                     let fileTok = AppLog.token(filename)
                     log.info("Exported bundle | fileTok=\(fileTok, privacy: .public)")
+                    S("EXPORT ok | fileTok=\(fileTok)")
                 case .failure(let error):
                     let ns = error as NSError
                     log.error("Export failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")
+                    SError("EXPORT failed | err=\(ns.domain):\(ns.code)")
                 }
             }
             .fileImporter(
@@ -108,34 +134,71 @@ struct ContentView: SwiftUI.View {
                 ],
                 allowsMultipleSelection: false
             ) { result in
-                do {
-                    guard let selectedFile = try result.get().first else { return }
+                let t0 = Date()
 
-                    let outcome = try BundleIO.ImportService.handleZipImport(selectedFile)
-                    switch outcome {
-                    case .activated(let activation):
-                        // Reset first to force reload even if it's the same path
-                        extractedFolderURL = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                            extractedFolderURL = activation.activeBase
-                            bundleAliasLabel = activation.alias
-                            bundleDOB = activation.dob
-                        }
-                    case .needsOverwrite(let p):
-                        pendingImport = p
-                        showDuplicateDialog = true
-                    }
-                } catch {
-                    log.error("Import failed: \(error.localizedDescription, privacy: .public)")
+                switch result {
+                case .failure(let error):
+                    let ns = error as NSError
+                    log.error("File import picker failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")
+                    SError("IMPORT picker failed | err=\(ns.domain):\(ns.code)")
                     importError = error.localizedDescription
+
+                case .success(let urls):
+                    guard let selectedFile = urls.first else {
+                        SWarn("IMPORT no file selected")
+                        return
+                    }
+
+                    let ext = selectedFile.pathExtension.lowercased()
+                    S("IMPORT tap | ext=\(ext)")
+                    S("IMPORT processing")
+
+                    do {
+                        let outcome = try BundleIO.ImportService.handleZipImport(selectedFile)
+                        let elapsedMs = Int(Date().timeIntervalSince(t0) * 1000)
+
+                        switch outcome {
+                        case .needsOverwrite(let pending):
+                            pendingImport = pending
+                            showDuplicateDialog = true
+                            S("IMPORT duplicate dialog shown")
+
+                            let destTok = AppLog.bundleRef(pending.destinationURL)
+                            let reason = pending.matchedOn ?? "unknown"
+                            S("IMPORT duplicate | matchedOn=\(reason) dest=\(destTok) elapsedMs=\(elapsedMs)")
+
+                        case .activated(let activation):
+                            let tok = AppLog.bundleRef(activation.activeBase)
+                            S("IMPORT ok | bundle=\(tok) elapsedMs=\(elapsedMs)")
+
+                            // Reset first to force reload even if it's the same path
+                            extractedFolderURL = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                                extractedFolderURL = activation.activeBase
+                                bundleAliasLabel = activation.alias
+                                bundleDOB = activation.dob
+                            }
+                        }
+
+                    } catch {
+                        let ns = error as NSError
+                        log.error("Import failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")
+                        SError("IMPORT failed | err=\(ns.domain):\(ns.code)")
+                        importError = error.localizedDescription
+                    }
                 }
             }
             .confirmationDialog(L("patient_viewer.content.import.duplicate.title", comment: "Import: duplicate bundle"),
                                 isPresented: $showDuplicateDialog) {
                 Button(L("patient_viewer.content.import.duplicate.overwrite", comment: "Import: overwrite bundle"), role: .destructive) {
                     guard let p = pendingImport else { return }
+                    S("IMPORT overwrite confirmed")
+                    S("IMPORT overwrite processing")
+                    let t1 = Date()
                     do {
                         let activation = try BundleIO.ImportService.confirmOverwrite(p)
+                        let elapsedMs = Int(Date().timeIntervalSince(t1) * 1000)
+                        S("IMPORT overwrite ok | bundle=\(AppLog.bundleRef(activation.activeBase)) elapsedMs=\(elapsedMs)")
                         pendingImport = nil
                         // Reset first to force reload even if it's the same path
                         extractedFolderURL = nil
@@ -145,17 +208,24 @@ struct ContentView: SwiftUI.View {
                             bundleDOB = activation.dob
                         }
                     } catch {
-                        log.error("Overwrite import failed: \(error.localizedDescription, privacy: .public)")
+                        let ns = error as NSError
+                        log.error("Overwrite import failed | err=\(ns.domain, privacy: .public):\(ns.code, privacy: .public)")
+                        SError("IMPORT overwrite failed | err=\(ns.domain):\(ns.code)")
                         importError = error.localizedDescription
                     }
                 }
                 Button(L("patient_viewer.content.common.cancel", comment: "Common: cancel"), role: .cancel) {
+                    SWarn("IMPORT overwrite cancelled")
                     if let p = pendingImport { BundleIO.ImportService.cancelOverwrite(p) }
+                    S("IMPORT overwrite dialog dismissed")
                     pendingImport = nil
                 }
             }
             .alert(L("patient_viewer.content.error.title", comment: "Alert title"), isPresented: .constant(importError != nil), actions: {
-                Button(L("patient_viewer.content.common.ok", comment: "Common: OK")) { importError = nil }
+                Button(L("patient_viewer.content.common.ok", comment: "Common: OK")) {
+                    SWarn("IMPORT error dismissed")
+                    importError = nil
+                }
             }, message: {
                 Text(importError ?? "")
             })
@@ -207,6 +277,7 @@ struct ContentView: SwiftUI.View {
             VStack(spacing: 16) {
                 // Load new bundle from device
                 Button {
+                    S("UI open file importer")
                     showingFileImporter = true
                 } label: {
                     HStack(spacing: 12) {
@@ -236,6 +307,7 @@ struct ContentView: SwiftUI.View {
 
                 // Load from saved bundles
                 Button {
+                    S("UI open bundle library")
                     sheetRoute = .bundleLibrary
                 } label: {
                     HStack(spacing: 12) {
@@ -265,6 +337,7 @@ struct ContentView: SwiftUI.View {
 
                 // Settings
                 Button {
+                    S("UI open settings")
                     sheetRoute = .settings
                 } label: {
                     HStack(spacing: 12) {
@@ -367,7 +440,7 @@ struct ContentView: SwiftUI.View {
                 .padding()
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color(.systemBackground))
+                        .fill(AppTheme.patientHeaderCard)
                         .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 6)
                 )
 
