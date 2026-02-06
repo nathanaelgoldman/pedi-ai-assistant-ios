@@ -7,14 +7,35 @@
 
 import SwiftUI
 
+// MARK: - SupportLog Environment key (writable + cross-file accessible)
+
+private struct SupportLogKey: EnvironmentKey {
+    static let defaultValue: SupportLog = .shared
+}
+
+extension EnvironmentValues {
+    /// App-wide support log instance. Injected at the App root.
+    var supportLog: SupportLog {
+        get { self[SupportLogKey.self] }
+        set { self[SupportLogKey.self] = newValue }
+    }
+}
+
 @main
 struct PatientViewerAppApp: App {
     @StateObject private var appLock = AppLockManager()
+
+    init() {
+        // Root-level lifecycle marker for support.
+        SupportLog.shared.info("APP start")
+    }
 
     var body: some Scene {
         WindowGroup {
             RootShellView()
                 .environmentObject(appLock)
+                // Provide SupportLog to the whole view tree (safe for sheets / previews / deep views)
+                .environment(\.supportLog, .shared)
         }
     }
 }
@@ -23,6 +44,13 @@ struct PatientViewerAppApp: App {
 struct RootShellView: View {
     @EnvironmentObject var appLock: AppLockManager
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.supportLog) private var supportLog
+
+    private func S(_ message: String) {
+        Task { @MainActor in
+            supportLog.info(message)
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -36,13 +64,25 @@ struct RootShellView: View {
                     .transition(.opacity.combined(with: .scale))
             }
         }
+        .onAppear {
+            S("UI root appeared")
+        }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
-            case .background, .inactive:
+            case .background:
+                S("APP scenePhase=background")
                 // Auto-lock when app goes to background if a passcode exists
                 appLock.lockIfNeeded()
-            default:
-                break
+                S("APP auto-lock requested")
+            case .inactive:
+                S("APP scenePhase=inactive")
+                // Auto-lock when app goes inactive if a passcode exists
+                appLock.lockIfNeeded()
+                S("APP auto-lock requested")
+            case .active:
+                S("APP scenePhase=active")
+            @unknown default:
+                S("APP scenePhase=unknown")
             }
         }
     }
@@ -51,8 +91,15 @@ struct RootShellView: View {
 /// Minimal lock screen UI that asks for the app-level passcode.
 struct LockScreenView: View {
     @EnvironmentObject var appLock: AppLockManager
+    @Environment(\.supportLog) private var supportLog
     @State private var passcode: String = ""
     @State private var errorMessage: String?
+
+    private func S(_ message: String) {
+        Task { @MainActor in
+            supportLog.info(message)
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -101,11 +148,14 @@ struct LockScreenView: View {
                 // Actions
                 VStack(spacing: 12) {
                     Button {
+                        S("LOCK unlock attempt (passcode)")
                         let ok = appLock.unlock(with: passcode)
                         if ok {
+                            S("LOCK unlock ok (passcode)")
                             passcode = ""
                             errorMessage = nil
                         } else {
+                            S("LOCK unlock failed (passcode)")
                             errorMessage = NSLocalizedString("lock_screen.error.incorrect_passcode", comment: "Incorrect passcode error")
                             passcode = ""
                         }
@@ -119,11 +169,18 @@ struct LockScreenView: View {
 
                     if appLock.canUseBiometrics {
                         Button {
+                            S("LOCK unlock attempt (biometrics)")
                             appLock.unlockWithBiometrics { success in
                                 if success {
+                                    Task { @MainActor in
+                                        supportLog.info("LOCK unlock ok (biometrics)")
+                                    }
                                     errorMessage = nil
                                     passcode = ""
                                 } else {
+                                    Task { @MainActor in
+                                        supportLog.warn("LOCK unlock failed (biometrics)")
+                                    }
                                     // Non-fatal: user can still unlock with passcode
                                     errorMessage = NSLocalizedString("lock_screen.error.biometric_failed", comment: "Biometrics failed error")
                                 }

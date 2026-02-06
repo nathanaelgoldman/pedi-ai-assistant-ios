@@ -17,19 +17,6 @@ import os
 // Central logger for this file
 private let log = AppLog.feature("BundleLibraryView")
 
-// MARK: - SupportLog environment fallback
-// BundleLibraryView used to rely on @EnvironmentObject SupportLog, which crashes at runtime
-// if the ancestor view forgets to inject it. We provide a default via EnvironmentKey.
-private struct SupportLogEnvKey: EnvironmentKey {
-    static let defaultValue: SupportLog = .shared
-}
-
-private extension EnvironmentValues {
-    var supportLog: SupportLog {
-        get { self[SupportLogEnvKey.self] }
-        set { self[SupportLogEnvKey.self] = newValue }
-    }
-}
 
 
 // MARK: - Localization (file-local)
@@ -824,6 +811,11 @@ struct BundleLibraryView: View {
             supportLog.add(message)
         }
     }
+    
+    // MARK: - SupportLog redaction helpers
+    private func aliasTok(_ alias: String) -> String {
+        AppLog.token(alias)   // stable-ish token, no alias leak
+    }
 
     private func SWarn(_ message: String) {
         Task { @MainActor in
@@ -899,7 +891,7 @@ struct BundleLibraryView: View {
                 List {
                     ForEach(savedBundles) { bundle in
                         Button(action: {
-                            S("BLV ACTIVATE tap | alias=\(bundle.alias)")
+                            S("BLV ACTIVATE tap | aliasTok=\(aliasTok(bundle.alias))")
                             let fileManager = FileManager.default
                             guard fileManager.fileExists(atPath: bundle.folderURL.path) else {
                                 alertMessage = LF("patient_viewer.bundle_library.error.folder_missing", bundle.folderURL.lastPathComponent)
@@ -908,10 +900,10 @@ struct BundleLibraryView: View {
                             }
                             do {
                                 try activatePersistentBundle(at: bundle.folderURL)
-                                S("BLV ACTIVATE ok | alias=\(bundle.alias)")
+                                S("BLV ACTIVATE ok | aliasTok=\(aliasTok(bundle.alias))")
                             } catch {
                                 log.error("Failed to load bundle: \(error.localizedDescription, privacy: .public)")
-                                SError("BLV ACTIVATE failed | alias=\(bundle.alias) | err=\(error.localizedDescription)")
+                                SError("BLV ACTIVATE failed | aliasTok=\(aliasTok(bundle.alias)) | err=\(error.localizedDescription)")
                                 alertMessage = LF("patient_viewer.bundle_library.error.load_failed", error.localizedDescription)
                                 showAlert = true
                             }
@@ -927,7 +919,7 @@ struct BundleLibraryView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 pendingDeletion = bundle
-                                S("BLV DELETE confirm shown | alias=\(bundle.alias)")
+                                S("BLV DELETE confirm shown | aliasTok=\(aliasTok(bundle.alias))")
                                 showDeleteConfirm = true
                             } label: {
                                 Label(L("patient_viewer.bundle_library.action.delete", comment: "Swipe action"), systemImage: "trash")
@@ -978,7 +970,7 @@ struct BundleLibraryView: View {
         ) {
             Button(L("patient_viewer.bundle_library.delete_confirm.delete", comment: "Delete button"), role: .destructive) {
                 if let bundle = pendingDeletion {
-                    S("BLV DELETE confirmed | alias=\(bundle.alias)")
+                    S("BLV DELETE confirmed | aliasTok=\(aliasTok(bundle.alias))")
                     deleteBundle(bundle)
                 }
                 pendingDeletion = nil
