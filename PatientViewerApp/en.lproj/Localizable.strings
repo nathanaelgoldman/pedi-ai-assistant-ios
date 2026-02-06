@@ -834,3 +834,6 @@
 "patient_viewer.app_settings.support_log.hint" = "Enable this only if requested by support. Logs are stored locally and cleared when the app closes.";
 "patient_viewer.app_settings.support_log.cleared" = "Support log cleared.";
 "patient_viewer.app_settings.support_log.error.export_failed_fmt" = "Unable to export support log: %@";
+
+/* EN */
+"patientDocs.error.saveManifestFailed_fmt" = "Failed to save document list: %@";

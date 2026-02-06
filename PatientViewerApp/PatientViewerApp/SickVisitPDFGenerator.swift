@@ -19,7 +19,11 @@ struct SickVisitPDFGenerator {
     private static let log = AppLog.feature("pdf.sick")
     static func generate(for visit: VisitSummary, dbURL: URL) -> URL? {
         let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
-        Self.log.info("Generating SickVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
+        let visitTok = AppLog.token(String(visit.id))
+
+
+        // Xcode log (use tokenized identifiers)
+        Self.log.info("Generating SickVisit PDF | visitTok=\(visitTok, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
         let pdfMetaData = [
             kCGPDFContextCreator: L("pdf.meta.creator"),
             kCGPDFContextAuthor: L("pdf.meta.author"),
@@ -892,11 +896,21 @@ struct SickVisitPDFGenerator {
             let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
             let fileURL = docsURL.appendingPathComponent("VisitReport_\(visit.id).pdf")
             try data.write(to: fileURL)
+
+            // App-based support log (never leak raw paths/IDs)
+            let fileTok = AppLog.token(fileURL.lastPathComponent)
+            Task { @MainActor in
+                SupportLog.shared.info("PDF sick saved ok | visitTok=\(visitTok) fileTok=\(fileTok)")
+            }
+
             Self.log.info(
                 "SickVisit PDF saved | file=\(AppLog.fileRef(fileURL), privacy: .public) size=\(data.count, privacy: .public)B"
             )
             return fileURL
         } catch {
+            Task { @MainActor in
+                SupportLog.shared.warn("PDF sick save failed | visitTok=\(visitTok)")
+            }
             Self.log.error("Failed to save sick visit PDF: \(error.localizedDescription, privacy: .public)")
             return nil
         }

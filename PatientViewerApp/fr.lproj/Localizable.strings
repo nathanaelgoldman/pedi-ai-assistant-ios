@@ -848,4 +848,6 @@
 "patient_viewer.app_settings.support_log.cleared" = "Journal de support effacé.";
 "patient_viewer.app_settings.support_log.error.export_failed_fmt" = "Impossible d’exporter le journal de support : %@";
 
+/* FR */
+"patientDocs.error.saveManifestFailed_fmt" = "Échec de l’enregistrement de la liste des documents : %@";
 

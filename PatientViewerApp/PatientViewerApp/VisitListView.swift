@@ -271,6 +271,11 @@ struct PDFPreviewContainer: SwiftUI.View {
                                         // Build the named copy first, then present using a non-nil Identifiable URL.
                                         // Using `.sheet(item:)` avoids the “No items to share” first-tap race.
                                         let shareCopyURL = makeNamedShareCopy(originalURL: fileURL, visit: visit, bundleRoot: dbURL)
+
+                                        // Support log breadcrumb (matches SupportLog export/sick patterns)
+                                        let shareTok = AppLog.token(shareCopyURL.lastPathComponent)
+                                        SupportLog.shared.info("UI share sheet present | visitTok=\(AppLog.token(String(visit.id))) fileTok=\(shareTok) cat=\(visit.category)")
+
                                         DispatchQueue.main.async {
                                             self.shareURL = IdentifiableURL(url: shareCopyURL)
                                         }
@@ -301,6 +306,7 @@ struct PDFPreviewContainer: SwiftUI.View {
             }
         }
         .sheet(item: $shareURL, onDismiss: {
+            SupportLog.shared.info("UI share sheet dismissed")
             // Reset between runs so the next share always starts clean.
             self.shareURL = nil
         }) { identifiable in

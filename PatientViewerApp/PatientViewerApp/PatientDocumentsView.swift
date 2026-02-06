@@ -43,7 +43,8 @@ struct DocumentRecord: Identifiable, Codable {
 private let documentsLog = AppLog.feature("Documents")
 
 private enum AllowedDocTypes {
-    static var supported: [UTType] {
+    // Stored list to avoid SwiftUI type-checker blowups from complex computed expressions.
+    static let supported: [UTType] = {
         var types: [UTType] = [.pdf, .image]
         let extras: [UTType] = [
             UTType(filenameExtension: "doc"),
@@ -55,7 +56,7 @@ private enum AllowedDocTypes {
         ].compactMap { $0 }
         types.append(contentsOf: extras)
         return types
-    }
+    }()
 }
 
 struct PatientDocumentsView: View {
@@ -69,6 +70,9 @@ struct PatientDocumentsView: View {
     @State private var didLoadOnce = false
     @State private var isPreviewing = false
     @State private var confirmDelete: DocumentRecord?
+
+    // Keep as a stored property to reduce SwiftUI type inference work.
+    private let allowedContentTypes: [UTType] = AllowedDocTypes.supported
 
     private struct IdentifiableURL: Identifiable {
         let id = UUID()
@@ -102,6 +106,7 @@ struct PatientDocumentsView: View {
 
                 // Upload button
                 Button {
+                    SupportLog.shared.info("DOCS upload tap")
                     showImporter = true
                 } label: {
                     HStack(spacing: 8) {
@@ -115,7 +120,7 @@ struct PatientDocumentsView: View {
                 .controlSize(.large)
                 .fileImporter(
                     isPresented: $showImporter,
-                    allowedContentTypes: AllowedDocTypes.supported,
+                    allowedContentTypes: allowedContentTypes,
                     allowsMultipleSelection: false
                 ) { result in
                     handleImport(result)
@@ -179,6 +184,7 @@ struct PatientDocumentsView: View {
                                     .disabled(isPreviewing)
 
                                     Button(role: .destructive) {
+                                        SupportLog.shared.info("DOCS delete tap | fileTok=\(AppLog.token(record.filename))")
                                         confirmDelete = record
                                     } label: {
                                         Label(L("patientDocs.delete"), systemImage: "trash")
@@ -210,6 +216,7 @@ struct PatientDocumentsView: View {
             guard !didLoadOnce else { return }
             let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
             documentsLog.info("Documents view appeared | db=\(AppLog.dbRef(dbFileURL), privacy: .public)")
+            SupportLog.shared.info("UI open patient documents")
             loadManifest()
             didLoadOnce = true
         }
@@ -252,6 +259,7 @@ struct PatientDocumentsView: View {
         let docsFolder = dbURL.appendingPathComponent("docs")
         let fileURL = docsFolder.appendingPathComponent(record.filename)
         documentsLog.debug("Attempting to open file | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
+        SupportLog.shared.info("DOCS preview tap | fileTok=\(AppLog.token(record.filename))")
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
             guard !isPreviewing else {
@@ -259,6 +267,7 @@ struct PatientDocumentsView: View {
                 return
             }
             documentsLog.info("Presenting QuickLook | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
+            SupportLog.shared.info("DOCS preview present | fileTok=\(AppLog.token(record.filename))")
             isPreviewing = true
             wrappedPreviewURL = IdentifiableURL(url: fileURL)
         } else {
@@ -374,29 +383,47 @@ struct PatientDocumentsView: View {
             do {
                 let data = try Data(contentsOf: url)
                 // Expect object with "files" map: { "files": { "filename": { ...meta... } } }
-                if let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let filesMap = root["files"] as? [String: Any] {
-                    var loaded: [DocumentRecord] = []
-                    for (filename, metaAny) in filesMap {
-                        let meta = metaAny as? [String: Any] ?? [:]
-                        // Accept either "originalName" or "title"
-                        let originalName = (meta["originalName"] as? String)
-                                          ?? (meta["title"] as? String)
-                                          ?? filename
-                        let uploadedAt = (meta["uploadedAt"] as? String)
-                            ?? NSLocalizedString("common.unknown", comment: "")
-                        // Use stable UUID if present (optional), else new one
-                        let idString = meta["id"] as? String
-                        let id = UUID(uuidString: idString ?? "") ?? UUID()
-                        loaded.append(DocumentRecord(id: id,
-                                                     filename: filename,
-                                                     originalName: originalName,
-                                                     uploadedAt: uploadedAt))
+                if let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    // Support both schemas:
+                    //  1) { "files": { ... } }
+                    //  2) { "docs": { "files": { ... } } }
+                    let filesMap: [String: Any]?
+                    if let m = root["files"] as? [String: Any] {
+                        filesMap = m
+                    } else if let docs = root["docs"] as? [String: Any],
+                              let m = docs["files"] as? [String: Any] {
+                        filesMap = m
+                    } else {
+                        filesMap = nil
                     }
-                    // Sort newest first if timestamps look present
-                    records = loaded.sorted { $0.uploadedAt > $1.uploadedAt }
-                    documentsLog.info("Loaded \(records.count, privacy: .public) record(s) from root manifest.")
-                    return true
+
+                    if let filesMap {
+                        var loaded: [DocumentRecord] = []
+                        for (filename, metaAny) in filesMap {
+                            let meta = metaAny as? [String: Any] ?? [:]
+                            // Accept either "originalName" or "title"
+                            let originalName = (meta["originalName"] as? String)
+                                              ?? (meta["title"] as? String)
+                                              ?? filename
+                            let uploadedAt = (meta["uploadedAt"] as? String)
+                                ?? NSLocalizedString("common.unknown", comment: "")
+                            // Use stable UUID if present (optional), else new one
+                            let idString = meta["id"] as? String
+                            let id = UUID(uuidString: idString ?? "") ?? UUID()
+
+                            loaded.append(DocumentRecord(
+                                id: id,
+                                filename: filename,
+                                originalName: originalName,
+                                uploadedAt: uploadedAt
+                            ))
+                        }
+
+                        // Sort newest first if timestamps look present
+                        records = loaded.sorted { $0.uploadedAt > $1.uploadedAt }
+                        documentsLog.info("Loaded \(records.count, privacy: .public) record(s) from root manifest.")
+                        return true
+                    }
                 }
             } catch {
                 documentsLog.error("Failed to read root manifest: \(String(describing: error), privacy: .private)")
@@ -443,11 +470,13 @@ struct PatientDocumentsView: View {
         }
 
         var didLoad = false
-        if fm.fileExists(atPath: legacyManifest.path) {
-            didLoad = loadFromLegacyManifest(url: legacyManifest)
-        }
-        if !didLoad, fm.fileExists(atPath: rootManifest.path) {
+        // Prefer the authoritative ROOT manifest when present (exporter writes hashes/metadata there).
+        if fm.fileExists(atPath: rootManifest.path) {
             didLoad = loadFromRootManifest(url: rootManifest)
+        }
+        // Fallback to legacy docs/manifest.json for in-app uploads or older bundles.
+        if !didLoad, fm.fileExists(atPath: legacyManifest.path) {
+            didLoad = loadFromLegacyManifest(url: legacyManifest)
         }
         if !didLoad {
             documentsLog.warning("No manifest.json found at root or docs/. Showing empty list.")
@@ -500,9 +529,9 @@ struct PatientDocumentsView: View {
             try data.write(to: manifestURL, options: [.atomic])
             documentsLog.info("Saved legacy docs manifest: \(manifestURL.lastPathComponent, privacy: .public)")
         } catch {
-            alertMessage = NSLocalizedString("patientDocs.error.saveManifestFailed", comment: "")
-            showAlert = true
             documentsLog.error("Failed to save legacy manifest: \(String(describing: error), privacy: .public)")
+            alertMessage = LF("patientDocs.error.saveManifestFailed_fmt", error.localizedDescription)
+            showAlert = true
         }
     }
 
@@ -583,39 +612,43 @@ struct QuickLookPreview: UIViewControllerRepresentable {
         @objc func shareTapped() {
             QuickLookPreview.log.info("Share tapped | file=DOC#\(AppLog.token(self.url.lastPathComponent), privacy: .public)")
 
-            // Stage a copy in a temp location so any extension can read it safely.
-            let tmpDir = FileManager.default.temporaryDirectory
-            let stagedURL = tmpDir.appendingPathComponent(self.url.lastPathComponent)
-            var provider: NSItemProvider?
+            // Share extensions (especially on Catalyst) are happier with a stable, user-accessible file.
+            // Stage a named copy in Documents/ShareCopies and share the URL via an item source.
+            let fm = FileManager.default
+
+            let docsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let shareDir = docsURL.appendingPathComponent("ShareCopies", isDirectory: true)
+            if !fm.fileExists(atPath: shareDir.path) {
+                try? fm.createDirectory(at: shareDir, withIntermediateDirectories: true)
+            }
+
+            // Keep original name, but sanitize for maximum compatibility.
+            let safeName = sanitizeFilenameComponent(self.url.lastPathComponent)
+            let dest = shareDir.appendingPathComponent(safeName)
 
             do {
-                if FileManager.default.fileExists(atPath: stagedURL.path) {
-                    try FileManager.default.removeItem(at: stagedURL)
+                if fm.fileExists(atPath: dest.path) {
+                    try fm.removeItem(at: dest)
                 }
-                try FileManager.default.copyItem(at: self.url, to: stagedURL)
-                provider = NSItemProvider(contentsOf: stagedURL)
-                QuickLookPreview.log.debug("Staged share copy | file=DOC#\(AppLog.token(stagedURL.lastPathComponent), privacy: .public)")
+                try fm.copyItem(at: self.url, to: dest)
+                QuickLookPreview.log.debug("Prepared share copy | file=DOC#\(AppLog.token(dest.lastPathComponent), privacy: .public)")
             } catch {
-                QuickLookPreview.log.error("Failed to stage share copy: \(String(describing: error), privacy: .public). Falling back to direct provider.")
-                provider = NSItemProvider(contentsOf: self.url)
+                QuickLookPreview.log.error("Failed to create share copy (using original): \(String(describing: error), privacy: .public)")
             }
 
-            guard let itemProvider = provider else {
-                QuickLookPreview.log.error("Failed to create NSItemProvider for share.")
-                return
-            }
-            // Preserve the original filename in the share sheet when possible.
-            itemProvider.suggestedName = self.url.lastPathComponent
+            let shareURL = fm.fileExists(atPath: dest.path) ? dest : self.url
 
-            let activityVC = UIActivityViewController(activityItems: [itemProvider], applicationActivities: nil)
+            // Use UIActivityItemSource so the share sheet receives a filename early.
+            let activityVC = UIActivityViewController(activityItems: [DocumentShareItemSource(fileURL: shareURL)], applicationActivities: nil)
             activityVC.completionWithItemsHandler = { _, completed, _, error in
                 if let error = error {
                     QuickLookPreview.log.error("Share failed: \(String(describing: error), privacy: .public)")
                 } else {
                     QuickLookPreview.log.info("Share finished. completed=\(completed, privacy: .public)")
                 }
-                // Best-effort cleanup for the staged file.
-                try? FileManager.default.removeItem(at: stagedURL)
+                // Optional: leave the copy in ShareCopies (user-visible) to avoid provider flakiness.
+                // If you prefer cleanup, uncomment the next line.
+                // try? FileManager.default.removeItem(at: shareURL)
             }
 
             // iPad/iPhone support: anchor to the Share bar button if available
@@ -623,7 +656,15 @@ struct QuickLookPreview: UIViewControllerRepresentable {
                 activityVC.popoverPresentationController?.barButtonItem = barButton
             } else {
                 activityVC.popoverPresentationController?.sourceView = navController?.view
+                activityVC.popoverPresentationController?.sourceRect = CGRect(
+                    x: navController?.view.bounds.midX ?? 0,
+                    y: navController?.view.bounds.midY ?? 0,
+                    width: 1,
+                    height: 1
+                )
+                activityVC.popoverPresentationController?.permittedArrowDirections = []
             }
+
             navController?.present(activityVC, animated: true)
         }
 
@@ -632,4 +673,64 @@ struct QuickLookPreview: UIViewControllerRepresentable {
             navController?.dismiss(animated: true)
         }
     }
+}
+
+// MARK: - Share helpers (documents)
+
+/// Activity item source that preserves the filename and provides a stable file URL.
+final class DocumentShareItemSource: NSObject, UIActivityItemSource {
+    private let fileURL: URL
+
+    init(fileURL: URL) {
+        self.fileURL = fileURL
+        super.init()
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        // Returning a URL gives ShareKit a filename early.
+        return fileURL
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController,
+                                itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
+        return fileURL
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController,
+                                dataTypeIdentifierForActivityType activityType: UIActivity.ActivityType?) -> String {
+        if #available(iOS 14.0, *) {
+            // Best-effort: derive type from extension, otherwise generic "public.data".
+            if let t = UTType(filenameExtension: fileURL.pathExtension) {
+                return t.identifier
+            }
+            return UTType.data.identifier
+        } else {
+            return "public.data"
+        }
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController,
+                                subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
+        return fileURL.deletingPathExtension().lastPathComponent
+    }
+}
+
+/// Conservative filename sanitizer for share compatibility across iOS/Mac Catalyst.
+private func sanitizeFilenameComponent(_ s: String) -> String {
+    let forbidden = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t")
+    let parts = s.components(separatedBy: forbidden)
+    let joined = parts.joined(separator: "-")
+
+    let ws = CharacterSet.whitespacesAndNewlines
+    let spaced = joined.components(separatedBy: ws).filter { !$0.isEmpty }.joined(separator: "_")
+
+    let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
+    let asciiSafe = String(spaced.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" })
+
+    let collapsed = asciiSafe
+        .replacingOccurrences(of: "--+", with: "-", options: .regularExpression)
+        .replacingOccurrences(of: "__+", with: "_", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "-_ ."))
+
+    return collapsed.isEmpty ? "document" : collapsed
 }

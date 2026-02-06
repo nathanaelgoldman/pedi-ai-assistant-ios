@@ -841,3 +841,5 @@
 "patient_viewer.app_settings.support_log.hint" = "仅在技术支持要求时启用。日志仅保存在本设备上，并会在应用关闭时清除。";
 "patient_viewer.app_settings.support_log.cleared" = "支持日志已清除。";
 "patient_viewer.app_settings.support_log.error.export_failed_fmt" = "无法导出支持日志：%@";
+/* 简体中文 */
+"patientDocs.error.saveManifestFailed_fmt" = "无法保存文件列表：%@";

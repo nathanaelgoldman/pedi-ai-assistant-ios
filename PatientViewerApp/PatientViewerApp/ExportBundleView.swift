@@ -146,7 +146,6 @@ struct ExportBundleView: View {
         let t0 = Date()
         let dbRef = AppLog.dbRef(self.dbURL)
         Self.log.info("Export started | db=\(dbRef, privacy: .public)")
-        SLInfo("EXPORT start")
         await MainActor.run {
             exportInProgress = true
             exportSuccess = false

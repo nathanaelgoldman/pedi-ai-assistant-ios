@@ -165,6 +165,16 @@ struct WellVisitPDFGenerator {
     }
     
     static func generate(for visit: VisitSummary, dbURL: URL) async throws -> URL? {
+        // --- SupportLog (local app log, MainActor-safe) ---
+        let visitTok = AppLog.token("\(visit.id)")
+
+        @inline(__always)
+        func SLWell(_ message: String) {
+            Task { @MainActor in
+                SupportLog.shared.info(message)
+            }
+        }
+        SLWell("PDF well generate start | visitTok=\(visitTok)")
         let dbFileURL = dbURL.appendingPathComponent("db.sqlite")
         WellVisitPDFGenerator.log.info("Generating WellVisit PDF | id=\(visit.id, privacy: .public) db=\(AppLog.dbRef(dbFileURL), privacy: .private)")
         let pdfMetaData = [
@@ -180,6 +190,8 @@ struct WellVisitPDFGenerator {
         let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
 
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: format)
+        
+        SLWell("PDF well renderer created | visitTok=\(visitTok)")
 
         let margin: CGFloat = 40
         let contentWidth = pageWidth - 2 * margin
@@ -2676,6 +2688,8 @@ struct WellVisitPDFGenerator {
         let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let fileURL = docsURL.appendingPathComponent("WellVisitReport_\(visit.id).pdf")
         try data.write(to: fileURL)
+        let fileTok = AppLog.token(fileURL.lastPathComponent)
+        SLWell("PDF well saved ok | visitTok=\(visitTok) fileTok=\(fileTok)")
         if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
            let size = attrs[.size] as? NSNumber {
             WellVisitPDFGenerator.log.info(
