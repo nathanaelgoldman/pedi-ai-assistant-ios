@@ -31,6 +31,8 @@ struct AppSettingsView: View {
 
     // MARK: - Support Log (off by default)
     @StateObject private var supportLog = SupportLog.shared
+    
+    
 
     private struct SupportSharePayload: Identifiable {
         let id = UUID()
@@ -38,6 +40,73 @@ struct AppSettingsView: View {
     }
 
     @State private var supportSharePayload: SupportSharePayload? = nil
+
+    // MARK: - De-dupe UI open/close logs
+    // SwiftUI can trigger onAppear/onDisappear more than once (e.g., NavigationView layout passes).
+    // We track presence with a shared ref-count and only log on 0->1 and 1->0 transitions.
+    @MainActor
+    private final class _Presence {
+        static let shared = _Presence()
+        var count: Int = 0
+
+        // SwiftUI can fire appear/disappear twice in quick succession during layout.
+        // We suppress identical open/close logs within a small window.
+        var lastOpenLogAt: Date? = nil
+        var lastCloseLogAt: Date? = nil
+        let dedupeWindow: TimeInterval = 0.5
+    }
+
+    @MainActor
+    private func logOpenOnce() {
+        let p = _Presence.shared
+        let was = p.count
+        p.count = was + 1
+
+        guard was == 0 else { return }
+
+        let now = Date()
+        if let last = p.lastOpenLogAt, now.timeIntervalSince(last) < p.dedupeWindow {
+            return
+        }
+        p.lastOpenLogAt = now
+        SL("UI open settings")
+    }
+
+    @MainActor
+    private func logCloseOnce() {
+        let p = _Presence.shared
+        if p.count > 0 { p.count -= 1 }
+
+        guard p.count == 0 else { return }
+
+        let now = Date()
+        if let last = p.lastCloseLogAt, now.timeIntervalSince(last) < p.dedupeWindow {
+            return
+        }
+        p.lastCloseLogAt = now
+        SL("UI close settings")
+    }
+    
+    private func setSupportLogEnabled(_ enabled: Bool) {
+        if enabled {
+            supportLog.setEnabled(true)
+            SL("SupportLog enabled")
+        } else {
+            // Log BEFORE disabling so the event is captured.
+            SL("SupportLog disabled")
+            supportLog.setEnabled(false)
+        }
+    }
+
+    // MARK: - SupportLog helpers
+    private func SL(_ message: String) {
+        // SupportLog methods are @MainActor; wrapping avoids cross-actor errors.
+        Task { await supportLog.info(message) }
+    }
+
+    private func SLerr(_ message: String) {
+        Task { await supportLog.error(message) }
+    }
 
     var body: some View {
         NavigationView {
@@ -133,7 +202,7 @@ struct AppSettingsView: View {
                 Section {
                     Toggle(isOn: Binding(
                         get: { supportLog.isEnabled },
-                        set: { supportLog.setEnabled($0) }
+                        set: { setSupportLogEnabled($0) }
                     )) {
                         HStack(spacing: 10) {
                             Label(
@@ -164,6 +233,7 @@ struct AppSettingsView: View {
                     }
 
                     Button {
+                        SL("SET support log share tap")
                         shareSupportLog()
                     } label: {
                         Label(
@@ -174,6 +244,7 @@ struct AppSettingsView: View {
                     .disabled(!supportLog.isEnabled)
 
                     Button(role: .destructive) {
+                        SL("SET support log clear tap")
                         supportLog.clear()
                         showSuccess(L("patient_viewer.app_settings.support_log.cleared", comment: "Support log cleared"))
                     } label: {
@@ -228,9 +299,16 @@ struct AppSettingsView: View {
                 }
             }
             .sheet(item: $supportSharePayload, onDismiss: {
+                SL("SET support log share sheet dismissed")
                 supportSharePayload = nil
             }) { payload in
                 ShareSheet(activityItems: payload.items)
+            }
+            .onAppear {
+                logOpenOnce()
+            }
+            .onDisappear {
+                logCloseOnce()
             }
         }
     }
@@ -238,6 +316,7 @@ struct AppSettingsView: View {
     // MARK: - Support Log helpers
     private func shareSupportLog() {
         Task {
+            SL("SET support log export start")
             do {
                 // Generate the log file.
                 let url = try await Task.detached(priority: .utility) {
@@ -258,8 +337,12 @@ struct AppSettingsView: View {
                 await MainActor.run {
                     // Creating a new payload forces the sheet (and UIActivityViewController) to be recreated.
                     supportSharePayload = SupportSharePayload(items: [text])
+                    // Emit after payload is set to confirm the sheet should present.
+                    SL("SET support log share sheet present")
                 }
+                SL("SET support log export ok")
             } catch {
+                SLerr("SET support log export failed | err=\(error.localizedDescription)")
                 showError(LF("patient_viewer.app_settings.support_log.error.export_failed_fmt",
                              error.localizedDescription))
             }

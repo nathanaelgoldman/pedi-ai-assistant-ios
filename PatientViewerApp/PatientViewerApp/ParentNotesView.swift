@@ -13,6 +13,16 @@ import UIKit
 
 private let notesLog = AppLog.feature("ParentNotesView")
 
+// SupportLog wiring (keep logs lightweight + privacy-safe)
+@MainActor private func S(_ msg: String) {
+    // SupportLog is the user-exportable log; keep messages short and avoid raw identifiers.
+    SupportLog.shared.info(msg)
+}
+
+private func tokPatient(_ patientId: Int64) -> String {
+    AppLog.token(String(patientId))
+}
+
 private func L(_ key: String) -> String {
     NSLocalizedString(key, tableName: nil, bundle: .main, value: key, comment: "")
 }
@@ -168,6 +178,7 @@ private extension SwiftUI.View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             loadNotes()
+            S("UI open parent notes | patientTok=\(tokPatient(patientId))")
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             loadNotes()
@@ -179,6 +190,7 @@ private extension SwiftUI.View {
             loadNotes()
         }
         .onDisappear {
+            S("UI close parent notes | patientTok=\(tokPatient(patientId))")
             onAutoSaveToPersistent?()
         }
         .alert("common.error", isPresented: $showAlert, actions: {}) {
@@ -222,6 +234,7 @@ private extension SwiftUI.View {
     private func loadNotes() {
         do {
             notesLog.debug("Attempting to load DB | base=BUNDLE#\(AppLog.token(dbURL.lastPathComponent), privacy: .public)")
+            S("PN load start | patientTok=\(tokPatient(patientId))")
             guard let dbFileURL = resolveDBURL() else {
                 alertMessage = LF("parentNotes.error.dbNotFoundUnder_fmt", dbURL.lastPathComponent)
                 showAlert = true
@@ -244,8 +257,10 @@ private extension SwiftUI.View {
             let raw = try patientRow.get(parentNotes) ?? ""
             notesLog.debug("Fetched parent_notes for patient \(patientId, privacy: .public) (length: \((raw as NSString).length, privacy: .public))")
             notes = raw.split(separator: "\n\n").map { String($0) }
+            S("PN load ok | patientTok=\(tokPatient(patientId)) count=\(notes.count)")
             notesLog.debug("View notes array now contains \(notes.count, privacy: .public) items.")
         } catch {
+            S("PN load error | patientTok=\(tokPatient(patientId)) err=\((error as NSError).localizedDescription)")
             alertMessage = LF("parentNotes.error.loadFailed_fmt", (error as NSError).localizedDescription)
             showAlert = true
         }
@@ -254,6 +269,7 @@ private extension SwiftUI.View {
     private func saveNote() {
         let trimmed = noteInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        S("PN save tap | patientTok=\(tokPatient(patientId))")
 
         do {
             guard let dbFileURL = resolveDBURL() else {
@@ -285,6 +301,7 @@ private extension SwiftUI.View {
             notesLog.debug("Executing SQL update on column 'parent_notes' (new length: \(joined.count, privacy: .public))")
             let changes = try db.run(update.update(parentNotes <- joined))
             notesLog.debug("Update affected rows: \(changes, privacy: .public)")
+            S("PN save ok | patientTok=\(tokPatient(patientId)) rows=\(changes) notes=\(allNotes.count)")
 
             // Read-back test
             if let confirmRow = try? db.pluck(patients.filter(id == patientId)) {
@@ -294,8 +311,8 @@ private extension SwiftUI.View {
 
             noteInput = ""
             loadNotes()
-            refreshTrigger.toggle()
         } catch {
+            S("PN save error | patientTok=\(tokPatient(patientId)) err=\((error as NSError).localizedDescription)")
             alertMessage = LF("parentNotes.error.saveFailed_fmt", (error as NSError).localizedDescription)
             showAlert = true
         }
@@ -303,6 +320,7 @@ private extension SwiftUI.View {
 
     private func deleteNote(at index: Int) {
         guard index < notes.count else { return }
+        S("PN delete tap | patientTok=\(tokPatient(patientId)) idx=\(index)")
 
         do {
             guard let dbFileURL = resolveDBURL() else {
@@ -328,9 +346,11 @@ private extension SwiftUI.View {
             let update = patients.filter(id == patientId)
             notesLog.debug("Deleting note at index \(index, privacy: .public); remaining count will be \(allNotes.count, privacy: .public)")
             try db.run(update.update(parentNotes <- joined))
+            S("PN delete ok | patientTok=\(tokPatient(patientId)) remaining=\(allNotes.count)")
 
             loadNotes()
         } catch {
+            S("PN delete error | patientTok=\(tokPatient(patientId)) err=\((error as NSError).localizedDescription)")
             alertMessage = LF("parentNotes.error.deleteFailed_fmt", (error as NSError).localizedDescription)
             showAlert = true
         }

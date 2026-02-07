@@ -8,6 +8,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import QuickLook
+import PDFKit
 import UIKit
 import OSLog
 
@@ -228,11 +229,20 @@ struct PatientDocumentsView: View {
             }
         }
         .sheet(item: $wrappedPreviewURL, onDismiss: {
-            documentsLog.debug("QuickLook dismissed.")
+            documentsLog.debug("Preview dismissed.")
+            SupportLog.shared.info("DOCS preview dismissed")
             isPreviewing = false
             wrappedPreviewURL = nil
         }) { (identifiableURL: IdentifiableURL) in
-            QuickLookPreview(url: identifiableURL.url)
+            // Avoid QuickLook for PDFs and images: QL can expose extra share entry points.
+            let ext = identifiableURL.url.pathExtension.lowercased()
+            if ext == "pdf" {
+                PDFPreview(url: identifiableURL.url)
+            } else if ["png", "jpg", "jpeg", "heic", "gif", "tif", "tiff", "bmp", "webp"].contains(ext) {
+                ImagePreview(url: identifiableURL.url)
+            } else {
+                QuickLookPreview(url: identifiableURL.url)
+            }
         }
         .confirmationDialog(
             L("patientDocs.confirmDelete.title"),
@@ -244,9 +254,12 @@ struct PatientDocumentsView: View {
             presenting: confirmDelete
         ) { record in
             Button(L("patientDocs.delete"), role: .destructive) {
+                SupportLog.shared.info("DOCS delete confirm | fileTok=\(AppLog.token(record.filename))")
                 deleteRecord(record)
             }
-            Button(L("common.cancel"), role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {
+                SupportLog.shared.info("DOCS delete cancel | fileTok=\(AppLog.token(record.filename))")
+            }
         } message: { record in
             Text(record.originalName)
         }
@@ -282,14 +295,18 @@ struct PatientDocumentsView: View {
         let fileURL = docsFolder.appendingPathComponent(record.filename)
         let nameTok = AppLog.token(record.originalName)
         let ext = (record.originalName as NSString).pathExtension.lowercased()
+        let fileTok = AppLog.token(record.filename)
+
         documentsLog.info("Deleting document | nameTok=\(nameTok, privacy: .public) ext=\(ext, privacy: .public)")
 
         do {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 try FileManager.default.removeItem(at: fileURL)
                 documentsLog.debug("Removed file | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
+                SupportLog.shared.info("DOCS delete file ok | fileTok=\(fileTok)")
             } else {
                 documentsLog.warning("File to delete not found | file=DOC#\(AppLog.token(fileURL.lastPathComponent), privacy: .public)")
+                SupportLog.shared.info("DOCS delete missing | fileTok=\(fileTok)")
             }
 
             // If currently previewing this file, dismiss the preview.
@@ -301,8 +318,12 @@ struct PatientDocumentsView: View {
             // Remove from in-memory list and persist to legacy docs manifest.
             records.removeAll { $0.id == record.id || $0.filename == record.filename }
             saveManifest()
+
+            // Always log the list update (even if file was already missing).
+            SupportLog.shared.info("DOCS delete record removed | fileTok=\(fileTok)")
         } catch {
             documentsLog.error("Failed to delete file: \(String(describing: error), privacy: .private)")
+            SupportLog.shared.info("DOCS delete failed | fileTok=\(fileTok) err=\(error.localizedDescription)")
             alertMessage = LF("patientDocs.error.deleteFailed_fmt", error.localizedDescription)
             showAlert = true
         }
@@ -312,6 +333,7 @@ struct PatientDocumentsView: View {
         do {
             guard let sourceURL = try result.get().first else {
                 documentsLog.warning("FileImporter returned empty selection.")
+                SupportLog.shared.info("DOCS import empty selection")
                 return
             }
 
@@ -355,6 +377,7 @@ struct PatientDocumentsView: View {
 
             let srcTok = AppLog.token(sourceURL.lastPathComponent)
             let ext = sourceURL.pathExtension.lowercased()
+            SupportLog.shared.info("DOCS import ok | srcTok=\(srcTok) ext=\(ext) storedTok=\(AppLog.token(filename))")
             documentsLog.info("Imported document | srcTok=\(srcTok, privacy: .public) ext=\(ext, privacy: .public) → stored=\(filename, privacy: .public)")
 
             let newRecord = DocumentRecord(
@@ -367,6 +390,7 @@ struct PatientDocumentsView: View {
             records.insert(newRecord, at: 0)
             saveManifest()
         } catch {
+            SupportLog.shared.info("DOCS import failed | err=\(error.localizedDescription)")
             documentsLog.error("Import failed: \(String(describing: error), privacy: .private)")
             alertMessage = LF("patientDocs.error.importFailed_fmt", error.localizedDescription)
             showAlert = true
@@ -528,8 +552,10 @@ struct PatientDocumentsView: View {
             let data = try JSONEncoder().encode(records)
             try data.write(to: manifestURL, options: [.atomic])
             documentsLog.info("Saved legacy docs manifest: \(manifestURL.lastPathComponent, privacy: .public)")
+            SupportLog.shared.info("DOCS manifest save ok | count=\(records.count)")
         } catch {
             documentsLog.error("Failed to save legacy manifest: \(String(describing: error), privacy: .public)")
+            SupportLog.shared.info("DOCS manifest save failed | err=\(error.localizedDescription)")
             alertMessage = LF("patientDocs.error.saveManifestFailed_fmt", error.localizedDescription)
             showAlert = true
         }
@@ -541,6 +567,299 @@ struct PatientDocumentsView: View {
         return formatter.string(from: Date())
     }
 }
+
+
+// MARK: - Image Preview (UIKit)
+
+struct ImagePreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let vc = ImagePreviewViewController(url: url)
+        let nav = UINavigationController(rootViewController: vc)
+        vc.navController = nav
+        return nav
+    }
+
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
+        // no-op
+    }
+}
+
+final class ImagePreviewViewController: UIViewController {
+    let url: URL
+    weak var navController: UINavigationController?
+
+    private let scrollView = UIScrollView()
+    private let imageView = UIImageView()
+
+    init(url: URL) {
+        self.url = url
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        view.backgroundColor = .systemBackground
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+
+        scrollView.minimumZoomScale = 1.0
+        scrollView.maximumZoomScale = 6.0
+        scrollView.delegate = self
+
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+
+        view.addSubview(scrollView)
+        scrollView.addSubview(imageView)
+
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            imageView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+
+            imageView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            imageView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
+        ])
+
+        // Load the image
+        if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+            imageView.image = img
+        }
+
+        navigationItem.largeTitleDisplayMode = .never
+
+        let shareItem = UIBarButtonItem(
+            barButtonSystemItem: .action,
+            target: self,
+            action: #selector(shareTapped)
+        )
+        shareItem.accessibilityIdentifier = "image.share"
+
+        let doneItem = UIBarButtonItem(
+            barButtonSystemItem: .done,
+            target: self,
+            action: #selector(doneTapped)
+        )
+        doneItem.accessibilityIdentifier = "image.done"
+
+        navigationItem.rightBarButtonItem = shareItem
+        navigationItem.leftBarButtonItem = doneItem
+
+        SupportLog.shared.info("DOCS image preview present | fileTok=\(AppLog.token(url.lastPathComponent))")
+    }
+
+    @objc private func doneTapped() {
+        SupportLog.shared.info("DOCS image preview dismissed")
+        navController?.dismiss(animated: true)
+    }
+
+    @objc private func shareTapped() {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let proc = ProcessInfo.processInfo.processName
+        SupportLog.shared.info("SupportLog target | pid=\(pid) proc=\(proc)")
+
+        SupportLog.shared.info("DOCS share tap | fileTok=\(AppLog.token(url.lastPathComponent))")
+
+        // Stage a stable share copy in Documents/ShareCopies
+        let fm = FileManager.default
+        let docsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let shareDir = docsURL.appendingPathComponent("ShareCopies", isDirectory: true)
+        if !fm.fileExists(atPath: shareDir.path) {
+            try? fm.createDirectory(at: shareDir, withIntermediateDirectories: true)
+        }
+
+        let safeName = sanitizeFilenameComponent(url.lastPathComponent)
+        let dest = shareDir.appendingPathComponent(safeName)
+
+        do {
+            if fm.fileExists(atPath: dest.path) {
+                try fm.removeItem(at: dest)
+            }
+            try fm.copyItem(at: url, to: dest)
+        } catch {
+            // If copy fails, we will share the original URL.
+        }
+
+        let shareURL = fm.fileExists(atPath: dest.path) ? dest : url
+        SupportLog.shared.info("DOCS share url | fileTok=\(AppLog.token(shareURL.lastPathComponent)) useCopy=\(shareURL == dest)")
+
+        let activityVC = UIActivityViewController(
+            activityItems: [DocumentShareItemSource(fileURL: shareURL)],
+            applicationActivities: nil
+        )
+        activityVC.completionWithItemsHandler = { activityType, completed, returnedItems, error in
+            let fileTok = AppLog.token(shareURL.lastPathComponent)
+            let act = activityType?.rawValue ?? "(nil)"
+            let itemsCount = returnedItems?.count ?? 0
+
+            if let error = error {
+                SupportLog.shared.info("DOCS share failed | fileTok=\(fileTok) act=\(act) items=\(itemsCount) err=\(error.localizedDescription)")
+            } else {
+                SupportLog.shared.info("DOCS share finished | fileTok=\(fileTok) completed=\(completed) act=\(act) items=\(itemsCount)")
+            }
+        }
+
+        activityVC.popoverPresentationController?.barButtonItem = navigationItem.rightBarButtonItem
+        SupportLog.shared.info("DOCS share sheet present | fileTok=\(AppLog.token(shareURL.lastPathComponent))")
+        present(activityVC, animated: true)
+    }
+}
+
+extension ImagePreviewViewController: UIScrollViewDelegate {
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        imageView
+    }
+}
+
+// MARK: - PDF Preview (PDFKit)
+
+struct PDFPreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let vc = PDFPreviewViewController(url: url)
+        let nav = UINavigationController(rootViewController: vc)
+        vc.navController = nav
+        return nav
+    }
+
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
+        // no-op
+    }
+}
+
+final class PDFPreviewViewController: UIViewController {
+    let url: URL
+    weak var navController: UINavigationController?
+
+    private let pdfView = PDFView()
+
+    init(url: URL) {
+        self.url = url
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        view.backgroundColor = .systemBackground
+
+        pdfView.translatesAutoresizingMaskIntoConstraints = false
+        pdfView.autoScales = true
+        pdfView.displayMode = .singlePageContinuous
+        pdfView.displayDirection = .vertical
+        pdfView.usePageViewController(true, withViewOptions: nil)
+
+        view.addSubview(pdfView)
+        NSLayoutConstraint.activate([
+            pdfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            pdfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            pdfView.topAnchor.constraint(equalTo: view.topAnchor),
+            pdfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+
+        if let doc = PDFDocument(url: url) {
+            pdfView.document = doc
+        }
+
+        navigationItem.largeTitleDisplayMode = .never
+
+        let shareItem = UIBarButtonItem(
+            barButtonSystemItem: .action,
+            target: self,
+            action: #selector(shareTapped)
+        )
+        shareItem.accessibilityIdentifier = "pdf.share"
+
+        let doneItem = UIBarButtonItem(
+            barButtonSystemItem: .done,
+            target: self,
+            action: #selector(doneTapped)
+        )
+        doneItem.accessibilityIdentifier = "pdf.done"
+
+        navigationItem.rightBarButtonItem = shareItem
+        navigationItem.leftBarButtonItem = doneItem
+
+        SupportLog.shared.info("DOCS pdf preview present | fileTok=\(AppLog.token(url.lastPathComponent))")
+    }
+
+    @objc private func doneTapped() {
+        SupportLog.shared.info("DOCS pdf preview dismissed")
+        navController?.dismiss(animated: true)
+    }
+
+    @objc private func shareTapped() {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let proc = ProcessInfo.processInfo.processName
+        SupportLog.shared.info("SupportLog target | pid=\(pid) proc=\(proc)")
+
+        SupportLog.shared.info("DOCS share tap | fileTok=\(AppLog.token(url.lastPathComponent))")
+
+        // Stage a stable share copy in Documents/ShareCopies (same strategy as QuickLookPreview)
+        let fm = FileManager.default
+        let docsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let shareDir = docsURL.appendingPathComponent("ShareCopies", isDirectory: true)
+        if !fm.fileExists(atPath: shareDir.path) {
+            try? fm.createDirectory(at: shareDir, withIntermediateDirectories: true)
+        }
+
+        let safeName = sanitizeFilenameComponent(url.lastPathComponent)
+        let dest = shareDir.appendingPathComponent(safeName)
+
+        do {
+            if fm.fileExists(atPath: dest.path) {
+                try fm.removeItem(at: dest)
+            }
+            try fm.copyItem(at: url, to: dest)
+        } catch {
+            // If copy fails, we will share the original URL.
+        }
+
+        let shareURL = fm.fileExists(atPath: dest.path) ? dest : url
+        SupportLog.shared.info("DOCS share url | fileTok=\(AppLog.token(shareURL.lastPathComponent)) useCopy=\(shareURL == dest)")
+
+        let activityVC = UIActivityViewController(
+            activityItems: [DocumentShareItemSource(fileURL: shareURL)],
+            applicationActivities: nil
+        )
+        activityVC.completionWithItemsHandler = { activityType, completed, returnedItems, error in
+            let fileTok = AppLog.token(shareURL.lastPathComponent)
+            let act = activityType?.rawValue ?? "(nil)"
+            let itemsCount = returnedItems?.count ?? 0
+
+            if let error = error {
+                SupportLog.shared.info("DOCS share failed | fileTok=\(fileTok) act=\(act) items=\(itemsCount) err=\(error.localizedDescription)")
+            } else {
+                SupportLog.shared.info("DOCS share finished | fileTok=\(fileTok) completed=\(completed) act=\(act) items=\(itemsCount)")
+            }
+        }
+
+        activityVC.popoverPresentationController?.barButtonItem = navigationItem.rightBarButtonItem
+        SupportLog.shared.info("DOCS share sheet present | fileTok=\(AppLog.token(shareURL.lastPathComponent))")
+        present(activityVC, animated: true)
+    }
+}
+
+// MARK: - QuickLook Preview
 
 struct QuickLookPreview: UIViewControllerRepresentable {
     let url: URL
@@ -558,25 +877,37 @@ struct QuickLookPreview: UIViewControllerRepresentable {
         nav.navigationBar.prefersLargeTitles = false
         context.coordinator.navController = nav
 
-        // Defer adding bar buttons until the next runloop so the nav bar has a real width.
-        // This reduces "temporary width == 0" Auto Layout warnings on Simulator.
+        // Hide QuickLook's bottom toolbar (it can show extra actions/buttons).
+        // We keep only our explicit nav bar buttons (Share + Done).
+        nav.setToolbarHidden(true, animated: false)
+        preview.toolbarItems = []
+
+        // Install bar buttons immediately so we can reliably log taps.
+        // Some OS versions/layouts show a temporary width==0 during first layout; we re-apply once on next runloop as a fallback.
+        let fileTok = AppLog.token(self.url.lastPathComponent)
+
+        let shareItem = UIBarButtonItem(
+            barButtonSystemItem: .action,
+            target: context.coordinator,
+            action: #selector(Coordinator.shareTapped)
+        )
+        shareItem.accessibilityIdentifier = "ql.share"
+
+        let doneItem = UIBarButtonItem(
+            barButtonSystemItem: .done,
+            target: context.coordinator,
+            action: #selector(Coordinator.doneTapped)
+        )
+        doneItem.accessibilityIdentifier = "ql.done"
+
+        preview.navigationItem.rightBarButtonItem = shareItem
+        preview.navigationItem.leftBarButtonItem = doneItem
+        SupportLog.shared.info("DOCS ql buttons installed | fileTok=\(fileTok)")
+
         DispatchQueue.main.async {
-            let shareItem = UIBarButtonItem(
-                barButtonSystemItem: .action,
-                target: context.coordinator,
-                action: #selector(Coordinator.shareTapped)
-            )
-            shareItem.accessibilityIdentifier = "ql.share"
-
-            let doneItem = UIBarButtonItem(
-                barButtonSystemItem: .done,
-                target: context.coordinator,
-                action: #selector(Coordinator.doneTapped)
-            )
-            doneItem.accessibilityIdentifier = "ql.done"
-
             preview.navigationItem.rightBarButtonItem = shareItem
             preview.navigationItem.leftBarButtonItem = doneItem
+            SupportLog.shared.info("DOCS ql buttons reinstalled | fileTok=\(fileTok)")
         }
 
         Self.log.debug("Prepared QLPreview | file=DOC#\(AppLog.token(self.url.lastPathComponent), privacy: .public)")
@@ -610,7 +941,14 @@ struct QuickLookPreview: UIViewControllerRepresentable {
         // MARK: - Actions
 
         @objc func shareTapped() {
+            let pid = ProcessInfo.processInfo.processIdentifier
+            let proc = ProcessInfo.processInfo.processName
+
+            QuickLookPreview.log.info("SupportLog target | pid=\(pid, privacy: .public) proc=\(proc, privacy: .public)")
+            SupportLog.shared.info("SupportLog target | pid=\(pid) proc=\(proc)")
+
             QuickLookPreview.log.info("Share tapped | file=DOC#\(AppLog.token(self.url.lastPathComponent), privacy: .public)")
+            SupportLog.shared.info("DOCS share tap | fileTok=\(AppLog.token(self.url.lastPathComponent))")
 
             // Share extensions (especially on Catalyst) are happier with a stable, user-accessible file.
             // Stage a named copy in Documents/ShareCopies and share the URL via an item source.
@@ -637,18 +975,22 @@ struct QuickLookPreview: UIViewControllerRepresentable {
             }
 
             let shareURL = fm.fileExists(atPath: dest.path) ? dest : self.url
+            SupportLog.shared.info("DOCS share url | fileTok=\(AppLog.token(shareURL.lastPathComponent)) useCopy=\(shareURL == dest)")
 
             // Use UIActivityItemSource so the share sheet receives a filename early.
             let activityVC = UIActivityViewController(activityItems: [DocumentShareItemSource(fileURL: shareURL)], applicationActivities: nil)
-            activityVC.completionWithItemsHandler = { _, completed, _, error in
+            activityVC.completionWithItemsHandler = { activityType, completed, returnedItems, error in
+                let fileTok = AppLog.token(shareURL.lastPathComponent)
+                let act = activityType?.rawValue ?? "(nil)"
+                let itemsCount = returnedItems?.count ?? 0
+
                 if let error = error {
                     QuickLookPreview.log.error("Share failed: \(String(describing: error), privacy: .public)")
+                    SupportLog.shared.info("DOCS share failed | fileTok=\(fileTok) act=\(act) items=\(itemsCount) err=\(error.localizedDescription)")
                 } else {
-                    QuickLookPreview.log.info("Share finished. completed=\(completed, privacy: .public)")
+                    QuickLookPreview.log.info("Share finished. completed=\(completed, privacy: .public) act=\(act, privacy: .public) items=\(itemsCount, privacy: .public)")
+                    SupportLog.shared.info("DOCS share finished | fileTok=\(fileTok) completed=\(completed) act=\(act) items=\(itemsCount)")
                 }
-                // Optional: leave the copy in ShareCopies (user-visible) to avoid provider flakiness.
-                // If you prefer cleanup, uncomment the next line.
-                // try? FileManager.default.removeItem(at: shareURL)
             }
 
             // iPad/iPhone support: anchor to the Share bar button if available
@@ -665,6 +1007,7 @@ struct QuickLookPreview: UIViewControllerRepresentable {
                 activityVC.popoverPresentationController?.permittedArrowDirections = []
             }
 
+            SupportLog.shared.info("DOCS share sheet present | fileTok=\(AppLog.token(shareURL.lastPathComponent))")
             navController?.present(activityVC, animated: true)
         }
 

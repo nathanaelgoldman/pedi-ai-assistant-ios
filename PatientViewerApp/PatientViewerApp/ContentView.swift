@@ -337,7 +337,6 @@ struct ContentView: SwiftUI.View {
 
                 // Settings
                 Button {
-                    S("UI open settings")
                     sheetRoute = .settings
                 } label: {
                     HStack(spacing: 12) {
