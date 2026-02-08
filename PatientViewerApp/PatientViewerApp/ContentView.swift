@@ -74,6 +74,10 @@ struct ContentView: SwiftUI.View {
     @State private var pendingImport: BundleIO.Pending? = nil
     @State private var showDuplicateDialog = false
     @State private var importError: String? = nil
+    // Cached growth data for the active bundle (avoid re-fetching on every body recompute)
+    @State private var growthDBPath: String? = nil
+    @State private var cachedPatientSex: String = "M"
+    @State private var cachedAllPatientData: [String: [GrowthDataPoint]] = [:]
     @Environment(\.scenePhase) private var scenePhase
     
 
@@ -244,10 +248,24 @@ struct ContentView: SwiftUI.View {
             .onChange(of: extractedFolderURL) { _, newURL in
                 guard let url = newURL else {
                     bundleFullName = nil
+                    growthDBPath = nil
+                    cachedPatientSex = "M"
+                    cachedAllPatientData = [:]
                     return
                 }
+
                 let dbPath = url.appendingPathComponent("db.sqlite").path
+
+                // Cache patient full name (existing behavior)
                 bundleFullName = PatientHeaderLoader.fetchPatientFullName(dbPath: dbPath)
+
+                // Cache growth series once per DB path (prevents double/extra fetches due to SwiftUI recompute)
+                if growthDBPath != dbPath {
+                    growthDBPath = dbPath
+                    let (sex, all) = GrowthDataFetcher.fetchAllGrowthData(dbPath: dbPath)
+                    cachedPatientSex = sex
+                    cachedAllPatientData = all
+                }
             }
         }
     }
@@ -378,7 +396,8 @@ struct ContentView: SwiftUI.View {
     private func activeBundleView(for url: URL) -> some SwiftUI.View {
         // Precompute DB-related values once
         let dbPath = url.appendingPathComponent("db.sqlite").path
-        let (patientSex, allPatientData) = GrowthDataFetcher.fetchAllGrowthData(dbPath: dbPath)
+        let patientSex = cachedPatientSex
+        let allPatientData = cachedAllPatientData
         let patientId = GrowthDataFetcher.getPatientId(from: dbPath) ?? -1
         let alias = bundleAliasLabel ?? L("patient_viewer.content.placeholder.unknown_patient", comment: "Placeholder: unknown patient")
         let dob = bundleDOB ?? L("patient_viewer.content.placeholder.unknown_dob", comment: "Placeholder: unknown date of birth")

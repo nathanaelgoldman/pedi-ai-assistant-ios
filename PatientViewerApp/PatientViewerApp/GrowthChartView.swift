@@ -16,6 +16,16 @@ struct GrowthChartView: View {
     // Logger
     private static let log = AppLog.feature("GrowthChartView")
 
+    // SupportLog (for user-facing debug export)
+    private func mTok(_ m: String) -> String { m } // measurement is not sensitive
+
+
+    private func SLAsync(_ message: String) {
+        Task { @MainActor in
+            SupportLog.shared.info(message)
+        }
+    }
+
     // Localization helper with fallback (mirrors the PDF generator behavior)
     private func L(_ key: String, _ fallback: String) -> String {
         NSLocalizedString(key, value: fallback, comment: "")
@@ -154,6 +164,7 @@ struct GrowthChartView: View {
                         Self.log.debug(
                             "points=\(self.cleanData().count, privacy: .public) curves=\(self.cleanCurves().count, privacy: .public)"
                         )
+                        SLAsync("GCV appear | m=\(self.mTok(self.measurement)) pts=\(self.cleanData().count) curves=\(self.cleanCurves().count)")
                     }
                     .chartXAxis {
                         AxisMarks(preset: .aligned, values: .stride(by: 1)) { value in
@@ -209,6 +220,7 @@ struct GrowthChartView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear {
                     Self.log.debug("No data to chart for \(self.measurement, privacy: .public)")
+                    SLAsync("GCV empty | m=\(self.mTok(self.measurement))")
                 }
             }
         }
@@ -216,6 +228,14 @@ struct GrowthChartView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .navigationTitle(titleForMeasurement(measurement))
+        .onChange(of: measurement) { oldValue, newValue in
+            // SwiftUI may reuse the same view instance when the measurement changes,
+            // so onAppear won't fire again. Log the switch explicitly.
+            SLAsync("GCV measurement change | from=\(self.mTok(oldValue)) to=\(self.mTok(newValue))")
+        }
+        .onDisappear {
+            SLAsync("GCV disappear | m=\(self.mTok(self.measurement))")
+        }
     }
 
     private func yDomain() -> ClosedRange<Double> {

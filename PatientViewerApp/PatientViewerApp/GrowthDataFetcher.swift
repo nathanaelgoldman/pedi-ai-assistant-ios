@@ -13,6 +13,20 @@ final class GrowthDataFetcher {
     // MARK: - Logging
     private static let log = AppLog.feature("GrowthDataFetcher")
 
+    // MARK: - SupportLog wiring (user-facing diagnostic log)
+    // Keep this file self-contained: SupportLog writes only high-signal lifecycle lines.
+    private static func S(_ message: String) {
+        Task { @MainActor in
+            SupportLog.shared.info(message)
+        }
+    }
+
+    private static func W(_ message: String) {
+        Task { @MainActor in
+            SupportLog.shared.warn(message)
+        }
+    }
+
     // MARK: - Constants
     private static let secondsPerDay: Swift.Double = 86_400.0
     private static let daysPerMonth: Swift.Double = 30.4375
@@ -83,6 +97,7 @@ final class GrowthDataFetcher {
         // BMI is computed from weight_kg + height_cm (in the same row).
         let m = measurement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let isBMI = (m == "bmi")
+        S("GDF fetch start | m=\(m)")
 
         let vitalsColumn: String?
         switch m {
@@ -96,6 +111,7 @@ final class GrowthDataFetcher {
             vitalsColumn = nil
         default:
             log.error("fetchGrowthData: invalid measurement '\(measurement, privacy: .public)'")
+            W("GDF invalid measurement | m=\(m)")
             return []
         }
 
@@ -103,6 +119,7 @@ final class GrowthDataFetcher {
         let db: Connection
         do {
             db = try Connection(dbPath)
+            S("GDF db open ok")
         } catch {
             log.error("fetchGrowthData: failed to connect DB: \(String(describing: error), privacy: .public)")
             return []
@@ -118,6 +135,7 @@ final class GrowthDataFetcher {
             let rawDOB = try? patientRow.get(dobCol)
         else {
             log.error("fetchGrowthData: could not fetch DOB for patient \(patientID, privacy: .public)")
+            W("GDF dob missing")
             return []
         }
 
@@ -125,10 +143,14 @@ final class GrowthDataFetcher {
 
         guard let dob = parseDate(rawDOB) else {
             log.error("fetchGrowthData: failed to parse DOB '\(rawDOB, privacy: .public)'")
+            W("GDF dob parse failed")
             return []
         }
 
         var results: [GrowthDataPoint] = []
+
+        var manualAdded = 0
+        var manualSkipped = 0
 
         // --- Step 1: manual_growth rows for this patient / measurement ---
         let manualGrowth = Table("manual_growth")
@@ -143,12 +165,14 @@ final class GrowthDataFetcher {
                 for row in try db.prepare(manualGrowth.filter(pidCol == patientID && wCol != nil && hCol != nil)) {
                     guard let wKg = row[wCol], let hCm = row[hCol] else {
                         log.warning("fetchGrowthData: nil weight/height for bmi")
+                        manualSkipped += 1
                         continue
                     }
 
                     // Filter out non-sensical/invalid numeric values early
                     guard wKg.isFinite, wKg > 0, hCm.isFinite, hCm > 0 else {
                         log.warning("fetchGrowthData: invalid w=\(wKg, privacy: .public) h=\(hCm, privacy: .public) for bmi; skipping")
+                        manualSkipped += 1
                         continue
                     }
 
@@ -157,12 +181,14 @@ final class GrowthDataFetcher {
 
                     guard bmi.isFinite, bmi > 0 else {
                         log.warning("fetchGrowthData: invalid bmi=\(bmi, privacy: .public); skipping")
+                        manualSkipped += 1
                         continue
                     }
 
                     let rawWhen = row[recAtCol]
                     guard let when = parseDate(rawWhen) else {
                         log.warning("fetchGrowthData: unparseable date '\(rawWhen, privacy: .public)'")
+                        manualSkipped += 1
                         continue
                     }
 
@@ -175,6 +201,7 @@ final class GrowthDataFetcher {
                     }
 
                     results.append(GrowthDataPoint(ageMonths: ageMonths, value: bmi))
+                    manualAdded += 1
                 }
 
             } else if let vitalsColumn = vitalsColumn {
@@ -183,17 +210,20 @@ final class GrowthDataFetcher {
                 for row in try db.prepare(manualGrowth.filter(pidCol == patientID && valueCol != nil)) {
                     guard let value = row[valueCol] else {
                         log.warning("fetchGrowthData: nil value for \(measurement, privacy: .public)")
+                        manualSkipped += 1
                         continue
                     }
                     // Filter out non-sensical/invalid numeric values early
                     guard value.isFinite, value > 0 else {
                         log.warning("fetchGrowthData: invalid value \(value, privacy: .public) for \(measurement, privacy: .public); skipping")
+                        manualSkipped += 1
                         continue
                     }
 
                     let rawWhen = row[recAtCol]
                     guard let when = parseDate(rawWhen) else {
                         log.warning("fetchGrowthData: unparseable date '\(rawWhen, privacy: .public)'")
+                        manualSkipped += 1
                         continue
                     }
 
@@ -206,10 +236,12 @@ final class GrowthDataFetcher {
                     }
 
                     results.append(GrowthDataPoint(ageMonths: ageMonths, value: value))
+                    manualAdded += 1
                 }
             }
         } catch {
             log.error("fetchGrowthData: query manual_growth failed: \(String(describing: error), privacy: .public)")
+            W("GDF manual_growth query failed")
         }
 
         // Helper to avoid double-counting obvious duplicates when adding perinatal baselines.
@@ -221,6 +253,8 @@ final class GrowthDataFetcher {
                 abs(point.value - targetValue) <= valueTolerance
             }
         }
+
+        var perinatalAdded = 0
 
         // --- Step 2: Perinatal history (optional baseline points) ---
         let perinatal = Table("perinatal_history")
@@ -240,6 +274,7 @@ final class GrowthDataFetcher {
                     let valKg = Swift.Double(g) / 1000.0
                     if !hasPoint(nearAge: 0.0, value: valKg) {
                         results.append(GrowthDataPoint(ageMonths: 0.0, value: valKg))
+                        perinatalAdded += 1
                     }
                 }
                 let dischargeG: Int? = (try? row.get(dwGCol)) ?? nil
@@ -248,6 +283,7 @@ final class GrowthDataFetcher {
                     // ~2 days ~ 0.07 months for a visible baseline before first check
                     if !hasPoint(nearAge: 0.07, value: valKg) {
                         results.append(GrowthDataPoint(ageMonths: 0.07, value: valKg))
+                        perinatalAdded += 1
                     }
                 }
 
@@ -261,6 +297,7 @@ final class GrowthDataFetcher {
                     if bmi.isFinite, bmi > 0 {
                         if !hasPoint(nearAge: 0.0, value: bmi) {
                             results.append(GrowthDataPoint(ageMonths: 0.0, value: bmi))
+                            perinatalAdded += 1
                         }
                     }
                 }
@@ -269,12 +306,14 @@ final class GrowthDataFetcher {
                 let birthLen: Swift.Double? = (try? row.get(blCmCol)) ?? nil
                 if let cm = birthLen, cm > 0 {
                     results.append(GrowthDataPoint(ageMonths: 0.0, value: cm))
+                    perinatalAdded += 1
                 }
 
             case "head_circ":
                 let birthHC: Swift.Double? = (try? row.get(bhcCmCol)) ?? nil
                 if let cm = birthHC, cm > 0 {
                     results.append(GrowthDataPoint(ageMonths: 0.0, value: cm))
+                    perinatalAdded += 1
                 }
 
             default:
@@ -284,6 +323,7 @@ final class GrowthDataFetcher {
 
         let sorted = results.sorted(by: { $0.ageMonths < $1.ageMonths })
         log.debug("fetchGrowthData: returning \(sorted.count, privacy: .public) point(s) for \(measurement, privacy: .public)")
+        S("GDF fetch ok | m=\(m) raw=\(manualAdded) skip=\(manualSkipped) perinatal=\(perinatalAdded) out=\(sorted.count)")
         return sorted
     }
 
@@ -323,6 +363,7 @@ final class GrowthDataFetcher {
 
         let normalizedSex = (sexRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let patientSex = (normalizedSex == "female" || normalizedSex == "f") ? "F" : "M"
+        S("GDF fetchAll start | sex=\(patientSex)")
 
         let measurements = ["weight", "height", "head_circ"]
         var allData: [String: [GrowthDataPoint]] = [:]
@@ -333,6 +374,7 @@ final class GrowthDataFetcher {
         }
 
         log.debug("fetchAllGrowthData: built series for patient \(pid, privacy: .public) sex=\(patientSex, privacy: .public)")
+        S("GDF fetchAll ok | sex=\(patientSex) series=\(allData.count)")
         return (patientSex, allData)
     }
 }

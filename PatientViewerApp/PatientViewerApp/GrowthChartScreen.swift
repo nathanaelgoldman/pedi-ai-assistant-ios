@@ -11,6 +11,12 @@ private func LF(_ key: String, _ args: CVarArg...) -> String {
     String(format: L(key), locale: Locale.current, arguments: args)
 }
 
+// MARK: - Support Log (file-local)
+@inline(__always)
+private func SL(_ message: String) {
+    Task { await SupportLog.shared.info(message) }
+}
+
 struct GrowthChartScreen: View {
     private let log = AppLog.feature("GrowthChartScreen")
     let patientSex: String
@@ -40,6 +46,7 @@ struct GrowthChartScreen: View {
             .onChange(of: selectedMeasurement) { _, newValue in
                 let file = "\(filePrefix(for: newValue))_0_24m_\(patientSex)"
                 log.debug("WHO file selected for \(newValue, privacy: .public): \(file, privacy: .public)")
+                SL("GC measurement change | sex=\(self.patientSex) m=\(newValue)")
             }
 
             let patientData: [GrowthDataPoint] = {
@@ -188,6 +195,10 @@ struct GrowthChartScreen: View {
         .appNavBarBackground()
         .onAppear {
             log.info("GrowthChartScreen appeared for sex=\(self.patientSex, privacy: .public) initialMeasurement=\(self.selectedMeasurement, privacy: .public)")
+            SL("UI open growth charts | sex=\(self.patientSex) m=\(self.selectedMeasurement)")
+        }
+        .onDisappear {
+            SL("UI close growth charts | sex=\(self.patientSex) m=\(self.selectedMeasurement)")
         }
         .navigationTitle(L("patient_viewer.growth_chart.title", comment: "Screen title"))
     }

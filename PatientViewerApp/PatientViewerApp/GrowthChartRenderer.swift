@@ -22,6 +22,19 @@ struct GrowthChartRenderer {
 
     private static let logger = AppLog.feature("GrowthChartRenderer")
 
+    // MARK: - SupportLog helpers
+    private static func S(_ message: String) {
+        Task { @MainActor in
+            SupportLog.shared.info(message)
+        }
+    }
+
+    private static func W(_ message: String) {
+        Task { @MainActor in
+            SupportLog.shared.warn(message)
+        }
+    }
+
     // MARK: - Localization helpers
 
     /// Localized display name for a measurement key (e.g., "weight", "height", "head_circ", "bmi").
@@ -136,6 +149,294 @@ struct GrowthChartRenderer {
         return out
     }
 
+    /// Render a growth chart using preloaded patient series to avoid repeated DB queries.
+    /// - Parameters:
+    ///   - patientSeries: Dictionary keyed by measurement ("weight", "height", "head_circ", "bmi")
+    ///   - measurement: Which chart to render
+    ///   - sex: "M" or "F"
+    ///   - filename: WHO CSV base name (without .csv)
+    ///   - maxAgeMonths: Optional cutoff (used by PDF renderer)
+    static func generateChartImage(
+        patientSeries: [String: [GrowthDataPoint]],
+        measurement: String,
+        sex: String,
+        filename: String,
+        maxAgeMonths: Double? = nil
+    ) async -> UIImage? {
+        let mKey = measurement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        Self.logger.info("Render start (preloaded): measurement=\(mKey, privacy: .public), sex=\(sex, privacy: .public), csv=\(filename, privacy: .public)")
+        S("GCR render start (preloaded) | m=\(mKey) sex=\(sex) csv=\(filename)")
+
+        // These loaders are synchronous — no 'await' needed here.
+        let refCurves = WhoReferenceLoader.loadCurve(fromCSV: filename, sex: sex)
+        S("GCR ref curves | m=\(mKey) curves=\(refCurves.count)")
+
+        // Pull patient data from the provided cache (no DB reads here).
+        let patientData: [GrowthDataPoint]
+        if mKey == "bmi" {
+            // Prefer BMI series if already provided.
+            if let bmi = patientSeries["bmi"], !bmi.isEmpty {
+                patientData = bmi
+                Self.logger.debug("BMI: using preloaded BMI series (count=\(bmi.count, privacy: .public))")
+            } else {
+                // Fallback: compute BMI by pairing weight and height series.
+                let w = patientSeries["weight"] ?? []
+                let h = patientSeries["height"] ?? []
+                patientData = Self.computeBMIData(weightPoints: w, heightPoints: h)
+                Self.logger.debug("BMI: preloaded BMI empty; using paired series (count=\(patientData.count, privacy: .public))")
+            }
+        } else {
+            patientData = patientSeries[mKey] ?? []
+        }
+
+        S("GCR patient series (preloaded) | m=\(mKey) rawPts=\(patientData.count)")
+
+        // Filter out any non-finite (NaN/±Inf) values from both sources before plotting.
+        let cleanPatientAll = patientData.filter { $0.ageMonths.isFinite && $0.value.isFinite }
+
+        // Apply optional age cutoff (used by PDF renderer to stop at visit age with a small tolerance).
+        let ageTolerance = 0.1
+        let cleanPatient: [GrowthDataPoint]
+        if let cutoff = maxAgeMonths {
+            cleanPatient = cleanPatientAll.filter { $0.ageMonths <= cutoff + ageTolerance }
+            if cleanPatient.isEmpty && !cleanPatientAll.isEmpty {
+                Self.logger.notice("All patient points for \(mKey, privacy: .public) are after cutoff ageMonths=\(cutoff, privacy: .public); none will be plotted for this chart.")
+                W("GCR cutoff removed all patient points (preloaded) | m=\(mKey) cutoff=\(cutoff)")
+            }
+        } else {
+            cleanPatient = cleanPatientAll
+        }
+
+        if cleanPatient.isEmpty {
+            Self.logger.notice("No patient points to plot for \(mKey, privacy: .public) (after cutoff/filtering)")
+            S("GCR clean patient empty (preloaded) | m=\(mKey)")
+        }
+
+        // Determine Y-axis domain dynamically (patient + reference), padded and clamped to defaults.
+        let patientValues = cleanPatient.map(\.value).filter { $0.isFinite }
+        let referenceValues = refCurves
+            .flatMap { $0.points.map(\.value) }
+            .filter { $0.isFinite }
+        let totalRefPoints = refCurves.reduce(0) { $0 + $1.points.count }
+        if totalRefPoints == 0 {
+            Self.logger.notice("No reference curve points loaded for \(mKey, privacy: .public)")
+            S("GCR reference empty (preloaded) | m=\(mKey)")
+        }
+        let yRange = Self.dynamicYRange(
+            measurement: mKey,
+            patientValues: patientValues,
+            referenceValues: referenceValues
+        )
+
+        // Compute X-axis max from BOTH patient and reference curves (with non-finite values filtered).
+        let patientMaxAge = cleanPatient.map(\.ageMonths).filter { $0.isFinite }.max() ?? 0
+        let curveMaxAge = refCurves
+            .flatMap { $0.points.map(\.ageMonths) }
+            .filter { $0.isFinite }
+            .max() ?? 0
+
+        let bestMax = max(patientMaxAge, curveMaxAge)
+
+        // Clamp to 0...60 months with a small padding; if no data, default to 60.
+        let maxDomainMonths: Double = 60
+        let paddedMaxAge: Double
+        if bestMax > 0 {
+            // A little padding, but never beyond 60 months.
+            paddedMaxAge = min(bestMax + 1.0, maxDomainMonths)
+        } else {
+            paddedMaxAge = maxDomainMonths
+        }
+
+        // If both patient and reference are empty, render a placeholder image instead of attempting to chart.
+        if cleanPatient.isEmpty && totalRefPoints == 0 {
+            Self.logger.notice("No data available to render for \(mKey, privacy: .public). Returning placeholder image.")
+            S("GCR placeholder (preloaded) | m=\(mKey)")
+            return await MainActor.run {
+                let placeholder = ZStack {
+                    Color.white
+                    VStack(spacing: 12) {
+                        let prettyName = Self.localizedMeasurementName(mKey)
+                        let title = String(
+                            format: NSLocalizedString(
+                                "growth.chart.placeholder.title",
+                                comment: "Placeholder title when no growth data is available for a chart. %@ = measurement name"
+                            ),
+                            locale: Locale.current,
+                            prettyName
+                        )
+                        Text(title)
+                            .font(.title2)
+                            .bold()
+
+                        Text(NSLocalizedString(
+                            "growth.chart.placeholder.subtitle",
+                            comment: "Placeholder subtitle inviting the user to add measurements"
+                        ))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                }
+                .frame(width: 1400, height: 1200)
+
+                let renderer = ImageRenderer(content: placeholder)
+                renderer.scale = 1.0
+                renderer.proposedSize = ProposedViewSize(width: 1400, height: 1200)
+                return renderer.uiImage
+            }
+        }
+
+        // Build the Chart and render on the main actor so all @MainActor-isolated
+        // view modifiers (e.g., .chartLegend) are called on the correct actor.
+        let image: UIImage? = await MainActor.run {
+            let axisAgeLabel = NSLocalizedString(
+                "growth.chart.axis.ageMonths",
+                comment: "Chart axis label for age in months"
+            )
+            let axisValueLabel = NSLocalizedString(
+                "growth.chart.axis.value",
+                comment: "Chart axis label for the plotted measurement values"
+            )
+            let percentileLegendLabel = NSLocalizedString(
+                "growth.chart.legend.percentile",
+                comment: "Legend label for percentile/SD reference curves"
+            )
+
+            // 1) Base chart content
+            let chartContent = Chart {
+                // Reference Curves (filtered inside the loop)
+                ForEach(refCurves, id: \.label) { curve in
+                    let points = curve.points.filter { $0.ageMonths.isFinite && $0.value.isFinite }
+                    ForEach(points, id: \.ageMonths) { point in
+                        LineMark(
+                            x: .value(axisAgeLabel, point.ageMonths),
+                            y: .value(axisValueLabel, point.value)
+                        )
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                        .opacity(0.7)
+                    }
+                    .foregroundStyle(by: .value(percentileLegendLabel, curve.label))
+                }
+
+                // Patient Data
+                ForEach(cleanPatient, id: \.ageMonths) { point in
+                    PointMark(
+                        x: .value(axisAgeLabel, point.ageMonths),
+                        y: .value(axisValueLabel, point.value)
+                    )
+                    .foregroundStyle(.blue)
+                    .symbolSize(40)
+                }
+            }
+
+            // 2) X/Y scales
+            let chartScaled = chartContent
+                .chartXScale(domain: 0...paddedMaxAge)
+                .chartYScale(domain: yRange)
+
+            // 3) Axes styling (black ticks/labels, lighter grid)
+            let chartWithAxes = chartScaled
+                .chartYAxis {
+                    switch mKey {
+                    case "weight":
+                        AxisMarks(position: .leading, values: .stride(by: 2)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    case "height":
+                        AxisMarks(position: .leading, values: .stride(by: 5)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    case "head_circ":
+                        AxisMarks(position: .leading, values: .stride(by: 2)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    case "bmi":
+                        AxisMarks(position: .leading, values: .stride(by: 2)) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(format: "%.1f", v))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+
+                    default:
+                        AxisMarks(position: .leading, values: .automatic) { value in
+                            AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                            AxisTick().foregroundStyle(.black)
+
+                            if let v = value.as(Double.self) {
+                                AxisValueLabel {
+                                    Text(String(Int(v.rounded())))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(position: .bottom, values: .stride(by: 2)) { value in
+                        AxisGridLine().foregroundStyle(.black.opacity(0.3))
+                        AxisTick().foregroundStyle(.black)
+
+                        if let month = value.as(Double.self) {
+                            AxisValueLabel {
+                                Text(String(Int(month.rounded())))
+                                    .foregroundColor(.black)
+                            }
+                        }
+                    }
+                }
+
+            // 4) Final view used for rendering
+            let chartView = chartWithAxes
+                .frame(width: 1400, height: 1200)
+                .background(Color.white)
+
+            let renderer = ImageRenderer(content: chartView)
+            renderer.scale = 1.0
+            renderer.proposedSize = ProposedViewSize(width: 1400, height: 1200)
+            return renderer.uiImage
+        }
+
+        if image != nil {
+            S("GCR render ok (preloaded) | m=\(mKey)")
+        } else {
+            W("GCR render failed (nil image) (preloaded) | m=\(mKey)")
+        }
+        return image
+    }
+
     static func generateChartImage(
         dbPath: String,
         patientID: Int64,
@@ -145,8 +446,11 @@ struct GrowthChartRenderer {
         maxAgeMonths: Double? = nil
     ) async -> UIImage? {
         Self.logger.info("Render start: measurement=\(measurement, privacy: .public), patientID=\(patientID, privacy: .public), sex=\(sex, privacy: .public), csv=\(filename, privacy: .public)")
+        let patientTok = AppLog.token(String(patientID))
+        S("GCR render start | m=\(measurement) patientTok=\(patientTok) sex=\(sex) csv=\(filename)")
         // These loaders are synchronous — no 'await' needed here.
         let refCurves = WhoReferenceLoader.loadCurve(fromCSV: filename, sex: sex)
+        S("GCR ref curves | m=\(measurement) patientTok=\(patientTok) curves=\(refCurves.count)")
 
         let patientData: [GrowthDataPoint]
         if measurement == "bmi" {
@@ -183,6 +487,7 @@ struct GrowthChartRenderer {
                 measurement: measurement
             )
         }
+        S("GCR patient series | m=\(measurement) patientTok=\(patientTok) rawPts=\(patientData.count)")
 
         // Filter out any non-finite (NaN/±Inf) values from both sources before plotting.
         let cleanPatientAll = patientData.filter { $0.ageMonths.isFinite && $0.value.isFinite }
@@ -194,6 +499,7 @@ struct GrowthChartRenderer {
             cleanPatient = cleanPatientAll.filter { $0.ageMonths <= cutoff + ageTolerance }
             if cleanPatient.isEmpty && !cleanPatientAll.isEmpty {
                 Self.logger.notice("All patient points for \(measurement, privacy: .public) are after cutoff ageMonths=\(cutoff, privacy: .public); none will be plotted for this chart.")
+                W("GCR cutoff removed all patient points | m=\(measurement) patientTok=\(patientTok) cutoff=\(cutoff)")
             }
         } else {
             cleanPatient = cleanPatientAll
@@ -201,6 +507,7 @@ struct GrowthChartRenderer {
 
         if cleanPatient.isEmpty {
             Self.logger.notice("No patient points to plot for \(measurement, privacy: .public) (after cutoff/filtering)")
+            S("GCR clean patient empty | m=\(measurement) patientTok=\(patientTok)")
         }
 
         // Determine Y-axis domain dynamically (patient + reference), padded and clamped to defaults.
@@ -211,6 +518,7 @@ struct GrowthChartRenderer {
         let totalRefPoints = refCurves.reduce(0) { $0 + $1.points.count }
         if totalRefPoints == 0 {
             Self.logger.notice("No reference curve points loaded for \(measurement, privacy: .public)")
+            S("GCR reference empty | m=\(measurement) patientTok=\(patientTok)")
         }
         let yRange = Self.dynamicYRange(
             measurement: measurement,
@@ -240,6 +548,7 @@ struct GrowthChartRenderer {
         // If both patient and reference are empty, render a placeholder image instead of attempting to chart.
         if cleanPatient.isEmpty && totalRefPoints == 0 {
             Self.logger.notice("No data available to render for \(measurement, privacy: .public). Returning placeholder image.")
+            S("GCR placeholder | m=\(measurement) patientTok=\(patientTok)")
             return await MainActor.run {
                 let placeholder = ZStack {
                     Color.white
@@ -425,6 +734,11 @@ struct GrowthChartRenderer {
             return renderer.uiImage
         }
 
+        if image != nil {
+            S("GCR render ok | m=\(measurement) patientTok=\(patientTok)")
+        } else {
+            W("GCR render failed (nil image) | m=\(measurement) patientTok=\(patientTok)")
+        }
         return image
     }
 }

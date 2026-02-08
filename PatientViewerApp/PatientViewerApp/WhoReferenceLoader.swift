@@ -9,6 +9,13 @@ import OSLog
 struct WhoReferenceLoader {
     private static let log = AppLog.feature("WhoReferenceLoader")
 
+    // SupportLog bridge (fire-and-forget, safe from nonisolated/static contexts)
+    private static func SL(_ message: String) {
+        Task { @MainActor in
+            SupportLog.shared.info(message)
+        }
+    }
+
     // Cache key must include sex to avoid returning the wrong curves when callers pass a generic name
     // (e.g., "wfa_0_24m") with different `sex` values across calls.
     private static var cache: [String: [(label: String, points: [GrowthDataPoint])]] = [:]
@@ -22,17 +29,23 @@ struct WhoReferenceLoader {
         let sexNorm = sex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let cacheKey = "\(csvName)|\(sexNorm)"
 
+        SL("WHO load start | name=\(csvName) sex=\(sexNorm)")
+
         // Cache hit (keyed by name + sex)
         if let cached = cache[cacheKey] {
             log.debug("Cache hit for \(cacheKey, privacy: .private)")
+            SL("WHO load cache hit | name=\(csvName) sex=\(sexNorm) curves=\(cached.count)")
             return cached
         }
 
         // Find the CSV (try a few likely subdirectories too)
         guard let url = findCSV(named: csvName) ?? findCSV(named: "\(csvName)_\(sexNorm)") else {
             log.error("Could not find CSV resource for \(csvName, privacy: .public)")
+            SL("WHO load missing | name=\(csvName) sex=\(sexNorm)")
             return []
         }
+
+        SL("WHO load file | file=\(url.lastPathComponent)")
 
         do {
             let raw = try String(contentsOf: url, encoding: .utf8)
@@ -43,6 +56,7 @@ struct WhoReferenceLoader {
 
             guard !rows.isEmpty else {
                 log.error("CSV at \(url.lastPathComponent, privacy: .public) is empty")
+                SL("WHO load empty | file=\(url.lastPathComponent)")
                 return []
             }
 
@@ -50,6 +64,7 @@ struct WhoReferenceLoader {
             let header = splitCSVRow(rows[0], by: delimiter).map { $0.trimmingCharacters(in: .whitespaces) }
             guard header.count >= 2 else {
                 log.error("Header too short in \(url.lastPathComponent, privacy: .public)")
+                SL("WHO load bad header | file=\(url.lastPathComponent)")
                 return []
             }
 
@@ -85,6 +100,7 @@ struct WhoReferenceLoader {
 
             if desired.isEmpty {
                 log.error("No recognizable SD or percentile columns in \(url.lastPathComponent, privacy: .public). Header: \(header.joined(separator: ","), privacy: .public)")
+                SL("WHO load no columns | file=\(url.lastPathComponent)")
                 return []
             }
 
@@ -123,9 +139,12 @@ struct WhoReferenceLoader {
 
             cache[cacheKey] = curves
             log.debug("Parsed \(curves.count, privacy: .public) curve(s) from \(url.lastPathComponent, privacy: .public)")
+
+            SL("WHO load ok | file=\(url.lastPathComponent) curves=\(curves.count)")
             return curves
         } catch {
             log.error("Failed reading \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .private)")
+            SL("WHO load read fail | file=\(url.lastPathComponent)")
             return []
         }
     }
