@@ -671,7 +671,6 @@ struct ContentView: SwiftUI.View {
                 try fm.removeItem(at: destDB)
             }
             try fm.copyItem(at: srcDB, to: destDB)
-            let destLabel = "PersistentBundles/\(alias)/\(destDB.lastPathComponent)"
             let fileTok = AppLog.token(destDB.lastPathComponent)
             log.info("Saved db.sqlite to persistent | fileTok=\(fileTok, privacy: .public)")
 

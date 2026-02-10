@@ -100,12 +100,16 @@ struct AppSettingsView: View {
 
     // MARK: - SupportLog helpers
     private func SL(_ message: String) {
-        // SupportLog methods are @MainActor; wrapping avoids cross-actor errors.
-        Task { await supportLog.info(message) }
+        // SupportLog methods are @MainActor (but not async). Hop to MainActor without `await`.
+        Task { @MainActor in
+            supportLog.info(message)
+        }
     }
 
     private func SLerr(_ message: String) {
-        Task { await supportLog.error(message) }
+        Task { @MainActor in
+            supportLog.error(message)
+        }
     }
 
     var body: some View {
@@ -246,6 +250,11 @@ struct AppSettingsView: View {
                     Button(role: .destructive) {
                         SL("SET support log clear tap")
                         supportLog.clear()
+
+                        // After clearing, immediately write a fresh session header line so the exported log
+                        // has a clear “starting point” for support.
+                        SL(PatientViewerAppApp.supportSessionHeaderLine())
+
                         showSuccess(L("patient_viewer.app_settings.support_log.cleared", comment: "Support log cleared"))
                     } label: {
                         Label(
@@ -659,11 +668,6 @@ private extension UIApplication {
             if let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController {
                 return root._supportLogTopMostPresented()
             }
-        }
-
-        // Fallback: any key window we can find.
-        if let root = windows.first(where: { $0.isKeyWindow })?.rootViewController {
-            return root._supportLogTopMostPresented()
         }
 
         return nil

@@ -17,17 +17,23 @@ private let log = AppLog.feature("BundleImporter")
 // MARK: - SupportLog wiring (file-local)
 @inline(__always)
 private func SLInfo(_ msg: String) {
-    Task { await SupportLog.shared.info(msg) }
+    Task { @MainActor in
+        SupportLog.shared.info(msg)
+    }
 }
 
 @inline(__always)
 private func SLWarn(_ msg: String) {
-    Task { await SupportLog.shared.warn(msg) }
+    Task { @MainActor in
+        SupportLog.shared.warn(msg)
+    }
 }
 
 @inline(__always)
 private func SLError(_ msg: String) {
-    Task { await SupportLog.shared.error(msg) }
+    Task { @MainActor in
+        SupportLog.shared.error(msg)
+    }
 }
 
 @inline(__always)
@@ -445,7 +451,9 @@ struct BundleImporter: View {
     var body: some View {
         VStack {
             Button(L("bundle_importer.button.import")) {
-                Task { await SupportLog.shared.info("UI open file importer") }
+                Task { @MainActor in
+                    SupportLog.shared.info("UI open file importer")
+                }
                 isImporterPresented = true
             }
             .fileImporter(
@@ -461,8 +469,12 @@ struct BundleImporter: View {
                     if let zipURL = urls.first {
                         log.info("User selected bundle: \(zipURL.lastPathComponent, privacy: .public)")
                         let ext = zipURL.pathExtension.lowercased()
-                        Task { await SupportLog.shared.info("IMPORT tap | ext=\(ext)") }
-                        Task { await SupportLog.shared.info("IMPORT processing") }
+                        Task { @MainActor in
+                            SupportLog.shared.info("IMPORT tap | ext=\(ext)")
+                        }
+                        Task { @MainActor in
+                            SupportLog.shared.info("IMPORT processing")
+                        }
                         Task {
                             do {
                                 let (folder, alias, dob) = try await BundleImporter.importBundle(from: zipURL)

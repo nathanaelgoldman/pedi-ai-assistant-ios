@@ -1166,7 +1166,6 @@ struct WellVisitPDFGenerator {
                 let lblSolidFoodQuality = WellVisitPDFGenerator.L("well_report.feeding.label.solid_food_quality", "Solid food quality")
                 let lblSolidFoodComment = WellVisitPDFGenerator.L("well_report.feeding.label.solid_food_comment", "Solid food comment")
                 let lblFoodVarietyQuantity = WellVisitPDFGenerator.L("well_report.feeding.label.food_variety_quantity", "Food variety / quantity")
-                let lblDairyIntakeDaily = WellVisitPDFGenerator.L("well_report.feeding.label.dairy_intake_daily", "Dairy intake daily")
                 let lblComment = WellVisitPDFGenerator.L("well_report.label.comment", "Comment")
 
 

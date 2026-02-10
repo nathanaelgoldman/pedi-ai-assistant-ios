@@ -6,11 +6,19 @@
 //
 
 import SwiftUI
+import Foundation
+import UIKit
 
 // MARK: - SupportLog Environment key (writable + cross-file accessible)
 
 private struct SupportLogKey: EnvironmentKey {
-    static let defaultValue: SupportLog = .shared
+    /// Default environment value should be a safe fallback (used in previews or if not injected).
+    /// The real shared instance is injected at the App root via `.environment(\.supportLog, .shared)`.
+    static var defaultValue: SupportLog {
+        // EnvironmentKey defaults are nonisolated; Swift 6 forbids directly touching @MainActor `shared` here.
+        // SwiftUI environment access is on the main thread in practice; assume main actor for this fallback.
+        MainActor.assumeIsolated { SupportLog.shared }
+    }
 }
 
 extension EnvironmentValues {
@@ -25,9 +33,32 @@ extension EnvironmentValues {
 struct PatientViewerAppApp: App {
     @StateObject private var appLock = AppLockManager()
 
+    // MARK: - Support log session header
+
+    static func supportSessionHeaderLine() -> String {
+        let info = Bundle.main.infoDictionary
+        let version = (info?["CFBundleShortVersionString"] as? String) ?? "?"
+        let build = (info?["CFBundleVersion"] as? String) ?? "?"
+
+        let device = UIDevice.current.model
+        let system = UIDevice.current.systemName
+        let systemVersion = UIDevice.current.systemVersion
+
+        let localeId = Locale.current.identifier
+        let tzId = TimeZone.current.identifier
+
+        // Mirror AppLockManager’s enable flag without touching Keychain / PHI.
+        let lockEnabled = UserDefaults.standard.bool(forKey: "AppLock.Enabled")
+
+        return "APP session | ver=\(version) (\(build)) os=\(system) \(systemVersion) device=\(device) locale=\(localeId) tz=\(tzId) lockEnabled=\(lockEnabled)"
+    }
+
     init() {
         // Root-level lifecycle marker for support.
-        SupportLog.shared.info("APP start")
+        Task { @MainActor in
+            SupportLog.shared.info("APP start")
+            SupportLog.shared.info(Self.supportSessionHeaderLine())
+        }
     }
 
     var body: some Scene {

@@ -8,11 +8,19 @@
 //  - Exposes `isLocked` so the UI can show/hide the app content
 //
 
+
 import Foundation
 import Security
 import CryptoKit
 import LocalAuthentication
 import Combine
+
+// MARK: - Support logging
+private func SL(_ message: String) {
+    Task { @MainActor in
+        SupportLog.shared.info(message)
+    }
+}
 
 @MainActor
 final class AppLockManager: ObservableObject {
@@ -40,34 +48,46 @@ final class AppLockManager: ObservableObject {
     /// Enable or change the lock password.
     /// Callers should already have confirmed "new" and "confirm" match.
     func setPassword(_ password: String) throws {
+        SL("LOCK setPassword")
         let hash = sha256(password)
         try storePasswordHash(hash)
 
         UserDefaults.standard.set(true, forKey: lockEnabledKey)
         isLockEnabled = true
+        SL("LOCK enabled")
         // Do NOT force-lock immediately; let the user keep using the app.
         // Lock will apply on next background/launch when `lockIfNeeded()` is called.
     }
 
     /// Clear the lock and remove the stored password hash.
     func clearPassword() {
+        SL("LOCK clearPassword")
         deletePasswordHash()
         UserDefaults.standard.removeObject(forKey: lockEnabledKey)
         isLockEnabled = false
         isLocked = false
+        SL("LOCK disabled")
     }
 
     /// Lock the app if a password has been configured.
     /// Call this from scenePhase changes (e.g. when going to background).
     func lockIfNeeded() {
         if isLockEnabled {
-            isLocked = true
+            if !isLocked {
+                isLocked = true
+                SL("LOCK state -> locked")
+            }
         }
     }
 
     /// Force unlock (used internally after successful verification).
     private func unlock() {
-        isLocked = false
+        if isLocked {
+            isLocked = false
+            SL("LOCK state -> unlocked")
+        } else {
+            isLocked = false
+        }
     }
 
     /// Check a candidate password. Returns true if correct and unlocks the app.

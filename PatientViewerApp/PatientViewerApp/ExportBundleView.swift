@@ -35,9 +35,9 @@ struct ExportBundleView: View {
     @State private var shareItem: ExportShareItem?
 
     // SupportLog helpers (fire-and-forget)
-    private func SLInfo(_ msg: String) { Task { await SupportLog.shared.info(msg) } }
-    private func SLWarn(_ msg: String) { Task { await SupportLog.shared.warn(msg) } }
-    private func SLError(_ msg: String) { Task { await SupportLog.shared.error(msg) } }
+    private func SLInfo(_ msg: String) { Task { SupportLog.shared.info(msg) } }
+    private func SLWarn(_ msg: String) { Task { SupportLog.shared.warn(msg) } }
+    private func SLError(_ msg: String) { Task { SupportLog.shared.error(msg) } }
 
     var body: some View {
         ScrollView {

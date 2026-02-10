@@ -399,7 +399,7 @@ struct SickVisitPDFGenerator {
                 let sexText = patientRow[sex]
                 let mrnText = patientRow[mrn]
 
-                let ageMonthsForVisit = computeAgeMonths(dobString: dobText, visitDateString: visit.date)
+                _ = computeAgeMonths(dobString: dobText, visitDateString: visit.date)
                 let aliasRef = (aliasText == L("common.placeholder")) ? "ALIAS#nil" : AppLog.aliasRef(aliasText)
                 Self.log.debug("Patient loaded | pid=\(pid, privacy: .private) alias=\(aliasRef, privacy: .public)")
 

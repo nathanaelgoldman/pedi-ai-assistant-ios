@@ -152,12 +152,12 @@ final class SupportLog: ObservableObject {
 
     // MARK: - Disk IO (Caches)
 
-    private static func logFileURL() -> URL {
+    nonisolated private static func logFileURL() -> URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         return caches.appendingPathComponent("careviewkids-support-log.txt")
     }
 
-    private static func exportFileURL() -> URL {
+    nonisolated private static func exportFileURL() -> URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         let stamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
