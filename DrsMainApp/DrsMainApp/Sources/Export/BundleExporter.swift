@@ -17,6 +17,9 @@ import Foundation
 import CryptoKit
 import SQLite3
 
+// SQLite bind lifetime helper (Swift doesn't expose SQLITE_TRANSIENT by default)
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
 // MARK: - Errors
 
 enum BundleZipError: Error, LocalizedError {
@@ -78,7 +81,14 @@ struct BundleExporter {
         }
 
         if fm.fileExists(atPath: dbSrc.path) {
-            try fm.copyItem(at: dbSrc, to: stageRoot.appendingPathComponent("db.sqlite"))
+            // Best-effort: checkpoint WAL so the copied db.sqlite includes latest changes.
+            walCheckpointIfNeeded(dbURL: dbSrc)
+
+            let stagedDB = stageRoot.appendingPathComponent("db.sqlite")
+            try fm.copyItem(at: dbSrc, to: stagedDB)
+
+            // Remove soft-deleted visits from the *staged* copy only (source bundle DB remains reversible).
+            purgeSoftDeletedVisits(in: stagedDB)
         }
         if fm.fileExists(atPath: docsSrc.path) {
             try copyTreeFiltered(from: docsSrc, to: stageRoot.appendingPathComponent("docs"))
@@ -345,6 +355,107 @@ struct BundleExporter {
         sqlite3_finalize(stmt)
 
         return (pid, alias, dob, sex, mrn)
+    }
+
+    // MARK: - Export sanitization (remove soft-deleted visits from staged DB)
+
+    /// Best-effort WAL checkpoint so db.sqlite copies include recent writes.
+    private static func walCheckpointIfNeeded(dbURL: URL) {
+        var db: OpaquePointer?
+        if sqlite3_open(dbURL.path, &db) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+        _ = sqlite3_exec(db, "PRAGMA wal_checkpoint(FULL);", nil, nil, nil)
+    }
+
+    /// Remove any visits marked `is_deleted=1` from the staged DB copy.
+    /// This keeps the clinician-side DB reversible while guaranteeing the exported bundle is clean.
+    private static func purgeSoftDeletedVisits(in stagedDBURL: URL) {
+        var db: OpaquePointer?
+        if sqlite3_open_v2(stagedDBURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        // Keep this resilient across schema versions.
+        func tableExists(_ name: String) -> Bool {
+            let sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, name, -1, SQLITE_TRANSIENT)
+            return sqlite3_step(stmt) == SQLITE_ROW
+        }
+
+        func hasColumn(table: String, col: String) -> Bool {
+            var stmt: OpaquePointer?
+            let pragma = "PRAGMA table_info(\(table));"
+            var exists = false
+            if sqlite3_prepare_v2(db, pragma, -1, &stmt, nil) == SQLITE_OK {
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    if let cName = sqlite3_column_text(stmt, 1) {
+                        if String(cString: cName) == col { exists = true; break }
+                    }
+                }
+            }
+            sqlite3_finalize(stmt)
+            return exists
+        }
+
+        // If the soft-delete column doesn't exist, nothing to purge.
+        let episodesHasSoftDelete = tableExists("episodes") && hasColumn(table: "episodes", col: "is_deleted")
+        let wellHasSoftDelete = tableExists("well_visits") && hasColumn(table: "well_visits", col: "is_deleted")
+        guard episodesHasSoftDelete || wellHasSoftDelete else { return }
+
+        // We do staged cleanup with foreign keys off to avoid failing on older schemas.
+        _ = sqlite3_exec(db, "PRAGMA foreign_keys=OFF;", nil, nil, nil)
+        _ = sqlite3_exec(db, "BEGIN IMMEDIATE;", nil, nil, nil)
+
+        func exec(_ sql: String) {
+            _ = sqlite3_exec(db, sql, nil, nil, nil)
+        }
+
+        if episodesHasSoftDelete {
+            // Remove dependent rows first (no-cascade FKs exist in older schemas).
+            if tableExists("vitals") {
+                exec("DELETE FROM vitals WHERE episode_id IN (SELECT id FROM episodes WHERE is_deleted=1);")
+            }
+            if tableExists("ai_inputs") {
+                exec("DELETE FROM ai_inputs WHERE episode_id IN (SELECT id FROM episodes WHERE is_deleted=1);")
+            }
+            if tableExists("visit_addenda") {
+                exec("DELETE FROM visit_addenda WHERE episode_id IN (SELECT id FROM episodes WHERE is_deleted=1);")
+            }
+            exec("DELETE FROM episodes WHERE is_deleted=1;")
+        }
+
+        if wellHasSoftDelete {
+            if tableExists("well_visit_milestones") {
+                exec("DELETE FROM well_visit_milestones WHERE visit_id IN (SELECT id FROM well_visits WHERE is_deleted=1);")
+            }
+            if tableExists("well_visit_growth_eval") {
+                exec("DELETE FROM well_visit_growth_eval WHERE well_visit_id IN (SELECT id FROM well_visits WHERE is_deleted=1);")
+            }
+            if tableExists("well_ai_inputs") {
+                exec("DELETE FROM well_ai_inputs WHERE well_visit_id IN (SELECT id FROM well_visits WHERE is_deleted=1);")
+            }
+            if tableExists("visit_addenda") {
+                exec("DELETE FROM visit_addenda WHERE well_visit_id IN (SELECT id FROM well_visits WHERE is_deleted=1);")
+            }
+            exec("DELETE FROM well_visits WHERE is_deleted=1;")
+        }
+
+        // Commit; ignore failure and rollback.
+        if sqlite3_exec(db, "COMMIT;", nil, nil, nil) != SQLITE_OK {
+            _ = sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+        }
+
+        _ = sqlite3_exec(db, "PRAGMA foreign_keys=ON;", nil, nil, nil)
     }
 
     private static func sha256Hex(_ data: Data) -> String {

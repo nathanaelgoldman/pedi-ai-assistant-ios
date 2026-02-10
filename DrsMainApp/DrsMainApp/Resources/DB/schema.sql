@@ -1,6 +1,6 @@
 PRAGMA foreign_keys=ON;
 PRAGMA journal_mode=WAL;
-PRAGMA user_version=1;
+PRAGMA user_version=2;
 
 -- ========== TABLES ==========
 
@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS episodes (
   patient_id INTEGER,
   user_id INTEGER,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  -- Soft-delete (cosmetic removal; excluded from UI + export)
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  deleted_at TEXT,
+  deleted_reason TEXT,
 
   -- Episode Core
   main_complaint TEXT,
@@ -225,6 +229,10 @@ CREATE TABLE IF NOT EXISTS well_visits (
   visit_date TEXT DEFAULT CURRENT_TIMESTAMP,
   visit_type TEXT,
   age_days INTEGER,
+  -- Soft-delete (cosmetic removal; excluded from UI + export)
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  deleted_at TEXT,
+  deleted_reason TEXT,
 
   -- Feeding / sleep (first visit subset)
   poop_status TEXT,
@@ -433,8 +441,10 @@ CREATE TABLE IF NOT EXISTS visit_addenda (
 CREATE INDEX IF NOT EXISTS idx_patients_mrn ON patients(mrn);
 CREATE INDEX IF NOT EXISTS idx_vitals_patient_time ON vitals(patient_id, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_episodes_patient ON episodes(patient_id);
+CREATE INDEX IF NOT EXISTS idx_episodes_patient_not_deleted ON episodes(patient_id, is_deleted);
 
 CREATE INDEX IF NOT EXISTS idx_well_visits_patient ON well_visits(patient_id);
+CREATE INDEX IF NOT EXISTS idx_well_visits_patient_not_deleted ON well_visits(patient_id, is_deleted);
 CREATE INDEX IF NOT EXISTS idx_visit_addenda_episode ON visit_addenda(episode_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_visit_addenda_well_visit ON visit_addenda(well_visit_id, created_at);
 
@@ -488,5 +498,5 @@ FROM perinatal_history per
 JOIN patients p ON p.id = per.patient_id
 WHERE per.maternity_discharge_date IS NOT NULL;
 
--- keep user_version at 1 for now (migrations will bump it)
-PRAGMA user_version=1;
+-- user_version=2 introduces soft-delete flags for episodes + well_visits
+PRAGMA user_version=2;

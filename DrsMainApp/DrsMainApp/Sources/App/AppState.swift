@@ -35,6 +35,18 @@ struct VisitRow: Identifiable, Equatable {
     let id: Int
     let dateISO: String
     let category: String
+
+    /// Source table name used to disambiguate visit origin (episodes vs well_visits vs visits).
+    /// This is critical for safe operations like soft-delete.
+    let sourceTable: String
+
+    /// Convenience initializer to keep call sites simple.
+    init(id: Int, dateISO: String, category: String, sourceTable: String = "") {
+        self.id = id
+        self.dateISO = dateISO
+        self.category = category
+        self.sourceTable = sourceTable
+    }
 }
 
 // Lightweight summaries for UI
@@ -546,6 +558,9 @@ final class AppState: ObservableObject {
 
         // Keep existing idempotent helpers (some are intentional no-ops for bundle DBs).
         applyGoldenSchemaIdempotent(to: dbURL)
+        
+        // Soft-delete flags for visits (episodes + well_visits)
+        ensureSoftDeleteVisitSchema(at: dbURL)
 
         // Growth unification objects (view + triggers + indexes)
         ensureGrowthUnificationSchema(at: dbURL)
@@ -990,6 +1005,71 @@ func reloadPatients() {
         loadVisits(for: pid)
         log.debug("reloadVisitsForSelectedPatient: pid=\(pid, privacy: .public) visits=\(self.visits.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
     }
+    
+    // MARK: - Soft delete visit (episodes / well_visits)
+
+    /// Soft-delete a visit so it disappears from UI lists and exports.
+    /// This only marks the row as deleted (is_deleted=1) and keeps data reversible.
+    func softDeleteVisit(_ visit: VisitRow, reason: String? = nil) {
+        // IMPORTANT: soft-delete is only supported for source tables that actually carry the columns.
+        let table = visit.sourceTable
+        guard table == "episodes" || table == "well_visits" else {
+            log.error("softDeleteVisit: unsupported sourceTable=\(table, privacy: .public) id=\(visit.id, privacy: .public)")
+            return
+        }
+
+        guard let dbURL = currentDBURL, FileManager.default.fileExists(atPath: dbURL.path) else {
+            log.error("softDeleteVisit: missing currentDBURL")
+            return
+        }
+
+        // Ensure columns exist on older bundle DBs.
+        // (Idempotent; safe to call.)
+        ensureSoftDeleteVisitSchema(at: dbURL)
+
+        var db: OpaquePointer?
+        if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            log.error("softDeleteVisit: sqlite open failed for \(dbURL.lastPathComponent, privacy: .public)")
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        UPDATE \(table)
+        SET is_deleted = 1,
+            deleted_at = CURRENT_TIMESTAMP,
+            deleted_reason = ?
+        WHERE id = ?;
+        """
+
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("softDeleteVisit: prepare failed err=\(msg, privacy: .public)")
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        if let reason {
+            sqlite3_bind_text(stmt, 1, reason, -1, SQLITE_TRANSIENT)
+        } else {
+            sqlite3_bind_null(stmt, 1)
+        }
+        sqlite3_bind_int64(stmt, 2, sqlite3_int64(visit.id))
+
+        if sqlite3_step(stmt) != SQLITE_DONE {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("softDeleteVisit: update failed err=\(msg, privacy: .public)")
+            return
+        }
+
+        log.info("softDeleteVisit: marked deleted table=\(table, privacy: .public) id=\(visit.id, privacy: .public)")
+
+        // Refresh in-memory visit list so UI updates immediately.
+        reloadVisitsForSelectedPatient()
+    }
         
         /// Check if a table exists in the opened SQLite database.
         private func tableExists(_ db: OpaquePointer?, name: String) -> Bool {
@@ -1029,6 +1109,7 @@ func reloadPatients() {
         /// 2) Else, union any tables that look like visit tables (episodes / well_visits / encounters)
         ///    by finding a patient-id column and a date-like column in each.
         func loadVisits(for patientID: Int) {
+        
             visits.removeAll()
             guard let dbURL = dbURLForCurrentBundle(),
                   FileManager.default.fileExists(atPath: dbURL.path) else {
@@ -1067,6 +1148,8 @@ func reloadPatients() {
                     
                     let catCol  = pickColumn(categoryCandidates, available: cols) // optional
                     let typeCol = pickColumn(wellTypeCandidates, available: cols) // optional
+
+                    let notDeletedClause = cols.contains("is_deleted") ? " AND is_deleted = 0" : ""
                     
                     var sql = """
                           SELECT id, \(dateCol) AS dateISO,
@@ -1089,7 +1172,7 @@ func reloadPatients() {
                     
                     sql += """
                        FROM visits
-                       WHERE \(pidCol) = ?
+                       WHERE \(pidCol) = ?\(notDeletedClause)
                        ORDER BY dateISO DESC;
                        """
                     
@@ -1107,7 +1190,7 @@ func reloadPatients() {
                         }
                         let dateISO = text(1)
                         let category = text(2)
-                        rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
+                        rows.append(VisitRow(id: id, dateISO: dateISO, category: category, sourceTable: "visits"))
                     }
                     // Debug: surface unexpected categories (e.g., "test") without dumping sensitive content.
                     #if DEBUG
@@ -1135,7 +1218,13 @@ func reloadPatients() {
             }
             
             // 2) Else, dynamically union any visit-like tables that have (pid + date) columns.
-            struct Part { let table: String; let pidCol: String; let dateCol: String; let categoryExpr: String }
+            struct Part {
+                let table: String
+                let pidCol: String
+                let dateCol: String
+                let categoryExpr: String
+                let notDeletedClause: String
+            }
             var parts: [Part] = []
             
             for t in tableCandidates where tableExists(db, name: t) {
@@ -1159,7 +1248,14 @@ func reloadPatients() {
                 } else {
                     categoryExpr = defaultCat
                 }
-                parts.append(Part(table: t, pidCol: pidCol, dateCol: dateCol, categoryExpr: categoryExpr))
+                let notDeletedClause = cols.contains("is_deleted") ? " AND is_deleted = 0" : ""
+                parts.append(Part(
+                    table: t,
+                    pidCol: pidCol,
+                    dateCol: dateCol,
+                    categoryExpr: categoryExpr,
+                    notDeletedClause: notDeletedClause
+                ))
             }
             
             guard !parts.isEmpty else {
@@ -1174,7 +1270,7 @@ func reloadPatients() {
             """
             SELECT id, \($0.dateCol) AS dateISO, \($0.categoryExpr) AS category, '\($0.table)' AS src
             FROM \($0.table)
-            WHERE \($0.pidCol) = ?
+            WHERE \($0.pidCol) = ?\($0.notDeletedClause)
             """
             }.joined(separator: "\nUNION ALL\n") + "\nORDER BY dateISO DESC;"
             
@@ -1208,7 +1304,7 @@ func reloadPatients() {
                 }
                 #endif
 
-                rows.append(VisitRow(id: id, dateISO: dateISO, category: category))
+                rows.append(VisitRow(id: id, dateISO: dateISO, category: category, sourceTable: srcTable))
             }
             self.visits = rows
             log.debug("loadVisits: pid=\(patientID, privacy: .public) done rows=\(rows.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
@@ -6136,6 +6232,57 @@ func reloadPatients() {
         self.log.info("applyBundledSchemaIfPresent: applying \(url.lastPathComponent, privacy: .public) to \(dbURL.lastPathComponent, privacy: .public)")
         applySQLFile(url, to: dbURL)
     }
+    
+    // MARK: - Soft-delete schema for visits (bundle DB)
+
+    /// Ensure soft-delete columns exist on visit tables.
+    ///
+    /// Targeted + idempotent, so older bundle DBs are upgraded safely.
+    /// Deleted visits remain reversible and can be excluded from UI/export by filtering `is_deleted = 0`.
+    private func ensureSoftDeleteVisitSchema(at dbURL: URL) {
+        var db: OpaquePointer?
+        if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            log.warning("ensureSoftDeleteVisitSchema: sqlite open failed for \(dbURL.lastPathComponent, privacy: .public)")
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        // Best-effort bump user_version to at least 2.
+        // Not required for correctness (columns are), but helpful for diagnostics.
+        var version: Int32 = 0
+        var vStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &vStmt, nil) == SQLITE_OK, let vStmt = vStmt {
+            defer { sqlite3_finalize(vStmt) }
+            if sqlite3_step(vStmt) == SQLITE_ROW {
+                version = sqlite3_column_int(vStmt, 0)
+            }
+        }
+        if version < 2 {
+            _ = sqlite3_exec(db, "PRAGMA user_version=2;", nil, nil, nil)
+        }
+
+        // Episodes: add soft-delete columns (ignore duplicate-column errors).
+        let alterEpisodes: [String] = [
+            "ALTER TABLE episodes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE episodes ADD COLUMN deleted_at TEXT",
+            "ALTER TABLE episodes ADD COLUMN deleted_reason TEXT"
+        ]
+        for stmt in alterEpisodes { _ = sqlite3_exec(db, stmt, nil, nil, nil) }
+
+        // Well visits: add soft-delete columns (ignore duplicate-column errors).
+        let alterWell: [String] = [
+            "ALTER TABLE well_visits ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE well_visits ADD COLUMN deleted_at TEXT",
+            "ALTER TABLE well_visits ADD COLUMN deleted_reason TEXT"
+        ]
+        for stmt in alterWell { _ = sqlite3_exec(db, stmt, nil, nil, nil) }
+
+        // Helpful indexes for filtering.
+        _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_episodes_patient_not_deleted ON episodes(patient_id, is_deleted);", nil, nil, nil)
+        _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_well_visits_patient_not_deleted ON well_visits(patient_id, is_deleted);", nil, nil, nil)
+    }
 
     // MARK: - Well-visit growth evaluation schema (bundle DB)
 
@@ -6882,18 +7029,21 @@ extension AppState {
         let canonicalParent = canonical.deletingLastPathComponent()
         let wrapperParent   = wrapper.deletingLastPathComponent()
 
-        self.log.info("deleteBundle: requested=\(wrapperPath, privacy: .public) canonical=\(canonicalPath, privacy: .public)")
+        // Avoid logging raw bundle names or filesystem paths; use log-safe references.
+        let canonicalRef = AppLog.bundleRef(canonical)
+        let wrapperRef   = AppLog.bundleRef(wrapper)
+        AppLog.bundle.info("deleteBundle: requested=\(wrapperRef, privacy: .public) canonical=\(canonicalRef, privacy: .public)")
 
         // 1) Delete canonical folder (real bundle root)
         if fm.fileExists(atPath: canonical.path) {
             do {
                 try fm.removeItem(at: canonical)
-                self.log.info("deleteBundle: removed canonical \(canonicalPath, privacy: .public)")
+                AppLog.bundle.info("deleteBundle: removed canonical \(canonicalRef, privacy: .public)")
             } catch {
-                self.log.error("deleteBundle: failed removing canonical \(canonicalPath, privacy: .public) — \(String(describing: error), privacy: .public)")
+                AppLog.bundle.error("deleteBundle: failed removing canonical \(canonicalRef, privacy: .public) — \(String(describing: error), privacy: .private(mask: .hash))")
             }
         } else {
-            self.log.info("deleteBundle: canonical already missing \(canonicalPath, privacy: .public)")
+            AppLog.bundle.info("deleteBundle: canonical already missing \(canonicalRef, privacy: .public)")
         }
 
         // 2) Delete wrapper folder too (if different)
@@ -6901,12 +7051,12 @@ extension AppState {
             if fm.fileExists(atPath: wrapper.path) {
                 do {
                     try fm.removeItem(at: wrapper)
-                    self.log.info("deleteBundle: removed wrapper \(wrapperPath, privacy: .public)")
+                    AppLog.bundle.info("deleteBundle: removed wrapper \(wrapperRef, privacy: .public)")
                 } catch {
-                    self.log.error("deleteBundle: failed removing wrapper \(wrapperPath, privacy: .public) — \(String(describing: error), privacy: .public)")
+                    AppLog.bundle.error("deleteBundle: failed removing wrapper \(wrapperRef, privacy: .public) — \(String(describing: error), privacy: .private(mask: .hash))")
                 }
             } else {
-                self.log.info("deleteBundle: wrapper already missing \(wrapperPath, privacy: .public)")
+                AppLog.bundle.info("deleteBundle: wrapper already missing \(wrapperRef, privacy: .public)")
             }
         }
 
@@ -7017,7 +7167,8 @@ private func cleanupEmptyParents(startingAt url: URL) {
 
             if contents.isEmpty {
                 try fm.removeItem(at: cur)
-                self.log.info("cleanupEmptyParents: removed empty folder \(cur.path, privacy: .public)")
+                let ref = "FOLDER#\(AppLog.token(cur.lastPathComponent))"
+                AppLog.bundle.info("cleanupEmptyParents: removed empty folder \(ref, privacy: .public)")
                 cur = cur.deletingLastPathComponent()
             } else {
                 break

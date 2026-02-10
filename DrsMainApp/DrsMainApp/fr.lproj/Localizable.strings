@@ -2880,3 +2880,14 @@
 "growth.source.manual" = "Paramètres ajoutés manuellement";
 "growth.source.vitals" = "Constantes ajoutées lors d'un épisode de maladie";
 "growth.source.episode" = "Consultation";
+
+"patient.visit.delete.title" = "Supprimer la consultation ?";
+"patient.visit.delete.confirm" = "Supprimer";
+"patient.visit.delete.cancel" = "Annuler";
+"patient.visit.delete.message" = "Cette consultation sera masquée de la liste et des dossiers peMR exportés. (La restauration n’est pas encore disponible.)";
+"patient.visit.delete.menu" = "Supprimer la consultation";
+
+"patient.visit.navigation.title" = "Consultation";
+"common.done" = "Terminé";
+
+

@@ -2786,3 +2786,13 @@
 "growth.source.manual" = "手动";
 "growth.source.vitals" = "生命体征";
 "growth.source.episode" = "就诊记录";
+
+"patient.visit.delete.title" = "删除本次就诊？";
+"patient.visit.delete.confirm" = "删除";
+"patient.visit.delete.cancel" = "取消";
+"patient.visit.delete.message" = "该就诊记录将从列表和导出的 peMR 文件中隐藏。（暂不支持恢复）";
+"patient.visit.delete.menu" = "删除就诊记录";
+
+"patient.visit.navigation.title" = "就诊";
+"common.done" = "完成";
+

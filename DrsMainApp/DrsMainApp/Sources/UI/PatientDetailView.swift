@@ -257,10 +257,15 @@ struct PatientDetailView: View {
     @State private var pmhPatientIDForSheet: Int? = nil
     @State private var showVaccinationStatus = false
     @State private var vaxPatientIDForSheet: Int? = nil
+
     @State private var showEpisodeForm = false
     @State private var editingEpisodeID: Int? = nil
     @State private var episodePatientIDForSheet: Int? = nil
     @State private var episodeBundleTokenForSheet: String? = nil
+
+    // Soft-delete visit UI state
+    @State private var pendingDeleteVisit: VisitRow? = nil
+    @State private var showDeleteVisitConfirm = false
 
     @State private var showWellVisitForm = false
     @State private var editingWellVisitID: Int? = nil
@@ -942,8 +947,7 @@ struct PatientDetailView: View {
                     .frame(maxWidth: 320)
                 }
 
-                let list = filteredVisits
-                if list.isEmpty {
+                if filteredVisits.isEmpty {
                     Text(
                         String(
                             format: NSLocalizedString(
@@ -956,7 +960,7 @@ struct PatientDetailView: View {
                     .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(list, id: \.stableID) { v in
+                        ForEach(filteredVisits, id: \.stableID) { v in
                             visitRow(v)
                         }
                     }
@@ -1036,8 +1040,49 @@ struct PatientDetailView: View {
         .sheet(item: $visitForDetail) { v in
             NavigationStack {
                 VisitDetailView(visit: v)
-                    .navigationTitle("Visit")
+                    .navigationTitle(
+                        NSLocalizedString(
+                            "patient.visit.navigation.title",
+                            comment: "Navigation title for the visit detail sheet"
+                        )
+                    )
             }
+        }
+        .confirmationDialog(
+            NSLocalizedString(
+                "patient.visit.delete.title",
+                comment: "Title of delete visit confirmation dialog"
+            ),
+            isPresented: $showDeleteVisitConfirm,
+            presenting: pendingDeleteVisit
+        ) { v in
+            Button(
+                NSLocalizedString(
+                    "patient.visit.delete.confirm",
+                    comment: "Confirm delete visit"
+                ),
+                role: .destructive
+            ) {
+                appState.softDeleteVisit(v)
+                pendingDeleteVisit = nil
+            }
+
+            Button(
+                NSLocalizedString(
+                    "patient.visit.delete.cancel",
+                    comment: "Cancel delete visit"
+                ),
+                role: .cancel
+            ) {
+                pendingDeleteVisit = nil
+            }
+        } message: { _ in
+            Text(
+                NSLocalizedString(
+                    "patient.visit.delete.message",
+                    comment: "Explanation shown when confirming visit deletion"
+                )
+            )
         }
     }
 
@@ -1107,6 +1152,20 @@ struct PatientDetailView: View {
         }
         .padding(8)
         .lightBlueSectionCardStyle()
+        .contextMenu {
+            Button(role: .destructive) {
+                pendingDeleteVisit = v
+                showDeleteVisitConfirm = true
+            } label: {
+                Label(
+                    NSLocalizedString(
+                        "patient.visit.delete.menu",
+                        comment: "Context menu item to delete visit"
+                    ),
+                    systemImage: "trash"
+                )
+            }
+        }
     }
 }
 
@@ -1417,8 +1476,15 @@ struct VisitDetailView: View {
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
+                Button(
+                    NSLocalizedString(
+                        "common.done",
+                        comment: "Generic Done button label"
+                    )
+                ) {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
         .alert(

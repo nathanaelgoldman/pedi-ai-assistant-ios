@@ -2896,3 +2896,12 @@
 "growth.source.manual" = "Manually added parameters";
 "growth.source.vitals" = "Vitals added in episodes";
 "growth.source.episode" = "Episode";
+
+"patient.visit.delete.title" = "Delete visit?";
+"patient.visit.delete.confirm" = "Delete";
+"patient.visit.delete.cancel" = "Cancel";
+"patient.visit.delete.message" = "This will hide the visit from the list and from exported peMR bundles. (Restore is not implemented yet.)";
+"patient.visit.delete.menu" = "Delete visit";
+
+"patient.visit.navigation.title" = "Visit";
+"common.done" = "Done";
