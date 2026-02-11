@@ -2905,3 +2905,27 @@
 
 "patient.visit.navigation.title" = "Visit";
 "common.done" = "Done";
+
+/* Restore soft-deleted visit */
+"patient.visit.restore.title" = "Restore visit?";
+"patient.visit.restore.message" = "This will make the visit visible again in the list and included in exports.";
+"patient.visit.restore.confirm" = "Restore";
+"patient.visit.restore.cancel" = "Cancel";
+"patient.visit.restore.menu" = "Restore Visit";
+
+/* Toggle: show deleted visits */
+"patient.visits.show-deleted" = "Show deleted";
+
+/* Badge shown on a deleted visit row */
+"patient.visit.deleted.badge" = "Deleted";
+
+/* Toolbar */
+"app.toolbar.export_support_log" = "Export Support Log…";
+
+/* Support log export alerts */
+"support_log.export.success.title" = "Support log exported";
+"support_log.export.success.message" = "Saved: %@";
+"support_log.export.error.title" = "Support log export failed";
+"support_log.export.error.message" = "Error: %@";
+
+"app.common.ok" = "ok";

@@ -18,6 +18,14 @@ import PediaShared
 import AppKit   // for NSAlert confirmation dialogs during import
 #endif
 
+// MARK: - User-facing error surface (release testing)
+
+struct AppUserError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 /// Convenience alias so other files can reference the sidebar summary
 /// type without qualifying it with `AppState.`.
 typealias BundleSidebarSummary = AppState.BundleSidebarSummary
@@ -40,12 +48,16 @@ struct VisitRow: Identifiable, Equatable {
     /// This is critical for safe operations like soft-delete.
     let sourceTable: String
 
+    /// Soft-delete flag from source table (0/1). Used for “Show deleted” + restore UI.
+    let isDeleted: Bool
+
     /// Convenience initializer to keep call sites simple.
-    init(id: Int, dateISO: String, category: String, sourceTable: String = "") {
+    init(id: Int, dateISO: String, category: String, sourceTable: String = "", isDeleted: Bool = false) {
         self.id = id
         self.dateISO = dateISO
         self.category = category
         self.sourceTable = sourceTable
+        self.isDeleted = isDeleted
     }
 }
 
@@ -154,6 +166,23 @@ final class AppState: ObservableObject {
                 log.info("selectedPatientID didSet: cleared patient-specific state in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
             }
         }
+    }
+    
+    // MARK: - User-facing error surface (release testing)
+
+    /// Latest user-visible error (shown as an alert by the App root).
+    @Published var lastError: AppUserError? = nil
+
+    /// Present a simple user-facing error.
+    func presentError(title: String, message: String) {
+        lastError = AppUserError(title: title, message: message)
+    }
+
+    /// Present an error with an optional context label.
+    func presentError(_ error: Error, context: String? = nil) {
+        let baseTitle = NSLocalizedString("app.error.title", comment: "Generic error alert title")
+        let title = context.map { "\(baseTitle): \($0)" } ?? baseTitle
+        lastError = AppUserError(title: title, message: String(describing: error))
     }
     @Published var visits: [VisitRow] = []
     @Published var bundleLocations: [URL] = []
@@ -1070,6 +1099,60 @@ func reloadPatients() {
         // Refresh in-memory visit list so UI updates immediately.
         reloadVisitsForSelectedPatient()
     }
+
+    /// Restore a previously soft-deleted visit.
+    /// Inverse of `softDeleteVisit`: sets is_deleted=0 and clears deleted metadata.
+    func restoreVisit(_ visit: VisitRow) {
+        let table = visit.sourceTable
+        guard table == "episodes" || table == "well_visits" else {
+            log.error("restoreVisit: unsupported sourceTable=\(table, privacy: .public) id=\(visit.id, privacy: .public)")
+            return
+        }
+
+        guard let dbURL = currentDBURL, FileManager.default.fileExists(atPath: dbURL.path) else {
+            log.error("restoreVisit: missing currentDBURL")
+            return
+        }
+
+        // Ensure columns exist on older bundle DBs (idempotent).
+        ensureSoftDeleteVisitSchema(at: dbURL)
+
+        var db: OpaquePointer?
+        if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            log.error("restoreVisit: sqlite open failed for \(dbURL.lastPathComponent, privacy: .public)")
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        UPDATE \(table)
+        SET is_deleted = 0,
+            deleted_at = NULL,
+            deleted_reason = NULL
+        WHERE id = ?;
+        """
+
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("restoreVisit: prepare failed err=\(msg, privacy: .public)")
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(visit.id))
+
+        if sqlite3_step(stmt) != SQLITE_DONE {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("restoreVisit: update failed err=\(msg, privacy: .public)")
+            return
+        }
+
+        log.info("restoreVisit: restored table=\(table, privacy: .public) id=\(visit.id, privacy: .public)")
+        reloadVisitsForSelectedPatient()
+    }
         
         /// Check if a table exists in the opened SQLite database.
         private func tableExists(_ db: OpaquePointer?, name: String) -> Bool {
@@ -1108,7 +1191,7 @@ func reloadPatients() {
         /// 1) Prefer a unified `visits` table if present (and columns exist)
         /// 2) Else, union any tables that look like visit tables (episodes / well_visits / encounters)
         ///    by finding a patient-id column and a date-like column in each.
-        func loadVisits(for patientID: Int) {
+        func loadVisits(for patientID: Int, includeDeleted: Bool = false) {
         
             visits.removeAll()
             guard let dbURL = dbURLForCurrentBundle(),
@@ -1149,8 +1232,10 @@ func reloadPatients() {
                     let catCol  = pickColumn(categoryCandidates, available: cols) // optional
                     let typeCol = pickColumn(wellTypeCandidates, available: cols) // optional
 
-                    let notDeletedClause = cols.contains("is_deleted") ? " AND is_deleted = 0" : ""
-                    
+                    let notDeletedClause = (!includeDeleted && cols.contains("is_deleted")) ? " AND is_deleted = 0" : ""
+
+                    let deletedExpr = cols.contains("is_deleted") ? "COALESCE(is_deleted,0)" : "0"
+
                     var sql = """
                           SELECT id, \(dateCol) AS dateISO,
                           """
@@ -1169,6 +1254,8 @@ func reloadPatients() {
                     } else {
                         sql += "'' AS category"
                     }
+
+                    sql += ", \(deletedExpr) AS isDeleted"
                     
                     sql += """
                        FROM visits
@@ -1190,7 +1277,8 @@ func reloadPatients() {
                         }
                         let dateISO = text(1)
                         let category = text(2)
-                        rows.append(VisitRow(id: id, dateISO: dateISO, category: category, sourceTable: "visits"))
+                        let isDeleted = (Int(sqlite3_column_int64(stmt, 3)) != 0)
+                        rows.append(VisitRow(id: id, dateISO: dateISO, category: category, sourceTable: "visits", isDeleted: isDeleted))
                     }
                     // Debug: surface unexpected categories (e.g., "test") without dumping sensitive content.
                     #if DEBUG
@@ -1223,6 +1311,7 @@ func reloadPatients() {
                 let pidCol: String
                 let dateCol: String
                 let categoryExpr: String
+                let deletedExpr: String
                 let notDeletedClause: String
             }
             var parts: [Part] = []
@@ -1248,12 +1337,14 @@ func reloadPatients() {
                 } else {
                     categoryExpr = defaultCat
                 }
-                let notDeletedClause = cols.contains("is_deleted") ? " AND is_deleted = 0" : ""
+                let notDeletedClause = (!includeDeleted && cols.contains("is_deleted")) ? " AND is_deleted = 0" : ""
+                let deletedExpr = cols.contains("is_deleted") ? "COALESCE(is_deleted,0)" : "0"
                 parts.append(Part(
                     table: t,
                     pidCol: pidCol,
                     dateCol: dateCol,
                     categoryExpr: categoryExpr,
+                    deletedExpr: deletedExpr,
                     notDeletedClause: notDeletedClause
                 ))
             }
@@ -1268,7 +1359,7 @@ func reloadPatients() {
             log.debug("loadVisits: using union over tables: \(parts.map{$0.table}.joined(separator: ","), privacy: .public)")
             let unionSQL = parts.map {
             """
-            SELECT id, \($0.dateCol) AS dateISO, \($0.categoryExpr) AS category, '\($0.table)' AS src
+            SELECT id, \($0.dateCol) AS dateISO, \($0.categoryExpr) AS category, \($0.deletedExpr) AS isDeleted, '\($0.table)' AS src
             FROM \($0.table)
             WHERE \($0.pidCol) = ?\($0.notDeletedClause)
             """
@@ -1295,7 +1386,8 @@ func reloadPatients() {
                 }
                 let dateISO  = text(1)
                 let category = text(2)
-                let srcTable = text(3)
+                let isDeleted = (Int(sqlite3_column_int64(stmt, 3)) != 0)
+                let srcTable = text(4)
 
                 #if DEBUG
                 let catNorm = category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1304,7 +1396,7 @@ func reloadPatients() {
                 }
                 #endif
 
-                rows.append(VisitRow(id: id, dateISO: dateISO, category: category, sourceTable: srcTable))
+                rows.append(VisitRow(id: id, dateISO: dateISO, category: category, sourceTable: srcTable, isDeleted: isDeleted))
             }
             self.visits = rows
             log.debug("loadVisits: pid=\(patientID, privacy: .public) done rows=\(rows.count, privacy: .public) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")

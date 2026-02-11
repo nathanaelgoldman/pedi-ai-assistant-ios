@@ -2890,4 +2890,26 @@
 "patient.visit.navigation.title" = "Consultation";
 "common.done" = "Terminé";
 
+/* Restaurer une visite supprimée */
+"patient.visit.restore.title" = "Restaurer la visite ?";
+"patient.visit.restore.message" = "La visite redeviendra visible dans la liste et sera incluse dans les exports.";
+"patient.visit.restore.confirm" = "Restaurer";
+"patient.visit.restore.cancel" = "Annuler";
+"patient.visit.restore.menu" = "Restaurer la visite";
 
+/* Toggle: show deleted visits */
+"patient.visits.show-deleted" = "Afficher les éléments supprimés";
+
+/* Badge shown on a deleted visit row */
+"patient.visit.deleted.badge" = "Supprimée";
+
+/* Barre d’outils */
+"app.toolbar.export_support_log" = "Exporter le journal de support…";
+
+/* Alertes export journal */
+"support_log.export.success.title" = "Journal de support exporté";
+"support_log.export.success.message" = "Enregistré : %@";
+"support_log.export.error.title" = "Échec de l’export du journal";
+"support_log.export.error.message" = "Erreur : %@";
+
+"app.common.ok" = "ok";

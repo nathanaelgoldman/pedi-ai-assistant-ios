@@ -266,6 +266,11 @@ struct PatientDetailView: View {
     // Soft-delete visit UI state
     @State private var pendingDeleteVisit: VisitRow? = nil
     @State private var showDeleteVisitConfirm = false
+    // Show/hide deleted visits
+    @State private var showDeletedVisits = false
+    // Restore soft-deleted visit UI state
+    @State private var pendingRestoreVisit: VisitRow? = nil
+    @State private var showRestoreVisitConfirm = false
 
     @State private var showWellVisitForm = false
     @State private var editingWellVisitID: Int? = nil
@@ -334,7 +339,8 @@ struct PatientDetailView: View {
     }
 
     private var filteredVisits: [VisitRow] {
-        let base = visitsSorted
+        let baseAll = visitsSorted
+        let base = showDeletedVisits ? baseAll : baseAll.filter { !$0.isDeleted }
         switch visitTab {
         case .all:
             return base
@@ -725,6 +731,8 @@ struct PatientDetailView: View {
         if appState.selectedPatientID != patient.id {
             appState.selectedPatientID = patient.id
         }
+        // Ensure visits are loaded with respect to deleted toggle
+        appState.loadVisits(for: patient.id, includeDeleted: showDeletedVisits)
     }
 
     private func handleSelectedPatientIDChange(_ newID: Int?) {
@@ -772,6 +780,8 @@ struct PatientDetailView: View {
             "pmh=\(String(describing: pmhPatientIDForSheet)) vax=\(String(describing: vaxPatientIDForSheet)) " +
             "well=\(String(describing: wellVisitPatientIDForSheet)) episode=\(String(describing: episodePatientIDForSheet))"
         )
+        // Ensure visits are loaded with respect to deleted toggle
+        appState.loadVisits(for: id, includeDeleted: showDeletedVisits)
         // No DB loads here: AppState.selectedPatientID didSet is the single source of truth.
     }
 
@@ -932,6 +942,15 @@ struct PatientDetailView: View {
                     )
                     .font(.headline)
                     Spacer()
+                    HStack(spacing: 8) {
+                        Toggle(
+                            NSLocalizedString("patient.visits.show-deleted", comment: "Toggle label to show soft-deleted visits"),
+                            isOn: $showDeletedVisits
+                        )
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    }
+                    .frame(maxWidth: 220)
                     Picker(
                         NSLocalizedString(
                             "patient.visits.filter.label",
@@ -988,6 +1007,11 @@ struct PatientDetailView: View {
             if !open {
                 editingWellVisitID = nil
             }
+        }
+        .onChange(of: showDeletedVisits) { _, show in
+            guard let pid = appState.selectedPatientID ?? Optional(patient.id) else { return }
+            appState.loadVisits(for: pid, includeDeleted: show)
+            visitTab = .all
         }
         .sheet(isPresented: $showDocuments) {
             DocumentListView()
@@ -1084,6 +1108,42 @@ struct PatientDetailView: View {
                 )
             )
         }
+        .confirmationDialog(
+            NSLocalizedString(
+                "patient.visit.restore.title",
+                comment: "Title of restore visit confirmation dialog"
+            ),
+            isPresented: $showRestoreVisitConfirm,
+            presenting: pendingRestoreVisit
+        ) { v in
+            Button(
+                NSLocalizedString(
+                    "patient.visit.restore.confirm",
+                    comment: "Confirm restore visit"
+                ),
+                role: .destructive
+            ) {
+                appState.restoreVisit(v)
+                pendingRestoreVisit = nil
+            }
+
+            Button(
+                NSLocalizedString(
+                    "patient.visit.restore.cancel",
+                    comment: "Cancel restore visit"
+                ),
+                role: .cancel
+            ) {
+                pendingRestoreVisit = nil
+            }
+        } message: { _ in
+            Text(
+                NSLocalizedString(
+                    "patient.visit.restore.message",
+                    comment: "Explanation shown when confirming visit restore"
+                )
+            )
+        }
     }
 
     // MARK: - Visit row helper (kept inside struct so it can access state/methods)
@@ -1099,6 +1159,11 @@ struct PatientDetailView: View {
                 Text(prettyCategory(v.category))
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                if v.isDeleted {
+                    Text(NSLocalizedString("patient.visit.deleted.badge", comment: "Small label shown on a deleted visit row"))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
@@ -1152,18 +1217,36 @@ struct PatientDetailView: View {
         }
         .padding(8)
         .lightBlueSectionCardStyle()
+        .opacity(v.isDeleted ? 0.55 : 1.0)
         .contextMenu {
-            Button(role: .destructive) {
-                pendingDeleteVisit = v
-                showDeleteVisitConfirm = true
-            } label: {
-                Label(
-                    NSLocalizedString(
-                        "patient.visit.delete.menu",
-                        comment: "Context menu item to delete visit"
-                    ),
-                    systemImage: "trash"
-                )
+            if v.isDeleted {
+                Button {
+                    pendingRestoreVisit = v
+                    showRestoreVisitConfirm = true
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.visit.restore.menu",
+                            comment: "Context menu item to restore a deleted visit"
+                        ),
+                        systemImage: "arrow.uturn.left"
+                    )
+                }
+            }
+            if !v.isDeleted {
+                Button(role: .destructive) {
+                    pendingDeleteVisit = v
+                    showDeleteVisitConfirm = true
+                    pendingRestoreVisit = nil
+                } label: {
+                    Label(
+                        NSLocalizedString(
+                            "patient.visit.delete.menu",
+                            comment: "Context menu item to delete visit"
+                        ),
+                        systemImage: "trash"
+                    )
+                }
             }
         }
     }

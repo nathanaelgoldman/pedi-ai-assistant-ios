@@ -2796,3 +2796,25 @@
 "patient.visit.navigation.title" = "就诊";
 "common.done" = "完成";
 
+/* 恢复已删除的就诊 */
+"patient.visit.restore.title" = "恢复就诊记录？";
+"patient.visit.restore.message" = "此操作会让该就诊记录重新显示在列表中，并包含在导出内容里。";
+"patient.visit.restore.confirm" = "恢复";
+"patient.visit.restore.cancel" = "取消";
+"patient.visit.restore.menu" = "恢复就诊记录";
+/* Toggle: show deleted visits */
+"patient.visits.show-deleted" = "显示已删除";
+
+/* Badge shown on a deleted visit row */
+"patient.visit.deleted.badge" = "已删除";
+
+/* 工具栏 */
+"app.toolbar.export_support_log" = "导出支持日志…";
+
+/* 导出提示 */
+"support_log.export.success.title" = "支持日志已导出";
+"support_log.export.success.message" = "已保存：%@";
+"support_log.export.error.title" = "支持日志导出失败";
+"support_log.export.error.message" = "错误：%@";
+
+"app.common.ok" = "完成";

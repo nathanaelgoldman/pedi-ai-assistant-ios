@@ -18,6 +18,40 @@ struct DrsMainAppApp: App {
     @StateObject private var appState: AppState
     @State private var showSignIn: Bool = false
     @State private var showClinicianProfile = false
+    // Unified alert presenter (avoid stacking multiple .alert modifiers)
+    @State private var activeAlert: ActiveAlert? = nil
+
+    private enum ActiveAlert: Identifiable {
+        case supportLog(title: String, message: String)
+        case lastError(title: String, message: String)
+
+        var id: String {
+            switch self {
+            case .supportLog:
+                return "supportLog"
+            case .lastError:
+                return "lastError"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .supportLog(let t, _):
+                return t
+            case .lastError(let t, _):
+                return t
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .supportLog(_, let m):
+                return m
+            case .lastError(_, let m):
+                return m
+            }
+        }
+    }
 
     init() {
         let store = ClinicianStore()
@@ -30,6 +64,18 @@ struct DrsMainAppApp: App {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(clinicianStore)
+                .alert(item: $activeAlert) { a in
+                    Alert(
+                        title: Text(a.title),
+                        message: Text(a.message),
+                        dismissButton: .default(Text(NSLocalizedString("app.common.ok", comment: "OK")))
+                    )
+                }
+                .onChange(of: appState.lastError?.id) { _ in
+                    guard let e = appState.lastError else { return }
+                    activeAlert = .lastError(title: e.title, message: e.message)
+                    appState.lastError = nil
+                }
                 .onAppear {
                     // Show sign-in if no active clinician selected yet
                     if appState.activeUserID == nil {
@@ -285,6 +331,9 @@ struct DrsMainAppApp: App {
                                 Divider()
                                 Button("app.toolbar.edit_profile") { showClinicianProfile = true }
                                 Button("app.toolbar.switch_clinician") { showSignIn = true }
+                                Button("app.toolbar.export_support_log") {
+                                    exportSupportLog()
+                                }
                                 Button("app.toolbar.sign_out") {
                                     appState.activeUserID = nil
                                     showSignIn = true
@@ -308,6 +357,76 @@ struct DrsMainAppApp: App {
                     }
                 }
         }
+    }
+    // MARK: - Support log export (macOS)
+
+    private func exportSupportLog() {
+        #if os(macOS)
+        Task {
+            do {
+                // 1) Create a temp support log from unified logging (current process)
+                //    Include hashed context so the file can be correlated without leaking raw identifiers.
+                var ctx: [String: String] = [:]
+
+                if let bundleURL = appState.currentBundleURL {
+                    ctx["bundle"] = AppLog.token(bundleURL.lastPathComponent)
+                }
+                if let pid = appState.selectedPatientID {
+                    ctx["patient_id"] = AppLog.token(String(pid))
+                }
+                if let uid = appState.activeUserID {
+                    ctx["clinician_id"] = AppLog.token(String(uid))
+                }
+
+                let tmpURL = try SupportLogExporter.exportCurrentProcessLogs(
+                    sinceSeconds: 1800,
+                    maxEntries: 4000,
+                    context: ctx
+                )
+
+                // 2) Ask user where to save it
+                let panel = NSSavePanel()
+                panel.canCreateDirectories = true
+                panel.isExtensionHidden = false
+                panel.nameFieldStringValue = tmpURL.lastPathComponent
+                panel.allowedFileTypes = ["txt"]
+
+                let response = panel.runModal()
+                if response == .OK, let dstURL = panel.url {
+                    // Replace if exists
+                    if FileManager.default.fileExists(atPath: dstURL.path) {
+                        try? FileManager.default.removeItem(at: dstURL)
+                    }
+                    try FileManager.default.copyItem(at: tmpURL, to: dstURL)
+
+                    // Clean up temp file
+                    try? FileManager.default.removeItem(at: tmpURL)
+
+                    await MainActor.run {
+                        let title = NSLocalizedString(
+                            "support_log.export.success.title",
+                            comment: "Title shown when support log export succeeded"
+                        )
+                        let message = String(
+                            format: NSLocalizedString(
+                                "support_log.export.success.message",
+                                comment: "Message shown when support log export succeeded; placeholder is filename"
+                            ),
+                            dstURL.lastPathComponent
+                        )
+                        activeAlert = .supportLog(title: title, message: message)
+                    }
+                } else {
+                    // User cancelled: no alert
+                    try? FileManager.default.removeItem(at: tmpURL)
+                }
+            } catch {
+                await MainActor.run {
+                    appState.presentError(error, context: "Support Log")
+                }
+            }
+        }
+        #endif
     }
 }
 
@@ -335,6 +454,17 @@ private struct SignInSheet: View {
         #else
         return Color.accentColor.opacity(colorScheme == .dark ? 0.14 : 0.08)
         #endif
+    }
+
+    // Dynamic height for the clinician list: grow with item count, then scroll beyond a cap.
+    private var cliniciansListHeight: CGFloat {
+        // Rough per-row height for `clinicianRow` + padding/background.
+        let rowH: CGFloat = 44
+        let verticalPadding: CGFloat = 20 // LazyVStack padding(.vertical, 10)
+        let count = max(1, clinicianStore.users.count)
+        let contentH = CGFloat(count) * rowH + verticalPadding
+        // Keep it compact for small lists, but avoid a tiny box.
+        return min(260, max(80, contentH))
     }
 
     var body: some View {
@@ -513,7 +643,7 @@ private struct SignInSheet: View {
                 .padding(.vertical, 10)
             }
             // Expand naturally when a few users exist; scroll when many.
-            .frame(minHeight: 80, maxHeight: 260)
+            .frame(height: cliniciansListHeight)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.secondary.opacity(colorScheme == .dark ? 0.14 : 0.06))

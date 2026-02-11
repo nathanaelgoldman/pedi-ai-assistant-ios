@@ -61,6 +61,7 @@
 		BBE216BA2ECF4A9C00D4C281 /* WellVisitForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */; };
 		E90B87422F162E4700D093D7 /* PromptRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90B87412F162E3B00D093D7 /* PromptRenderer.swift */; };
 		E91960B62F2C25BF00D65B06 /* WHOGrowthHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */; };
+		E9218D062F3C293600204D98 /* SupportLogExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9218D052F3C292300204D98 /* SupportLogExporter.swift */; };
 		E93EDEC82F2201E0002A0381 /* WHOGrowthEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */; };
 		E98BC2692F1B5EB9002A5207 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98BC2682F1B5EAC002A5207 /* AppLog.swift */; };
 /* End PBXBuildFile section */
@@ -120,6 +121,7 @@
 		BBE216B92ECF4A9700D4C281 /* WellVisitForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellVisitForm.swift; sourceTree = "<group>"; };
 		E90B87412F162E3B00D093D7 /* PromptRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRenderer.swift; sourceTree = "<group>"; };
 		E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WHOGrowthHub.swift; sourceTree = "<group>"; };
+		E9218D052F3C292300204D98 /* SupportLogExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportLogExporter.swift; sourceTree = "<group>"; };
 		E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WHOGrowthEvaluator.swift; sourceTree = "<group>"; };
 		E98BC2682F1B5EAC002A5207 /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -208,6 +210,7 @@
 		BB564AED2EAE0BB900870007 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				E9218D052F3C292300204D98 /* SupportLogExporter.swift */,
 				E98BC2682F1B5EAC002A5207 /* AppLog.swift */,
 				BBE216B72ECF344600D4C281 /* WellVisitStore.swift */,
 				BB6E2F822EC858600044F225 /* VitalsStore.swift */,
@@ -442,6 +445,7 @@
 				BB6E2F852EC8665C0044F225 /* VitalsRanges.swift in Sources */,
 				BB3E15A32EB71C63008E1472 /* ReportBuilder.swift in Sources */,
 				BBA6AD572EB5C49100BDA924 /* GrowthDataFetcher.swift in Sources */,
+				E9218D062F3C293600204D98 /* SupportLogExporter.swift in Sources */,
 				E98BC2692F1B5EB9002A5207 /* AppLog.swift in Sources */,
 				BB71CCE92EEE8B95000B7947 /* GeminiProvider.swift in Sources */,
 				BB564ADD2EADC30A00870007 /* DrsMainAppApp.swift in Sources */,
