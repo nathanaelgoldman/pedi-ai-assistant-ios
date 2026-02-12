@@ -2913,3 +2913,30 @@
 "support_log.export.error.message" = "Erreur : %@";
 
 "app.common.ok" = "ok";
+
+/* Échec d’ouverture du dossier patient */
+"bundle.select.failed.title" = "Impossible d’ouvrir le dossier";
+"bundle.select.failed.message" = "Le dossier sélectionné ne peut pas être ouvert. Il est peut-être manquant, corrompu ou inaccessible.";
+
+/* Échec de suppression */
+"visit.delete.failed.title" = "Échec de la suppression";
+"visit.delete.failed.unsupported" = "Ce type de visite ne peut pas être supprimé.";
+"visit.delete.failed.no_db" = "Le fichier de base de données est manquant ou inaccessible.";
+"visit.delete.failed.db_open" = "Impossible d’ouvrir la base de données pour effectuer la suppression.";
+
+/* Échec de restauration */
+"visit.restore.failed.title" = "Échec de la restauration";
+"visit.restore.failed.unsupported" = "Ce type de visite ne peut pas être restauré.";
+"visit.restore.failed.no_db" = "Le fichier de base de données est manquant ou inaccessible.";
+"visit.restore.failed.db_open" = "Impossible d’ouvrir la base de données pour effectuer la restauration.";
+
+"exporter.mac.success.title" = "Exportation terminée";
+"exporter.mac.success.reveal" = "Afficher dans le Finder";
+"exporter.mac.success.share" = "Partager…";
+"common.ok" = "OK";
+
+/* Boutons de la boîte de dialogue d’export du journal de support */
+"support_log.export.success.reveal" = "Afficher dans le Finder";
+"support_log.export.success.share" = "Partager…";
+
+"app.toolbar.trigger_test_error" = "Déclencher une erreur de test (TEMP)";

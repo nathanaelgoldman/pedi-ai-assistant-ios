@@ -2710,16 +2710,16 @@ private var problemListingHeaderLine: String {
             ) {
                 Button("well_visit_form.alert.ok", role: .cancel) { }
             } message: {
-                Text(saveErrorMessage ?? NSLocalizedString("well_visit_form.alert.unknown_error", comment: ""))
+                Text(saveErrorMessage.isEmpty ? NSLocalizedString("well_visit_form.alert.unknown_error", comment: "") : saveErrorMessage)
             }
             .onAppear {
                  AppLog.ui.debug("WellVisitForm: opened editingVisitID=\(logOptInt(editingVisitID), privacy: .public)")
                 loadIfEditing()
                 refreshWeightTrend()
             }
-            .onChangeCompat(of: visitDate) {
+            .onChangeCompat(of: visitDate, perform: {
                 refreshWeightTrend()
-            }
+            })
         }
         
         .frame(
@@ -4844,12 +4844,12 @@ private var problemListingHeaderLine: String {
         LIMIT 1;
         """
 
-        if let snap = runQuery(closestSQL) { stmt in
+        if let snap = runQuery(closestSQL, bind: { stmt in
             sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
             _ = visitISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
             sqlite3_bind_int(stmt, 3, windowDays)
             _ = visitISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
-        } {
+        }) {
             return snap
         }
 

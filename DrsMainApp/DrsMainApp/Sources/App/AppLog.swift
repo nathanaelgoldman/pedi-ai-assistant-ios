@@ -61,6 +61,55 @@ enum AppLog {
     }
 
 
+    // MARK: - Support log filtering
+
+    /// Coarse log levels used when exporting Support Logs.
+    /// (We keep this independent of OSLogEntry's internal level types so it's stable across OS versions.)
+    enum SupportLevel: Int, Comparable {
+        case debug = 0
+        case info  = 1
+        case notice = 2
+        case error = 3
+        case fault = 4
+
+        static func < (lhs: SupportLevel, rhs: SupportLevel) -> Bool {
+            lhs.rawValue < rhs.rawValue
+        }
+    }
+
+    /// Minimum level to include in exported Support Logs.
+    /// DEBUG builds include `.debug`; Release/TestFlight builds default to `.info`.
+    static var supportLogMinimumLevel: SupportLevel {
+        #if DEBUG
+        return .debug
+        #else
+        return .info
+        #endif
+    }
+
+    /// Map an OSLog entry level raw value to our coarse `SupportLevel`.
+    /// OSLogEntryLog.Level raw values are currently: debug=0, info=1, notice=2, error=3, fault=4.
+    /// If a future OS introduces new values, we clamp to the nearest known bucket.
+    static func supportLevel(fromOSLogRawValue raw: Int) -> SupportLevel {
+        switch raw {
+        case 0: return .debug
+        case 1: return .info
+        case 2: return .notice
+        case 3: return .error
+        case 4: return .fault
+        default:
+            if raw < 0 { return .debug }
+            if raw > 4 { return .fault }
+            return .info
+        }
+    }
+
+    /// Decide if an OSLog entry should be included in the exported Support Log.
+    static func includeInSupportLog(osLogLevelRaw: Int) -> Bool {
+        supportLevel(fromOSLogRawValue: osLogLevelRaw) >= supportLogMinimumLevel
+    }
+
+
     // MARK: - Redaction helpers (stable, non-identifying references)
 
     /// Stable short token (hex) for correlating logs without leaking raw identifiers.

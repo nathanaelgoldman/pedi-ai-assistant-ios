@@ -31,7 +31,7 @@ struct MacBundleExporter {
     }
 
     /// Asks BundleExporter to pack the active bundle folder and lets the user save the `.pemr` file.
-    static func run(appState: AppState) async {
+    static func run(appState: AppState) async throws -> URL {
         do {
             // 1) Source folder: the bundle currently open in DrsMainApp
             guard let src = appState.currentBundleURL else {
@@ -59,8 +59,6 @@ struct MacBundleExporter {
             if panel.runModal() == .OK, let chosenURL = panel.url {
                 let fm = FileManager.default
 
-                // Normalise the final saved file to have a `.pemr` extension,
-                // regardless of what the user typed into the panel.
                 var dest = chosenURL
                 let ext = dest.pathExtension.lowercased()
                 if ext != "pemr" {
@@ -71,12 +69,37 @@ struct MacBundleExporter {
                 if fm.fileExists(atPath: dest.path) {
                     try? fm.removeItem(at: dest)
                 }
+
                 try fm.copyItem(at: tempBundleURL, to: dest)
 
-                NSWorkspace.shared.activateFileViewerSelecting([dest])
+                // Post-export action dialog
+                let alert = NSAlert()
+                alert.messageText = L("exporter.mac.success.title", comment: "Title for successful bundle export alert")
+                alert.informativeText = dest.lastPathComponent
+
+                alert.addButton(withTitle: L("exporter.mac.success.reveal", comment: "Reveal exported bundle in Finder"))
+                alert.addButton(withTitle: L("exporter.mac.success.share", comment: "Share exported bundle"))
+                alert.addButton(withTitle: L("common.ok", comment: "Generic OK button"))
+
+                let response = alert.runModal()
+
+                if response == .alertFirstButtonReturn {
+                    NSWorkspace.shared.activateFileViewerSelecting([dest])
+                } else if response == .alertSecondButtonReturn {
+                    if let window = NSApp.keyWindow,
+                       let contentView = window.contentView {
+                        let picker = NSSharingServicePicker(items: [dest])
+                        picker.show(relativeTo: contentView.bounds, of: contentView, preferredEdge: .minY)
+                    }
+                }
+
+                return dest
+            } else {
+                throw CocoaError(.userCancelled)
             }
         } catch {
-            NSAlert(error: error).runModal()
+                throw error
+            }
         }
     }
-}
+

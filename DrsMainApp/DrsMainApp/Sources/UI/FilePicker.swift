@@ -33,7 +33,12 @@ enum FilePicker {
         panel.canCreateDirectories = false
         panel.title = "Choose Patient Bundles (.peMR or .zip)"
         panel.prompt = "Add Bundles"
-        panel.allowedFileTypes = ["zip", "peMR", "pemr"]
+        // macOS 12+: prefer UTType-based filtering
+        var types: [UTType] = [.zip]
+        if let pemr = UTType(filenameExtension: "pemr") {
+            types.append(pemr)
+        }
+        panel.allowedContentTypes = types
 
         panel.begin { resp in
             guard resp == .OK else { completion([]); return }

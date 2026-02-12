@@ -42,6 +42,24 @@ fileprivate extension View {
     }
 }
 
+/// Uses macOS 15's `.presentationSizing(.fitted)` when available, otherwise no-ops.
+fileprivate struct FittedPresentationSizingIfAvailable: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content.presentationSizing(.fitted)
+        } else {
+            content
+        }
+    }
+}
+
+fileprivate extension View {
+    /// Apply `.presentationSizing(.fitted)` only on macOS 15+.
+    func fittedPresentationSizingIfAvailable() -> some View {
+        self.modifier(FittedPresentationSizingIfAvailable())
+    }
+}
+
 /// Lightweight editor for the perinatal_history table, wired to AppState.
 /// Reads current values from `app.perinatalHistory`, lets you edit, then saves via
 /// `app.savePerinatalHistoryForSelectedPatient(_:)`.
@@ -277,7 +295,7 @@ struct PerinatalHistoryForm: View {
 
     var body: some View {
         Group {
-#if os(macOS)
+        #if os(macOS)
             // Ensure a proper title bar + toolbar area on macOS sheets/windows.
             NavigationStack {
                 formContent
@@ -286,7 +304,7 @@ struct PerinatalHistoryForm: View {
             .frame(minWidth: 980, idealWidth: 1150, maxWidth: 1500,
                    minHeight: 680, idealHeight: 860, maxHeight: 1100,
                    alignment: .top)
-            .presentationSizing(.fitted)
+            .fittedPresentationSizingIfAvailable()
 #else
             NavigationView {
                 formContent

@@ -195,7 +195,7 @@ final class GrowthStore {
 
         // recordedAtISO as TEXT (use SQLITE_TRANSIENT so SQLite copies the buffer)
         let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        recordedAtISO.withCString { cstr in
+        _ = recordedAtISO.withCString { cstr in
             sqlite3_bind_text(stmt, 2, cstr, -1, SQLITE_TRANSIENT)
         }
 

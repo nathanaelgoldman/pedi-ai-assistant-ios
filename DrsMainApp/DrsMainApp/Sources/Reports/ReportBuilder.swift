@@ -4398,10 +4398,6 @@ extension ReportBuilder {
         ]
 
         // Problem Listing milestone formatting (shared text pipeline step)
-        let problemListingHeading = L(
-            "report.docx.heading.problem_listing",
-            comment: "DOCX heading detection: Problem Listing"
-        )
         let milestonesHeader = L(
             "well_visit_form.problem_listing.milestones.header",
             comment: "Problem listing subheader shown before milestone bullet lines"

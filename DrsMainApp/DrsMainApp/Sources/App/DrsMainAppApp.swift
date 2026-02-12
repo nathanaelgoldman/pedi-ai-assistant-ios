@@ -10,6 +10,7 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
+import UniformTypeIdentifiers
 #endif
 
 @main
@@ -20,9 +21,10 @@ struct DrsMainAppApp: App {
     @State private var showClinicianProfile = false
     // Unified alert presenter (avoid stacking multiple .alert modifiers)
     @State private var activeAlert: ActiveAlert? = nil
+    @State private var pendingShareURL: URL? = nil
 
     private enum ActiveAlert: Identifiable {
-        case supportLog(title: String, message: String)
+        case supportLog(title: String, message: String, fileURL: URL?)
         case lastError(title: String, message: String)
 
         var id: String {
@@ -36,7 +38,7 @@ struct DrsMainAppApp: App {
 
         var title: String {
             switch self {
-            case .supportLog(let t, _):
+            case .supportLog(let t, _, _):
                 return t
             case .lastError(let t, _):
                 return t
@@ -45,7 +47,7 @@ struct DrsMainAppApp: App {
 
         var message: String {
             switch self {
-            case .supportLog(_, let m):
+            case .supportLog(_, let m, _):
                 return m
             case .lastError(_, let m):
                 return m
@@ -65,16 +67,80 @@ struct DrsMainAppApp: App {
                 .environmentObject(appState)
                 .environmentObject(clinicianStore)
                 .alert(item: $activeAlert) { a in
-                    Alert(
-                        title: Text(a.title),
-                        message: Text(a.message),
-                        dismissButton: .default(Text(NSLocalizedString("app.common.ok", comment: "OK")))
-                    )
+                    switch a {
+                    case .lastError:
+                        return Alert(
+                            title: Text(a.title),
+                            message: Text(a.message),
+                            dismissButton: .default(
+                                Text(NSLocalizedString("app.common.ok", comment: "OK")),
+                                action: {
+                                    // Only mark as seen when the user actually dismisses an error alert.
+                                    AppLog.feature("ui.alert").info("User dismissed error alert")
+                                    if appState.userErrorStatus == .present {
+                                        appState.userErrorStatus = .seen
+                                    }
+                                }
+                            )
+                        )
+                    case .supportLog(_, _, let fileURL):
+                        #if os(macOS)
+                        let revealTitle = NSLocalizedString(
+                            "support_log.export.success.reveal",
+                            comment: "Button title to reveal the exported support log in Finder"
+                        )
+                        let shareTitle = NSLocalizedString(
+                            "support_log.export.success.share",
+                            comment: "Button title to share the exported support log"
+                        )
+                        let okTitle = NSLocalizedString("app.common.ok", comment: "OK")
+
+                        // If we don't have a file URL (should be rare), fall back to OK only.
+                        guard let fileURL else {
+                            return Alert(
+                                title: Text(a.title),
+                                message: Text(a.message),
+                                dismissButton: .default(Text(okTitle))
+                            )
+                        }
+
+                        return Alert(
+                            title: Text(a.title),
+                            message: Text(a.message),
+                            primaryButton: .default(Text(shareTitle), action: {
+                                // Defer presentation until after the alert is dismissed.
+                                pendingShareURL = fileURL
+                                activeAlert = nil
+                            }),
+                            secondaryButton: .default(Text(revealTitle), action: {
+                                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                            })
+                        )
+                        #else
+                        return Alert(
+                            title: Text(a.title),
+                            message: Text(a.message),
+                            dismissButton: .default(Text(NSLocalizedString("app.common.ok", comment: "OK")))
+                        )
+                        #endif
+                    }
                 }
-                .onChange(of: appState.lastError?.id) { _ in
+                .onChange(of: appState.lastError?.id) { _, _ in
                     guard let e = appState.lastError else { return }
+                    // Present the alert; the dismiss action will mark userErrorStatus as .seen.
                     activeAlert = .lastError(title: e.title, message: e.message)
+                    // Clear the published error payload to prevent repeat triggers.
                     appState.lastError = nil
+                }
+                .onChange(of: pendingShareURL) { _, url in
+                    #if os(macOS)
+                    guard let url else { return }
+                    // Small async hop so the alert has fully dismissed and the window is valid.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        presentShareSheet(for: url)
+                        pendingShareURL = nil
+                    }
+                    #endif
                 }
                 .onAppear {
                     // Show sign-in if no active clinician selected yet
@@ -334,6 +400,16 @@ struct DrsMainAppApp: App {
                                 Button("app.toolbar.export_support_log") {
                                     exportSupportLog()
                                 }
+#if DEBUG
+                                Button(NSLocalizedString("app.toolbar.trigger_test_error", comment: "Debug-only menu item to trigger a test error")) {
+                                    let err = NSError(
+                                        domain: "DrsMainApp.Test",
+                                        code: 999,
+                                        userInfo: [NSLocalizedDescriptionKey: "This is a fake test error to verify alert dismissal logging."]
+                                    )
+                                    appState.presentError(err, context: "Test")
+                                }
+#endif
                                 Button("app.toolbar.sign_out") {
                                     appState.activeUserID = nil
                                     showSignIn = true
@@ -358,6 +434,35 @@ struct DrsMainAppApp: App {
                 }
         }
     }
+    #if os(macOS)
+    private func presentShareSheet(for fileURL: URL) {
+        // Ensure we're on the main thread and the app is foregrounded.
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+
+            // Prefer the key window; fall back to any visible window.
+            let window = NSApp.windows.first(where: { $0.isKeyWindow })
+                ?? NSApp.keyWindow
+                ?? NSApp.mainWindow
+                ?? NSApp.windows.first(where: { $0.isVisible })
+
+            guard let window, let view = window.contentView else {
+                // If we cannot present the share picker, at least reveal the file.
+                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                return
+            }
+
+            let picker = NSSharingServicePicker(items: [fileURL])
+
+            // Anchor to a stable rect in the contentView.
+            let bounds = view.bounds
+            let anchorRect = NSRect(x: bounds.midX, y: bounds.midY, width: 1, height: 1)
+
+            picker.show(relativeTo: anchorRect, of: view, preferredEdge: .minY)
+        }
+    }
+    #endif
+
     // MARK: - Support log export (macOS)
 
     private func exportSupportLog() {
@@ -377,6 +482,7 @@ struct DrsMainAppApp: App {
                 if let uid = appState.activeUserID {
                     ctx["clinician_id"] = AppLog.token(String(uid))
                 }
+                ctx["user_error"] = appState.userErrorStatus.rawValue
 
                 let tmpURL = try SupportLogExporter.exportCurrentProcessLogs(
                     sinceSeconds: 1800,
@@ -389,7 +495,7 @@ struct DrsMainAppApp: App {
                 panel.canCreateDirectories = true
                 panel.isExtensionHidden = false
                 panel.nameFieldStringValue = tmpURL.lastPathComponent
-                panel.allowedFileTypes = ["txt"]
+                panel.allowedContentTypes = [.plainText]
 
                 let response = panel.runModal()
                 if response == .OK, let dstURL = panel.url {
@@ -414,7 +520,7 @@ struct DrsMainAppApp: App {
                             ),
                             dstURL.lastPathComponent
                         )
-                        activeAlert = .supportLog(title: title, message: message)
+                        activeAlert = .supportLog(title: title, message: message, fileURL: dstURL)
                     }
                 } else {
                     // User cancelled: no alert

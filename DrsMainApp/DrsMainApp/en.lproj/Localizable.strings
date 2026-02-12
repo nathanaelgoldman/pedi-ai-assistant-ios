@@ -2929,3 +2929,29 @@
 "support_log.export.error.message" = "Error: %@";
 
 "app.common.ok" = "ok";
+
+/* Bundle selection failed */
+"bundle.select.failed.title" = "Unable to Open Bundle";
+"bundle.select.failed.message" = "The selected bundle could not be opened. It may be missing, corrupted, or inaccessible.";
+
+/* Soft delete failed */
+"visit.delete.failed.title" = "Delete Failed";
+"visit.delete.failed.unsupported" = "This visit type cannot be deleted.";
+"visit.delete.failed.no_db" = "The database file is missing or inaccessible.";
+"visit.delete.failed.db_open" = "The database could not be opened for deletion.";
+
+/* Restore failed */
+"visit.restore.failed.title" = "Restore Failed";
+"visit.restore.failed.unsupported" = "This visit type cannot be restored.";
+"visit.restore.failed.no_db" = "The database file is missing or inaccessible.";
+"visit.restore.failed.db_open" = "The database could not be opened for restoration.";
+"exporter.mac.success.title" = "Export complete";
+"exporter.mac.success.reveal" = "Reveal in Finder";
+"exporter.mac.success.share" = "Share…";
+"common.ok" = "OK";
+
+/* Support log export success alert buttons */
+"support_log.export.success.reveal" = "Reveal in Finder";
+"support_log.export.success.share" = "Share…";
+
+"app.toolbar.trigger_test_error" = "Trigger Test Error (TEMP)";

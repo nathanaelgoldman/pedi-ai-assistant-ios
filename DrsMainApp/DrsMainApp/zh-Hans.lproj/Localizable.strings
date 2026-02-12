@@ -2818,3 +2818,30 @@
 "support_log.export.error.message" = "错误：%@";
 
 "app.common.ok" = "完成";
+
+/* 打开档案失败 */
+"bundle.select.failed.title" = "无法打开档案";
+"bundle.select.failed.message" = "所选档案无法打开。可能已丢失、损坏或无法访问。";
+
+/* 删除失败 */
+"visit.delete.failed.title" = "删除失败";
+"visit.delete.failed.unsupported" = "该类型的就诊记录无法删除。";
+"visit.delete.failed.no_db" = "数据库文件缺失或无法访问。";
+"visit.delete.failed.db_open" = "无法打开数据库以执行删除操作。";
+
+/* 恢复失败 */
+"visit.restore.failed.title" = "恢复失败";
+"visit.restore.failed.unsupported" = "该类型的就诊记录无法恢复。";
+"visit.restore.failed.no_db" = "数据库文件缺失或无法访问。";
+"visit.restore.failed.db_open" = "无法打开数据库以执行恢复操作。";
+
+"exporter.mac.success.title" = "导出完成";
+"exporter.mac.success.reveal" = "在 Finder 中显示";
+"exporter.mac.success.share" = "分享…";
+"common.ok" = "好";
+
+/* 支持日志导出成功对话框按钮 */
+"support_log.export.success.reveal" = "在 Finder 中显示";
+"support_log.export.success.share" = "分享…";
+
+"app.toolbar.trigger_test_error" = "触发测试错误（临时）";

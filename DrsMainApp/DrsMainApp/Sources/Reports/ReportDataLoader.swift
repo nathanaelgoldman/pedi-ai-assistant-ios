@@ -1585,7 +1585,7 @@ final class ReportDataLoader {
         var meds: [String] = []
         var planGuidance: String?
         var clinicianComments: String?
-        var nextVisitDate: String?
+        let nextVisitDate: String? = nil
         var perinatalSummary: String?
 
         // Localize DB-stored choice tokens (often stored in EN) into the current UI language.
@@ -2416,7 +2416,6 @@ final class ReportDataLoader {
         let exists = fm.fileExists(atPath: path)
         let attrs = try? fm.attributesOfItem(atPath: path)
         let size = (attrs?[.size] as? NSNumber)?.int64Value ?? -1
-        let parent = url.deletingLastPathComponent().lastPathComponent
 
         #if DEBUG
         // Avoid leaking full sandbox paths (username / container path) in logs.

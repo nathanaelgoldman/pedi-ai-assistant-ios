@@ -476,7 +476,17 @@ struct PatientDetailView: View {
                 }
 
                 Button {
-                    Task { await MacBundleExporter.run(appState: appState) }
+                    Task { @MainActor in
+                        do {
+                            _ = try await MacBundleExporter.run(appState: appState)
+                        } catch {
+                            // Surface to the app-wide user-facing error alert.
+                            appState.presentError(error, context: NSLocalizedString(
+                                "patient.header.export-bundle",
+                                comment: "Context label for export bundle errors"
+                            ))
+                        }
+                    }
                 } label: {
                     Label(
                         NSLocalizedString(

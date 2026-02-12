@@ -170,19 +170,60 @@ final class AppState: ObservableObject {
     
     // MARK: - User-facing error surface (release testing)
 
+    enum UserErrorStatus: String {
+        case none
+        case present
+        case seen
+    }
+
+    /// Tracks whether a user-facing error has occurred during this session.
+    @Published var userErrorStatus: UserErrorStatus = .none
+
     /// Latest user-visible error (shown as an alert by the App root).
     @Published var lastError: AppUserError? = nil
 
+    /// Log-safe hint about the most recent user-facing error (hashed; safe to include in support logs).
+    @Published var lastErrorHint: String? = nil
+
+    /// Dedicated logger for user-facing alert flow.
+    private let alertLog = AppLog.feature("ui.alert")
+
     /// Present a simple user-facing error.
     func presentError(title: String, message: String) {
+        // Keep PII out of logs: store only hashed/short tokens.
+        let token = AppLog.token("\(title)|\(message)", length: 12)
+        self.lastErrorHint = "token=\(token)"
+
+        alertLog.error(
+            "Presenting error alert token=\(token, privacy: .public) title=\(title, privacy: .private(mask: .hash)) msg=\(message, privacy: .private(mask: .hash))"
+        )
+
         lastError = AppUserError(title: title, message: message)
+        userErrorStatus = .present
     }
 
     /// Present an error with an optional context label.
     func presentError(_ error: Error, context: String? = nil) {
         let baseTitle = NSLocalizedString("app.error.title", comment: "Generic error alert title")
         let title = context.map { "\(baseTitle): \($0)" } ?? baseTitle
-        lastError = AppUserError(title: title, message: String(describing: error))
+        let message = String(describing: error)
+
+        // Keep PII out of logs: store only hashed/short tokens.
+        let token = AppLog.token("\(title)|\(message)", length: 12)
+        self.lastErrorHint = "token=\(token)"
+
+        if let ctx = context, !ctx.isEmpty {
+            alertLog.error(
+                "Presenting error alert token=\(token, privacy: .public) ctx=\(ctx, privacy: .private(mask: .hash)) err=\(message, privacy: .private(mask: .hash))"
+            )
+        } else {
+            alertLog.error(
+                "Presenting error alert token=\(token, privacy: .public) err=\(message, privacy: .private(mask: .hash))"
+            )
+        }
+
+        lastError = AppUserError(title: title, message: message)
+        userErrorStatus = .present
     }
     @Published var visits: [VisitRow] = []
     @Published var bundleLocations: [URL] = []
@@ -891,6 +932,10 @@ final class AppState: ObservableObject {
             self.recentBundles.removeAll { $0.standardizedFileURL.resolvingSymlinksInPath().path == standardized.path }
             pruneRecentBundlesInPlace()
             persistRecentBundles()
+            self.presentError(
+                title: NSLocalizedString("bundle.select.failed.title", comment: "User-facing title when bundle selection fails"),
+                message: NSLocalizedString("bundle.select.failed.message", comment: "User-facing message when the selected bundle is missing or invalid")
+            )
             self.log.info("selectBundle: finished (invalid selection) in \(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms")
             return
         }
@@ -1044,11 +1089,19 @@ func reloadPatients() {
         let table = visit.sourceTable
         guard table == "episodes" || table == "well_visits" else {
             log.error("softDeleteVisit: unsupported sourceTable=\(table, privacy: .public) id=\(visit.id, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.delete.failed.title", comment: "User-facing title when soft delete fails"),
+                message: NSLocalizedString("visit.delete.failed.unsupported", comment: "User-facing message when soft delete is not supported for a visit")
+            )
             return
         }
 
         guard let dbURL = currentDBURL, FileManager.default.fileExists(atPath: dbURL.path) else {
             log.error("softDeleteVisit: missing currentDBURL")
+            presentError(
+                title: NSLocalizedString("visit.delete.failed.title", comment: "User-facing title when soft delete fails"),
+                message: NSLocalizedString("visit.delete.failed.no_db", comment: "User-facing message when no database is available")
+            )
             return
         }
 
@@ -1060,6 +1113,10 @@ func reloadPatients() {
         if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
             if let db { sqlite3_close(db) }
             log.error("softDeleteVisit: sqlite open failed for \(dbURL.lastPathComponent, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.delete.failed.title", comment: "User-facing title when soft delete fails"),
+                message: NSLocalizedString("visit.delete.failed.db_open", comment: "User-facing message when the database cannot be opened")
+            )
             return
         }
         guard let db = db else { return }
@@ -1077,6 +1134,10 @@ func reloadPatients() {
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
             log.error("softDeleteVisit: prepare failed err=\(msg, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.delete.failed.title", comment: "User-facing title when soft delete fails"),
+                message: msg
+            )
             return
         }
         defer { sqlite3_finalize(stmt) }
@@ -1091,6 +1152,10 @@ func reloadPatients() {
         if sqlite3_step(stmt) != SQLITE_DONE {
             let msg = String(cString: sqlite3_errmsg(db))
             log.error("softDeleteVisit: update failed err=\(msg, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.delete.failed.title", comment: "User-facing title when soft delete fails"),
+                message: msg
+            )
             return
         }
 
@@ -1106,11 +1171,19 @@ func reloadPatients() {
         let table = visit.sourceTable
         guard table == "episodes" || table == "well_visits" else {
             log.error("restoreVisit: unsupported sourceTable=\(table, privacy: .public) id=\(visit.id, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.restore.failed.title", comment: "User-facing title when restore fails"),
+                message: NSLocalizedString("visit.restore.failed.unsupported", comment: "User-facing message when restore is not supported for a visit")
+            )
             return
         }
 
         guard let dbURL = currentDBURL, FileManager.default.fileExists(atPath: dbURL.path) else {
             log.error("restoreVisit: missing currentDBURL")
+            presentError(
+                title: NSLocalizedString("visit.restore.failed.title", comment: "User-facing title when restore fails"),
+                message: NSLocalizedString("visit.restore.failed.no_db", comment: "User-facing message when no database is available")
+            )
             return
         }
 
@@ -1121,6 +1194,10 @@ func reloadPatients() {
         if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
             if let db { sqlite3_close(db) }
             log.error("restoreVisit: sqlite open failed for \(dbURL.lastPathComponent, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.restore.failed.title", comment: "User-facing title when restore fails"),
+                message: NSLocalizedString("visit.restore.failed.db_open", comment: "User-facing message when the database cannot be opened")
+            )
             return
         }
         guard let db = db else { return }
@@ -1138,6 +1215,10 @@ func reloadPatients() {
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) != SQLITE_OK {
             let msg = String(cString: sqlite3_errmsg(db))
             log.error("restoreVisit: prepare failed err=\(msg, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.restore.failed.title", comment: "User-facing title when restore fails"),
+                message: msg
+            )
             return
         }
         defer { sqlite3_finalize(stmt) }
@@ -1147,6 +1228,10 @@ func reloadPatients() {
         if sqlite3_step(stmt) != SQLITE_DONE {
             let msg = String(cString: sqlite3_errmsg(db))
             log.error("restoreVisit: update failed err=\(msg, privacy: .public)")
+            presentError(
+                title: NSLocalizedString("visit.restore.failed.title", comment: "User-facing title when restore fails"),
+                message: msg
+            )
             return
         }
 
@@ -6240,6 +6325,51 @@ func reloadPatients() {
         var executedCount = 0
         var ignoredErrorCount = 0
 
+        // Cache PRAGMA table_info results so we don't re-query for every ALTER.
+        var tableColsCache: [String: Set<String>] = [:]
+
+        func unquoteIdent(_ s: String) -> String {
+            var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if (t.hasPrefix("\"") && t.hasSuffix("\"")) || (t.hasPrefix("`") && t.hasSuffix("`")) {
+                t.removeFirst()
+                t.removeLast()
+            }
+            return t
+        }
+
+        // Detect "ALTER TABLE <table> ADD COLUMN <col> ..." and skip if the column already exists.
+        // This prevents noisy "duplicate column name" errors that can leak into system logs.
+        let alterAddColumnRE: NSRegularExpression? = try? NSRegularExpression(
+            pattern: "(?i)^\\s*ALTER\\s+TABLE\\s+([A-Za-z0-9_\"`]+)\\s+ADD\\s+COLUMN\\s+([A-Za-z0-9_\"`]+)\\b",
+            options: []
+        )
+
+        func shouldSkipAlterAddColumn(_ sql: String) -> Bool {
+            guard let re = alterAddColumnRE else { return false }
+            let ns = sql as NSString
+            let full = NSRange(location: 0, length: ns.length)
+            guard let m = re.firstMatch(in: sql, options: [], range: full) else { return false }
+            if m.numberOfRanges < 3 { return false }
+
+            let tableRaw = ns.substring(with: m.range(at: 1))
+            let colRaw   = ns.substring(with: m.range(at: 2))
+            let table = unquoteIdent(tableRaw)
+            let col   = unquoteIdent(colRaw)
+
+            if table.isEmpty || col.isEmpty { return false }
+
+            let cols: Set<String>
+            if let cached = tableColsCache[table] {
+                cols = cached
+            } else {
+                let fetched = Set(columnSet(of: table, db: db).map { $0.lowercased() })
+                tableColsCache[table] = fetched
+                cols = fetched
+            }
+
+            return cols.contains(col.lowercased())
+        }
+
         bytes.withUnsafeBufferPointer { buf in
             guard let base = buf.baseAddress else { return }
 
@@ -6271,6 +6401,29 @@ func reloadPatients() {
 
                 // If SQLite reports no statement (e.g., only comments/whitespace), we're done.
                 guard let stmt = stmt else { break }
+
+                // If this is an ALTER TABLE ... ADD COLUMN ... for a column that already exists,
+                // skip executing it entirely to avoid producing system/SQLite error logs.
+                if let stmtSQLPtr = sqlite3_sql(stmt) {
+                    let stmtSQL = String(cString: stmtSQLPtr)
+                    if shouldSkipAlterAddColumn(stmtSQL) {
+                        ignoredErrorCount += 1
+                        sqlite3_finalize(stmt)
+
+                        // Advance to next statement using the tail pointer.
+                        if let tail = tail {
+                            let newIdx = Int(tail - base)
+                            if newIdx <= idx {
+                                idx += 1
+                            } else {
+                                idx = newIdx
+                            }
+                        } else {
+                            break
+                        }
+                        continue
+                    }
+                }
 
                 executedCount += 1
 
@@ -6355,21 +6508,29 @@ func reloadPatients() {
             _ = sqlite3_exec(db, "PRAGMA user_version=2;", nil, nil, nil)
         }
 
-        // Episodes: add soft-delete columns (ignore duplicate-column errors).
-        let alterEpisodes: [String] = [
-            "ALTER TABLE episodes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE episodes ADD COLUMN deleted_at TEXT",
-            "ALTER TABLE episodes ADD COLUMN deleted_reason TEXT"
-        ]
-        for stmt in alterEpisodes { _ = sqlite3_exec(db, stmt, nil, nil, nil) }
+        // Episodes: add soft-delete columns (avoid executing duplicate ALTERs to prevent noisy system logs).
+        let epCols = Set(columnSet(of: "episodes", db: db).map { $0.lowercased() })
+        if !epCols.contains("is_deleted") {
+            _ = sqlite3_exec(db, "ALTER TABLE episodes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0", nil, nil, nil)
+        }
+        if !epCols.contains("deleted_at") {
+            _ = sqlite3_exec(db, "ALTER TABLE episodes ADD COLUMN deleted_at TEXT", nil, nil, nil)
+        }
+        if !epCols.contains("deleted_reason") {
+            _ = sqlite3_exec(db, "ALTER TABLE episodes ADD COLUMN deleted_reason TEXT", nil, nil, nil)
+        }
 
-        // Well visits: add soft-delete columns (ignore duplicate-column errors).
-        let alterWell: [String] = [
-            "ALTER TABLE well_visits ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE well_visits ADD COLUMN deleted_at TEXT",
-            "ALTER TABLE well_visits ADD COLUMN deleted_reason TEXT"
-        ]
-        for stmt in alterWell { _ = sqlite3_exec(db, stmt, nil, nil, nil) }
+        // Well visits: add soft-delete columns (avoid executing duplicate ALTERs to prevent noisy system logs).
+        let wvCols = Set(columnSet(of: "well_visits", db: db).map { $0.lowercased() })
+        if !wvCols.contains("is_deleted") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visits ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0", nil, nil, nil)
+        }
+        if !wvCols.contains("deleted_at") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visits ADD COLUMN deleted_at TEXT", nil, nil, nil)
+        }
+        if !wvCols.contains("deleted_reason") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visits ADD COLUMN deleted_reason TEXT", nil, nil, nil)
+        }
 
         // Helpful indexes for filtering.
         _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_episodes_patient_not_deleted ON episodes(patient_id, is_deleted);", nil, nil, nil)
@@ -6422,19 +6583,32 @@ func reloadPatients() {
             nil, nil, nil
         )
 
-        // Best-effort add missing columns for older DBs (ignore 'duplicate column' errors).
-        let alterStatements: [String] = [
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN is_flagged INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN basis TEXT",
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN tokens_json TEXT NOT NULL DEFAULT '[]'",
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN z_summary TEXT",
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN nutrition_line TEXT",
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN trend_summary TEXT",
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP",
-            "ALTER TABLE well_visit_growth_eval ADD COLUMN updated_at TEXT"
-        ]
-        for stmt in alterStatements {
-            _ = sqlite3_exec(db, stmt, nil, nil, nil)
+        // Best-effort add missing columns for older DBs without triggering duplicate-column errors.
+        let cols = Set(columnSet(of: "well_visit_growth_eval", db: db).map { $0.lowercased() })
+
+        if !cols.contains("is_flagged") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN is_flagged INTEGER NOT NULL DEFAULT 0", nil, nil, nil)
+        }
+        if !cols.contains("basis") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN basis TEXT", nil, nil, nil)
+        }
+        if !cols.contains("tokens_json") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN tokens_json TEXT NOT NULL DEFAULT '[]'", nil, nil, nil)
+        }
+        if !cols.contains("z_summary") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN z_summary TEXT", nil, nil, nil)
+        }
+        if !cols.contains("nutrition_line") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN nutrition_line TEXT", nil, nil, nil)
+        }
+        if !cols.contains("trend_summary") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN trend_summary TEXT", nil, nil, nil)
+        }
+        if !cols.contains("created_at") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", nil, nil, nil)
+        }
+        if !cols.contains("updated_at") {
+            _ = sqlite3_exec(db, "ALTER TABLE well_visit_growth_eval ADD COLUMN updated_at TEXT", nil, nil, nil)
         }
     }
         // MARK: - Minimal schema & seed helpers (no dependency on external initializers)
