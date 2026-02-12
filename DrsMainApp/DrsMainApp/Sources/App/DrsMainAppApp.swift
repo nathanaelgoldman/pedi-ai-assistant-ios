@@ -13,8 +13,36 @@ import AppKit
 import UniformTypeIdentifiers
 #endif
 
+#if os(macOS)
+// Disable macOS window tabbing (prevents ghost tabs/windows and hides the tab bar UI).
+private final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Global preference: do not allow tabbing.
+        NSWindow.allowsAutomaticWindowTabbing = false
+
+        // Apply to any windows that already exist.
+        for w in NSApp.windows {
+            w.tabbingMode = .disallowed
+        }
+
+        // Ensure any future windows also have tabbing disabled.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            (note.object as? NSWindow)?.tabbingMode = .disallowed
+        }
+    }
+}
+#endif
+
 @main
 struct DrsMainAppApp: App {
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
+
     @StateObject private var clinicianStore: ClinicianStore
     @StateObject private var appState: AppState
     @State private var showSignIn: Bool = false
@@ -55,11 +83,22 @@ struct DrsMainAppApp: App {
         }
     }
 
+    #if os(macOS)
+    init() {
+        let store = ClinicianStore()
+        _clinicianStore = StateObject(wrappedValue: store)
+        _appState = StateObject(wrappedValue: AppState(clinicianStore: store))
+
+        // Disable window tabbing as early as possible (before windows are created).
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+    #else
     init() {
         let store = ClinicianStore()
         _clinicianStore = StateObject(wrappedValue: store)
         _appState = StateObject(wrappedValue: AppState(clinicianStore: store))
     }
+    #endif
 
     var body: some Scene {
         WindowGroup("") {
@@ -432,6 +471,11 @@ struct DrsMainAppApp: App {
                         }
                     }
                 }
+        }
+        .commands {
+            // Disable extra windows/tabs for now to avoid “ghost” scenes.
+            // This removes File ▸ New Window / New Tab (and New Document if present).
+            CommandGroup(replacing: .newItem) { }
         }
     }
     #if os(macOS)

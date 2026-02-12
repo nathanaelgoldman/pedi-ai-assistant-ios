@@ -2845,3 +2845,6 @@
 "support_log.export.success.share" = "分享…";
 
 "app.toolbar.trigger_test_error" = "触发测试错误（临时）";
+
+"well_visit_form.ai.disclaimer" = "AI 输出仅供参考，其可靠性取决于提示词与输入数据质量。请结合临床判断使用。";
+"sick_episode_form.ai.disclaimer" = "AI 输出仅供参考，其可靠性取决于提示词与输入数据质量。请结合临床判断使用。";

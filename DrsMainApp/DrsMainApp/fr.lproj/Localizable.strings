@@ -2940,3 +2940,5 @@
 "support_log.export.success.share" = "Partager…";
 
 "app.toolbar.trigger_test_error" = "Déclencher une erreur de test (TEMP)";
+"well_visit_form.ai.disclaimer" = "La sortie IA est fournie à titre indicatif et dépend de la qualité du prompt et des données. Utilisez votre jugement clinique.";
+"sick_episode_form.ai.disclaimer" = "La sortie IA est fournie à titre indicatif et dépend de la qualité du prompt et des données. Utilisez votre jugement clinique.";

@@ -1536,6 +1536,11 @@ private var problemListingHeaderLine: String {
                     }
                 }
 
+                Text(L10nWVF.k("well_visit_form.ai.disclaimer"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+
                 let entries = currentAIEntriesForVisit
 
                 if entries.isEmpty {

@@ -498,6 +498,18 @@ struct SickEpisodeForm: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(NSLocalizedString(
+                    "sick_episode_form.ai.disclaimer",
+                    comment: "Disclaimer shown near AI assistance output to remind clinicians that AI output is informational and depends on prompt/data quality"
+                ))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 2)
+
             HStack {
                 Button {
                     triggerGuidelineFlags()

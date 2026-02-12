@@ -2955,3 +2955,6 @@
 "support_log.export.success.share" = "Share…";
 
 "app.toolbar.trigger_test_error" = "Trigger Test Error (TEMP)";
+
+"well_visit_form.ai.disclaimer" = "AI output is informational only and depends on the quality of the prompt and data. Use clinical judgment.";
+"sick_episode_form.ai.disclaimer" = "AI output is informational only and depends on the quality of the prompt and data. Use clinical judgment.";

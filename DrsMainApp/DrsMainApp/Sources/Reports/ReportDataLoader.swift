@@ -3550,7 +3550,7 @@ final class ReportDataLoader {
             var wfa: [ReportGrowth.Point] = []
             var lhfa: [ReportGrowth.Point] = []
             var hcfa: [ReportGrowth.Point] = []
-            var bmi: [ReportGrowth.Point] = []
+            let bmi: [ReportGrowth.Point] = []
 
             // -------- PERINATAL: birth / discharge --------
             if columns(in: "perinatal_history").isEmpty == false {
