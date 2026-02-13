@@ -2958,3 +2958,33 @@
 
 "well_visit_form.ai.disclaimer" = "AI output is informational only and depends on the quality of the prompt and data. Use clinical judgment.";
 "sick_episode_form.ai.disclaimer" = "AI output is informational only and depends on the quality of the prompt and data. Use clinical judgment.";
+"help.window.title" = "CareFlow Kids — Help";
+"help.menu.open" = "Help";
+
+"help.header.title" = "How to use the app";
+"help.header.subtitle" = "A quick guide to the main workflow.";
+
+"help.section.quick_start.title" = "Quick start";
+"help.section.quick_start.body" = "1) Sign in as a clinician.\n2) Open or create a patient bundle.\n3) Add a sick visit or a well visit.\n4) Export the bundle to share or archive. \n5) After export, the bundle is expected to be shared and imported by the sister app CareView Kids, so that parents can read, share and print reports, see the growth charts, leave notes and insert documents. Once a bundle is created, parents can re-export it from CareView Kids and, later, CareFlow Kids can re-import the bundle to update the information it contains during an encounter with the doctor";
+"help.section.patients.title" = "Patients & bundles";
+"help.section.patients.body" = "A patient's information lives inside a bundle folder. Opening a bundle with CareFlow Kids or CarView Kids loads patients, visits, and documents. Export creates a portable .pemr file that can be used by the sister app CareView Kids.";
+"help.section.visits.title" = "Visits";
+"help.section.visits.body" = "Use Sick Episode for acute problems and Well Visit for scheduled growth and development evaluation. Save often your work; you can return later to edit and generate reports. Bundles can be deleted from the app by removing them from the sidebar after having shared it with the patient who can keep a copy of it in CareView Kids and make extra back-up copies of the file on disk if necessary.";
+
+"help.section.ai.title" = "AI assistant";
+"help.section.ai.body" = "AI output is supportive only. Treat it as complementary information and verify clinically. Quality depends on the prompt and the completeness of clinical inputs.";
+
+"help.section.export.title" = "Export / Share";
+"help.section.export.body" = "Export packages the current bundle as a .pemr file. After saving, you can reveal it in Finder or share it using the macOS share sheet.";
+
+"help.section.privacy.title" = "Privacy & data";
+"help.section.privacy.body" = "Keep bundles private. Exported files may contain sensitive health data; share only with appropriate recipients and secure channels.";
+
+"help.footer.support" = "Tip: If something looks wrong, export a Support Log and include the time of the issue.";
+
+"help.footer.contact.title" = "Support";
+"help.footer.contact.whatsapp.label" = "WhatsApp";
+"help.footer.contact.whatsapp.value" = "+32 475 41 63 94";
+"help.footer.contact.wechat.label" = "WeChat";
+"help.footer.contact.wechat.value" = "yunastic";
+"help.footer.contact.note" = "When reporting an issue, please include a Support Log export.";

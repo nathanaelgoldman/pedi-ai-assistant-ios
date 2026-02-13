@@ -50,6 +50,9 @@ struct DrsMainAppApp: App {
     // Unified alert presenter (avoid stacking multiple .alert modifiers)
     @State private var activeAlert: ActiveAlert? = nil
     @State private var pendingShareURL: URL? = nil
+    #if os(macOS)
+    @State private var helpWindowController: NSWindowController? = nil
+    #endif
 
     private enum ActiveAlert: Identifiable {
         case supportLog(title: String, message: String, fileURL: URL?)
@@ -476,6 +479,14 @@ struct DrsMainAppApp: App {
             // Disable extra windows/tabs for now to avoid “ghost” scenes.
             // This removes File ▸ New Window / New Tab (and New Document if present).
             CommandGroup(replacing: .newItem) { }
+            #if os(macOS)
+            CommandGroup(replacing: .help) {
+                Button(NSLocalizedString("help.menu.open", comment: "Help menu item title")) {
+                    openHelpWindow()
+                }
+                .keyboardShortcut("?", modifiers: [.command, .shift])
+            }
+            #endif
         }
     }
     #if os(macOS)
@@ -506,6 +517,107 @@ struct DrsMainAppApp: App {
         }
     }
     #endif
+
+    #if os(macOS)
+    private func openHelpWindow() {
+        // Reuse an existing controller if the window is still around.
+        if let wc = helpWindowController, let w = wc.window {
+            NSApp.activate(ignoringOtherApps: true)
+            w.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let root = HelpView()
+        let host = NSHostingController(rootView: root)
+
+        let window = NSWindow(contentViewController: host)
+        window.title = NSLocalizedString("help.window.title", comment: "Help window title")
+        window.setContentSize(NSSize(width: 720, height: 760))
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.center()
+
+        let wc = NSWindowController(window: window)
+        helpWindowController = wc
+
+        // When the user closes the window, drop our reference so it can be recreated cleanly.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { _ in
+            helpWindowController = nil
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        wc.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+    }
+    #endif
+
+private struct HelpView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(NSLocalizedString("help.header.title", comment: "Help header"))
+                    .font(.title2).bold()
+
+                Text(NSLocalizedString("help.header.subtitle", comment: "Help subtitle"))
+                    .foregroundStyle(.secondary)
+
+                Divider().padding(.vertical, 6)
+
+                helpSection(titleKey: "help.section.quick_start.title", bodyKey: "help.section.quick_start.body")
+                helpSection(titleKey: "help.section.patients.title", bodyKey: "help.section.patients.body")
+                helpSection(titleKey: "help.section.visits.title", bodyKey: "help.section.visits.body")
+                helpSection(titleKey: "help.section.ai.title", bodyKey: "help.section.ai.body")
+                helpSection(titleKey: "help.section.export.title", bodyKey: "help.section.export.body")
+                helpSection(titleKey: "help.section.privacy.title", bodyKey: "help.section.privacy.body")
+
+                Divider().padding(.vertical, 6)
+
+                // Support / contact
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("help.footer.contact.title", comment: "Support contact section title"))
+                        .font(.headline)
+
+                    // Keep values as separate keys so they can be updated without touching code.
+                    (Text("help.footer.contact.whatsapp.label") + Text(": ") + Text("help.footer.contact.whatsapp.value"))
+                        .font(.body)
+                        .textSelection(.enabled)
+
+                    (Text("help.footer.contact.wechat.label") + Text(": ") + Text("help.footer.contact.wechat.value"))
+                        .font(.body)
+                        .textSelection(.enabled)
+
+                    Text(NSLocalizedString("help.footer.contact.note", comment: "Support contact note"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                .padding(.bottom, 4)
+
+                Text(NSLocalizedString("help.footer.support", comment: "Help footer tip"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func helpSection(titleKey: String, bodyKey: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(NSLocalizedString(titleKey, comment: ""))
+                .font(.headline)
+            Text(NSLocalizedString(bodyKey, comment: ""))
+                .font(.body)
+                .textSelection(.enabled)
+        }
+        .padding(.bottom, 6)
+    }
+}
 
     // MARK: - Support log export (macOS)
 

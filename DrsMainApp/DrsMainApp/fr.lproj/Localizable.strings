@@ -2940,5 +2940,39 @@
 "support_log.export.success.share" = "Partager…";
 
 "app.toolbar.trigger_test_error" = "Déclencher une erreur de test (TEMP)";
-"well_visit_form.ai.disclaimer" = "La sortie IA est fournie à titre indicatif et dépend de la qualité du prompt et des données. Utilisez votre jugement clinique.";
-"sick_episode_form.ai.disclaimer" = "La sortie IA est fournie à titre indicatif et dépend de la qualité du prompt et des données. Utilisez votre jugement clinique.";
+"well_visit_form.ai.disclaimer" = "Le contenu généré par l’IA est fourni à titre informatif uniquement et dépend de la qualité du prompt et des données saisies. Utilisez votre jugement clinique.";
+"sick_episode_form.ai.disclaimer" = "Le contenu généré par l’IA est fourni à titre informatif uniquement et dépend de la qualité du prompt et des données saisies. Utilisez votre jugement clinique.";
+
+"help.window.title" = "CareFlow Kids — Aide";
+"help.menu.open" = "Aide";
+
+"help.header.title" = "Comment utiliser l’application";
+"help.header.subtitle" = "Guide rapide du flux de travail principal.";
+
+"help.section.quick_start.title" = "Démarrage rapide";
+"help.section.quick_start.body" = "1) Connectez-vous en tant que clinicien.\n2) Ouvrez ou créez un dossier patient (bundle).\n3) Ajoutez une consultation aiguë (Sick Episode) ou une visite de suivi (Well Visit).\n4) Exportez le bundle pour le partager ou l’archiver.\n5) Après exportation, le bundle est destiné à être partagé et importé dans l’application partenaire CareView Kids, afin que les parents puissent lire, partager et imprimer les rapports, consulter les courbes de croissance, ajouter des notes et insérer des documents. Une fois créé, le parent peut réexporter le dossier depuis CareView Kids, et CareFlow Kids peut le réimporter afin de mettre à jour les informations lors d’une consultation.";
+
+"help.section.patients.title" = "Patients et dossiers";
+"help.section.patients.body" = "Les informations d'un patient sont contenues dans chaque dossier .pemr. L’ouverture d’un dossier charge les informations du patient dans CareFlow Kids, les visites et les documents associés. L’exportation crée un fichier portable .pemr destiné à être utilisé avec l’application partenaire CareView Kids.";
+
+"help.section.visits.title" = "Consultations";
+"help.section.visits.body" = "Utilisez « Épisode de maladie » pour les problèmes aigus et « Visite de suivi » pour les évaluations programmées de croissance et de développement. Enregistrez rëgulièrement votre travail ; vous pouvez revenir ultérieurement pour modifier et générer des rapports. Les dossiers peuvent être supprimés de l’application via la barre latérale après les avoir partagés avec les parents, qui peuvent en conserver une copie dans CareView Kids et créer des sauvegardes supplémentaires du fichier si nécessaire.";
+
+"help.section.ai.title" = "Assistant IA";
+"help.section.ai.body" = "Le contenu généré par l’IA est uniquement un support. Considérez-le comme une information complémentaire et vérifiez-le cliniquement. La qualité dépend du prompt donné á l'IA et de l’exhaustivité des données cliniques saisies.";
+
+"help.section.export.title" = "Export / Partage";
+"help.section.export.body" = "L’exportation regroupe le dossier actuel sous forme d'un fichier .pemr. Après enregistrement, vous pouvez l’afficher dans le Finder ou le partager via la feuille de partage macOS afin qu'il puisse être reimporté dans CareFlow Kids ou dans CareView Kids.";
+
+"help.section.privacy.title" = "Confidentialité et données";
+"help.section.privacy.body" = "Conservez les dossiers de manière privée. Les fichiers exportés peuvent contenir des données de santé sensibles ; partagez-les uniquement avec des destinataires appropriés et via des canaux sécurisés.";
+
+"help.footer.support" = "Astuce : si quelque chose ne va pas, exportez un Support Log et notez l’heure du problème.";
+
+"help.footer.contact.title" = "Support";
+"help.footer.contact.whatsapp.label" = "WhatsApp";
+"help.footer.contact.whatsapp.value" = "+32 475 41 63 94";
+"help.footer.contact.wechat.label" = "WeChat";
+"help.footer.contact.wechat.value" = "yunastic";
+"help.footer.contact.note" = "En cas de problème, veuillez joindre l’export du journal de support.";
+

@@ -61,6 +61,8 @@
 		E91960B62F2C25BF00D65B06 /* WHOGrowthHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */; };
 		E9218D062F3C293600204D98 /* SupportLogExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9218D052F3C292300204D98 /* SupportLogExporter.swift */; };
 		E93EDEC82F2201E0002A0381 /* WHOGrowthEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */; };
+		E957D44C2F3E063200384998 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA252EC1EF9600EB3280 /* PediaShared */; };
+		E957D44D2F3E063200384998 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA282EC1EFE700EB3280 /* PediaShared */; };
 		E98BC2692F1B5EB9002A5207 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98BC2682F1B5EAC002A5207 /* AppLog.swift */; };
 /* End PBXBuildFile section */
 
@@ -160,6 +162,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E957D44D2F3E063200384998 /* PediaShared in Frameworks */,
+				E957D44C2F3E063200384998 /* PediaShared in Frameworks */,
 				BB9E72BD2EAD1A1C00601148 /* PediaShared in Frameworks */,
 				BB26FA232EC1ED8E00EB3280 /* ZIPFoundation in Frameworks */,
 			);
@@ -641,6 +645,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "CareFlow Kids";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
+				INFOPLIST_KEY_LSBackgroundOnly = NO;
+				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSHumanReadableCopyright = 1.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -686,6 +692,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "CareFlow Kids";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
+				INFOPLIST_KEY_LSBackgroundOnly = NO;
+				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSHumanReadableCopyright = 1.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

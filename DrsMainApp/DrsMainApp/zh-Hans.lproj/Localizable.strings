@@ -2846,5 +2846,38 @@
 
 "app.toolbar.trigger_test_error" = "触发测试错误（临时）";
 
-"well_visit_form.ai.disclaimer" = "AI 输出仅供参考，其可靠性取决于提示词与输入数据质量。请结合临床判断使用。";
-"sick_episode_form.ai.disclaimer" = "AI 输出仅供参考，其可靠性取决于提示词与输入数据质量。请结合临床判断使用。";
+"well_visit_form.ai.disclaimer" = "AI 生成内容仅供参考，其质量取决于提示语和输入数据的完整性。请结合临床判断使用。";
+"sick_episode_form.ai.disclaimer" = "AI 生成内容仅供参考，其质量取决于提示语和输入数据的完整性。请结合临床判断使用。";
+
+"help.window.title" = "CareFlow Kids — 帮助";
+"help.menu.open" = "帮助";
+
+"help.header.title" = "如何使用本应用";
+"help.header.subtitle" = "主要工作流程的快速指南。";
+
+"help.section.quick_start.title" = "快速开始";
+"help.section.quick_start.body" = "1) 以医生身份登录。\n2) 打开或创建一个患者 bundle。\n3) 添加一次急诊就诊（Sick Episode）或健康随访（Well Visit）。\n4) 导出 bundle 以便分享或归档。\n5) 导出后，该 bundle 可通过配套应用 CareView Kids 导入，家长可在其中阅读、分享和打印报告，查看生长曲线，添加备注并上传文件。创建后，家长也可以从 CareView Kids 再次导出 bundle，而 CareFlow Kids 可重新导入，以便在后续就诊时更新其中的信息。";
+
+"help.section.patients.title" = "患者与 Bundle";
+"help.section.patients.body" = "每位患者都存储在一个 bundle 文件夹中。打开 bundle 后会加载患者信息、就诊记录和相关文件。导出功能会生成一个可移植的 .pemr 文件，供配套应用 CareView Kids 使用。";
+
+"help.section.visits.title" = "就诊记录";
+"help.section.visits.body" = "急性问题请选择“急诊就诊（Sick Episode）”，定期生长与发育评估请选择“健康随访（Well Visit）”。请经常保存；您可以稍后返回修改并生成报告。将 bundle 分享给家长后，可从侧边栏中删除该 bundle。家长可在 CareView Kids 中保留副本，并根据需要在本地创建额外备份。";
+
+"help.section.ai.title" = "AI 助手";
+"help.section.ai.body" = "AI 生成内容仅作为辅助参考。请将其视为补充信息，并进行临床核实。输出质量取决于提示语及临床数据的完整性。";
+
+"help.section.export.title" = "导出 / 分享";
+"help.section.export.body" = "导出功能会将当前 bundle 打包为 .pemr 文件。保存后，您可以在 Finder 中显示该文件，或通过 macOS 分享功能进行分享。";
+
+"help.section.privacy.title" = "隐私与数据";
+"help.section.privacy.body" = "请妥善保管 bundle 文件。导出的文件可能包含敏感的健康信息；仅通过安全渠道与合适的接收方共享。";
+
+"help.footer.support" = "提示：如出现异常，可导出 Support Log，并记录问题发生时间。";
+
+"help.footer.contact.title" = "技术支持";
+"help.footer.contact.whatsapp.label" = "WhatsApp";
+"help.footer.contact.whatsapp.value" = "+32 475 41 63 94";
+"help.footer.contact.wechat.label" = "微信";
+"help.footer.contact.wechat.value" = "yunastic";
+"help.footer.contact.note" = "反馈问题时，请附上“支持日志”的导出文件。";

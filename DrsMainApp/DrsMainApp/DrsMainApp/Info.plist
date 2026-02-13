@@ -9,6 +9,8 @@
 			<string>Pedia Medical Record Bundle</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>com.yunastic.pedia.pemr</string>
@@ -16,6 +18,12 @@
 		</dict>
 	</array>
 	<key>CFBundleGetInfoString</key>
+	<string></string>
+	<key>CFBundleIconFile</key>
+	<string></string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleSignature</key>
 	<string></string>
 	<key>CFBundleURLTypes</key>
 	<array>
@@ -31,6 +39,11 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Pedia portable medical record bundle</string>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconBadgeName</key>
+				<string></string>
+			</dict>
 			<key>UTTypeIdentifier</key>
 			<string>com.yunastic.pedia.pemr</string>
 			<key>UTTypeTagSpecification</key>
