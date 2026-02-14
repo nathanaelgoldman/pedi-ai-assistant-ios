@@ -523,6 +523,13 @@ public struct WellVisitStore {
         if rc != SQLITE_OK {
             throw sqliteError(db, key: "wellVisitStore.error.open", url.path)
         }
+
+        // Avoid transient "database is locked" errors during brief concurrent access.
+        // This makes SQLite wait a short time for locks to clear instead of failing immediately.
+        if let db {
+            sqlite3_busy_timeout(db, 800) // milliseconds
+        }
+
         return db
     }
 

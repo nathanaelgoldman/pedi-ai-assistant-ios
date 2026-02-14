@@ -2496,6 +2496,10 @@ struct SickEpisodeForm: View {
                 loadVitalsHistory()
             }
 
+            // After a successful save we can (re)run guideline flags using the now-stable episode id.
+            // This avoids the “no flags until reload” UX and makes the flags reactive to edits.
+            triggerGuidelineFlags()
+
             // Refresh visits/profile but keep the form open
             appState.loadVisits(for: pid)
             appState.loadPatientProfile(for: Int64(pid))

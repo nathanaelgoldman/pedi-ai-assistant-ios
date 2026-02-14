@@ -2977,3 +2977,6 @@
 "help.footer.contact.note" = "En cas de problème, veuillez joindre l’export du journal de support.";
 
 "well_visit_form.weight_trend.no_weight_data" = "Aucune donnée de poids antérieure disponible pour évaluer l’évolution.";
+"well_visit_form.ai.json_debug.title" = "JSON IA";
+"well_visit_form.ai.json_debug.placeholder" = "<toucher pour charger>";
+"well_visit_form.ai.json_debug.load" = "Charger le JSON";

@@ -1540,9 +1540,11 @@ private var problemListingHeaderLine: String {
                 }
 
                 // 🔎 Debug: preview the exact JSON payload we send to the AI provider
-                DisclosureGroup("AI JSON (debug)", isExpanded: $showAIJSONDebug) {
+                DisclosureGroup(NSLocalizedString("well_visit_form.ai.json_debug.title", comment: ""), isExpanded: $showAIJSONDebug) {
                     ScrollView {
-                        Text(aiJSONDebugText.isEmpty ? "<tap to load>" : aiJSONDebugText)
+                        Text(aiJSONDebugText.isEmpty
+                             ? NSLocalizedString("well_visit_form.ai.json_debug.placeholder", comment: "")
+                             : aiJSONDebugText)
                             .font(.system(.footnote, design: .monospaced))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1551,12 +1553,17 @@ private var problemListingHeaderLine: String {
                     .frame(maxHeight: 260)
 
                     HStack {
-                        Button("Load JSON") {
+                        Button(NSLocalizedString("well_visit_form.ai.json_debug.load", comment: "")) {
                             refreshAIJSONDebug()
                         }
                         Spacer()
                     }
                     .padding(.top, 6)
+                }
+                .onChange(of: showAIJSONDebug) { expanded in
+                    if expanded {
+                        refreshAIJSONDebug()
+                    }
                 }
                 .onChange(of: showAIJSONDebug) { expanded in
                     if expanded {
@@ -5235,12 +5242,7 @@ private var problemListingHeaderLine: String {
             }
         }
 
-        // 🔎 Debug: prove exactly what growth context is being sent to AI
-        let problemsPreview = String(problemsForAI.prefix(300))
-        let earlyFlag = (ageDays ?? 99999) <= 60
-        AppLog.db.debug(
-            "WellVisitAIContext: ageDays=\(String(describing: ageDays)) early=\(earlyFlag) problemsPreview=\(problemsPreview)"
-        )
+        
 
         let perinatalSummary = cleaned(appState.perinatalSummaryForSelectedPatient())
         let pmhSummary       = cleaned(appState.pmhSummaryForSelectedPatient())

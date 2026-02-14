@@ -3225,6 +3225,31 @@ func reloadPatients() {
                 if let ruleSet = try? decoder.decode(GuidelineRuleSet.self, from: data) {
                     var flags: [String] = []
 
+                    // 🔎 Debug: log the derived numeric context used for matching
+                    let effectiveAgeDays: Int? = {
+                        if let d = context.patientAgeDays { return d }
+                        return parseAgeDays(fromProblemListing: context.problemListing)
+                    }()
+
+                    let effectiveMaxTempC: Double? = {
+                        if let t = context.maxTempC { return t }
+                        return parseMaxTempC(fromProblemListing: context.problemListing)
+                    }()
+
+                    let hasFeverFromTemp: Bool = {
+                        if let t = effectiveMaxTempC { return t >= 38.0 }
+                        return false
+                    }()
+
+                    let hasFeverFromText: Bool = {
+                        let lower = context.problemListing.lowercased()
+                        return lower.contains("fever") || lower.contains("febrile")
+                    }()
+
+                    let hasFever = hasFeverFromTemp || hasFeverFromText
+
+                    log.debug("GuidelineEval: episodeID=\(context.episodeID) ageDays=\(String(describing: effectiveAgeDays)) maxTempC=\(String(describing: effectiveMaxTempC)) hasFever=\(hasFever)")
+
                     // Optional top-level flags
                     if let baseFlags = ruleSet.flags {
                         flags.append(contentsOf: baseFlags
@@ -3236,6 +3261,7 @@ func reloadPatients() {
                     if let rules = ruleSet.rules {
                         for rule in rules {
                             if ruleConditionsMatch(rule.conditions, context: context) {
+                                log.debug("GuidelineEval: MATCH rule=\(rule.id ?? "<no-id>")")
                                 let primary = rule.flag?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
                                 let fallback = rule.description?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
                                 let text = primary.isEmpty ? fallback : primary

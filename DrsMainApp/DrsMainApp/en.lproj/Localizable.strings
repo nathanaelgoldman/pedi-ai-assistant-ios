@@ -2989,3 +2989,7 @@
 "help.footer.contact.wechat.value" = "yunastic";
 "help.footer.contact.note" = "When reporting an issue, please include a Support Log export.";
 "well_visit_form.weight_trend.no_weight_data" = "No previous weight data available to assess trend.";
+
+"well_visit_form.ai.json_debug.title" = "AI JSON (debug)";
+"well_visit_form.ai.json_debug.placeholder" = "<tap to load>";
+"well_visit_form.ai.json_debug.load" = "Load JSON";
