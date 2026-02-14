@@ -14,6 +14,7 @@
 
 
 import SwiftUI
+import AppKit
 import OSLog
 import SQLite3
 
@@ -640,8 +641,30 @@ struct SickEpisodeForm: View {
                                      : provider)
                                     .font(.caption.bold())
                                     .foregroundStyle(.secondary)
-                                Text(text)
-                                    .font(.caption)
+                                ScrollView {
+                                    Text(text)
+                                        .font(.caption)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(8)
+                                }
+                                .frame(minHeight: 120, maxHeight: 220)
+                                .background(Color.secondary.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .strokeBorder(Color.secondary.opacity(0.3))
+                                )
+                                .contextMenu {
+                                    Button("Copy") {
+                                        #if canImport(AppKit)
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(text, forType: .string)
+                                        #elseif canImport(UIKit)
+                                        UIPasteboard.general.string = text
+                                        #endif
+                                    }
+                                }
                             }
                             .padding(6)
                             .background(Color.blue.opacity(0.04))

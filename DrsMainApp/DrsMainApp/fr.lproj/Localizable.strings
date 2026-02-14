@@ -2976,3 +2976,4 @@
 "help.footer.contact.wechat.value" = "yunastic";
 "help.footer.contact.note" = "En cas de problème, veuillez joindre l’export du journal de support.";
 
+"well_visit_form.weight_trend.no_weight_data" = "Aucune donnée de poids antérieure disponible pour évaluer l’évolution.";

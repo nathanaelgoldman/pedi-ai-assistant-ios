@@ -567,6 +567,9 @@ struct WellVisitForm: View {
     // Tokens persisted for PatientViewerApp (localization-proof)
     @State private var growthWHOProblemTokens: [ProblemToken] = []
     @State private var growthWHOMeasurementTokens: [ProblemToken] = []
+    
+    @State private var showAIJSONDebug: Bool = false
+    @State private var aiJSONDebugText: String = ""
 
     /// We only show the weight-delta helper box for the first 3 well visits
     /// (1, 2 and 4-month visits).
@@ -1536,6 +1539,31 @@ private var problemListingHeaderLine: String {
                     }
                 }
 
+                // 🔎 Debug: preview the exact JSON payload we send to the AI provider
+                DisclosureGroup("AI JSON (debug)", isExpanded: $showAIJSONDebug) {
+                    ScrollView {
+                        Text(aiJSONDebugText.isEmpty ? "<tap to load>" : aiJSONDebugText)
+                            .font(.system(.footnote, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 4)
+                    }
+                    .frame(maxHeight: 260)
+
+                    HStack {
+                        Button("Load JSON") {
+                            refreshAIJSONDebug()
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 6)
+                }
+                .onChange(of: showAIJSONDebug) { expanded in
+                    if expanded {
+                        refreshAIJSONDebug()
+                    }
+                }
+
                 Text(L10nWVF.k("well_visit_form.ai.disclaimer"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -1554,13 +1582,26 @@ private var problemListingHeaderLine: String {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
-                            TextEditor(text: .constant(entry.value))
-                                .frame(minHeight: 140)
-                                .disabled(true)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .strokeBorder(Color.secondary.opacity(0.3))
-                                )
+                            ScrollView {
+                                Text(entry.value)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(8)
+                            }
+                            .frame(minHeight: 140, maxHeight: 220)
+                            .background(Color.secondary.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.secondary.opacity(0.3))
+                            )
+                            .contextMenu {
+                                Button("Copy") {
+                                    #if canImport(UIKit)
+                                    UIPasteboard.general.string = entry.value
+                                    #endif
+                                }
+                            }
                         }
                         .padding(.top, 4)
                     }
@@ -4641,7 +4682,85 @@ private var problemListingHeaderLine: String {
     
     // MARK: - AI helpers (well visits)
 
+
     // MARK: - Manual growth helpers (for AI context)
+
+    /// Appends the *selected* manual growth snapshot (±window days rule) to the AI problems.
+    /// This ensures AI sees the same growth values the visit uses for interpretation.
+    private func appendManualGrowthSnapshotLineForAI(
+        baseProblems: String,
+        dbURL: URL,
+        patientID: Int
+    ) -> String {
+        guard let snap = fetchManualGrowthSnapshot(dbURL: dbURL, patientID: patientID) else {
+            return baseProblems
+        }
+
+        let line = manualGrowthLineForAI(snap)
+        return baseProblems.isEmpty ? line : (baseProblems + "\n" + line)
+    }
+
+    /// Fetch a manual growth entry ONLY if it is within ±window days of `visitDate`.
+    /// No fallback is applied. This is useful for early visits where AI must not see distant data.
+    private func fetchManualGrowthSnapshotNearVisitOnly(dbURL: URL, patientID: Int) -> ManualGrowthSnapshot? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        let visitISO = Self.isoDateOnly.string(from: visitDate)
+        let windowDays: Int32 = Int32(Self.manualGrowthNearVisitWindowDays)
+
+        func colDoubleOrNil(_ stmt: OpaquePointer?, _ idx: Int32) -> Double? {
+            guard let stmt else { return nil }
+            if sqlite3_column_type(stmt, idx) == SQLITE_NULL { return nil }
+            return sqlite3_column_double(stmt, idx)
+        }
+
+        let closestSQL = """
+        SELECT recorded_at, weight_kg, height_cm, head_circumference_cm
+        FROM manual_growth
+        WHERE patient_id = ?
+          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
+          AND abs(julianday(date(recorded_at)) - julianday(date(?))) <= ?
+        ORDER BY abs(julianday(date(recorded_at)) - julianday(date(?))) ASC,
+                 datetime(recorded_at) DESC
+        LIMIT 1;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, closestSQL, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            return nil
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+        _ = visitISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+        sqlite3_bind_int(stmt, 3, windowDays)
+        _ = visitISO.withCString { sqlite3_bind_text(stmt, 4, $0, -1, SQLITE_TRANSIENT) }
+
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+
+        let recordedAt: String = {
+            guard let cStr = sqlite3_column_text(stmt, 0) else { return "" }
+            return String(cString: cStr)
+        }()
+        if recordedAt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+
+        let w  = colDoubleOrNil(stmt, 1)
+        let h  = colDoubleOrNil(stmt, 2)
+        let hc = colDoubleOrNil(stmt, 3)
+        if w == nil && h == nil && hc == nil { return nil }
+
+        return ManualGrowthSnapshot(
+            recordedAtRaw: recordedAt,
+            weightKg: w,
+            heightCm: h,
+            headCircCm: hc
+        )
+    }
 
     private struct ManualGrowthSnapshot {
         let recordedAtRaw: String
@@ -4886,6 +5005,76 @@ private var problemListingHeaderLine: String {
         return "Growth near visit (manual_growth @ \(snap.recordedAtRaw)): weight \(fmt(snap.weightKg, decimals: 2)) kg; length \(fmt(snap.heightCm, decimals: 1)) cm; HC \(fmt(snap.headCircCm, decimals: 1)) cm"
     }
 
+    /// For early visits (≤ 2 months), provide a focused weight-gain line for AI using:
+    /// - Current weight: within ±window days (no fallback)
+    /// - Previous weight: most recent manual_growth strictly before the CURRENT snapshot date
+    /// This avoids leaking distant future measurements into the prompt.
+    private func earlyWeightGainLineForAI(dbURL: URL, patientID: Int) -> String? {
+        guard let current = fetchManualGrowthSnapshotNearVisitOnly(dbURL: dbURL, patientID: patientID),
+              let wNow = current.weightKg, wNow > 0 else {
+            return nil
+        }
+
+        // Find previous weight strictly before the current snapshot date (not window start).
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        let currentDateISO = String(current.recordedAtRaw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(10))
+
+        let prevSQL = """
+        SELECT recorded_at, weight_kg
+        FROM manual_growth
+        WHERE patient_id = ?
+          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
+          AND weight_kg IS NOT NULL
+          AND date(recorded_at) < date(?)
+        ORDER BY datetime(recorded_at) DESC
+        LIMIT 1;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, prevSQL, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            return nil
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int64(stmt, 1, sqlite3_int64(patientID))
+        _ = currentDateISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+
+        guard sqlite3_step(stmt) == SQLITE_ROW else {
+            return nil
+        }
+
+        let prevRecordedAt: String = {
+            guard let cStr = sqlite3_column_text(stmt, 0) else { return "" }
+            return String(cString: cStr)
+        }().trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let wPrev = sqlite3_column_double(stmt, 1)
+        if prevRecordedAt.isEmpty || wPrev <= 0 { return nil }
+
+        // Parse dates (best effort) using YYYY-MM-DD prefix.
+        let nowDateStr = String(current.recordedAtRaw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(10))
+        let prevDateStr = String(prevRecordedAt.prefix(10))
+        guard let dNow = Self.isoDateOnly.date(from: nowDateStr),
+              let dPrev = Self.isoDateOnly.date(from: prevDateStr) else {
+            return nil
+        }
+
+        let dayDiff = Calendar.current.dateComponents([.day], from: dPrev, to: dNow).day ?? 0
+        guard dayDiff > 0 else { return nil }
+
+        let deltaGPerDay = ((wNow - wPrev) * 1000.0) / Double(dayDiff)
+        let rounded = Int(deltaGPerDay.rounded())
+
+        // Keep it intentionally plain (English) since it's AI-context only.
+        return "Early growth focus: weight gain ≈ \(rounded) g/day (from \(prevRecordedAt.prefix(10)) to \(current.recordedAtRaw.prefix(10)))."
+    }
+
     /// Fetch patient's recorded sex from the bundle DB (best effort).
     ///
     /// We keep this intentionally lightweight (single-column query), mirroring the SickEpisodeForm approach.
@@ -5015,27 +5204,53 @@ private var problemListingHeaderLine: String {
         }
 
         let trimmedProblems = problemListing.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ageDays = computeAgeDaysForVisit(patientID: patientID)
 
-        // Add contemporaneous growth values (if available) so AI can interpret the visit.
+        // Add growth context for AI.
+        // Early visits (≤ 2 months): do NOT leak distant measurements; focus on weight gain since last record.
+        // Older visits: keep the near-visit snapshot line (±3 days rule).
         var problemsForAI = trimmedProblems
         if let dbURL = appState.currentDBURL {
-            problemsForAI = appendManualGrowthBlockForAI(
-                baseProblems: problemsForAI,
-                dbURL: dbURL,
-                patientID: patientID
-            )
+            let isEarlyVisitForAI: Bool = {
+                guard let ageDays else { return false }
+                return ageDays <= 60
+            }()
+
+            if isEarlyVisitForAI {
+                if let gainLine = earlyWeightGainLineForAI(dbURL: dbURL, patientID: patientID) {
+                    problemsForAI = problemsForAI.isEmpty ? gainLine : (problemsForAI + "\n" + gainLine)
+                } else {
+                    // If we cannot compute gain, still include ONLY a strict near-visit snapshot (no fallback).
+                    if let snap = fetchManualGrowthSnapshotNearVisitOnly(dbURL: dbURL, patientID: patientID) {
+                        let line = manualGrowthLineForAI(snap)
+                        problemsForAI = problemsForAI.isEmpty ? line : (problemsForAI + "\n" + line)
+                    }
+                }
+            } else {
+                problemsForAI = appendManualGrowthSnapshotLineForAI(
+                    baseProblems: problemsForAI,
+                    dbURL: dbURL,
+                    patientID: patientID
+                )
+            }
         }
-        
+
+        // 🔎 Debug: prove exactly what growth context is being sent to AI
+        let problemsPreview = String(problemsForAI.prefix(300))
+        let earlyFlag = (ageDays ?? 99999) <= 60
+        AppLog.db.debug(
+            "WellVisitAIContext: ageDays=\(String(describing: ageDays)) early=\(earlyFlag) problemsPreview=\(problemsPreview)"
+        )
 
         let perinatalSummary = cleaned(appState.perinatalSummaryForSelectedPatient())
         let pmhSummary       = cleaned(appState.pmhSummaryForSelectedPatient())
         let vaccSummary      = cleaned(appState.vaccinationSummaryForSelectedPatient())
 
-        let ageDays = computeAgeDaysForVisit(patientID: patientID)
-
         // Nutrition category line for AI (derived from the same WHO evaluator)
         let nutritionSummaryLineForAI: String? = {
             guard showsWHOGrowthEvaluation else { return nil }
+            // Do not compute WHO nutrition categorization for early visits (≤ 2 months).
+            if let ageDays, ageDays <= 60 { return nil }
             guard let dbURL = appState.currentDBURL else { return nil }
             guard let ageDays, ageDays >= 0 else { return nil }
             let ageMonths = Double(ageDays) / 30.4375
@@ -5090,6 +5305,8 @@ private var problemListingHeaderLine: String {
         // Only meaningful when WHO growth evaluation is shown (4-month+ visits).
         let growthTrendSummaryForAI: String? = {
             guard showsWHOGrowthEvaluation else { return nil }
+            // Do not include long-term WHO trend narrative for early visits (≤ 2 months).
+            if let ageDays, ageDays <= 60 { return nil }
 
             let z = growthWHOZSummary.trimmingCharacters(in: .whitespacesAndNewlines)
             let n = (nutritionSummaryLineForAI ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5125,6 +5342,15 @@ private var problemListingHeaderLine: String {
             growthTrendIsFlagged: growthTrendIsFlaggedForAI,
             growthTrendWindow: growthTrendWindowForAI
         )
+    }
+    
+    /// Debug helper: builds the exact JSON payload used for the AI call (read-only).
+    private func refreshAIJSONDebug() {
+        guard let ctx = buildWellVisitAIContext() else {
+            aiJSONDebugText = "<no AI context>"
+            return
+        }
+        aiJSONDebugText = appState.previewWellVisitJSON(using: ctx)
     }
     
     /// Trigger the AI call via AppState using the current well-visit context.

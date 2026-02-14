@@ -3426,15 +3426,226 @@ func reloadPatients() {
                 payload["growth_trend_window"] = window
             }
 
-            // ✅ Manual growth snapshot (preferred for well-visit interpretation)
-            if let growth = fetchLatestManualGrowthSnapshot(patientID: context.patientID) {
-                var g: [String: Any] = [
-                    "recorded_at": growth.recordedAtISO
-                ]
-                if let w = growth.weightKg { g["weight_kg"] = w }
-                if let h = growth.heightCm { g["height_cm"] = h }
-                if let hc = growth.headCircumferenceCm { g["head_circumference_cm"] = hc }
-                payload["manual_growth_snapshot"] = g
+            // ✅ Early weight gain (structured, computed)
+            // For early well visits (≤ 2 months), focus on weight gain since the last available measurement.
+            // Rule:
+            //  - “current” weight: closest manual_growth within ±3 days of the well visit date
+            //  - “previous” weight: most recent manual_growth strictly before the current weight date (can be older than 3 days)
+            //  - fallback if no previous manual_growth: use perinatal discharge date/weight if present
+            if let age = context.ageDays, age <= 60,
+               let dbURL = currentDBURL,
+               FileManager.default.fileExists(atPath: dbURL.path) {
+
+                // Local YYYY-MM-DD parser
+                let df = DateFormatter()
+                df.calendar = Calendar(identifier: .gregorian)
+                df.locale = Locale(identifier: "en_US_POSIX")
+                df.timeZone = TimeZone(secondsFromGMT: 0)
+                df.dateFormat = "yyyy-MM-dd"
+
+                func openRO(_ url: URL) -> OpaquePointer? {
+                    var db: OpaquePointer?
+                    let rc = sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil)
+                    guard rc == SQLITE_OK, let db else { return nil }
+                    return db
+                }
+
+                func readText(_ stmt: OpaquePointer?, _ idx: Int32) -> String? {
+                    guard let stmt, let c = sqlite3_column_text(stmt, idx) else { return nil }
+                    let s = String(cString: c).trimmingCharacters(in: .whitespacesAndNewlines)
+                    return s.isEmpty ? nil : s
+                }
+
+                func readDouble(_ stmt: OpaquePointer?, _ idx: Int32) -> Double? {
+                    guard let stmt else { return nil }
+                    if sqlite3_column_type(stmt, idx) == SQLITE_NULL { return nil }
+                    return sqlite3_column_double(stmt, idx)
+                }
+
+                // 1) Resolve the well visit date (YYYY-MM-DD)
+                var visitISO: String? = nil
+                if let db = openRO(dbURL) {
+                    defer { sqlite3_close(db) }
+                    let sql = "SELECT visit_date FROM well_visits WHERE id = ? LIMIT 1;"
+                    var stmt: OpaquePointer?
+                    if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt {
+                        defer { sqlite3_finalize(stmt) }
+                        sqlite3_bind_int64(stmt, 1, sqlite3_int64(context.wellVisitID))
+                        if sqlite3_step(stmt) == SQLITE_ROW {
+                            visitISO = readText(stmt, 0).map { String($0.prefix(10)) }
+                        }
+                    }
+                }
+
+                if let visitISO, df.date(from: visitISO) != nil {
+                    // 2) Current weight: closest manual_growth within ±3 days of visitISO (excluding vitals mirrors)
+                    var currentDateISO: String? = nil
+                    var wNowKg: Double? = nil
+
+                    if let db = openRO(dbURL) {
+                        defer { sqlite3_close(db) }
+                        let currentSQL = """
+                        SELECT recorded_at, weight_kg
+                        FROM manual_growth
+                        WHERE patient_id = ?
+                          AND COALESCE(source,'manual') NOT LIKE 'vitals%'
+                          AND weight_kg IS NOT NULL
+                          AND abs(julianday(date(recorded_at)) - julianday(date(?))) <= 3
+                        ORDER BY abs(julianday(date(recorded_at)) - julianday(date(?))) ASC,
+                                 datetime(recorded_at) DESC
+                        LIMIT 1;
+                        """
+
+                        var stmt: OpaquePointer?
+                        if sqlite3_prepare_v2(db, currentSQL, -1, &stmt, nil) == SQLITE_OK, let stmt {
+                            defer { sqlite3_finalize(stmt) }
+                            sqlite3_bind_int64(stmt, 1, sqlite3_int64(context.patientID))
+                            _ = visitISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+                            _ = visitISO.withCString { sqlite3_bind_text(stmt, 3, $0, -1, SQLITE_TRANSIENT) }
+
+                            if sqlite3_step(stmt) == SQLITE_ROW {
+                                if let rec = readText(stmt, 0) {
+                                    currentDateISO = String(rec.prefix(10))
+                                }
+                                wNowKg = readDouble(stmt, 1)
+                            }
+                        }
+                    }
+
+                    if let currentDateISO,
+                       let wNowKg, wNowKg > 0,
+                       let dNow = df.date(from: currentDateISO) {
+
+                        // 3) Previous weight: most recent manual_growth strictly before currentDateISO
+                        var prevDateISO: String? = nil
+                        var wPrevKg: Double? = nil
+
+                        if let db = openRO(dbURL) {
+                            defer { sqlite3_close(db) }
+                            let prevSQL = """
+                            SELECT recorded_at, weight_kg
+                            FROM manual_growth
+                            WHERE patient_id = ?
+                              AND COALESCE(source,'manual') NOT LIKE 'vitals%'
+                              AND weight_kg IS NOT NULL
+                              AND date(recorded_at) < date(?)
+                            ORDER BY datetime(recorded_at) DESC
+                            LIMIT 1;
+                            """
+
+                            var stmt: OpaquePointer?
+                            if sqlite3_prepare_v2(db, prevSQL, -1, &stmt, nil) == SQLITE_OK, let stmt {
+                                defer { sqlite3_finalize(stmt) }
+                                sqlite3_bind_int64(stmt, 1, sqlite3_int64(context.patientID))
+                                _ = currentDateISO.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT) }
+
+                                if sqlite3_step(stmt) == SQLITE_ROW {
+                                    if let rec = readText(stmt, 0) {
+                                        prevDateISO = String(rec.prefix(10))
+                                    }
+                                    wPrevKg = readDouble(stmt, 1)
+                                }
+                            }
+                        }
+
+                        // 3b) Fallback: use perinatal discharge weight/date if no previous manual_growth
+                        if (prevDateISO == nil) || (wPrevKg == nil) || ((wPrevKg ?? 0) <= 0) {
+                            let txt = context.perinatalSummary ?? ""
+
+                            func firstMatch(_ pattern: String) -> String? {
+                                guard let re = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+                                let ns = txt as NSString
+                                let range = NSRange(location: 0, length: ns.length)
+                                guard let m = re.firstMatch(in: txt, options: [], range: range), m.numberOfRanges >= 2 else { return nil }
+                                let r = m.range(at: 1)
+                                guard r.location != NSNotFound else { return nil }
+                                let s = ns.substring(with: r)
+                                return s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : s
+                            }
+
+                            if let d = firstMatch("maternityDischargeDate:\\s*Optional\\(\\\"(\\d{4}-\\d{2}-\\d{2})\\\"\\)"),
+                               let g = firstMatch("dischargeWeightG:\\s*Optional\\((\\d+)\\)"),
+                               let gInt = Int(g), gInt > 0 {
+                                let kg = Double(gInt) / 1000.0
+                                if let dPrev = df.date(from: d), dPrev < dNow {
+                                    prevDateISO = d
+                                    wPrevKg = kg
+                                }
+                            }
+                        }
+
+                        if let prevDateISO,
+                           let wPrevKg, wPrevKg > 0,
+                           let dPrev = df.date(from: prevDateISO) {
+
+                            let dayDiff = Calendar(identifier: .gregorian).dateComponents([.day], from: dPrev, to: dNow).day ?? 0
+                            if dayDiff > 0 {
+                                let gPerDay = ((wNowKg - wPrevKg) * 1000.0) / Double(dayDiff)
+                                let rounded = Int(gPerDay.rounded())
+
+                                payload["early_weight_gain"] = [
+                                    "g_per_day": rounded,
+                                    "days": dayDiff,
+                                    "from_date": prevDateISO,
+                                    "to_date": currentDateISO,
+                                    "weight_prev_kg": Double(String(format: "%.3f", wPrevKg)) ?? wPrevKg,
+                                    "weight_now_kg": Double(String(format: "%.3f", wNowKg)) ?? wNowKg
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ✅ Manual growth snapshot (OPTIONAL)
+            // IMPORTANT:
+            //  - For early well visits (≤ 2 months), we intentionally DO NOT include a global "latest" snapshot
+            //    because it can leak distant or erroneous measurements into the prompt.
+            //    Early growth for AI is handled in the UI problemListing (near-visit / g/day line).
+            //  - For older visits, include a best-effort snapshot only if values look plausible.
+            let allowManualSnapshotInJSON: Bool = {
+                if let age = context.ageDays {
+                    return age > 60
+                }
+                // If age is unknown, keep it conservative: do not include.
+                return false
+            }()
+
+            if allowManualSnapshotInJSON,
+               let growth = fetchLatestManualGrowthSnapshot(patientID: context.patientID) {
+
+                // Basic plausibility filters to avoid poisoning the prompt with obvious data errors.
+                // (These are intentionally wide; they only catch "impossible" entries.)
+                func plausibleWeight(_ kg: Double?) -> Bool {
+                    guard let kg else { return true }
+                    return kg > 0.2 && kg < 200
+                }
+                func plausibleLength(_ cm: Double?) -> Bool {
+                    guard let cm else { return true }
+                    return cm > 20 && cm < 250
+                }
+                func plausibleHC(_ cm: Double?) -> Bool {
+                    guard let cm else { return true }
+                    return cm > 10 && cm < 80
+                }
+
+                let isPlausible = plausibleWeight(growth.weightKg)
+                    && plausibleLength(growth.heightCm)
+                    && plausibleHC(growth.headCircumferenceCm)
+
+                if isPlausible {
+                    var g: [String: Any] = [
+                        "recorded_at": growth.recordedAtISO
+                    ]
+                    if let w = growth.weightKg { g["weight_kg"] = w }
+                    if let h = growth.heightCm { g["height_cm"] = h }
+                    if let hc = growth.headCircumferenceCm { g["head_circumference_cm"] = hc }
+                    payload["manual_growth_snapshot"] = g
+                } else {
+                    // Skip snapshot if it contains obvious nonsense.
+                    // The human-readable problem listing remains the primary growth context.
+                    // (Do not add any payload field.)
+                }
             }
 
             if JSONSerialization.isValidJSONObject(payload),
@@ -3445,6 +3656,12 @@ func reloadPatients() {
             } else {
                 return "{}"
             }
+        }
+    
+        /// Debug helper: returns the exact JSON payload that would be sent for a well visit.
+        /// This is read-only and does not perform any network call.
+        func previewWellVisitJSON(using context: AppState.WellVisitAIContext) -> String {
+            buildWellVisitJSON(using: context)
         }
         
         /// Build a structured JSON snapshot of the current sick-episode context.

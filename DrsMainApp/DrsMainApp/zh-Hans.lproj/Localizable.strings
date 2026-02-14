@@ -2881,3 +2881,5 @@
 "help.footer.contact.wechat.label" = "微信";
 "help.footer.contact.wechat.value" = "yunastic";
 "help.footer.contact.note" = "反馈问题时，请附上“支持日志”的导出文件。";
+
+"well_visit_form.weight_trend.no_weight_data" = "暂无既往体重数据，无法评估趋势。";
