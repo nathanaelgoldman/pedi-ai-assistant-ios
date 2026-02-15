@@ -666,6 +666,11 @@ final class AppState: ObservableObject {
     // Feature logger for AppState (bundle selection, patient/visit loading, etc.).
     private let log = AppLog.feature("appstate")
     
+    // MARK: - Terminology (local app DB; read-only; NOT part of patient bundles)
+    /// Instantiated once with AppState so that the terminology DB is installed (if bundled)
+    /// and health-checked on app launch.
+    @Published private(set) var terminologyStore: TerminologyStore = TerminologyStore()
+    
     // MARK: - Private
     private func loadRecentBundles() {
         let paths = UserDefaults.standard.stringArray(forKey: recentsKey) ?? []
@@ -4288,6 +4293,9 @@ func reloadPatients() {
         /// For now, this prefers any configured provider (e.g. OpenAI) and falls
         /// back to the local stub when none is available or on error.
         func runAIForEpisode(using context: EpisodeAIContext) {
+            // Always compute guideline flags for this episode context (provider-independent).
+            // This keeps the UI flags populated even when the provider fails or when we fall back to the local stub.
+            runGuidelineFlags(using: context, rulesJSON: nil)
             if let provider = resolveEpisodeAIProvider() {
                 self.log.info("runAIForEpisode: using provider \(String(describing: type(of: provider)), privacy: .public)")
                 // Run the provider asynchronously so the UI remains responsive.

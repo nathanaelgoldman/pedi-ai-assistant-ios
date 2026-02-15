@@ -1,0 +1,3 @@
+404684003   # Clinical finding
+386661006   # Fever
+29857009    # Cough

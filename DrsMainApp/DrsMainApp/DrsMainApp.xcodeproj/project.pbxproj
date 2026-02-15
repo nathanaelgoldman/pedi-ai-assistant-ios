@@ -60,6 +60,10 @@
 		E90B87422F162E4700D093D7 /* PromptRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90B87412F162E3B00D093D7 /* PromptRenderer.swift */; };
 		E91960B62F2C25BF00D65B06 /* WHOGrowthHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */; };
 		E9218D062F3C293600204D98 /* SupportLogExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9218D052F3C292300204D98 /* SupportLogExporter.swift */; };
+		E9240F612F41836F00C95DD8 /* TerminologyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9240F602F41836C00C95DD8 /* TerminologyStore.swift */; };
+		E9240F632F41843600C95DD8 /* snomed_schema.sql in Resources */ = {isa = PBXBuildFile; fileRef = E9240F622F41843300C95DD8 /* snomed_schema.sql */; };
+		E9240F662F41EDCC00C95DD8 /* ClinicalFeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9240F652F41EDC300C95DD8 /* ClinicalFeatureExtractor.swift */; };
+		E9240F682F42130900C95DD8 /* GuidelineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9240F672F42130300C95DD8 /* GuidelineEngine.swift */; };
 		E93EDEC82F2201E0002A0381 /* WHOGrowthEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */; };
 		E957D44C2F3E063200384998 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA252EC1EF9600EB3280 /* PediaShared */; };
 		E957D44D2F3E063200384998 /* PediaShared in Frameworks */ = {isa = PBXBuildFile; productRef = BB26FA282EC1EFE700EB3280 /* PediaShared */; };
@@ -122,6 +126,10 @@
 		E90B87412F162E3B00D093D7 /* PromptRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRenderer.swift; sourceTree = "<group>"; };
 		E91960B52F2C25BB00D65B06 /* WHOGrowthHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WHOGrowthHub.swift; sourceTree = "<group>"; };
 		E9218D052F3C292300204D98 /* SupportLogExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportLogExporter.swift; sourceTree = "<group>"; };
+		E9240F602F41836C00C95DD8 /* TerminologyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminologyStore.swift; sourceTree = "<group>"; };
+		E9240F622F41843300C95DD8 /* snomed_schema.sql */ = {isa = PBXFileReference; lastKnownFileType = text; path = snomed_schema.sql; sourceTree = "<group>"; };
+		E9240F652F41EDC300C95DD8 /* ClinicalFeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalFeatureExtractor.swift; sourceTree = "<group>"; };
+		E9240F672F42130300C95DD8 /* GuidelineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidelineEngine.swift; sourceTree = "<group>"; };
 		E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WHOGrowthEvaluator.swift; sourceTree = "<group>"; };
 		E98BC2682F1B5EAC002A5207 /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -289,6 +297,8 @@
 		BB564AF12EAE0BB900870007 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				E9240F642F41EDAB00C95DD8 /* ClinicalLogic */,
+				E9240F5F2F41835F00C95DD8 /* Terminology */,
 				BB01DB6F2ECB53B500F412D8 /* AI */,
 				BB564AF02EAE0BB900870007 /* Util */,
 				BB9EB0D92EC0CCE300308D39 /* Export */,
@@ -327,6 +337,24 @@
 				BB9EB0DA2EC0CCF500308D39 /* MacBundleExporter.swift */,
 			);
 			path = Export;
+			sourceTree = "<group>";
+		};
+		E9240F5F2F41835F00C95DD8 /* Terminology */ = {
+			isa = PBXGroup;
+			children = (
+				E9240F622F41843300C95DD8 /* snomed_schema.sql */,
+				E9240F602F41836C00C95DD8 /* TerminologyStore.swift */,
+			);
+			path = Terminology;
+			sourceTree = "<group>";
+		};
+		E9240F642F41EDAB00C95DD8 /* ClinicalLogic */ = {
+			isa = PBXGroup;
+			children = (
+				E9240F672F42130300C95DD8 /* GuidelineEngine.swift */,
+				E9240F652F41EDC300C95DD8 /* ClinicalFeatureExtractor.swift */,
+			);
+			path = ClinicalLogic;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -411,6 +439,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E9240F632F41843600C95DD8 /* snomed_schema.sql in Resources */,
 				BB71CCEC2EEE9570000B7947 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -426,6 +455,7 @@
 				BB564AFF2EAF25EF00870007 /* PatientsListView.swift in Sources */,
 				BB3E15AA2EB7489D008E1472 /* GoldenDB.swift in Sources */,
 				BB91868D2EC7141800A8AA8A /* SickEpisodeForm.swift in Sources */,
+				E9240F682F42130900C95DD8 /* GuidelineEngine.swift in Sources */,
 				BB01DB712ECB543100F412D8 /* OpenAIProvider.swift in Sources */,
 				BB4718AD2ED7343600839786 /* WellVisitRules.swift in Sources */,
 				BBA6AD5B2EB5CC3600BDA924 /* VitalsTableView.swift in Sources */,
@@ -446,7 +476,9 @@
 				BBD60E352ED936BA008D7F46 /* WellVisitReportRules.swift in Sources */,
 				BB71CCE72EEE8B66000B7947 /* AnthropicProvider.swift in Sources */,
 				BBA6AD532EB5B49E00BDA924 /* GrowthStore.swift in Sources */,
+				E9240F662F41EDCC00C95DD8 /* ClinicalFeatureExtractor.swift in Sources */,
 				BB9186892EC6F48F00A8AA8A /* VaccinationStatusForm.swift in Sources */,
+				E9240F612F41836F00C95DD8 /* TerminologyStore.swift in Sources */,
 				BB9EB0DB2EC0CD0100308D39 /* MacBundleExporter.swift in Sources */,
 				BB91868B2EC707F300A8AA8A /* EpisodeStore.swift in Sources */,
 				BB9EB0DD2EC0D05200308D39 /* BundleExporter.swift in Sources */,
