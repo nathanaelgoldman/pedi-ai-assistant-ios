@@ -119,6 +119,8 @@ struct PatientProfile: Equatable {
     var parentNotes: String?         // NEW: kept separate from PMH
 }
 
+
+
 @MainActor
 final class AppState: ObservableObject {
     
@@ -187,6 +189,8 @@ final class AppState: ObservableObject {
 
     /// Dedicated logger for user-facing alert flow.
     private let alertLog = AppLog.feature("ui.alert")
+    
+   
 
     /// Present a simple user-facing error.
     func presentError(title: String, message: String) {
@@ -2677,6 +2681,9 @@ func reloadPatients() {
         /// Used by the UI to let the clinician pick one or more codes into the ICD-10 field.
         @Published var aiICD10CandidatesForActiveEpisode: [String] = []
 
+        // Shared extractor instance (keeps AppState from re-instantiating per call)
+        private let clinicalFeatureExtractor = ClinicalFeatureExtractor()
+
         /// Optional resolver that lets the host app provide clinician-specific sick-visit JSON rules.
         /// This keeps AppState decoupled from ClinicianStore while still allowing per-doctor config.
         var sickRulesJSONResolver: (() -> String?)?
@@ -2695,70 +2702,89 @@ func reloadPatients() {
 
         /// Lightweight snapshot of the clinically relevant data we want to feed into
         /// guideline rules and AI prompts for a single sick visit.
-        struct EpisodeAIContext {
+    struct EpisodeAIContext: EpisodeAIContextProviding {
             let patientID: Int
             let episodeID: Int
             let problemListing: String
             let complementaryInvestigations: String
             let vaccinationStatus: String?
-            let perinatalSummary: String? = nil
             let pmhSummary: String?
-
-            /// Patient age in days at the time of the episode (if known).
-            /// This allows JSON rules to express age bands like 0–28d, 29–90d, etc.
-            let patientAgeDays: Int? = nil
-
-            /// Patient sex, normalized if possible to "male"/"female".
-            /// JSON rules can then use `sex_in: ["male"]`, etc.
-            let patientSex: String? = nil
-
-            /// Maximum recorded temperature in °C around this episode (if available).
-            /// Enables rules like `min_temp_c: 38.0` or `requires_fever: true`.
-            let maxTempC: Double? = nil
-        }
-        /// Lightweight snapshot of the clinically relevant data we want to feed into
-        /// AI prompts for a single *well* visit (preventive check).
-        struct WellVisitAIContext {
-            let patientID: Int
-            let wellVisitID: Int
-            let visitType: String          // e.g. "one_month", "six_month", "first_postnatal"
-            let ageDays: Int?              // from well_visits.age_days, if available
-            let problemListing: String     // snapshot from well_visits.problem_listing
-            let perinatalSummary: String?  // consolidated perinatal history
-            let pmhSummary: String?        // past medical history summary
-            let vaccinationStatus: String? // vaccination summary
-
-            // Optional, locally-computed growth trend evaluation (provided by the UI).
-            let growthTrendSummary: String?      // human-readable summary (e.g., weight-for-age trend)
-            let growthTrendIsFlagged: Bool?      // true if concerning / needs attention
-            let growthTrendWindow: String?       // e.g. "from 4 months onward" or similar
-            
+            let perinatalSummary: String?
+            let patientAgeDays: Int?
+            let patientSex: String?
+            let maxTempC: Double?
+        
             init(
                 patientID: Int,
-                wellVisitID: Int,
-                visitType: String,
-                ageDays: Int?,
+                episodeID: Int,
                 problemListing: String,
-                perinatalSummary: String?,
-                pmhSummary: String?,
+                complementaryInvestigations: String,
                 vaccinationStatus: String?,
-                growthTrendSummary: String? = nil,
-                growthTrendIsFlagged: Bool? = nil,
-                growthTrendWindow: String? = nil
+                perinatalSummary: String? = nil,
+                pmhSummary: String?,
+                patientAgeDays: Int? = nil,
+                patientSex: String? = nil,
+                maxTempC: Double? = nil
             ) {
                 self.patientID = patientID
-                self.wellVisitID = wellVisitID
-                self.visitType = visitType
-                self.ageDays = ageDays
+                self.episodeID = episodeID
                 self.problemListing = problemListing
+                self.complementaryInvestigations = complementaryInvestigations
+                self.vaccinationStatus = vaccinationStatus
                 self.perinatalSummary = perinatalSummary
                 self.pmhSummary = pmhSummary
-                self.vaccinationStatus = vaccinationStatus
-                self.growthTrendSummary = growthTrendSummary
-                self.growthTrendIsFlagged = growthTrendIsFlagged
-                self.growthTrendWindow = growthTrendWindow
+                self.patientAgeDays = patientAgeDays
+                self.patientSex = patientSex
+                self.maxTempC = maxTempC
             }
+
+    }
+        /// Lightweight snapshot of the clinically relevant data we want to feed into
+        /// AI prompts for a single *well* visit (preventive check).
+    struct WellVisitAIContext {
+        let patientID: Int
+        let wellVisitID: Int
+        let visitType: String          // e.g. "one_month", "six_month", "first_postnatal"
+        let ageDays: Int?              // from well_visits.age_days, if available
+        let patientSex: String?
+        let problemListing: String     // snapshot from well_visits.problem_listing
+        let perinatalSummary: String?  // consolidated perinatal history
+        let pmhSummary: String?        // past medical history summary
+        let vaccinationStatus: String? // vaccination summary
+
+        // Optional, locally-computed growth trend evaluation (provided by the UI).
+        let growthTrendSummary: String?      // human-readable summary (e.g., weight-for-age trend)
+        let growthTrendIsFlagged: Bool?      // true if concerning / needs attention
+        let growthTrendWindow: String?       // e.g. "from 4 months onward" or similar
+        
+        init(
+            patientID: Int,
+            wellVisitID: Int,
+            visitType: String,
+            ageDays: Int?,
+            patientSex: String?,
+            problemListing: String,
+            perinatalSummary: String?,
+            pmhSummary: String?,
+            vaccinationStatus: String?,
+            growthTrendSummary: String? = nil,
+            growthTrendIsFlagged: Bool? = nil,
+            growthTrendWindow: String? = nil
+        ) {
+            self.patientID = patientID
+            self.wellVisitID = wellVisitID
+            self.visitType = visitType
+            self.ageDays = ageDays
+            self.patientSex = patientSex
+            self.problemListing = problemListing
+            self.perinatalSummary = perinatalSummary
+            self.pmhSummary = pmhSummary
+            self.vaccinationStatus = vaccinationStatus
+            self.growthTrendSummary = growthTrendSummary
+            self.growthTrendIsFlagged = growthTrendIsFlagged
+            self.growthTrendWindow = growthTrendWindow
         }
+    }
 
         /// Sanitize problem listing text before sending to AI:
         ///  - drop lines that look like they contain explicit identity labels (e.g. "Patient: ...")
@@ -3055,23 +3081,10 @@ func reloadPatients() {
                 return false
             }
 
-            // --- Derived numeric context (with fallbacks from text) ---
-
-            // Prefer explicitly-populated values from EpisodeAIContext if ever
-            // provided; otherwise derive them from the problemListing text.
-            let effectiveAgeDays: Int? = {
-                if let d = context.patientAgeDays {
-                    return d
-                }
-                return parseAgeDays(fromProblemListing: context.problemListing)
-            }()
-
-            let effectiveMaxTempC: Double? = {
-                if let t = context.maxTempC {
-                    return t
-                }
-                return parseMaxTempC(fromProblemListing: context.problemListing)
-            }()
+            // --- Canonical pipeline rule: AppState does NOT parse clinical facts from free text. ---
+            // Only use explicitly populated structured fields from EpisodeAIContext.
+            let effectiveAgeDays: Int? = context.patientAgeDays
+            let effectiveMaxTempC: Double? = context.maxTempC
 
             // --- 1) Text constraints ---
             let problemOK = fieldContainsAny(cond.problemContains, in: context.problemListing)
@@ -3114,19 +3127,11 @@ func reloadPatients() {
                     // No explicit requirement → unconstrained.
                     return true
                 }
-                // Compute a simple fever flag:
-                let hasFeverFromTemp: Bool = {
-                    if let t = effectiveMaxTempC {
-                        return t >= 38.0
-                    }
+                guard let t = effectiveMaxTempC else {
+                    // If fever is required/forbidden but temp is unknown, we cannot decide → no match.
                     return false
-                }()
-                let hasFeverFromText: Bool = {
-                    let lower = context.problemListing.lowercased()
-                    return lower.contains("fever") || lower.contains("febrile")
-                }()
-                let hasFever = hasFeverFromTemp || hasFeverFromText
-
+                }
+                let hasFever = t >= 38.0
                 return requires ? hasFever : !hasFever
             }()
 
@@ -3137,46 +3142,14 @@ func reloadPatients() {
                     return true
                 }
 
-                // Try to get sex from context first, then fall back to parsing the problem listing
-                // line "Sex: F" / "Sex: M" / "Sex: Male" / "Sex: Female".
-                func parseSex(from listing: String) -> String? {
-                    guard let sexLine = listing
-                        .split(separator: "\n")
-                        .first(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("Sex:") })
-                    else {
-                        return nil
-                    }
-
-                    let raw = sexLine
-                        .replacingOccurrences(of: "Sex:", with: "")
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                    if raw.isEmpty { return nil }
-
-                    let lower = raw.lowercased()
-                    if lower.hasPrefix("m") { return "male" }
-                    if lower.hasPrefix("f") { return "female" }
-                    return lower
-                }
-
-                // 1) Prefer any explicit sex passed in the context
-                var candidate: String? = nil
-                if let sexRaw = context.patientSex?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !sexRaw.isEmpty {
-                    candidate = sexRaw
-                } else {
-                    // 2) Else, derive it from the problem listing
-                    candidate = parseSex(from: context.problemListing)
-                }
-
-                guard let c = candidate, !c.isEmpty else {
-                    // Rule constrains sex but we still don't know it → no match.
+                guard let raw = context.patientSex?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !raw.isEmpty else {
+                    // Rule constrains sex but it wasn't provided → no match.
                     return false
                 }
 
-                // Normalize to "male"/"female" if possible
                 let normSex: String = {
-                    let lower = c.lowercased()
+                    let lower = raw.lowercased()
                     if lower.hasPrefix("m") { return "male" }
                     if lower.hasPrefix("f") { return "female" }
                     return lower
@@ -3195,11 +3168,13 @@ func reloadPatients() {
 
         /// Entry point for JSON-based guideline flags.
         /// - If `rulesJSON` is nil or empty, falls back to the stub behavior.
-        /// - For now we support very simple shapes:
-        ///     1) ["flag 1", "flag 2"]
-        ///     2) { "flags": ["flag 1", "flag 2"] }
-        ///   plus the structured GuidelineRuleSet format above.
-        func runGuidelineFlags(using context: EpisodeAIContext, rulesJSON: String?) {
+        /// - Uses ClinicalFeatureExtractor and GuidelineEngine for canonical evaluation.
+
+
+
+
+
+func runGuidelineFlags(using context: EpisodeAIContext, rulesJSON: String?) {
             // Determine the effective JSON to use:
             //  1) explicit `rulesJSON` parameter if non-empty
             //  2) else, whatever the host app resolver provides (per-clinician rules)
@@ -3221,6 +3196,50 @@ func reloadPatients() {
                 return
             }
 
+            // --- NEW (v1) canonical flow: ClinicalFeatureExtractor -> GuidelineEngine ---
+            // We keep this best-effort and purely additive: if v1 produces no matches,
+            // we fall back to the existing v0 behavior below.
+            //
+            // Note: we intentionally do NOT require TerminologyStore here yet; the profile
+            // already carries stable keys and may optionally include SNOMED IDs.
+            do {
+                let encounterDate = Date()
+
+                // Canonical pipeline rule: AppState does NOT parse clinical facts from free text.
+                // Build the profile in one shot using ClinicalFeatureExtractor.
+                let profile = clinicalFeatureExtractor.buildProfile(
+                    fromEpisodeContext: context,
+                    encounterDate: encounterDate,
+                    terminology: terminologyStore
+                )
+
+                // Evaluate using new engine.
+                //DEBUG Temp
+                log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) profile.ageDays=\(String(describing: profile.ageDays)) profile.ageMonths=\(String(describing: profile.ageMonths)) tempMax=\(String(describing: profile.doubleValue(ClinicalFeatureExtractor.Key.tempCMax))) fever=\(String(describing: profile.boolValue(ClinicalFeatureExtractor.Key.feverPresent))) features=\(profile.features.count)")
+                let result = GuidelineEngine.evaluate(profile: profile, rulesJSON: raw)
+
+                if !result.matches.isEmpty {
+                    // Deterministic ordering for UI: higher priority first, then stable text.
+                    let ordered = result.matches
+                        .sorted { (a, b) in
+                            if a.priority != b.priority { return a.priority > b.priority }
+                            return a.flagText.localizedCaseInsensitiveCompare(b.flagText) == .orderedAscending
+                        }
+                        .map { $0.flagText }
+
+                    aiGuidelineFlagsForActiveEpisode = ordered
+                    log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) matches=\(ordered.count)")
+                    return
+                } else {
+                    log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) no matches → falling back to v0")
+                }
+            } catch {
+                // If anything unexpected happens in v1, we fall back to v0 logic below.
+                log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) failed (\(String(describing: error))) → falling back to v0")
+            }
+
+            // For now, keep the proven v0 rule evaluation (text/heuristic matching) to avoid
+            // breaking existing JSON-guideline behavior while we finish the refactor.
             do {
                 let data = Data(raw.utf8)
 
@@ -3712,6 +3731,17 @@ func reloadPatients() {
                 "problem_listing_lines": problemLines,
                 "complementary_investigations": context.complementaryInvestigations
             ]
+            
+            if let ageDays = context.patientAgeDays {
+                payload["age_days"] = ageDays
+            }
+            if let sex = context.patientSex?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !sex.isEmpty {
+                payload["sex"] = sex
+            }
+            if let t = context.maxTempC {
+                payload["max_temp_c"] = t
+            }
 
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
                !vacc.isEmpty {
@@ -4344,11 +4374,15 @@ func reloadPatients() {
                         // well-visit context into a lightweight EpisodeAIContext.
                         let shimContext = EpisodeAIContext(
                             patientID: context.patientID,
-                            episodeID: context.wellVisitID,          // used only for provider internals
+                            episodeID: context.wellVisitID,
                             problemListing: context.problemListing,
                             complementaryInvestigations: "",
                             vaccinationStatus: context.vaccinationStatus,
-                            pmhSummary: context.pmhSummary
+                            perinatalSummary: context.perinatalSummary,
+                            pmhSummary: context.pmhSummary,
+                            patientAgeDays: context.ageDays,
+                            patientSex: context.patientSex,
+                            maxTempC: nil
                         )
 
                         let result = try await provider.evaluateEpisode(

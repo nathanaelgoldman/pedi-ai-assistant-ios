@@ -5336,6 +5336,11 @@ private var problemListingHeaderLine: String {
             wellVisitID: visitID,
             visitType: visitTypeID,
             ageDays: ageDays,
+            patientSex: {
+                guard let dbURL = appState.currentDBURL else { return nil }
+                return fetchPatientSexRaw(dbURL: dbURL, patientID: patientID)
+            }(),
+            
             problemListing: problemsForAI,
             perinatalSummary: perinatalSummary,
             pmhSummary: pmhSummary,

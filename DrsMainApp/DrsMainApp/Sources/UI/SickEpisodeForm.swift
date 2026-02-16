@@ -2326,13 +2326,50 @@ struct SickEpisodeForm: View {
         let pmhSummary: String? = appState.pmhSummaryForSelectedPatient()
         let vaccinationStatus: String? = appState.vaccinationSummaryForSelectedPatient()
 
+        // Demographics (avoid relying on AppState.selectedPatientProfile shape here)
+        var patientSex: String? = nil
+        var patientAgeDays: Int? = nil
+        if let dbURL = appState.currentDBURL,
+           FileManager.default.fileExists(atPath: dbURL.path) {
+            let demo = fetchPatientDemographics(dbURL: dbURL, patientID: Int64(pid))
+            patientSex = demo.sex?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Compute ageDays from DOB at encounter time (use now for this form)
+            if let dobISO = demo.dobISO, !dobISO.isEmpty {
+                let parts = dobISO.split(separator: "-").map(String.init)
+                if parts.count >= 3,
+                   let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]) {
+                    var cal = Calendar(identifier: .gregorian)
+                    cal.timeZone = .current
+                    if let dob = DateComponents(calendar: cal, year: y, month: m, day: d).date {
+                        let now = Date()
+                        let days = cal.dateComponents([.day], from: dob, to: now).day
+                        patientAgeDays = days
+                    }
+                }
+            }
+        }
+
+        let maxTempC: Double? = vitalsHistory
+            .compactMap { (row: VitalsRow) -> Double? in
+                row.temperatureC
+            }
+            .max()
+            ?? {
+                let s = temperatureCField.trimmingCharacters(in: .whitespacesAndNewlines)
+                return s.isEmpty ? nil : Double(s)
+            }()
+
         return AppState.EpisodeAIContext(
             patientID: pid,
             episodeID: Int(eid),
             problemListing: problemListing,
             complementaryInvestigations: complementaryInvestigations,
             vaccinationStatus: vaccinationStatus,
-            pmhSummary: pmhSummary
+            pmhSummary: pmhSummary,
+            patientAgeDays: patientAgeDays,
+            patientSex: patientSex,
+            maxTempC: maxTempC
         )
     }
 

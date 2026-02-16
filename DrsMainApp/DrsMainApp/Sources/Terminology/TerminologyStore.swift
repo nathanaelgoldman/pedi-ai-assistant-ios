@@ -17,7 +17,7 @@ final class TerminologyStore: ObservableObject {
 
     // MARK: - Version contract
     // Bump this only when the SQLite schema layout changes (tables/columns/indexes).
-    private let expectedSchemaVersion = "1"
+    private let expectedSchemaVersion = "1.0"
 
     // Meta keys we expect in the terminology DB.
     private enum MetaKey {
@@ -79,6 +79,20 @@ final class TerminologyStore: ObservableObject {
             out.append(TermHit(id: descID, conceptID: conceptID, term: term))
         }
         return out
+    }
+    
+    /// Very small “normalization” helper:
+    /// - input: free text (any UI language for now, but works best with English mock DB)
+    /// - output: best-matching conceptID (if any)
+    ///
+    /// Later upgrades:
+    /// - restrict by language_code
+    /// - prefer synonyms via langrefset acceptability
+    /// - better ranking (token match, prefix boost, etc.)
+    func bestConceptMatch(_ query: String) -> TermHit? {
+        // Reuse current minimal search and pick the best hit.
+        // For now: shortest term first (already ORDER BY LENGTH(term)).
+        return searchTerms(query, limit: 1).first
     }
 
     // MARK: - DB location (local app space, NOT patient bundle)
@@ -225,12 +239,15 @@ final class TerminologyStore: ObservableObject {
         let dbBuildRaw = readMeta(MetaKey.dbBuild)
         let hashRaw    = readMeta(MetaKey.contentHash)
 
-        let dbBuildInfo = (dbBuildRaw?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-            ? " build=\(dbBuildRaw!)"
-            : ""
-        let hashInfo = (hashRaw?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-            ? " hash=\(hashRaw!)"
-            : ""
+        let dbBuildInfo: String = {
+            guard let v = dbBuildRaw?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return "" }
+            return " build=\(v)"
+        }()
+
+        let hashInfo: String = {
+            guard let v = hashRaw?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return "" }
+            return " hash=\(v)"
+        }()
 
         if schemaV != expectedSchemaVersion {
             // Hard fail (we keep the DB unopened beyond this check, but signal loudly).
@@ -241,7 +258,7 @@ final class TerminologyStore: ObservableObject {
         }
 
         log.info(
-            "TerminologyStore: snomed.sqlite OK schema=\(schemaV, privacy: .public) rf2=\(rf2Rel, privacy: .public) subset=\(subset, privacy: .public) subsetV=\(subsetV, privacy: .public)\(dbBuildInfo, privacy: .public)\(hashInfo, privacy: .public)"
+            "TerminologyStore: snomed.sqlite OK schema=\(schemaV, privacy: .public) rf2=\(rf2Rel, privacy: .public) subset=\(subset, privacy: .public) subsetV=\(subsetV, privacy: .public)\(dbBuildInfo)\(hashInfo)"
         )
     }
 }

@@ -11,7 +11,26 @@
 //  the original display strings for UI/debug.
 //
 
+
 import Foundation
+
+/// Minimal contract for building a canonical clinical profile from an episode context,
+/// without coupling ClinicalFeatureExtractor to AppState.
+protocol EpisodeAIContextProviding {
+    var patientID: Int { get }
+    var episodeID: Int { get }
+
+    var problemListing: String { get }
+    var complementaryInvestigations: String { get }
+
+    var vaccinationStatus: String? { get }
+    var perinatalSummary: String? { get }
+    var pmhSummary: String? { get }
+
+    var patientAgeDays: Int? { get }
+    var patientSex: String? { get }
+    var maxTempC: Double? { get }
+}
 
 // MARK: - Core Models
 
@@ -88,6 +107,172 @@ struct PatientClinicalProfile: Codable {
 
     // Text “breadcrumbs” (kept for humans/debugging; NOT for matching)
     var provenanceNotes: [String]
+}
+
+// MARK: - Matching-friendly views
+
+extension PatientClinicalProfile {
+
+    /// Deterministic lookup map: last-write-wins if duplicate keys exist.
+    /// Intended for guideline predicate evaluation.
+    var featureValueByKey: [String: ClinicalFeature.Value] {
+        var map: [String: ClinicalFeature.Value] = [:]
+        for f in features {
+            map[f.key] = f.value
+        }
+        return map
+    }
+
+    /// Convenience set of keys that are effectively "present".
+    ///
+    /// Rules of thumb:
+    /// - `.bool(true)` => present
+    /// - numeric/string/date => present
+    /// - `.strings([])` => not present
+    /// - `.string("")` => not present
+    var presentKeys: Set<String> {
+        var s: Set<String> = []
+        for f in features {
+            switch f.value {
+            case .bool(let b):
+                if b { s.insert(f.key) }
+            case .int:
+                s.insert(f.key)
+            case .double:
+                s.insert(f.key)
+            case .date:
+                s.insert(f.key)
+            case .string(let str):
+                if !str.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    s.insert(f.key)
+                }
+            case .strings(let arr):
+                if !arr.isEmpty {
+                    s.insert(f.key)
+                }
+            }
+        }
+        return s
+    }
+
+    /// Fetch the first feature for a key (preserving original order).
+    func firstFeature(_ key: String) -> ClinicalFeature? {
+        features.first(where: { $0.key == key })
+    }
+
+    /// Fetch the first value for a key.
+    func firstValue(_ key: String) -> ClinicalFeature.Value? {
+        firstFeature(key)?.value
+    }
+
+    /// Convenience typed getters commonly used by guideline predicates.
+    func boolValue(_ key: String) -> Bool? {
+        if case .bool(let b) = firstValue(key) { return b }
+        return nil
+    }
+
+    func intValue(_ key: String) -> Int? {
+        if case .int(let i) = firstValue(key) { return i }
+        return nil
+    }
+
+    func doubleValue(_ key: String) -> Double? {
+        if case .double(let d) = firstValue(key) { return d }
+        return nil
+    }
+
+    func stringValue(_ key: String) -> String? {
+        if case .string(let s) = firstValue(key) { return s }
+        return nil
+    }
+}
+
+// MARK: - GuidelineEngine bridge
+//
+// Let the profile be consumed directly by GuidelineEngine without an AppState wrapper.
+extension PatientClinicalProfile: ClinicalFeatureProviding {
+
+    func bool(_ key: String) -> Bool? {
+        if case .bool(let b) = firstValue(key) { return b }
+        return nil
+    }
+
+    func int(_ key: String) -> Int? {
+        if case .int(let i) = firstValue(key) { return i }
+        return nil
+    }
+
+    func double(_ key: String) -> Double? {
+        if case .double(let d) = firstValue(key) { return d }
+        return nil
+    }
+
+    func string(_ key: String) -> String? {
+        if case .string(let s) = firstValue(key) { return s }
+        return nil
+    }
+
+    func strings(_ key: String) -> [String]? {
+        if case .strings(let arr) = firstValue(key) { return arr }
+        return nil
+    }
+}
+
+extension PatientClinicalProfile {
+    /// Compact, human-readable snapshot for logs/debug panels.
+    /// Avoids duplicating clinical derivations in AppState.
+    func debugSummaryLine() -> String {
+        let n = features.count
+        let abn = abnormalFindings.count
+        let obj = objectivePositiveFindings.count
+        let age = ageDays.map { "ageDays=\($0)" } ?? "ageDays=nil"
+        let t = (doubleValue(ClinicalFeatureExtractor.Key.tempCMax)).map { "maxTempC=\($0)" } ?? "maxTempC=nil"
+        let fever = (boolValue(ClinicalFeatureExtractor.Key.feverPresent)).map { "fever=\($0)" } ?? "fever=nil"
+        return "Profile(\(age) \(t) \(fever) features=\(n) objective=\(obj) abnormal=\(abn))"
+    }
+}
+
+// MARK: - SNOMED normalization (dev)
+//
+// Goal: convert any remaining free-text findings into SNOMED concept IDs using TerminologyStore.
+// Numbers/measurements are not touched here.
+
+extension ClinicalFeatureExtractor {
+
+    struct NormalizedConcept: Hashable, Identifiable {
+        let id: Int64              // conceptID (SNOMED SCTID)
+        let sourceText: String     // original text that led to this match
+        let matchedTerm: String    // term from description.term that matched
+    }
+
+    /// Convert free text → SNOMED concepts (best-effort).
+    /// Keep it intentionally simple until RF2 is available.
+    func normalizeFreeTextFindings(
+        _ texts: [String],
+        terminology: TerminologyStore
+    ) -> [NormalizedConcept] {
+        var out: [NormalizedConcept] = []
+        out.reserveCapacity(texts.count)
+
+        for raw in texts {
+            let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !q.isEmpty else { continue }
+
+            if let hit = terminology.bestConceptMatch(q) {
+                out.append(
+                    NormalizedConcept(
+                        id: hit.conceptID,
+                        sourceText: q,
+                        matchedTerm: hit.term
+                    )
+                )
+            }
+        }
+
+        // de-dup by conceptID (keep first sourceText for now)
+        var seen = Set<Int64>()
+        return out.filter { seen.insert($0.id).inserted }
+    }
 }
 
 // MARK: - Input Shapes (minimal + decoupled)
@@ -178,11 +363,16 @@ final class ClinicalFeatureExtractor {
         vitals: [VitalsSnapshot],
         vaccination: VaccinationSnapshot?,
         perinatal: PerinatalSnapshot?,
-        problemLines: [ProblemLine]
+        problemLines: [ProblemLine],
+        terminology: TerminologyStore? = nil
     ) -> PatientClinicalProfile {
 
         var notes: [String] = []
         var features: [ClinicalFeature] = []
+        // Minimal extraction-owned debug breadcrumbs (keeps AppState dumb).
+        if let encounterDate {
+            notes.append("Encounter date: \(ISO8601DateFormatter().string(from: encounterDate))")
+        }
 
         // Age
         let age = Self.computeAge(dob: dob, on: encounterDate)
@@ -358,31 +548,114 @@ final class ClinicalFeatureExtractor {
             ))
         }
 
-        // Problem lines (already curated by your form logic; we treat tokens as stable contract)
-        // We DO NOT parse the display string here.
-        for line in problemLines {
-            // Emit one feature per token for matching, plus keep the display as provenance.
-            if line.tokens.isEmpty {
-                // Still keep the display line as a note so nothing is lost.
-                notes.append("ProblemLine(\(line.source)): \(line.display)")
-                continue
+        // Problem lines
+        // - If tokens are already stable keys (e.g. "pe.lungs.wheeze"), we emit them directly.
+        // - If tokens look like SNOMED ids ("sct:386661006" or "386661006"), we emit an SCT feature.
+        // - If tokens are free text and `terminology` is available, we best-effort map to SNOMED and emit SCT features.
+        // - We always keep the original display line as provenance via `note` or `provenanceNotes`.
+
+        func emitToken(_ rawToken: String, line: ProblemLine) {
+            let t = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return }
+
+            // Helper: detect numeric SCTID
+            func parseSCTID(_ s: String) -> Int64? {
+                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("sct:") {
+                    let rest = String(trimmed.dropFirst(4))
+                    return Int64(rest)
+                }
+                return Int64(trimmed)
             }
-            for tok in line.tokens {
+
+            // Case A: token is already an SCTID (numeric or sct: prefix)
+            if let sct = parseSCTID(t) {
                 features.append(.init(
-                    key: tok,
+                    key: "sct:\(sct)",
                     value: .bool(true),
-                    snomedConceptId: nil,
+                    snomedConceptId: sct,
                     note: line.display,
                     isObjectivePositive: line.isObjective,
                     isAbnormal: line.isAbnormal,
                     source: line.source
                 ))
+                return
+            }
+
+            // Case B: token is a stable key we can use directly
+            // (We do not attempt to localize/parse these here.)
+            features.append(.init(
+                key: t,
+                value: .bool(true),
+                snomedConceptId: nil,
+                note: line.display,
+                isObjectivePositive: line.isObjective,
+                isAbnormal: line.isAbnormal,
+                source: line.source
+            ))
+        }
+
+        for line in problemLines {
+            if line.tokens.isEmpty {
+                // Best-effort: if we have terminology, try mapping the display text.
+                if let terminology {
+                    let hits = normalizeFreeTextFindings([line.display], terminology: terminology)
+                    if hits.isEmpty {
+                        notes.append("ProblemLine(\(line.source)): \(line.display)")
+                    } else {
+                        for h in hits {
+                            features.append(.init(
+                                key: "sct:\(h.id)",
+                                value: .bool(true),
+                                snomedConceptId: h.id,
+                                note: "\(line.display) → \(h.matchedTerm)",
+                                isObjectivePositive: line.isObjective,
+                                isAbnormal: line.isAbnormal,
+                                source: line.source
+                            ))
+                        }
+                    }
+                } else {
+                    notes.append("ProblemLine(\(line.source)): \(line.display)")
+                }
+                continue
+            }
+
+            // Emit tokens as-is first (stable contract), then optionally add SNOMED normalization for tokens
+            // that look like free text (contains spaces) when terminology is available.
+            for tok in line.tokens {
+                emitToken(tok, line: line)
+
+                // If this token looks like free text (e.g., contains spaces) and terminology exists, add SCT mapping too.
+                if let terminology {
+                    let tt = tok.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if tt.contains(" ") {
+                        if let hit = terminology.bestConceptMatch(tt) {
+                            features.append(.init(
+                                key: "sct:\(hit.conceptID)",
+                                value: .bool(true),
+                                snomedConceptId: hit.conceptID,
+                                note: "\(line.display) → \(hit.term)",
+                                isObjectivePositive: line.isObjective,
+                                isAbnormal: line.isAbnormal,
+                                source: line.source
+                            ))
+                        }
+                    }
+                }
             }
         }
 
         // Partitions
         let objective = features.filter { $0.isObjectivePositive }
         let abnormal = features.filter { $0.isAbnormal }
+
+        // Extraction summary breadcrumbs
+        notes.append("Features total: \(features.count)")
+        if !abnormal.isEmpty {
+            let abnKeys = abnormal.map { $0.key }.prefix(20).joined(separator: ", ")
+            notes.append("Abnormal keys (first 20): \(abnKeys)")
+        }
 
         return PatientClinicalProfile(
             patientId: patientId,
@@ -476,3 +749,133 @@ extension ClinicalFeature {
     }
 }
 
+
+
+// MARK: - Episode context adapter
+
+extension ClinicalFeatureExtractor {
+
+    /// Build a canonical clinical profile from an episode context, but with demographics supplied
+    /// by the caller (DB-backed), so the extractor does not invent DOB/sex.
+    ///
+    /// - Note: This is the preferred entry point once AppState can pass DOB/sex from the patient record.
+    func buildProfile(
+        fromEpisodeContext ctx: EpisodeAIContextProviding,
+        patientDOB: Date?,
+        patientSexToken: String?,
+        encounterDate: Date = Date(),
+        terminology: TerminologyStore? = nil
+    ) -> PatientClinicalProfile {
+
+        // Structured vitals (max temp). Other vitals are not available in EpisodeAIContext yet.
+        let vitals: [VitalsSnapshot] = [
+            VitalsSnapshot(
+                takenAt: encounterDate,
+                tempC: ctx.maxTempC,
+                hr: nil,
+                rr: nil,
+                spo2: nil,
+                systolic: nil,
+                diastolic: nil
+            )
+        ]
+
+        // Vaccination token (already structured enough for now).
+        let vaccination: VaccinationSnapshot? = {
+            guard let raw = ctx.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty else { return nil }
+            return VaccinationSnapshot(statusToken: raw, vaccineTokens: [])
+        }()
+
+        // Perinatal: keep as provenance until structured fields exist.
+        let perinatal: PerinatalSnapshot? = {
+            guard let raw = ctx.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty else { return nil }
+            return PerinatalSnapshot(
+                gestationalAgeWeeks: nil,
+                birthWeightG: nil,
+                nicuStay: nil,
+                infectionRiskText: raw
+            )
+        }()
+
+        // Problem lines: transport only; no parsing. Tokens remain empty until form emits stable tokens.
+        func toProblemLines(_ text: String, source: String) -> [ProblemLine] {
+            text.split(separator: "\n")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map {
+                    ProblemLine(
+                        display: $0,
+                        tokens: [],
+                        isObjective: false,
+                        isAbnormal: false,
+                        source: source
+                    )
+                }
+        }
+
+        var problemLines: [ProblemLine] = []
+        problemLines.append(contentsOf: toProblemLines(ctx.problemListing, source: "episode.problem_listing"))
+
+        let inv = ctx.complementaryInvestigations.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !inv.isEmpty {
+            problemLines.append(contentsOf: toProblemLines(inv, source: "episode.complementary_investigations"))
+        }
+
+        if let pmhRaw = ctx.pmhSummary?.trimmingCharacters(in: .whitespacesAndNewlines), !pmhRaw.isEmpty {
+            problemLines.append(contentsOf: toProblemLines(pmhRaw, source: "episode.pmh"))
+        }
+
+        let sexToken = patientSexToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return buildProfile(
+            patientId: Int64(ctx.patientID),
+            sexToken: (sexToken?.isEmpty == true ? nil : sexToken),
+            dob: patientDOB,
+            encounterDate: encounterDate,
+            vitals: vitals,
+            vaccination: vaccination,
+            perinatal: perinatal,
+            problemLines: problemLines,
+            terminology: terminology
+        )
+    }
+
+    /// Build a canonical clinical profile directly from an episode context.
+    ///
+    /// This keeps AppState free of clinical parsing/derivation logic.
+    /// AppState should pass its EpisodeAIContext (conforming to EpisodeAIContextProviding)
+    /// and let the extractor perform any necessary *structured* adaptation.
+    func buildProfile(
+        fromEpisodeContext ctx: EpisodeAIContextProviding,
+        encounterDate: Date = Date(),
+        terminology: TerminologyStore? = nil
+    ) -> PatientClinicalProfile {
+
+        #if DEBUG
+        print("[Extractor] Incoming ctx: patientID=\(ctx.patientID) ageDays=\(String(describing: ctx.patientAgeDays)) sex=\(String(describing: ctx.patientSex)) maxTempC=\(String(describing: ctx.maxTempC))")
+        #endif
+
+        // Back-compat shim: if the caller did not provide DOB yet, we can only
+        // derive a DOB from a structured numeric age (days). This is NOT free-text parsing.
+        let dobFallback: Date? = {
+            guard let ageDays = ctx.patientAgeDays else { return nil }
+            return Calendar(identifier: .gregorian).date(byAdding: .day, value: -ageDays, to: encounterDate)
+        }()
+
+        let profile = buildProfile(
+            fromEpisodeContext: ctx,
+            patientDOB: dobFallback,
+            patientSexToken: ctx.patientSex,
+            encounterDate: encounterDate,
+            terminology: terminology
+        )
+
+        #if DEBUG
+        print("[Extractor] Built profile: \(profile.debugSummaryLine())")
+        #endif
+
+        return profile
+    }
+}
