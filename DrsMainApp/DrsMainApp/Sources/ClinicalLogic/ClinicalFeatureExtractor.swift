@@ -322,6 +322,12 @@ final class ClinicalFeatureExtractor {
     // MARK: Feature Keys (stable contract)
     enum Key {
         // Demographics
+        // v1 guideline engine canonical keys
+        static let demographicsSex = "demographics.sex"
+        static let demographicsAgeDays = "demographics.age_days"
+        static let demographicsAgeMonths = "demographics.age_months"
+
+        // Back-compat keys (older rules / legacy consumers)
         static let sex = "patient.sex"
         static let ageDays = "patient.age_days"
         static let ageMonths = "patient.age_months"
@@ -377,6 +383,17 @@ final class ClinicalFeatureExtractor {
         // Age
         let age = Self.computeAge(dob: dob, on: encounterDate)
         if let sexToken {
+            // Canonical key for v1 engine
+            features.append(.init(
+                key: Key.demographicsSex,
+                value: .string(sexToken),
+                snomedConceptId: nil,
+                note: nil,
+                isObjectivePositive: true,
+                isAbnormal: false,
+                source: "demographics"
+            ))
+            // Back-compat key
             features.append(.init(
                 key: Key.sex,
                 value: .string(sexToken),
@@ -388,6 +405,17 @@ final class ClinicalFeatureExtractor {
             ))
         }
         if let d = age.ageDays {
+            // Canonical key for v1 engine
+            features.append(.init(
+                key: Key.demographicsAgeDays,
+                value: .int(d),
+                snomedConceptId: nil,
+                note: nil,
+                isObjectivePositive: true,
+                isAbnormal: false,
+                source: "demographics"
+            ))
+            // Back-compat key
             features.append(.init(
                 key: Key.ageDays,
                 value: .int(d),
@@ -399,6 +427,17 @@ final class ClinicalFeatureExtractor {
             ))
         }
         if let m = age.ageMonths {
+            // Canonical key for v1 engine
+            features.append(.init(
+                key: Key.demographicsAgeMonths,
+                value: .int(m),
+                snomedConceptId: nil,
+                note: nil,
+                isObjectivePositive: true,
+                isAbnormal: false,
+                source: "demographics"
+            ))
+            // Back-compat key
             features.append(.init(
                 key: Key.ageMonths,
                 value: .int(m),
@@ -485,12 +524,39 @@ final class ClinicalFeatureExtractor {
             features.append(.init(
                 key: Key.feverPresent,
                 value: .bool(maxTemp >= 38.0),
-                snomedConceptId: 386661006, // Fever (can be revised if you prefer a different concept)
+                snomedConceptId: nil,
                 note: "derived from vital.temp_c.max >= 38.0",
                 isObjectivePositive: true,
                 isAbnormal: maxTemp >= 38.0,
                 source: "derived"
             ))
+
+            // Optional: if we have a terminology store, map the derived fever flag to a SNOMED concept
+            // via DB lookup (no hard-coded concept IDs).
+            if maxTemp >= 38.0, let terminology {
+                // Try English + French (keeps UI locale independent enough for now).
+                let queries = ["fever", "fièvre"]
+                for q in queries {
+                    if let hit = terminology.bestConceptMatch(q) {
+                        let sctKey = "sct:\(hit.conceptID)"
+
+                        // Avoid duplicate SCT features if the same concept was already emitted
+                        // (e.g., via ProblemLines mapping).
+                        if !features.contains(where: { $0.key == sctKey }) {
+                            features.append(.init(
+                                key: sctKey,
+                                value: .bool(true),
+                                snomedConceptId: hit.conceptID,
+                                note: "derived fever → \(hit.term)",
+                                isObjectivePositive: true,
+                                isAbnormal: true,
+                                source: "derived.snomed"
+                            ))
+                        }
+                        break
+                    }
+                }
+            }
         }
         if let hr = vAgg.hr {
             features.append(.init(
@@ -599,7 +665,39 @@ final class ClinicalFeatureExtractor {
             if line.tokens.isEmpty {
                 // Best-effort: if we have terminology, try mapping the display text.
                 if let terminology {
-                    let hits = normalizeFreeTextFindings([line.display], terminology: terminology)
+                    // Many ProblemLine.display values are formatted like "Section : Finding".
+                    // Try several candidate strings so localized prefixes don't block matching.
+                    let raw = line.display.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    var candidates: [String] = []
+                    candidates.append(raw)
+
+                    // Split on common separators and keep the *rightmost* chunk.
+                    let seps: [String] = [":", "：", "-", "—"]
+                    for sep in seps {
+                        if raw.contains(sep) {
+                            let parts = raw.split(separator: Character(sep), omittingEmptySubsequences: true)
+                            if let last = parts.last {
+                                let tail = String(last).trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !tail.isEmpty { candidates.append(tail) }
+                            }
+                        }
+                    }
+
+                    // Also try comma/semicolon-splitting on the tail (e.g., "wheeze, crackles").
+                    if let last = candidates.last {
+                        let more = last
+                            .split(whereSeparator: { ",;".contains($0) })
+                            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+                        candidates.append(contentsOf: more)
+                    }
+
+                    // De-dup while preserving order.
+                    var seen = Set<String>()
+                    let uniqueCandidates = candidates.filter { seen.insert($0.lowercased()).inserted }
+
+                    let hits = normalizeFreeTextFindings(uniqueCandidates, terminology: terminology)
                     if hits.isEmpty {
                         notes.append("ProblemLine(\(line.source)): \(line.display)")
                     } else {
@@ -646,6 +744,29 @@ final class ClinicalFeatureExtractor {
             }
         }
 
+        // SNOMED mirror features
+        let existingKeys = Set(features.map { $0.key })
+        let snapshot = features
+        var addedSCTKeys = Set<String>()
+
+        for f in snapshot {
+            guard let id = f.snomedConceptId else { continue }
+            let k = "sct:\(id)"
+            guard !existingKeys.contains(k), addedSCTKeys.insert(k).inserted else { continue }
+
+            features.append(.init(
+                key: k,
+                value: .bool(true),
+                snomedConceptId: id,
+                note: f.key,
+                isObjectivePositive: f.isObjectivePositive,
+                isAbnormal: f.isAbnormal,
+                source: "snomed_mirror"
+            ))
+        }
+        // Final de-dupe: keep the FIRST occurrence of each key (preserves provenance order)
+        var seenKeys = Set<String>()
+        features = features.filter { seenKeys.insert($0.key).inserted }
         // Partitions
         let objective = features.filter { $0.isObjectivePositive }
         let abnormal = features.filter { $0.isAbnormal }

@@ -95,6 +95,40 @@ final class TerminologyStore: ObservableObject {
         return searchTerms(query, limit: 1).first
     }
 
+    /// Map a stable app feature key (e.g. "sick_episode_form.choice.wheeze") to a SNOMED concept_id.
+    ///
+    /// This uses the app-local terminology DB table `feature_snomed_map`.
+    ///
+    /// Returns: concept_id (SCTID) if mapped and active.
+    func conceptIDForFeatureKey(_ featureKey: String) -> Int64? {
+        let k = featureKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !k.isEmpty else { return nil }
+
+        guard let db = openDBReadOnly() else { return nil }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT concept_id
+        FROM feature_snomed_map
+        WHERE active = 1
+          AND feature_key = ?
+        LIMIT 1;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("TerminologyStore: conceptIDForFeatureKey prepare failed: \(msg, privacy: .public)")
+            return nil
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        _ = k.withCString { sqlite3_bind_text(stmt, 1, $0, -1, SQLITE_TRANSIENT) }
+
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        return sqlite3_column_int64(stmt, 0)
+    }
+
     // MARK: - DB location (local app space, NOT patient bundle)
     /// ~/Library/Application Support/DrsMainApp/Terminology/snomed.sqlite
     private var dbURL: URL {
@@ -134,6 +168,22 @@ final class TerminologyStore: ObservableObject {
         } else {
             let sample = hits.map { $0.term }.joined(separator: " | ")
             log.info("TerminologyStore: DEBUG smoke search 'fever' -> \(hits.count, privacy: .public) hits: \(sample, privacy: .public)")
+        }
+        
+        let hits2 = searchTerms("sibilants", limit: 5)
+        if hits2.isEmpty {
+            log.info("TerminologyStore: DEBUG smoke search 'sibilants' -> 0 hits")
+        } else {
+            let sample2 = hits2.map { "\($0.term) [\($0.conceptID)]" }.joined(separator: " | ")
+            log.info("TerminologyStore: DEBUG smoke search 'sibilants' -> \(hits2.count, privacy: .public) hits: \(sample2, privacy: .public)")
+        }
+
+        let hits3 = searchTerms("wheezing", limit: 5)
+        if hits3.isEmpty {
+            log.info("TerminologyStore: DEBUG smoke search 'wheezing' -> 0 hits")
+        } else {
+            let sample3 = hits3.map { "\($0.term) [\($0.conceptID)]" }.joined(separator: " | ")
+            log.info("TerminologyStore: DEBUG smoke search 'wheezing' -> \(hits3.count, privacy: .public) hits: \(sample3, privacy: .public)")
         }
         #endif
     }

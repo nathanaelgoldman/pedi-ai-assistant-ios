@@ -2312,6 +2312,69 @@ struct SickEpisodeForm: View {
         }
     }
 
+    // MARK: - Problem tokens (machine-readable)
+
+    /// Stable token for a stored choice value, using the same key namespace as Localizable.
+    /// Example: "Wheeze" -> "sick_episode_form.choice.wheeze"
+    private func choiceToken(_ raw: String) -> String {
+        "sick_episode_form.choice.\(sickChoiceKey(raw))"
+    }
+
+    /// Build a machine-readable list of flagged/abnormal items **without** relying on localized display text.
+    /// These tokens are meant to feed terminology mapping + guideline matching.
+    private func buildProblemTokens() -> [String] {
+        var out: [String] = []
+
+        // Main complaints (preset only). Free-text complaints remain as-is so they can still be used by AI.
+        out.append(contentsOf: Array(presetComplaints).map(choiceToken))
+        let freeComplaints = otherComplaints
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        out.append(contentsOf: freeComplaints)
+
+        // Structured HPI abnormalities
+        if appearance != "Well" { out.append(choiceToken(appearance)) }
+        if feeding != "Normal" { out.append(choiceToken(feeding)) }
+        if breathing != "Normal" { out.append(choiceToken(breathing)) }
+        if urination != "Normal" { out.append(choiceToken(urination)) }
+        if pain != "None" { out.append(choiceToken(pain)) }
+        if stools != "Normal" { out.append(choiceToken(stools)) }
+        let ctx = Array(context).filter { $0 != "None" }
+        out.append(contentsOf: ctx.map(choiceToken))
+
+        // PE abnormalities
+        if generalAppearance != "Well" { out.append(choiceToken(generalAppearance)) }
+        if hydration != "Normal" { out.append(choiceToken(hydration)) }
+        if heart != "Normal" { out.append(choiceToken(heart)) }
+        if color != "Normal" { out.append(choiceToken(color)) }
+
+        out.append(contentsOf: Array(skinSet).filter { $0 != "Normal" }.map(choiceToken))
+        out.append(contentsOf: Array(ent).filter { $0 != "Normal" }.map(choiceToken))
+
+        if rightEar != "Normal" { out.append(choiceToken(rightEar)) }
+        if leftEar  != "Normal" { out.append(choiceToken(leftEar)) }
+        if rightEye != "Normal" { out.append(choiceToken(rightEye)) }
+        if leftEye  != "Normal" { out.append(choiceToken(leftEye)) }
+
+        out.append(contentsOf: Array(lungsSet).filter { $0 != "Normal" }.map(choiceToken))
+        out.append(contentsOf: Array(abdomenSet).filter { $0 != "Normal" }.map(choiceToken))
+        if peristalsis != "Normal" { out.append(choiceToken(peristalsis)) }
+        out.append(contentsOf: Array(genitaliaSet).filter { $0 != "Normal" }.map(choiceToken))
+
+        if neurological != "Alert" { out.append(choiceToken(neurological)) }
+        if musculoskeletal != "Normal" { out.append(choiceToken(musculoskeletal)) }
+
+        // Lymph nodes ("None" is the normal/default here)
+        out.append(contentsOf: Array(lymphNodesSet).filter { $0 != "None" }.map(choiceToken))
+
+        // Extra PE free text stays as-is (AI use); we do NOT tokenize it here.
+
+        // Dedupe + stable order
+        let deduped = Array(Set(out)).sorted()
+        return deduped
+    }
+
     // MARK: - AI assistance wiring
 
     /// Build a lightweight AI context for the current episode, if possible.
@@ -2364,6 +2427,7 @@ struct SickEpisodeForm: View {
             patientID: pid,
             episodeID: Int(eid),
             problemListing: problemListing,
+            problemTokens: buildProblemTokens(),
             complementaryInvestigations: complementaryInvestigations,
             vaccinationStatus: vaccinationStatus,
             pmhSummary: pmhSummary,
@@ -2386,6 +2450,7 @@ struct SickEpisodeForm: View {
         }
         // Use the central JSON-based entry point; for now we pass nil so AppState
         // falls back to the existing stub when no clinician-specific rules are used.
+        AppLog.ui.debug("SickEpisodeForm: guideline ctx.problemTokens=\(ctx.problemTokens, privacy: .public)")
         appState.runGuidelineFlags(using: ctx, rulesJSON: nil)
     }
 

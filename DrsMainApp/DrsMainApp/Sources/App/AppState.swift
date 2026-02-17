@@ -2706,6 +2706,7 @@ func reloadPatients() {
             let patientID: Int
             let episodeID: Int
             let problemListing: String
+            let problemTokens: [String]
             let complementaryInvestigations: String
             let vaccinationStatus: String?
             let pmhSummary: String?
@@ -2718,6 +2719,7 @@ func reloadPatients() {
                 patientID: Int,
                 episodeID: Int,
                 problemListing: String,
+                problemTokens: [String] = [],
                 complementaryInvestigations: String,
                 vaccinationStatus: String?,
                 perinatalSummary: String? = nil,
@@ -2729,6 +2731,7 @@ func reloadPatients() {
                 self.patientID = patientID
                 self.episodeID = episodeID
                 self.problemListing = problemListing
+                self.problemTokens = problemTokens
                 self.complementaryInvestigations = complementaryInvestigations
                 self.vaccinationStatus = vaccinationStatus
                 self.perinatalSummary = perinatalSummary
@@ -2983,188 +2986,6 @@ func reloadPatients() {
             let rules: [Rule]?
         }
     
-        /// Best-effort age parser from the problem listing text.
-        /// Supports formats like:
-        ///   "Age: 19 d"
-        ///   "Age: 3 mo"
-        ///   "Age: 1 y 4 mo"
-        ///   "Age: 10 y"
-        private func parseAgeDays(fromProblemListing listing: String) -> Int? {
-            // Look for a line starting with "Age:"
-            guard let ageLine = listing
-                .split(separator: "\n")
-                .first(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("Age:") })
-            else { return nil }
-
-            let s = ageLine
-                .replacingOccurrences(of: "Age:", with: "")
-                .trimmingCharacters(in: .whitespaces)
-
-            // 1) "19 d"
-            if let r = s.range(of: "d") {
-                let numStr = s[..<r.lowerBound].trimmingCharacters(in: .whitespaces)
-                if let v = Int(numStr) { return v }
-            }
-
-            // 2) "3 mo"  → approx months → days
-            if let r = s.range(of: "mo") {
-                let numStr = s[..<r.lowerBound].trimmingCharacters(in: .whitespaces)
-                if let m = Int(numStr) {
-                    return m * 30
-                }
-            }
-
-            // 3) "1 y 4 mo" or "10 y"
-            if let rY = s.range(of: "y") {
-                let yearsPart = s[..<rY.lowerBound].trimmingCharacters(in: .whitespaces)
-                var totalDays = 0
-                if let y = Int(yearsPart) {
-                    totalDays += y * 365
-                }
-                if let rMo = s.range(of: "mo") {
-                    let between = s[rY.upperBound..<rMo.lowerBound]
-                    let moStr = between
-                        .replacingOccurrences(of: "mo", with: "")
-                        .trimmingCharacters(in: .whitespaces)
-                    if let m = Int(moStr) {
-                        totalDays += m * 30
-                    }
-                }
-                return totalDays > 0 ? totalDays : nil
-            }
-
-            return nil
-        }
-
-        /// Best-effort max temperature parser from the "Abnormal vitals" line,
-        /// expecting something like: "Abnormal vitals: T 38.5°C, HR ..."
-        private func parseMaxTempC(fromProblemListing listing: String) -> Double? {
-            guard let vitalsLine = listing
-                .split(separator: "\n")
-                .first(where: { $0.contains("Abnormal vitals:") })
-            else { return nil }
-
-            let s = String(vitalsLine)
-
-            guard let rStart = s.range(of: "T "),
-                  let rEnd = s.range(of: "°C", range: rStart.upperBound..<s.endIndex)
-            else { return nil }
-
-            let numStr = s[rStart.upperBound..<rEnd.lowerBound]
-                .trimmingCharacters(in: .whitespaces)
-                .replacingOccurrences(of: ",", with: ".")
-
-            return Double(numStr)
-        }
-
-        /// Evaluate whether a rule's conditions match the given episode context.
-        /// Empty/nil condition arrays are treated as "no constraint" for that field.
-        private func ruleConditionsMatch(_ cond: GuidelineRuleSet.Rule.Conditions?, context: EpisodeAIContext) -> Bool {
-            guard let cond = cond else {
-                // No conditions at all → always match
-                return true
-            }
-
-            func fieldContainsAny(_ needles: [String]?, in haystack: String?) -> Bool {
-                // If there are no needles for this field, treat as unconstrained (pass-through).
-                guard let needles = needles, !needles.isEmpty else { return true }
-                guard let haystack = haystack?.lowercased(), !haystack.isEmpty else { return false }
-
-                for raw in needles {
-                    let needle = raw
-                        .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                        .lowercased()
-                    if !needle.isEmpty, haystack.contains(needle) {
-                        return true
-                    }
-                }
-                return false
-            }
-
-            // --- Canonical pipeline rule: AppState does NOT parse clinical facts from free text. ---
-            // Only use explicitly populated structured fields from EpisodeAIContext.
-            let effectiveAgeDays: Int? = context.patientAgeDays
-            let effectiveMaxTempC: Double? = context.maxTempC
-
-            // --- 1) Text constraints ---
-            let problemOK = fieldContainsAny(cond.problemContains, in: context.problemListing)
-            let invOK     = fieldContainsAny(cond.investigationsContains, in: context.complementaryInvestigations)
-            let pmhOK     = fieldContainsAny(cond.pmhContains, in: context.pmhSummary)
-            let vaccOK    = fieldContainsAny(cond.vaccinationContains, in: context.vaccinationStatus)
-
-            // --- 2) Age constraints (in days) ---
-            let ageOK: Bool = {
-                if cond.minAgeDays == nil && cond.maxAgeDays == nil {
-                    // No age bounds at all → unconstrained.
-                    return true
-                }
-                guard let ageDays = effectiveAgeDays else {
-                    // Rule requires age info but we don't have it → rule cannot match.
-                    return false
-                }
-                if let min = cond.minAgeDays, ageDays < min { return false }
-                if let max = cond.maxAgeDays, ageDays > max { return false }
-                return true
-            }()
-
-            // --- 3) Temperature constraints (max temp in °C) ---
-            let tempOK: Bool = {
-                if cond.minTempC == nil && cond.maxTempC == nil {
-                    return true
-                }
-                guard let t = effectiveMaxTempC else {
-                    // Rule requires temperature but none is available → no match.
-                    return false
-                }
-                if let minT = cond.minTempC, t < minT { return false }
-                if let maxT = cond.maxTempC, t > maxT { return false }
-                return true
-            }()
-
-            // --- 4) Fever flag (requires_fever) ---
-            let feverOK: Bool = {
-                guard let requires = cond.requiresFever else {
-                    // No explicit requirement → unconstrained.
-                    return true
-                }
-                guard let t = effectiveMaxTempC else {
-                    // If fever is required/forbidden but temp is unknown, we cannot decide → no match.
-                    return false
-                }
-                let hasFever = t >= 38.0
-                return requires ? hasFever : !hasFever
-            }()
-
-            // --- 5) Sex constraints ---
-            let sexOK: Bool = {
-                guard let allowed = cond.sexIn, !allowed.isEmpty else {
-                    // No constraint on sex.
-                    return true
-                }
-
-                guard let raw = context.patientSex?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !raw.isEmpty else {
-                    // Rule constrains sex but it wasn't provided → no match.
-                    return false
-                }
-
-                let normSex: String = {
-                    let lower = raw.lowercased()
-                    if lower.hasPrefix("m") { return "male" }
-                    if lower.hasPrefix("f") { return "female" }
-                    return lower
-                }()
-
-                let normAllowed = allowed.map {
-                    $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                }
-
-                return normAllowed.contains(normSex)
-            }()
-
-            // All constrained dimensions must pass (AND semantics).
-            return problemOK && invOK && pmhOK && vaccOK && ageOK && tempOK && feverOK && sexOK
-        }
 
         /// Entry point for JSON-based guideline flags.
         /// - If `rulesJSON` is nil or empty, falls back to the stub behavior.
@@ -3174,168 +2995,73 @@ func reloadPatients() {
 
 
 
-func runGuidelineFlags(using context: EpisodeAIContext, rulesJSON: String?) {
-            // Determine the effective JSON to use:
-            //  1) explicit `rulesJSON` parameter if non-empty
-            //  2) else, whatever the host app resolver provides (per-clinician rules)
-            let effectiveRaw: String? = {
-                if let supplied = rulesJSON?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
-                   !supplied.isEmpty {
-                    return supplied
-                }
-                if let resolved = sickRulesJSONResolver?()?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
-                   !resolved.isEmpty {
-                    return resolved
-                }
-                return nil
-            }()
-
-            // No rules configured anywhere? Use the existing stub so the UI still shows something helpful.
-            guard let raw = effectiveRaw else {
-                runGuidelineFlagsStub(using: context)
-                return
+    func runGuidelineFlags(using context: EpisodeAIContext, rulesJSON: String?) {
+        // Determine the effective JSON to use:
+        //  1) explicit `rulesJSON` parameter if non-empty
+        //  2) else, whatever the host app resolver provides (per-clinician rules)
+        let effectiveRaw: String? = {
+            if let supplied = rulesJSON?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+               !supplied.isEmpty {
+                return supplied
             }
-
-            // --- NEW (v1) canonical flow: ClinicalFeatureExtractor -> GuidelineEngine ---
-            // We keep this best-effort and purely additive: if v1 produces no matches,
-            // we fall back to the existing v0 behavior below.
-            //
-            // Note: we intentionally do NOT require TerminologyStore here yet; the profile
-            // already carries stable keys and may optionally include SNOMED IDs.
-            do {
-                let encounterDate = Date()
-
-                // Canonical pipeline rule: AppState does NOT parse clinical facts from free text.
-                // Build the profile in one shot using ClinicalFeatureExtractor.
-                let profile = clinicalFeatureExtractor.buildProfile(
-                    fromEpisodeContext: context,
-                    encounterDate: encounterDate,
-                    terminology: terminologyStore
-                )
-
-                // Evaluate using new engine.
-                //DEBUG Temp
-                log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) profile.ageDays=\(String(describing: profile.ageDays)) profile.ageMonths=\(String(describing: profile.ageMonths)) tempMax=\(String(describing: profile.doubleValue(ClinicalFeatureExtractor.Key.tempCMax))) fever=\(String(describing: profile.boolValue(ClinicalFeatureExtractor.Key.feverPresent))) features=\(profile.features.count)")
-                let result = GuidelineEngine.evaluate(profile: profile, rulesJSON: raw)
-
-                if !result.matches.isEmpty {
-                    // Deterministic ordering for UI: higher priority first, then stable text.
-                    let ordered = result.matches
-                        .sorted { (a, b) in
-                            if a.priority != b.priority { return a.priority > b.priority }
-                            return a.flagText.localizedCaseInsensitiveCompare(b.flagText) == .orderedAscending
-                        }
-                        .map { $0.flagText }
-
-                    aiGuidelineFlagsForActiveEpisode = ordered
-                    log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) matches=\(ordered.count)")
-                    return
-                } else {
-                    log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) no matches → falling back to v0")
-                }
-            } catch {
-                // If anything unexpected happens in v1, we fall back to v0 logic below.
-                log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) failed (\(String(describing: error))) → falling back to v0")
+            if let resolved = sickRulesJSONResolver?()?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+               !resolved.isEmpty {
+                return resolved
             }
+            return nil
+        }()
 
-            // For now, keep the proven v0 rule evaluation (text/heuristic matching) to avoid
-            // breaking existing JSON-guideline behavior while we finish the refactor.
-            do {
-                let data = Data(raw.utf8)
-
-                // First, try to decode a structured rule set.
-                let decoder = JSONDecoder()
-                decoder.keyDecodingStrategy = .convertFromSnakeCase
-                if let ruleSet = try? decoder.decode(GuidelineRuleSet.self, from: data) {
-                    var flags: [String] = []
-
-                    // 🔎 Debug: log the derived numeric context used for matching
-                    let effectiveAgeDays: Int? = {
-                        if let d = context.patientAgeDays { return d }
-                        return parseAgeDays(fromProblemListing: context.problemListing)
-                    }()
-
-                    let effectiveMaxTempC: Double? = {
-                        if let t = context.maxTempC { return t }
-                        return parseMaxTempC(fromProblemListing: context.problemListing)
-                    }()
-
-                    let hasFeverFromTemp: Bool = {
-                        if let t = effectiveMaxTempC { return t >= 38.0 }
-                        return false
-                    }()
-
-                    let hasFeverFromText: Bool = {
-                        let lower = context.problemListing.lowercased()
-                        return lower.contains("fever") || lower.contains("febrile")
-                    }()
-
-                    let hasFever = hasFeverFromTemp || hasFeverFromText
-
-                    log.debug("GuidelineEval: episodeID=\(context.episodeID) ageDays=\(String(describing: effectiveAgeDays)) maxTempC=\(String(describing: effectiveMaxTempC)) hasFever=\(hasFever)")
-
-                    // Optional top-level flags
-                    if let baseFlags = ruleSet.flags {
-                        flags.append(contentsOf: baseFlags
-                            .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
-                            .filter { !$0.isEmpty })
-                    }
-
-                    // Rule-based flags derived from the episode context
-                    if let rules = ruleSet.rules {
-                        for rule in rules {
-                            if ruleConditionsMatch(rule.conditions, context: context) {
-                                log.debug("GuidelineEval: MATCH rule=\(rule.id ?? "<no-id>")")
-                                let primary = rule.flag?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
-                                let fallback = rule.description?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
-                                let text = primary.isEmpty ? fallback : primary
-                                if !text.isEmpty {
-                                    flags.append(text)
-                                }
-                            }
-                        }
-                    }
-
-                    if !flags.isEmpty {
-                        aiGuidelineFlagsForActiveEpisode = flags
-                        return
-                    } else {
-                        // Structured rules present but none matched or produced text → fall back
-                        runGuidelineFlagsStub(using: context)
-                        return
-                    }
-                }
-
-                // Fallback: support very simple shapes for backwards compatibility.
-                let obj = try JSONSerialization.jsonObject(with: data, options: [])
-
-                var derivedFlags: [String] = []
-
-                // Case 1: array of strings → treat as flags directly
-                if let arr = obj as? [String] {
-                    derivedFlags = arr
-                        .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                }
-                // Case 2: dictionary with "flags": [String]
-                else if let dict = obj as? [String: Any],
-                        let arr = dict["flags"] as? [String] {
-                    derivedFlags = arr
-                        .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                }
-
-                if derivedFlags.isEmpty {
-                    // Structure not recognized yet → fall back to stub for now.
-                    runGuidelineFlagsStub(using: context)
-                } else {
-                    aiGuidelineFlagsForActiveEpisode = derivedFlags
-                }
-            } catch {
-                // JSON parse failed → keep behavior safe and predictable.
-                runGuidelineFlagsStub(using: context)
-            }
+        // No rules configured anywhere? Use the existing stub so the UI still shows something helpful.
+        guard let raw = effectiveRaw else {
+            runGuidelineFlagsStub(using: context)
+            return
         }
+
+        // --- Canonical flow: ClinicalFeatureExtractor -> GuidelineEngine ---
+        // AppState does NOT parse clinical facts from free text.
+        let encounterDate = Date()
+
+        let profile = clinicalFeatureExtractor.buildProfile(
+            fromEpisodeContext: context,
+            encounterDate: encounterDate,
+            terminology: terminologyStore
+        )
+        
+        let sctKeys = profile.features
+            .map { $0.key }
+            .filter { $0.hasPrefix("sct:") }
+
+        log.debug("SNOMED mirror keys: count=\(sctKeys.count) sample=\(Array(sctKeys.prefix(10)))")
+
+        // 🔎 Debug context for matching
+        log.debug(
+            "GuidelineEval(v1): episodeID=\(context.episodeID) profile.ageDays=\(String(describing: profile.ageDays)) profile.ageMonths=\(String(describing: profile.ageMonths)) tempMax=\(String(describing: profile.doubleValue(ClinicalFeatureExtractor.Key.tempCMax))) fever=\(String(describing: profile.boolValue(ClinicalFeatureExtractor.Key.feverPresent))) features=\(profile.features.count)"
+        )
+        
+        let rawLen = raw.count
+        let rawHead = String(raw.prefix(120))
+        log.debug("GuidelineEval(v1): using sickRulesJSON len=\(rawLen) head=\(rawHead)")
+
+        let result = GuidelineEngine.evaluate(profile: profile, rulesJSON: raw)
+
+        if !result.matches.isEmpty {
+            // Deterministic ordering for UI: higher priority first, then stable text.
+            let ordered = result.matches
+                .sorted { (a, b) in
+                    if a.priority != b.priority { return a.priority > b.priority }
+                    return a.flagText.localizedCaseInsensitiveCompare(b.flagText) == .orderedAscending
+                }
+                .map { $0.flagText }
+
+            aiGuidelineFlagsForActiveEpisode = ordered
+            log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) matches=\(ordered.count)")
+            return
+        }
+
+        // No v1 matches → show stub messaging (no v0 free-text parsing fallback).
+        log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) no matches → stub")
+        runGuidelineFlagsStub(using: context)
+    }
 
         /// Build a structured JSON snapshot of the current well-visit context.
         /// This is designed to be provider-agnostic and safe to embed directly

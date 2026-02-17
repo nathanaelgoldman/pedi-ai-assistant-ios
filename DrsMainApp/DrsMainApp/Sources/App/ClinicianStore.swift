@@ -229,6 +229,14 @@ final class ClinicianStore: ObservableObject {
             out.append(user)
         }
         self.users = out
+        log.debug("ClinicianStore: reloadUsers loaded users=\(out.count)")
+        for u in out {
+            let sickLen = u.aiSickRulesJSON?.count ?? 0
+            let wellLen = u.aiWellRulesJSON?.count ?? 0
+            if sickLen > 0 || wellLen > 0 {
+                log.debug("ClinicianStore: user id=\(u.id) rules(sick=\(sickLen) chars, well=\(wellLen) chars)")
+            }
+        }
     }
 
     @discardableResult
@@ -426,6 +434,11 @@ final class ClinicianStore: ObservableObject {
         sickRulesJSON: String?,
         wellRulesJSON: String?
     ) {
+        let sp = sickPrompt?.count ?? 0
+        let wp = wellPrompt?.count ?? 0
+        let sr = sickRulesJSON?.count ?? 0
+        let wr = wellRulesJSON?.count ?? 0
+        log.debug("ClinicianStore: updateAIPromptsAndRules id=\(id) sizes(prompt sick=\(sp), well=\(wp); rules sick=\(sr), well=\(wr))")
         guard let db = openDB() else { return }
         defer { sqlite3_close(db) }
 

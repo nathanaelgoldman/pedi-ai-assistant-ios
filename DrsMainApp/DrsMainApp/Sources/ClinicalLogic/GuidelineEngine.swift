@@ -215,6 +215,7 @@ public indirect enum Predicate: Codable {
         let value = try? c.decode(Double.self, forKey: .value)
         let intValue = try? c.decode(Int.self, forKey: .value)
         let strValue = try? c.decode(String.self, forKey: .value)
+        let boolValue = try? c.decode(Bool.self, forKey: .value)
         let values = try? c.decode([String].self, forKey: .values)
         let min = try? c.decode(Double.self, forKey: .min)
         let max = try? c.decode(Double.self, forKey: .max)
@@ -227,6 +228,7 @@ public indirect enum Predicate: Codable {
             valueDouble: value,
             valueInt: intValue,
             valueString: strValue,
+            valueBool: boolValue,
             values: values,
             minDouble: min,
             maxDouble: max,
@@ -254,6 +256,8 @@ public indirect enum Predicate: Codable {
                 try c.encode(v, forKey: .value)
             } else if let v = cond.valueString {
                 try c.encode(v, forKey: .value)
+            } else if let v = cond.valueBool {
+                try c.encode(v, forKey: .value)
             }
             if let vs = cond.values {
                 try c.encode(vs, forKey: .values)
@@ -277,6 +281,8 @@ public struct Condition: Codable {
         case lte
         case lt
         case betweenInclusive
+        case present
+        case absent
         case unknown(String)
 
         public init(from decoder: Decoder) throws {
@@ -300,6 +306,9 @@ public struct Condition: Codable {
             case "lte": self = .lte
             case "lt": self = .lt
             case "between_inclusive": self = .betweenInclusive
+            case "present": self = .present
+            case "exists": self = .present
+            case "absent": self = .absent
             default: return nil
             }
         }
@@ -315,6 +324,8 @@ public struct Condition: Codable {
             case .lte: return "lte"
             case .lt: return "lt"
             case .betweenInclusive: return "between_inclusive"
+            case .present: return "present"
+            case .absent: return "absent"
             case .unknown(let s): return s
             }
         }
@@ -326,6 +337,7 @@ public struct Condition: Codable {
     public let valueDouble: Double?
     public let valueInt: Int?
     public let valueString: String?
+    public let valueBool: Bool?
     public let values: [String]?
 
     public let minDouble: Double?
@@ -339,6 +351,7 @@ public struct Condition: Codable {
         valueDouble: Double? = nil,
         valueInt: Int? = nil,
         valueString: String? = nil,
+        valueBool: Bool? = nil,
         values: [String]? = nil,
         minDouble: Double? = nil,
         maxDouble: Double? = nil,
@@ -350,6 +363,7 @@ public struct Condition: Codable {
         self.valueDouble = valueDouble
         self.valueInt = valueInt
         self.valueString = valueString
+        self.valueBool = valueBool
         self.values = values
         self.minDouble = minDouble
         self.maxDouble = maxDouble
@@ -381,11 +395,53 @@ public enum GuidelineEngine {
 
             let ruleSet = try decoder.decode(GuidelineRuleSetV1.self, from: data)
 
+            #if DEBUG
+            print("GuidelineEngine: decoded rules=\(ruleSet.rules.count) schema=\(ruleSet.schemaVersion ?? "nil")")
+
+            // Best-effort key sampling for debugging.
+            // `ClinicalFeatureProviding` does not expose keys, so we downcast known implementations.
+            if let p = profile as? PatientClinicalProfile {
+                let keys = p.features.map { $0.key }
+                let hasSCT = keys.contains { $0.hasPrefix("sct:") }
+                print("GuidelineEngine: profile has sct keys? \(hasSCT)")
+                print("GuidelineEngine: sample keys=\(Array(keys.prefix(20)))")
+            } else if let p = profile as? FeatureMapProfile {
+                let keys = Array(p.features.keys)
+                let hasSCT = keys.contains { $0.hasPrefix("sct:") }
+                print("GuidelineEngine: profile has sct keys? \(hasSCT)")
+                print("GuidelineEngine: sample keys=\(Array(keys.prefix(20)))")
+            } else {
+                print("GuidelineEngine: profile key sampling unavailable for type \(type(of: profile))")
+            }
+            #endif
+
             var matches: [GuidelineMatch] = []
             matches.reserveCapacity(ruleSet.rules.count)
 
             for rule in ruleSet.rules {
-                if predicateMatches(rule.when, profile: profile) {
+
+                #if DEBUG
+                // Minimal trace to explain why v1 matches or not.
+                // NOTE: These keys are the canonical (non-localized) keys used by the engine.
+                let ageDays   = profile.int("demographics.age_days")
+                let ageMonths = profile.int("demographics.age_months")
+                let tempMax   = profile.double("vital.temp_c.max")
+                let fever     = profile.bool("symptom.fever.present")
+                let sex       = profile.string("demographics.sex")
+                let vax       = profile.string("immunization.status")
+
+                print("[GuidelineEngine v1] rule=\(rule.id) pri=\(rule.priority ?? 0)")
+                print("  profile: ageDays=\(String(describing: ageDays)) ageMonths=\(String(describing: ageMonths)) tempMax=\(String(describing: tempMax)) fever=\(String(describing: fever)) sex=\(String(describing: sex)) vax=\(String(describing: vax))")
+                print("  when: \(rule.when)")
+                #endif
+
+                let ok = predicateMatches(rule.when, profile: profile)
+
+                #if DEBUG
+                print("  -> match=\(ok)")
+                #endif
+
+                if ok {
                     let p = rule.priority ?? 0
                     let text = rule.flag.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !text.isEmpty {
@@ -396,7 +452,9 @@ public enum GuidelineEngine {
 
             return GuidelineResult(matches: matches)
         } catch {
-            // Intentionally silent for now: caller decides what to show.
+            #if DEBUG
+            print("GuidelineEngine: failed to decode rulesJSON: \(error)")
+            #endif
             return GuidelineResult(matches: [])
         }
     }
@@ -417,9 +475,20 @@ public enum GuidelineEngine {
     }
 
     private static func conditionMatches(_ c: Condition, profile: ClinicalFeatureProviding) -> Bool {
+        func hasAnyValue(_ key: String) -> Bool {
+            if let b = profile.bool(key) { return b || true }
+            if profile.int(key) != nil { return true }
+            if profile.double(key) != nil { return true }
+            if profile.string(key) != nil { return true }
+            if profile.strings(key) != nil { return true }
+            return false
+        }
         switch c.op {
         case .eq:
             // Try string equality first, then numeric.
+            if let expected = c.valueBool {
+                    return profile.bool(c.key) == expected
+                }
             if let expected = c.valueString {
                 let actual = profile.string(c.key)
                 return normalize(actual) == normalize(expected)
@@ -433,6 +502,9 @@ public enum GuidelineEngine {
             return false
 
         case .neq:
+            if let expected = c.valueBool {
+                    return profile.bool(c.key) != expected
+                }
             if let expected = c.valueString {
                 let actual = profile.string(c.key)
                 return normalize(actual) != normalize(expected)
@@ -519,6 +591,12 @@ public enum GuidelineEngine {
                 return false
             }
             return false
+
+        case .present:
+            return hasAnyValue(c.key)
+
+        case .absent:
+            return !hasAnyValue(c.key)
 
         case .unknown:
             return false
