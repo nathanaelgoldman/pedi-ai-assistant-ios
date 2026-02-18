@@ -2371,8 +2371,8 @@ struct SickEpisodeForm: View {
         // Extra PE free text stays as-is (AI use); we do NOT tokenize it here.
 
         // Dedupe + stable order
-        let deduped = Array(Set(out)).sorted()
-        return deduped
+        var seen = Set<String>()
+        return out.filter { seen.insert($0).inserted }
     }
 
     // MARK: - AI assistance wiring
@@ -2427,7 +2427,7 @@ struct SickEpisodeForm: View {
             patientID: pid,
             episodeID: Int(eid),
             problemListing: problemListing,
-            problemTokens: buildProblemTokens(),
+            problemTokens: buildSickEpisodeTokens(),
             complementaryInvestigations: complementaryInvestigations,
             vaccinationStatus: vaccinationStatus,
             pmhSummary: pmhSummary,
@@ -2513,7 +2513,74 @@ struct SickEpisodeForm: View {
         selectedAIHistoryID = nil
     }
 
-    
+    // MARK: - Token protocol (must match sick_tokens.csv)
+    private func tokenizeValue(_ raw: String) -> String {
+        // Reuse your existing normalization to kill NBSP/ZWSP/etc
+        var s = normalizeChoiceValue(raw).lowercased()
+
+        // Match CSV-style normalization: turn separators into underscores
+        // (Examples: "Dry, scaly rash" -> dry_scaly_rash, "Crackles (R)" -> crackles_r,
+        //  "Red & Bulging with pus" -> red_bulging_with_pus, "Foul-smelling" -> foul_smelling)
+        s = s.replacingOccurrences(of: "&", with: " ")
+
+        // Replace any non-alphanumeric runs with "_"
+        s = s.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+
+        // Trim underscores
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return s
+    }
+
+    private func makeSickToken(domain: String, field: String, value: String) -> String {
+        "sick.\(domain).\(field).\(tokenizeValue(value))"
+    }
+
+    /// Build the full token set from current UI state.
+    /// NOTE: domains/fields must match sick_tokens.csv exactly.
+    private func buildSickEpisodeTokens() -> [String] {
+        var out: [String] = []
+
+        // ---- HPI ----
+        for c in presetComplaints.sorted() {
+            out.append(makeSickToken(domain: "hpi", field: "complaint", value: c))
+        }
+
+        out.append(makeSickToken(domain: "hpi", field: "appearance", value: appearance))
+        out.append(makeSickToken(domain: "hpi", field: "feeding", value: feeding))
+        out.append(makeSickToken(domain: "hpi", field: "breathing", value: breathing))
+        out.append(makeSickToken(domain: "hpi", field: "urination", value: urination))
+        out.append(makeSickToken(domain: "hpi", field: "pain_location", value: pain))
+        out.append(makeSickToken(domain: "hpi", field: "stool", value: stools))
+
+        for cx in context.sorted() where normalizeChoiceValue(cx) != "None" {
+            out.append(makeSickToken(domain: "hpi", field: "context", value: cx))
+        }
+
+        // ---- PE ----
+        out.append(makeSickToken(domain: "pe", field: "general_appearance", value: generalAppearance))
+        out.append(makeSickToken(domain: "pe", field: "hydration", value: hydration))
+        out.append(makeSickToken(domain: "pe", field: "color_hemodynamics", value: color))
+        out.append(makeSickToken(domain: "pe", field: "heart", value: heart))
+        out.append(makeSickToken(domain: "pe", field: "peristalsis", value: peristalsis))
+        out.append(makeSickToken(domain: "pe", field: "neuro", value: neurological))
+        out.append(makeSickToken(domain: "pe", field: "msk", value: musculoskeletal))
+
+        for v in skinSet.sorted() { out.append(makeSickToken(domain: "pe", field: "skin", value: v)) }
+        for v in ent.sorted() { out.append(makeSickToken(domain: "pe", field: "ent", value: v)) }
+        for v in lungsSet.sorted() { out.append(makeSickToken(domain: "pe", field: "lungs", value: v)) }
+        for v in abdomenSet.sorted() { out.append(makeSickToken(domain: "pe", field: "abdomen", value: v)) }
+        for v in genitaliaSet.sorted() { out.append(makeSickToken(domain: "pe", field: "genitalia", value: v)) }
+        for v in lymphNodesSet.sorted() { out.append(makeSickToken(domain: "pe", field: "nodes", value: v)) }
+
+        // Ear / Eye: token list intentionally does not encode laterality (matches your CSV)
+        out.append(makeSickToken(domain: "pe", field: "ear", value: rightEar))
+        out.append(makeSickToken(domain: "pe", field: "ear", value: leftEar))
+        out.append(makeSickToken(domain: "pe", field: "eye", value: rightEye))
+        out.append(makeSickToken(domain: "pe", field: "eye", value: leftEye))
+
+        // De-dup just in case the same token was added twice
+        return Array(Set(out)).sorted()
+    }
     // MARK: - Save (commit to db + refresh UI)
     private func saveTapped() {
         AppLog.ui.info("SickEpisodeForm: saveTapped start | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private) editingEpisodeID=\(String(describing: editingEpisodeID), privacy: .private)")

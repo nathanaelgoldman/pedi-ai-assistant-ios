@@ -1,0 +1,152 @@
+feature_key,display_en
+perinatal.choice.birth_mode.emergent_cs,Emergent C-section
+perinatal.choice.birth_mode.forceps,Forceps
+perinatal.choice.birth_mode.instrumental_unspecified,Instrumental (unspecified)
+perinatal.choice.birth_mode.normal_vaginal,Normal vaginal delivery
+perinatal.choice.birth_mode.planned_cs,Planned C-section
+perinatal.choice.birth_mode.vacuum,Vacuum
+perinatal.choice.family_vax.covid,COVID
+perinatal.choice.family_vax.dtap,dTAP
+perinatal.choice.family_vax.flu,Flu
+perinatal.choice.family_vax.none,No vaccination
+perinatal.choice.family_vax.rsv,RSV
+perinatal.choice.feeding.ebf,Exclusive breastfeeding (EBF)
+perinatal.choice.feeding.exclusive_formula,Exclusive formula feeding
+perinatal.choice.feeding.mixed,Mixed feeding
+perinatal.choice.hearing.abnormal,Abnormal
+perinatal.choice.hearing.abnormal_left,Abnormal left
+perinatal.choice.hearing.abnormal_right,Abnormal right
+perinatal.choice.hearing.normal,Normal
+perinatal.choice.hearing.not_done,Not done
+perinatal.choice.heart.abnormal,Abnormal
+perinatal.choice.heart.normal,Normal
+perinatal.choice.heart.not_done,Not done
+perinatal.choice.infrisk.gbs_no_treatment,GBS+ and no treatment
+perinatal.choice.infrisk.gbs_treatment,GBS+ and treatment
+perinatal.choice.infrisk.prom,PROM
+perinatal.choice.infrisk.seroconversion_torch,Seroconversion TORCH
+perinatal.choice.maternity_event.hyperbili_with_pt,Hyperbilirubinemia with phototherapy
+perinatal.choice.maternity_event.hyperbili_without_pt,Hyperbilirubinemia without phototherapy
+perinatal.choice.maternity_event.hypoglycemia,Hypoglycemia
+perinatal.choice.maternity_event.none,None
+perinatal.choice.maternity_event.suspicion_infection,Suspicion of infection
+perinatal.choice.maternity_event.weight_loss_10,Weight loss ≥ 10%
+perinatal.choice.maternity_vax.anti_hbv_ig,Anti-HBV immunoglobulins
+perinatal.choice.maternity_vax.bcg,BCG
+perinatal.choice.maternity_vax.hepb,Hep. B
+perinatal.choice.maternity_vax.rsv,RSV
+perinatal.choice.metab.abnormal,Abnormal
+perinatal.choice.metab.done_pending,"Done, pending result"
+perinatal.choice.metab.normal,Normal
+perinatal.choice.mother_vax.covid,COVID
+perinatal.choice.mother_vax.dtap,dTAP
+perinatal.choice.mother_vax.flu,Flu
+perinatal.choice.mother_vax.none,No vaccination
+perinatal.choice.mother_vax.rsv,RSV
+perinatal.choice.pregnancy.gestational_diabetes,Gestational diabetes
+perinatal.choice.pregnancy.infection,Infection
+perinatal.choice.pregnancy.iugr,Intrauterine growth retardation
+perinatal.choice.pregnancy.normal,Normal
+perinatal.choice.pregnancy.preeclampsia,Preeclampsia
+perinatal.choice.pregnancy.threat_premature_birth,Threat of premature birth
+perinatal.choice.resusc.bag_mask,Bag–mask ventilation
+perinatal.choice.resusc.chest_compression,Chest compression
+perinatal.choice.resusc.fluids_drugs,Fluids and drugs
+perinatal.choice.resusc.free_oxygen,Free oxygen
+perinatal.choice.resusc.none,None
+sick_episode_form.choice.abdominal,Abdominal
+sick_episode_form.choice.abdominal_pain,Abdominal pain
+sick_episode_form.choice.abnormal_tone,Abnormal tone
+sick_episode_form.choice.age,AGE
+sick_episode_form.choice.alert,Alert
+sick_episode_form.choice.bloody_diarrhea,Bloody diarrhea
+sick_episode_form.choice.bradycardia,Bradycardia
+sick_episode_form.choice.cervical,Cervical
+sick_episode_form.choice.congested_nose,Congested nose
+sick_episode_form.choice.cough,Cough
+sick_episode_form.choice.crackles,Crackles
+sick_episode_form.choice.crackles_l,Crackles (L)
+sick_episode_form.choice.crackles_r,Crackles (R)
+sick_episode_form.choice.crusty,Crusty
+sick_episode_form.choice.daycare,Daycare
+sick_episode_form.choice.decreased,Decreased
+sick_episode_form.choice.decreased_sounds,Decreased sounds
+sick_episode_form.choice.decreased_sounds_l,Decreased sounds (L)
+sick_episode_form.choice.decreased_sounds_r,Decreased sounds (R)
+sick_episode_form.choice.diarrhea,Diarrhea
+sick_episode_form.choice.discharge,Discharge
+sick_episode_form.choice.distended,Distended
+sick_episode_form.choice.dry_scaly_rash,"Dry, scaly rash"
+sick_episode_form.choice.ear,Ear
+sick_episode_form.choice.ear_discharge,Ear discharge
+sick_episode_form.choice.epigastric_pain,Epigastric pain
+sick_episode_form.choice.eyelid_swelling,Eyelid swelling
+sick_episode_form.choice.fast,Fast
+sick_episode_form.choice.fever,Fever
+sick_episode_form.choice.foul_smelling,Foul-smelling
+sick_episode_form.choice.generalized,Generalized
+sick_episode_form.choice.guarding,Guarding
+sick_episode_form.choice.hard,Hard
+sick_episode_form.choice.head,Head
+sick_episode_form.choice.headache,Headache
+sick_episode_form.choice.hypogastric_pain,Hypogastric pain
+sick_episode_form.choice.increased,Increased
+sick_episode_form.choice.irritable,Irritable
+sick_episode_form.choice.labored,Labored
+sick_episode_form.choice.lethargic,Lethargic
+sick_episode_form.choice.limb,Limb
+sick_episode_form.choice.limping,Limping
+sick_episode_form.choice.liquid,Liquid
+sick_episode_form.choice.llq_pain,LLQ pain
+sick_episode_form.choice.macular_rash,Macular rash
+sick_episode_form.choice.maculopapular_rash,Maculopapular rash
+sick_episode_form.choice.murmur,Murmur
+sick_episode_form.choice.neck,Neck
+sick_episode_form.choice.noisy,Noisy
+sick_episode_form.choice.none,None
+sick_episode_form.choice.normal,Normal
+sick_episode_form.choice.not_seen_wax,Not seen (wax)
+sick_episode_form.choice.otitis,Otitis
+sick_episode_form.choice.pain,Pain
+sick_episode_form.choice.painful,Painful
+sick_episode_form.choice.pale,Pale
+sick_episode_form.choice.papular_rash,Papular rash
+sick_episode_form.choice.periumbilical_pain,Periumbilical pain
+sick_episode_form.choice.petechiae,Petechiae
+sick_episode_form.choice.purpura,Purpura
+sick_episode_form.choice.pus_in_canal,Pus in canal
+sick_episode_form.choice.rash,Rash
+sick_episode_form.choice.rebound,Rebound
+sick_episode_form.choice.red,Red
+sick_episode_form.choice.red_bulging_with_pus,Red & Bulging with pus
+sick_episode_form.choice.red_canal,Red canal
+sick_episode_form.choice.red_throat,Red throat
+sick_episode_form.choice.red_tm,Red TM
+sick_episode_form.choice.redness,Redness
+sick_episode_form.choice.refuses,Refuses
+sick_episode_form.choice.rhonchi,Rhonchi
+sick_episode_form.choice.rhonchi_l,Rhonchi (L)
+sick_episode_form.choice.rhonchi_r,Rhonchi (R)
+sick_episode_form.choice.rlq_pain,RLQ pain
+sick_episode_form.choice.runny_nose,Runny nose
+sick_episode_form.choice.see_plan,See Plan
+sick_episode_form.choice.sick_contact,Sick contact
+sick_episode_form.choice.sleepy,Sleepy
+sick_episode_form.choice.soft,Soft
+sick_episode_form.choice.submandibular,Submandibular
+sick_episode_form.choice.swelling,Swelling
+sick_episode_form.choice.swollen_joint,Swollen joint
+sick_episode_form.choice.tachycardia,Tachycardia
+sick_episode_form.choice.tender,Tender
+sick_episode_form.choice.throat,Throat
+sick_episode_form.choice.tired,Tired
+sick_episode_form.choice.tonsil_deposits,Tonsil deposits
+sick_episode_form.choice.travel,Travel
+sick_episode_form.choice.uri,URI
+sick_episode_form.choice.uti,UTI
+sick_episode_form.choice.vomiting,Vomiting
+sick_episode_form.choice.well,Well
+sick_episode_form.choice.wheeze,Wheeze
+sick_episode_form.choice.wheeze_l,Wheeze (L)
+sick_episode_form.choice.wheeze_r,Wheeze (R)
+sick_episode_form.choice.yellow,Yellow

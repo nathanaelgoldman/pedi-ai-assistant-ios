@@ -1,0 +1,119 @@
+token,domain,field,raw_value,value_norm,source_array
+sick.hpi.appearance.irritable,hpi,appearance,Irritable,irritable,appearanceChoices
+sick.hpi.appearance.lethargic,hpi,appearance,Lethargic,lethargic,appearanceChoices
+sick.hpi.appearance.tired,hpi,appearance,Tired,tired,appearanceChoices
+sick.hpi.appearance.well,hpi,appearance,Well,well,appearanceChoices
+sick.hpi.breathing.fast,hpi,breathing,Fast,fast,breathingChoices
+sick.hpi.breathing.labored,hpi,breathing,Labored,labored,breathingChoices
+sick.hpi.breathing.noisy,hpi,breathing,Noisy,noisy,breathingChoices
+sick.hpi.breathing.normal,hpi,breathing,Normal,normal,breathingChoices
+sick.hpi.complaint.abdominal_pain,hpi,complaint,Abdominal pain,abdominal_pain,complaintOptions
+sick.hpi.complaint.cough,hpi,complaint,Cough,cough,complaintOptions
+sick.hpi.complaint.diarrhea,hpi,complaint,Diarrhea,diarrhea,complaintOptions
+sick.hpi.complaint.fever,hpi,complaint,Fever,fever,complaintOptions
+sick.hpi.complaint.headache,hpi,complaint,Headache,headache,complaintOptions
+sick.hpi.complaint.rash,hpi,complaint,Rash,rash,complaintOptions
+sick.hpi.complaint.runny_nose,hpi,complaint,Runny nose,runny_nose,complaintOptions
+sick.hpi.complaint.vomiting,hpi,complaint,Vomiting,vomiting,complaintOptions
+sick.hpi.context.daycare,hpi,context,Daycare,daycare,contextChoices
+sick.hpi.context.none,hpi,context,None,none,contextChoices
+sick.hpi.context.sick_contact,hpi,context,Sick contact,sick_contact,contextChoices
+sick.hpi.context.travel,hpi,context,Travel,travel,contextChoices
+sick.hpi.feeding.decreased,hpi,feeding,Decreased,decreased,feedingChoices
+sick.hpi.feeding.normal,hpi,feeding,Normal,normal,feedingChoices
+sick.hpi.feeding.refuses,hpi,feeding,Refuses,refuses,feedingChoices
+sick.hpi.pain_location.abdominal,hpi,pain_location,Abdominal,abdominal,painChoices
+sick.hpi.pain_location.ear,hpi,pain_location,Ear,ear,painChoices
+sick.hpi.pain_location.head,hpi,pain_location,Head,head,painChoices
+sick.hpi.pain_location.limb,hpi,pain_location,Limb,limb,painChoices
+sick.hpi.pain_location.neck,hpi,pain_location,Neck,neck,painChoices
+sick.hpi.pain_location.none,hpi,pain_location,None,none,painChoices
+sick.hpi.pain_location.throat,hpi,pain_location,Throat,throat,painChoices
+sick.hpi.stools.bloody_diarrhea,hpi,stools,Bloody diarrhea,bloody_diarrhea,stoolsChoices
+sick.hpi.stools.hard,hpi,stools,Hard,hard,stoolsChoices
+sick.hpi.stools.liquid,hpi,stools,Liquid,liquid,stoolsChoices
+sick.hpi.stools.normal,hpi,stools,Normal,normal,stoolsChoices
+sick.hpi.stools.soft,hpi,stools,Soft,soft,stoolsChoices
+sick.hpi.urination.decreased,hpi,urination,Decreased,decreased,urinationChoices
+sick.hpi.urination.foul_smelling,hpi,urination,Foul-smelling,foul_smelling,urinationChoices
+sick.hpi.urination.normal,hpi,urination,Normal,normal,urinationChoices
+sick.hpi.urination.painful,hpi,urination,Painful,painful,urinationChoices
+sick.pe.abdomen.distended,pe,abdomen,Distended,distended,abdomenOptionsMulti
+sick.pe.abdomen.epigastric_pain,pe,abdomen,Epigastric pain,epigastric_pain,abdomenOptionsMulti
+sick.pe.abdomen.guarding,pe,abdomen,Guarding,guarding,abdomenOptionsMulti
+sick.pe.abdomen.hypogastric_pain,pe,abdomen,Hypogastric pain,hypogastric_pain,abdomenOptionsMulti
+sick.pe.abdomen.llq_pain,pe,abdomen,LLQ pain,llq_pain,abdomenOptionsMulti
+sick.pe.abdomen.normal,pe,abdomen,Normal,normal,abdomenOptionsMulti
+sick.pe.abdomen.periumbilical_pain,pe,abdomen,Periumbilical pain,periumbilical_pain,abdomenOptionsMulti
+sick.pe.abdomen.rebound,pe,abdomen,Rebound,rebound,abdomenOptionsMulti
+sick.pe.abdomen.rlq_pain,pe,abdomen,RLQ pain,rlq_pain,abdomenOptionsMulti
+sick.pe.abdomen.tender,pe,abdomen,Tender,tender,abdomenOptionsMulti
+sick.pe.color.normal,pe,color,Normal,normal,colorChoices
+sick.pe.color.pale,pe,color,Pale,pale,colorChoices
+sick.pe.color.yellow,pe,color,Yellow,yellow,colorChoices
+sick.pe.ear.normal,pe,ear,Normal,normal,earChoices
+sick.pe.ear.not_seen_wax,pe,ear,Not seen (wax),not_seen_wax,earChoices
+sick.pe.ear.pus_in_canal,pe,ear,Pus in canal,pus_in_canal,earChoices
+sick.pe.ear.red_and_bulging_with_pus,pe,ear,Red & Bulging with pus,red_and_bulging_with_pus,earChoices
+sick.pe.ear.red_canal,pe,ear,Red canal,red_canal,earChoices
+sick.pe.ear.red_tm,pe,ear,Red TM,red_tm,earChoices
+sick.pe.ent.congested_nose,pe,ent,Congested nose,congested_nose,entChoices
+sick.pe.ent.ear_discharge,pe,ent,Ear discharge,ear_discharge,entChoices
+sick.pe.ent.normal,pe,ent,Normal,normal,entChoices
+sick.pe.ent.red_throat,pe,ent,Red throat,red_throat,entChoices
+sick.pe.ent.tonsil_deposits,pe,ent,Tonsil deposits,tonsil_deposits,entChoices
+sick.pe.eye.crusty,pe,eye,Crusty,crusty,eyeChoices
+sick.pe.eye.discharge,pe,eye,Discharge,discharge,eyeChoices
+sick.pe.eye.eyelid_swelling,pe,eye,Eyelid swelling,eyelid_swelling,eyeChoices
+sick.pe.eye.normal,pe,eye,Normal,normal,eyeChoices
+sick.pe.eye.red,pe,eye,Red,red,eyeChoices
+sick.pe.general_appearance.irritable,pe,general_appearance,Irritable,irritable,generalChoices
+sick.pe.general_appearance.lethargic,pe,general_appearance,Lethargic,lethargic,generalChoices
+sick.pe.general_appearance.tired,pe,general_appearance,Tired,tired,generalChoices
+sick.pe.general_appearance.well,pe,general_appearance,Well,well,generalChoices
+sick.pe.genitalia.discharge,pe,genitalia,Discharge,discharge,genitaliaOptionsMulti
+sick.pe.genitalia.normal,pe,genitalia,Normal,normal,genitaliaOptionsMulti
+sick.pe.genitalia.redness,pe,genitalia,Redness,redness,genitaliaOptionsMulti
+sick.pe.genitalia.swelling,pe,genitalia,Swelling,swelling,genitaliaOptionsMulti
+sick.pe.heart.bradycardia,pe,heart,Bradycardia,bradycardia,heartChoices
+sick.pe.heart.murmur,pe,heart,Murmur,murmur,heartChoices
+sick.pe.heart.normal,pe,heart,Normal,normal,heartChoices
+sick.pe.heart.tachycardia,pe,heart,Tachycardia,tachycardia,heartChoices
+sick.pe.hydration.decreased,pe,hydration,Decreased,decreased,hydrationChoices
+sick.pe.hydration.normal,pe,hydration,Normal,normal,hydrationChoices
+sick.pe.lungs.crackles,pe,lungs,Crackles,crackles,lungsOptionsMulti
+sick.pe.lungs.crackles_l,pe,lungs,Crackles (L),crackles_l,lungsOptionsMulti
+sick.pe.lungs.crackles_r,pe,lungs,Crackles (R),crackles_r,lungsOptionsMulti
+sick.pe.lungs.decreased_sounds,pe,lungs,Decreased sounds,decreased_sounds,lungsOptionsMulti
+sick.pe.lungs.decreased_sounds_l,pe,lungs,Decreased sounds (L),decreased_sounds_l,lungsOptionsMulti
+sick.pe.lungs.decreased_sounds_r,pe,lungs,Decreased sounds (R),decreased_sounds_r,lungsOptionsMulti
+sick.pe.lungs.normal,pe,lungs,Normal,normal,lungsOptionsMulti
+sick.pe.lungs.rhonchi,pe,lungs,Rhonchi,rhonchi,lungsOptionsMulti
+sick.pe.lungs.rhonchi_l,pe,lungs,Rhonchi (L),rhonchi_l,lungsOptionsMulti
+sick.pe.lungs.rhonchi_r,pe,lungs,Rhonchi (R),rhonchi_r,lungsOptionsMulti
+sick.pe.lungs.wheeze,pe,lungs,Wheeze,wheeze,lungsOptionsMulti
+sick.pe.lungs.wheeze_l,pe,lungs,Wheeze (L),wheeze_l,lungsOptionsMulti
+sick.pe.lungs.wheeze_r,pe,lungs,Wheeze (R),wheeze_r,lungsOptionsMulti
+sick.pe.lymph_nodes.cervical,pe,lymph_nodes,Cervical,cervical,nodesOptionsMulti
+sick.pe.lymph_nodes.generalized,pe,lymph_nodes,Generalized,generalized,nodesOptionsMulti
+sick.pe.lymph_nodes.none,pe,lymph_nodes,None,none,nodesOptionsMulti
+sick.pe.lymph_nodes.submandibular,pe,lymph_nodes,Submandibular,submandibular,nodesOptionsMulti
+sick.pe.lymph_nodes.tender,pe,lymph_nodes,Tender,tender,nodesOptionsMulti
+sick.pe.musculoskeletal.limping,pe,musculoskeletal,Limping,limping,mskChoices
+sick.pe.musculoskeletal.normal,pe,musculoskeletal,Normal,normal,mskChoices
+sick.pe.musculoskeletal.pain,pe,musculoskeletal,Pain,pain,mskChoices
+sick.pe.musculoskeletal.swollen_joint,pe,musculoskeletal,Swollen joint,swollen_joint,mskChoices
+sick.pe.neurological.abnormal_tone,pe,neurological,Abnormal tone,abnormal_tone,neuroChoices
+sick.pe.neurological.alert,pe,neurological,Alert,alert,neuroChoices
+sick.pe.neurological.irritable,pe,neurological,Irritable,irritable,neuroChoices
+sick.pe.neurological.sleepy,pe,neurological,Sleepy,sleepy,neuroChoices
+sick.pe.peristalsis.decreased,pe,peristalsis,Decreased,decreased,peristalsisChoices
+sick.pe.peristalsis.increased,pe,peristalsis,Increased,increased,peristalsisChoices
+sick.pe.peristalsis.normal,pe,peristalsis,Normal,normal,peristalsisChoices
+sick.pe.skin.dry_scaly_rash,pe,skin,"Dry, scaly rash",dry_scaly_rash,skinOptionsMulti
+sick.pe.skin.macular_rash,pe,skin,Macular rash,macular_rash,skinOptionsMulti
+sick.pe.skin.maculopapular_rash,pe,skin,Maculopapular rash,maculopapular_rash,skinOptionsMulti
+sick.pe.skin.normal,pe,skin,Normal,normal,skinOptionsMulti
+sick.pe.skin.papular_rash,pe,skin,Papular rash,papular_rash,skinOptionsMulti
+sick.pe.skin.petechiae,pe,skin,Petechiae,petechiae,skinOptionsMulti
+sick.pe.skin.purpura,pe,skin,Purpura,purpura,skinOptionsMulti

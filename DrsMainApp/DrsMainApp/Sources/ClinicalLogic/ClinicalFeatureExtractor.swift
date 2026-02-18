@@ -23,6 +23,10 @@ protocol EpisodeAIContextProviding {
     var problemListing: String { get }
     var complementaryInvestigations: String { get }
 
+    /// Stable, locale-agnostic tokens for guideline matching (UI choice keys).
+    /// Example: "sick_episode_form.choice.wheeze".
+    var problemTokens: [String] { get }
+
     var vaccinationStatus: String? { get }
     var perinatalSummary: String? { get }
     var pmhSummary: String? { get }
@@ -30,6 +34,10 @@ protocol EpisodeAIContextProviding {
     var patientAgeDays: Int? { get }
     var patientSex: String? { get }
     var maxTempC: Double? { get }
+}
+
+extension EpisodeAIContextProviding {
+    var problemTokens: [String] { [] }
 }
 
 // MARK: - Core Models
@@ -620,7 +628,7 @@ final class ClinicalFeatureExtractor {
         // - If tokens are free text and `terminology` is available, we best-effort map to SNOMED and emit SCT features.
         // - We always keep the original display line as provenance via `note` or `provenanceNotes`.
 
-        func emitToken(_ rawToken: String, line: ProblemLine) {
+        func emitToken(_ rawToken: String, line: ProblemLine, terminology: TerminologyStore?) {
             let t = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !t.isEmpty else { return }
 
@@ -648,8 +656,36 @@ final class ClinicalFeatureExtractor {
                 return
             }
 
-            // Case B: token is a stable key we can use directly
-            // (We do not attempt to localize/parse these here.)
+            // Case B: token is a stable app feature key.
+            // Emit it directly for matching, and if a terminology store exists,
+            // also emit the mapped SNOMED SCT feature (sct:<id>) via feature_snomed_map.
+            if let terminology {
+                if let conceptID = terminology.conceptIDForFeatureKey(t) {
+                    features.append(.init(
+                        key: "sct:\(conceptID)",
+                        value: .bool(true),
+                        snomedConceptId: conceptID,
+                        note: "feature_key=\(t)",
+                        isObjectivePositive: line.isObjective,
+                        isAbnormal: line.isAbnormal,
+                        source: "feature_map"
+                    ))
+
+                    notes.append("feature_map: \(t) -> sct:\(conceptID)")
+                    AppLog.feature("extractor").debug("feature_map: \(t) -> sct:\(conceptID)")
+                } else {
+                    // Telemetry: surface unmapped feature keys so we can fill feature_snomed_map systematically.
+                    // Deduped per app run to avoid log spam.
+                    struct MissingFeatureMapLogOnce {
+                        static var seen = Set<String>()
+                    }
+                    if MissingFeatureMapLogOnce.seen.insert(t).inserted {
+                        AppLog.feature("extractor").debug("missing_feature_map: \(t)")
+                    }
+                }
+            }
+
+            // Always keep the stable key too (some rules may key off non-SCT tokens).
             features.append(.init(
                 key: t,
                 value: .bool(true),
@@ -722,7 +758,7 @@ final class ClinicalFeatureExtractor {
             // Emit tokens as-is first (stable contract), then optionally add SNOMED normalization for tokens
             // that look like free text (contains spaces) when terminology is available.
             for tok in line.tokens {
-                emitToken(tok, line: line)
+                emitToken(tok, line: line, terminology: terminology)
 
                 // If this token looks like free text (e.g., contains spaces) and terminology exists, add SCT mapping too.
                 if let terminology {
@@ -920,7 +956,9 @@ extension ClinicalFeatureExtractor {
             )
         }()
 
-        // Problem lines: transport only; no parsing. Tokens remain empty until form emits stable tokens.
+        // Problem lines:
+        // - problemTokens: stable tokens from UI (preferred for matching)
+        // - problemListing: human-readable provenance (kept for logs/AI context)
         func toProblemLines(_ text: String, source: String) -> [ProblemLine] {
             text.split(separator: "\n")
                 .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -936,7 +974,29 @@ extension ClinicalFeatureExtractor {
                 }
         }
 
+        func toProblemTokenLines(_ tokens: [String], source: String) -> [ProblemLine] {
+            tokens
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map {
+                    ProblemLine(
+                        display: $0,
+                        tokens: [$0],
+                        isObjective: false,
+                        isAbnormal: true,
+                        source: source
+                    )
+                }
+        }
+
         var problemLines: [ProblemLine] = []
+
+        // Preferred: stable tokens emitted by the UI (guideline matching)
+        if !ctx.problemTokens.isEmpty {
+            problemLines.append(contentsOf: toProblemTokenLines(ctx.problemTokens, source: "episode.problem_tokens"))
+        }
+
+        // Provenance: human-readable listing (kept for AI/logs; may also be SNOMED-mapped later)
         problemLines.append(contentsOf: toProblemLines(ctx.problemListing, source: "episode.problem_listing"))
 
         let inv = ctx.complementaryInvestigations.trimmingCharacters(in: .whitespacesAndNewlines)

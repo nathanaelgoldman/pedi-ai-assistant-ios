@@ -129,6 +129,53 @@ final class TerminologyStore: ObservableObject {
         return sqlite3_column_int64(stmt, 0)
     }
 
+    /// Batch map stable app feature keys (e.g. "sick_episode_form.choice.wheeze") to SNOMED concept_ids.
+    ///
+    /// - Uses a single SQLite open + a single SELECT with an `IN (...)` list.
+    /// - Returns a dictionary keyed by feature_key with the mapped concept_id.
+    /// - Ignores empty/whitespace-only keys.
+    func conceptIDsForFeatureKeys(_ featureKeys: [String]) -> [String: Int64] {
+        let keys = featureKeys
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !keys.isEmpty else { return [:] }
+
+        guard let db = openDBReadOnly() else { return [:] }
+        defer { sqlite3_close(db) }
+
+        // Build: (?, ?, ?, ...) placeholders
+        let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ",")
+        let sql = """
+        SELECT feature_key, concept_id
+        FROM feature_snomed_map
+        WHERE active = 1
+          AND feature_key IN (\(placeholders));
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("TerminologyStore: conceptIDsForFeatureKeys prepare failed: \(msg, privacy: .public)")
+            return [:]
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        // Bind keys 1..N
+        for (i, k) in keys.enumerated() {
+            _ = k.withCString { sqlite3_bind_text(stmt, Int32(i + 1), $0, -1, SQLITE_TRANSIENT) }
+        }
+
+        var out: [String: Int64] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let kStr = sqlite3_column_text(stmt, 0) else { continue }
+            let key = String(cString: kStr)
+            let conceptID = sqlite3_column_int64(stmt, 1)
+            out[key] = conceptID
+        }
+        return out
+    }
+
     // MARK: - DB location (local app space, NOT patient bundle)
     /// ~/Library/Application Support/DrsMainApp/Terminology/snomed.sqlite
     private var dbURL: URL {

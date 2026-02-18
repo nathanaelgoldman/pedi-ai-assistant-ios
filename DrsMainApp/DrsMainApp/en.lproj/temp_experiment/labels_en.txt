@@ -1,0 +1,136 @@
+Emergent C-section
+Forceps
+Instrumental (unspecified)
+Normal vaginal delivery
+Planned C-section
+Vacuum
+COVID
+dTAP
+Flu
+No vaccination
+RSV
+Exclusive breastfeeding (EBF)
+Exclusive formula feeding
+Mixed feeding
+Abnormal
+Abnormal left
+Abnormal right
+Normal
+Not done
+GBS+ and no treatment
+GBS+ and treatment
+PROM
+Seroconversion TORCH
+Hyperbilirubinemia with phototherapy
+Hyperbilirubinemia without phototherapy
+Hypoglycemia
+None
+Suspicion of infection
+Weight loss ≥ 10%
+Anti-HBV immunoglobulins
+BCG
+Hep. B
+Done, pending result
+Gestational diabetes
+Infection
+Intrauterine growth retardation
+Preeclampsia
+Threat of premature birth
+Bag–mask ventilation
+Chest compression
+Fluids and drugs
+Free oxygen
+Abdominal
+Abdominal pain
+Abnormal tone
+AGE
+Alert
+Bloody diarrhea
+Bradycardia
+Cervical
+Congested nose
+Cough
+Crackles
+Crackles (L)
+Crackles (R)
+Crusty
+Daycare
+Decreased
+Decreased sounds
+Decreased sounds (L)
+Decreased sounds (R)
+Diarrhea
+Discharge
+Distended
+Dry, scaly rash
+Ear
+Ear discharge
+Epigastric pain
+Eyelid swelling
+Fast
+Fever
+Foul-smelling
+Generalized
+Guarding
+Hard
+Head
+Headache
+Hypogastric pain
+Increased
+Irritable
+Labored
+Lethargic
+Limb
+Limping
+Liquid
+LLQ pain
+Macular rash
+Maculopapular rash
+Murmur
+Neck
+Noisy
+Not seen (wax)
+Otitis
+Pain
+Painful
+Pale
+Papular rash
+Periumbilical pain
+Petechiae
+Purpura
+Pus in canal
+Rash
+Rebound
+Red
+Red & Bulging with pus
+Red canal
+Red throat
+Red TM
+Redness
+Refuses
+Rhonchi
+Rhonchi (L)
+Rhonchi (R)
+RLQ pain
+Runny nose
+See Plan
+Sick contact
+Sleepy
+Soft
+Submandibular
+Swelling
+Swollen joint
+Tachycardia
+Tender
+Throat
+Tired
+Tonsil deposits
+Travel
+URI
+UTI
+Vomiting
+Well
+Wheeze
+Wheeze (L)
+Wheeze (R)
+Yellow
