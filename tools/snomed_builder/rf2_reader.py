@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import sys
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,7 +87,18 @@ class RF2Snapshot:
 
     def _iter_tsv_dicts(self, path: Path) -> Iterator[Dict[str, str]]:
         """Yield each RF2 row as a dict keyed by header columns."""
-        with path.open("r", encoding="utf-8", newline="") as f:
+        # RF2 description/textdefinition rows can contain very long OWL/text fields.
+        # Python's csv module defaults to 131072 bytes; bump it high enough for RF2.
+        try:
+            csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
+        except Exception:
+            # If the platform refuses very large limits, fall back to a still-large value.
+            try:
+                csv.field_size_limit(10_000_000)
+            except Exception:
+                pass
+
+        with path.open("r", encoding="utf-8", errors="replace", newline="") as f:
             reader = csv.DictReader(f, delimiter="\t")
             for row in reader:
                 if not row:

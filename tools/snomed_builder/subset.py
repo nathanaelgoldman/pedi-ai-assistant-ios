@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, Set
+import uuid
 
 
 # SNOMED Description typeIds (common)
@@ -16,6 +17,26 @@ EN_US_LANGREFSET = 900000000000509007
 # Acceptability
 PREFERRED = 900000000000548007
 ACCEPTABLE = 900000000000549004
+
+
+def _rf2_row_id_to_int(row_id: str) -> int:
+    """RF2 row ids are usually numeric, but some distributions may use UUIDs.
+
+    Our SQLite schema uses INTEGER PRIMARY KEY, so we normalize to a stable int:
+      - if row_id is digits: int(row_id)
+      - else: treat as UUID and fold to signed 63-bit int (stable across runs)
+    """
+    s = (row_id or "").strip()
+    if s.isdigit():
+        return int(s)
+
+    # UUID -> stable 63-bit positive int (SQLite INTEGER is signed 64-bit)
+    try:
+        u = uuid.UUID(s)
+    except Exception as e:
+        raise ValueError(f"Unexpected non-numeric RF2 id: {row_id!r}") from e
+
+    return int(u.int % (2**63 - 1))
 
 
 def load_subset_concept_ids(path: Path) -> set[int]:
@@ -133,7 +154,7 @@ def build_subset_rows(
 
         langrefset_rows.append(
             (
-                int(row["id"]),
+                _rf2_row_id_to_int(row["id"]),
                 int(row["active"]),
                 row["effectiveTime"],
                 int(row["moduleId"]),

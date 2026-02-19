@@ -52,19 +52,23 @@ def main():
     print(f"Kept lang refset rows: {result.kept_langrefset}")
 
     print("Creating SQLite DB...")
-    writer = SQLiteWriter(out_path, schema_path)
+    writer = SQLiteWriter(out_path)
+    writer.init_schema(schema_path)
 
     writer.insert_concepts(result.concept_rows)
     writer.insert_descriptions(result.description_rows)
     writer.insert_langrefset(result.langrefset_rows)
 
-    writer.insert_meta(
-        subset_name=args.subset_name,
-        subset_version=args.subset_version,
-        schema_version=args.schema_version,
-        rf2_release=args.rf2_release,
+    writer.write_meta(
+        {
+            "subset_name": args.subset_name,
+            "subset_version": args.subset_version,
+            "schema_version": args.schema_version,
+            "rf2_release": args.rf2_release,
+        }
     )
 
+    writer.finalize()
     writer.close()
 
     print("Done.")

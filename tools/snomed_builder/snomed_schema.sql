@@ -62,3 +62,15 @@ CREATE TABLE IF NOT EXISTS langrefset (
 CREATE INDEX IF NOT EXISTS idx_langrefset_refcomp ON langrefset(referenced_component_id);
 CREATE INDEX IF NOT EXISTS idx_langrefset_refset  ON langrefset(refset_id);
 CREATE INDEX IF NOT EXISTS idx_langrefset_active  ON langrefset(active);
+
+-- Token/feature key → SNOMED concept mapping (app-side bridge)
+CREATE TABLE IF NOT EXISTS feature_snomed_map (
+  feature_key TEXT PRIMARY KEY,         -- e.g. sick.pe.lungs.wheeze
+  concept_id  INTEGER NOT NULL,          -- SNOMED SCTID
+  active      INTEGER NOT NULL DEFAULT 1,
+  note        TEXT,
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_feature_snomed_map_concept
+  ON feature_snomed_map(concept_id);

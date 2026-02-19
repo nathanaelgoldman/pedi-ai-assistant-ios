@@ -1,0 +1,10 @@
+feature_key,search_raw_value_en,existing_concept_id_in_csv,candidate_concept_id,candidate_concept_active,type_id,term
+sick.pe.peristalsis.increased,Increased,271784000,80642001,1,900000000000003001,Increased digestive peristalsis (finding)
+sick.pe.peristalsis.increased,Increased,271784000,80306002,1,900000000000003001,Increased peristalsis (finding)
+sick.pe.peristalsis.increased,Increased,271784000,124725002,0,900000000000003001,Increased ureteral peristalsis (biological function) (finding)
+sick.pe.peristalsis.increased,Increased,271784000,130949008,1,900000000000003001,Increased ureteral peristalsis (finding)
+sick.pe.peristalsis.increased,Increased,271784000,80642001,1,900000000000013009,Increased digestive peristalsis
+sick.pe.peristalsis.increased,Increased,271784000,80306002,1,900000000000013009,Increased peristalsis
+sick.pe.peristalsis.increased,Increased,271784000,124725002,0,900000000000013009,Increased ureteral peristalsis
+sick.pe.peristalsis.increased,Increased,271784000,130949008,1,900000000000013009,Increased ureteral peristalsis
+sick.pe.abdomen.guarding,Guarding,271820003,163224007,0,900000000000013009,O/E - guarding of abdomen
