@@ -2714,6 +2714,10 @@ func reloadPatients() {
             let patientAgeDays: Int?
             let patientSex: String?
             let maxTempC: Double?
+            let maxTempIsAbnormal: Bool?
+            let spo2: Int?
+            let spo2IsAbnormal: Bool?
+        
         
             init(
                 patientID: Int,
@@ -2726,7 +2730,10 @@ func reloadPatients() {
                 pmhSummary: String?,
                 patientAgeDays: Int? = nil,
                 patientSex: String? = nil,
-                maxTempC: Double? = nil
+                maxTempC: Double? = nil,
+                maxTempIsAbnormal: Bool? = nil,
+                spo2: Int? = nil,
+                spo2IsAbnormal: Bool? = nil
             ) {
                 self.patientID = patientID
                 self.episodeID = episodeID
@@ -2739,6 +2746,9 @@ func reloadPatients() {
                 self.patientAgeDays = patientAgeDays
                 self.patientSex = patientSex
                 self.maxTempC = maxTempC
+                self.maxTempIsAbnormal = maxTempIsAbnormal
+                self.spo2 = spo2
+                self.spo2IsAbnormal = spo2IsAbnormal
             }
 
     }

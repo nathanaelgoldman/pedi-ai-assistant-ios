@@ -2993,3 +2993,17 @@
 "well_visit_form.ai.json_debug.title" = "AI JSON (debug)";
 "well_visit_form.ai.json_debug.placeholder" = "<tap to load>";
 "well_visit_form.ai.json_debug.load" = "Load JSON";
+
+"sick_episode_form.vitals_validation.invalid_weight" = "Invalid weight value.";
+"sick_episode_form.vitals_validation.invalid_height" = "Invalid height value.";
+"sick_episode_form.vitals_validation.invalid_head_circumference" = "Invalid head circumference value.";
+"sick_episode_form.vitals_validation.invalid_temperature" = "Invalid temperature value.";
+"sick_episode_form.vitals_validation.invalid_heart_rate" = "Invalid heart rate value.";
+"sick_episode_form.vitals_validation.invalid_respiratory_rate" = "Invalid respiratory rate value.";
+"sick_episode_form.vitals_validation.invalid_spo2" = "Invalid SpO₂ value.";
+"sick_episode_form.vitals_validation.invalid_bp_systolic" = "Invalid systolic BP value.";
+"sick_episode_form.vitals_validation.invalid_bp_diastolic" = "Invalid diastolic BP value.";
+
+"common.ok" = "OK";
+"sick_episode_form.vitals_validation.alert_title" = "Invalid vitals value";
+"common.ok" = "OK";

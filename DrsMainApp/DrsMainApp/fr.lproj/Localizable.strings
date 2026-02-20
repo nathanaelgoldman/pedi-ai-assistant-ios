@@ -2980,3 +2980,16 @@
 "well_visit_form.ai.json_debug.title" = "JSON IA";
 "well_visit_form.ai.json_debug.placeholder" = "<toucher pour charger>";
 "well_visit_form.ai.json_debug.load" = "Charger le JSON";
+
+"sick_episode_form.vitals_validation.invalid_weight" = "Valeur de poids invalide.";
+"sick_episode_form.vitals_validation.invalid_height" = "Valeur de taille invalide.";
+"sick_episode_form.vitals_validation.invalid_head_circumference" = "Valeur de périmètre crânien invalide.";
+"sick_episode_form.vitals_validation.invalid_temperature" = "Valeur de température invalide.";
+"sick_episode_form.vitals_validation.invalid_heart_rate" = "Valeur de fréquence cardiaque invalide.";
+"sick_episode_form.vitals_validation.invalid_respiratory_rate" = "Valeur de fréquence respiratoire invalide.";
+"sick_episode_form.vitals_validation.invalid_spo2" = "Valeur de SpO₂ invalide.";
+"sick_episode_form.vitals_validation.invalid_bp_systolic" = "Valeur de pression artérielle systolique invalide.";
+"sick_episode_form.vitals_validation.invalid_bp_diastolic" = "Valeur de pression artérielle diastolique invalide.";
+"common.ok" = "OK";
+"sick_episode_form.vitals_validation.alert_title" = "Valeur de constantes invalide";
+"common.ok" = "OK";

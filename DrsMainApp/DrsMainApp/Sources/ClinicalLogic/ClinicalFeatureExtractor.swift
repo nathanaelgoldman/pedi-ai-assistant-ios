@@ -14,6 +14,10 @@
 
 import Foundation
 
+// Curated “reassuring negatives” allowlist.
+// When the *normal/well* UI token is present, we emit the corresponding neg: key.
+
+
 /// Minimal contract for building a canonical clinical profile from an episode context,
 /// without coupling ClinicalFeatureExtractor to AppState.
 protocol EpisodeAIContextProviding {
@@ -33,11 +37,20 @@ protocol EpisodeAIContextProviding {
 
     var patientAgeDays: Int? { get }
     var patientSex: String? { get }
+
+    // Vitals (values + pre-evaluated abnormal flags; evaluator lives outside extractor)
     var maxTempC: Double? { get }
+    var maxTempIsAbnormal: Bool? { get }
+
+    var spo2: Int? { get }
+    var spo2IsAbnormal: Bool? { get }
 }
 
 extension EpisodeAIContextProviding {
     var problemTokens: [String] { [] }
+    var maxTempIsAbnormal: Bool? { nil }
+    var spo2: Int? { nil }
+    var spo2IsAbnormal: Bool? { nil }
 }
 
 // MARK: - Core Models
@@ -252,6 +265,23 @@ extension ClinicalFeatureExtractor {
         let sourceText: String     // original text that led to this match
         let matchedTerm: String    // term from description.term that matched
     }
+    
+    private static let reassuringNegMap: [String: String] = [
+        // HPI
+        "sick.hpi.appearance.well":       "neg:hpi.general_condition.poor",
+        "sick.hpi.feeding.normal":        "neg:hpi.feeding.poor",
+        "sick.hpi.breathing.normal":      "neg:hpi.resp.distress",
+        "sick.hpi.urination.normal":      "neg:hpi.urination.decreased",
+        "sick.hpi.pain_location.none":    "neg:hpi.pain.present",
+        "sick.hpi.vomiting.no":           "neg:hpi.vomiting.present",  // adjust if your token name differs
+
+        // PE
+        "sick.pe.general_appearance.well":"neg:pe.appearance.toxic",
+        "sick.pe.hydration.normal":       "neg:pe.hydration.dehydrated",
+        "sick.pe.color_hemodynamics.normal":"neg:pe.hemodynamics.abnormal",
+        "sick.pe.neuro.alert":            "neg:pe.neuro.altered",
+        "sick.pe.skin.no_petechiae":      "neg:pe.skin.petechiae"      // adjust if your token name differs
+    ]
 
     /// Convert free text → SNOMED concepts (best-effort).
     /// Keep it intentionally simple until RF2 is available.
@@ -286,14 +316,28 @@ extension ClinicalFeatureExtractor {
 // MARK: - Input Shapes (minimal + decoupled)
 
 /// Minimal vitals snapshot (extend as needed).
+/// Minimal vitals snapshot (extend as needed).
+/// NOTE: abnormality evaluation is owned by VitalsRange / VitalsBP.
+/// This struct just transports already-evaluated flags into the extractor.
 struct VitalsSnapshot {
     var takenAt: Date?
+
     var tempC: Double?
+    var tempIsAbnormal: Bool?      // e.g., >= 38.0 (or your rule)
+
     var hr: Int?
+    var hrIsAbnormal: Bool?
+
     var rr: Int?
+    var rrIsAbnormal: Bool?
+
     var spo2: Int?
+    var spo2IsAbnormal: Bool?
+
     var systolic: Int?
     var diastolic: Int?
+    var bpIsAbnormal: Bool?        // or keep more granular if you want later
+    var bpCategoryToken: String?   // optional: "normal", "elevated", "stage1", ...
 }
 
 /// Minimal vaccination snapshot (tokens should be stable, not localized).
@@ -349,6 +393,9 @@ final class ClinicalFeatureExtractor {
         static let hr = "vital.hr"
         static let rr = "vital.rr"
         static let spo2 = "vital.spo2"
+        // Derived boolean flags (preferred for simple presence-based rule predicates)
+        static let spo2Low = "vital.spo2.low"          // SpO₂ classified as low
+        static let spo2LowNeg = "neg:vital.spo2.low"   // SpO₂ present and classified as NOT low
         static let bpSys = "vital.bp.systolic"
         static let bpDia = "vital.bp.diastolic"
 
@@ -524,7 +571,7 @@ final class ClinicalFeatureExtractor {
                 snomedConceptId: nil,
                 note: "max temp among selected vitals",
                 isObjectivePositive: true,
-                isAbnormal: maxTemp >= 38.0,
+                isAbnormal: vAgg.maxTempIsAbnormal ?? (maxTemp >= 38.0),
                 source: "vitals"
             ))
 
@@ -538,6 +585,26 @@ final class ClinicalFeatureExtractor {
                 isAbnormal: maxTemp >= 38.0,
                 source: "derived"
             ))
+
+            // Curated reassuring negative: afebrile
+            if maxTemp < 38.0 {
+                let negKey = "neg:vital.temp.fever"
+                if !features.contains(where: { $0.key == negKey }) {
+                    features.append(.init(
+                        key: negKey,
+                        value: .bool(true),
+                        snomedConceptId: nil,
+                        note: "derived from vital.temp_c.max < 38.0",
+                        isObjectivePositive: true,
+                        isAbnormal: false,
+                        source: "derived.neg.vitals"
+                    ))
+                }
+
+                #if DEBUG
+                print("[Extractor] neg vital: afebrile")
+                #endif
+            }
 
             // Optional: if we have a terminology store, map the derived fever flag to a SNOMED concept
             // via DB lookup (no hard-coded concept IDs).
@@ -573,7 +640,7 @@ final class ClinicalFeatureExtractor {
                 snomedConceptId: nil,
                 note: "nearest vitals",
                 isObjectivePositive: true,
-                isAbnormal: false,
+                isAbnormal: vAgg.hrIsAbnormal ?? false,
                 source: "vitals"
             ))
         }
@@ -584,20 +651,38 @@ final class ClinicalFeatureExtractor {
                 snomedConceptId: nil,
                 note: "nearest vitals",
                 isObjectivePositive: true,
-                isAbnormal: false,
+                isAbnormal: vAgg.rrIsAbnormal ?? false,
                 source: "vitals"
             ))
         }
         if let spo2 = vAgg.spo2 {
+            let isLow = (vAgg.spo2IsAbnormal ?? false)
+
+            // Numeric value remains available for dashboards / future numeric predicates.
             features.append(.init(
                 key: Key.spo2,
                 value: .int(spo2),
                 snomedConceptId: nil,
                 note: "nearest vitals",
                 isObjectivePositive: true,
-                isAbnormal: spo2 < 95,
+                isAbnormal: isLow,
                 source: "vitals"
             ))
+
+            // Derived boolean flags for presence-based rules.
+            if isLow {
+                features.append(.flag(Key.spo2Low, true, source: "derived" , note: "VitalsRanges.classifySpO2 == low"))
+            } else {
+                features.append(.init(
+                    key: Key.spo2LowNeg,
+                    value: .bool(true),
+                    snomedConceptId: nil,
+                    note: "VitalsRanges.classifySpO2 != low",
+                    isObjectivePositive: true,
+                    isAbnormal: false,
+                    source: "derived.neg.vitals"
+                ))
+            }
         }
         if let sys = vAgg.systolic {
             features.append(.init(
@@ -606,7 +691,7 @@ final class ClinicalFeatureExtractor {
                 snomedConceptId: nil,
                 note: "nearest vitals",
                 isObjectivePositive: true,
-                isAbnormal: false,
+                isAbnormal: vAgg.bpIsAbnormal ?? false,
                 source: "vitals"
             ))
         }
@@ -617,7 +702,7 @@ final class ClinicalFeatureExtractor {
                 snomedConceptId: nil,
                 note: "nearest vitals",
                 isObjectivePositive: true,
-                isAbnormal: false,
+                isAbnormal: vAgg.bpIsAbnormal ?? false,
                 source: "vitals"
             ))
         }
@@ -780,6 +865,37 @@ final class ClinicalFeatureExtractor {
             }
         }
 
+        // Curated reassuring negatives (emit neg: keys from normal/well tokens)
+        do {
+            var negKeys: [String] = []
+            for f in features {
+                if let neg = Self.reassuringNegMap[f.key] {
+                    negKeys.append(neg)
+                }
+            }
+            let uniqueNeg = Array(Set(negKeys)).sorted()
+
+            for nk in uniqueNeg {
+                if !features.contains(where: { $0.key == nk }) {
+                    features.append(.init(
+                        key: nk,
+                        value: .bool(true),
+                        snomedConceptId: nil,
+                        note: "derived reassuring negative",
+                        isObjectivePositive: true,
+                        isAbnormal: false,
+                        source: "derived.neg"
+                    ))
+                }
+            }
+
+            #if DEBUG
+            if !uniqueNeg.isEmpty {
+                print("[Extractor] neg keys: count=\(uniqueNeg.count) sample=\(uniqueNeg.prefix(10))")
+            }
+            #endif
+        }
+
         // SNOMED mirror features
         let existingKeys = Set(features.map { $0.key })
         let snapshot = features
@@ -848,11 +964,21 @@ extension ClinicalFeatureExtractor {
 
     struct VitalsAgg {
         var maxTempC: Double?
+        var maxTempIsAbnormal: Bool?
+
         var hr: Int?
+        var hrIsAbnormal: Bool?
+
         var rr: Int?
+        var rrIsAbnormal: Bool?
+
         var spo2: Int?
+        var spo2IsAbnormal: Bool?
+
         var systolic: Int?
         var diastolic: Int?
+        var bpIsAbnormal: Bool?
+        var bpCategoryToken: String?
     }
 
     /// For now: choose max temperature across all provided vitals.
@@ -872,13 +998,29 @@ extension ClinicalFeatureExtractor {
         }
 
         let n = nearest()
+
+        // For temp: if ANY snapshot flagged abnormal => abnormal.
+        // If no flags exist at all => nil.
+        let tempFlags = vitals.compactMap { $0.tempIsAbnormal }
+        let maxTempIsAbnormal: Bool? = tempFlags.isEmpty ? nil : tempFlags.contains(true)
+
         return .init(
             maxTempC: maxTemp,
+            maxTempIsAbnormal: maxTempIsAbnormal,
+
             hr: n.hr,
+            hrIsAbnormal: n.hrIsAbnormal,
+
             rr: n.rr,
+            rrIsAbnormal: n.rrIsAbnormal,
+
             spo2: n.spo2,
+            spo2IsAbnormal: n.spo2IsAbnormal,
+
             systolic: n.systolic,
-            diastolic: n.diastolic
+            diastolic: n.diastolic,
+            bpIsAbnormal: n.bpIsAbnormal,
+            bpCategoryToken: n.bpCategoryToken
         )
     }
 }
@@ -928,12 +1070,23 @@ extension ClinicalFeatureExtractor {
         let vitals: [VitalsSnapshot] = [
             VitalsSnapshot(
                 takenAt: encounterDate,
+
                 tempC: ctx.maxTempC,
+                tempIsAbnormal: ctx.maxTempIsAbnormal,
+
                 hr: nil,
+                hrIsAbnormal: nil,
+
                 rr: nil,
-                spo2: nil,
+                rrIsAbnormal: nil,
+
+                spo2: ctx.spo2,
+                spo2IsAbnormal: ctx.spo2IsAbnormal,
+
                 systolic: nil,
-                diastolic: nil
+                diastolic: nil,
+                bpIsAbnormal: nil,
+                bpCategoryToken: nil
             )
         ]
 
@@ -1035,7 +1188,7 @@ extension ClinicalFeatureExtractor {
     ) -> PatientClinicalProfile {
 
         #if DEBUG
-        print("[Extractor] Incoming ctx: patientID=\(ctx.patientID) ageDays=\(String(describing: ctx.patientAgeDays)) sex=\(String(describing: ctx.patientSex)) maxTempC=\(String(describing: ctx.maxTempC))")
+        print("[Extractor] Incoming ctx: patientID=\(ctx.patientID) ageDays=\(String(describing: ctx.patientAgeDays)) sex=\(String(describing: ctx.patientSex)) maxTempC=\(String(describing: ctx.maxTempC)) spo2=\(String(describing: ctx.spo2)) spo2Abn=\(String(describing: ctx.spo2IsAbnormal))")
         #endif
 
         // Back-compat shim: if the caller did not provide DOB yet, we can only

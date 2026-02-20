@@ -297,6 +297,14 @@ struct SickEpisodeForm: View {
     private var vitalsBadgesList: [String] {
         vitalsBadges()
     }
+    
+    // MARK: - Vitals validation UI
+    private struct VitalsValidationAlert: Identifiable {
+        let id = UUID()
+        let message: String
+    }
+
+    @State private var vitalsValidationAlert: VitalsValidationAlert?
 
     private var vitalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -931,6 +939,14 @@ struct SickEpisodeForm: View {
                 prefillVitalsIfEditing()
                 loadVitalsHistory()
                 loadAddenda()
+            }
+            
+            .alert(item: $vitalsValidationAlert) { alert in
+                Alert(
+                    title: Text(NSLocalizedString("sick_episode_form.vitals_validation.alert_title", comment: "Title for invalid vitals validation alert")),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "OK button")))
+                )
             }
         }
     }
@@ -2423,6 +2439,23 @@ struct SickEpisodeForm: View {
                 return s.isEmpty ? nil : Double(s)
             }()
 
+        // SpO₂: use the lowest recorded value (worst) from vitals history, fallback to typed field.
+        let spo2: Int? = vitalsHistory
+            .compactMap { (row: VitalsRow) -> Int? in
+                row.spo2
+            }
+            .min()
+            ?? {
+                let s = spo2Field.trimmingCharacters(in: .whitespacesAndNewlines)
+                return s.isEmpty ? nil : Int(s)
+            }()
+
+        // Delegate SpO₂ classification to VitalsRanges (single source of truth).
+        let spo2IsAbnormal: Bool? = {
+            let cls = VitalsRanges.classifySpO2(spo2)
+            return (cls == "low")
+        }()
+
         return AppState.EpisodeAIContext(
             patientID: pid,
             episodeID: Int(eid),
@@ -2433,7 +2466,14 @@ struct SickEpisodeForm: View {
             pmhSummary: pmhSummary,
             patientAgeDays: patientAgeDays,
             patientSex: patientSex,
-            maxTempC: maxTempC
+            maxTempC: maxTempC,
+            // Delegate classification to VitalsRanges (single source of truth).
+            maxTempIsAbnormal: {
+                let cls = VitalsRanges.classifyTempC(maxTempC)
+                return (cls == "fever" || cls == "hypothermia")
+            }(),
+            spo2: spo2,
+            spo2IsAbnormal: spo2IsAbnormal
         )
     }
 
@@ -3155,6 +3195,12 @@ extension SickEpisodeForm {
               let pid = appState.selectedPatientID,
               let dbURL = appState.currentDBURL,
               FileManager.default.fileExists(atPath: dbURL.path) else { return }
+        func failVital(_ message: String) {
+            AppLog.ui.info("SickEpisodeForm: vitals validation failed | \(message, privacy: .public)")
+            DispatchQueue.main.async {
+                vitalsValidationAlert = VitalsValidationAlert(message: message)
+            }
+        }
         do {
             try ensureManualGrowthTable(dbURL: dbURL)
             try ensureVitalsTable(dbURL: dbURL)
@@ -3173,6 +3219,78 @@ extension SickEpisodeForm {
             var bs = i(bpSysField)
             var bd = i(bpDiaField)
             if let x = bs, let y = bd, x < y { bs = y; bd = x } // swap if reversed
+
+            // ---- Basic physiologic sanity validation (reject nonsense data) ----
+            func invalid(_ condition: Bool, _ message: String) throws {
+                if condition {
+                    throw NSError(
+                        domain: "SickEpisodeForm.VitalsValidation",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: message]
+                    )
+                }
+            }
+
+            // Weight (kg): 0.3 – 300
+            if let w = w {
+                try invalid(w < 0.3 || w > 300.0,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_weight",
+                                      comment: "Vitals validation: invalid weight"))
+            }
+
+            // Height (cm): 20 – 250
+            if let h = h {
+                try invalid(h < 20.0 || h > 250.0,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_height",
+                                      comment: "Vitals validation: invalid height"))
+            }
+
+            // Head circumference (cm): 15 – 70
+            if let hc = hc {
+                try invalid(hc < 15.0 || hc > 70.0,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_head_circumference",
+                                      comment: "Vitals validation: invalid head circumference"))
+            }
+
+            // Temperature (°C): 30 – 45
+            if let t = t {
+                try invalid(t < 30.0 || t > 45.0,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_temperature",
+                                      comment: "Vitals validation: invalid temperature"))
+            }
+
+            // Heart rate (bpm): 20 – 300
+            if let hr = hr {
+                try invalid(hr < 20 || hr > 300,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_heart_rate",
+                                      comment: "Vitals validation: invalid heart rate"))
+            }
+
+            // Respiratory rate (/min): 5 – 120
+            if let rr = rr {
+                try invalid(rr < 5 || rr > 120,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_respiratory_rate",
+                                      comment: "Vitals validation: invalid respiratory rate"))
+            }
+
+            // SpO2 (%): 50 – 100
+            if let s2 = s2 {
+                try invalid(s2 < 50 || s2 > 100,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_spo2",
+                                      comment: "Vitals validation: invalid SpO2"))
+            }
+
+            // Blood pressure (mmHg): 30 – 300
+            if let bs = bs {
+                try invalid(bs < 30 || bs > 300,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_bp_systolic",
+                                      comment: "Vitals validation: invalid systolic BP"))
+            }
+            if let bd = bd {
+                try invalid(bd < 20 || bd > 200,
+                    NSLocalizedString("sick_episode_form.vitals_validation.invalid_bp_diastolic",
+                                      comment: "Vitals validation: invalid diastolic BP"))
+            }
 
             // Skip if all empty
             if [w,h,hc,t].allSatisfy({ $0 == nil }) &&
@@ -3198,6 +3316,14 @@ extension SickEpisodeForm {
             // Refresh list + keep fields as-is
             loadVitalsHistory()
         } catch {
+            let ns = error as NSError
+            let msg = ns.localizedDescription
+
+            if ns.domain == "SickEpisodeForm.VitalsValidation" {
+                failVital(msg)
+                return
+            }
+
             AppLog.db.error("SickEpisodeForm: saveVitalsTapped failed | pid=\(pid, privacy: .private) episodeID=\(eid, privacy: .private) err=\(String(describing: error), privacy: .public)")
         }
     }

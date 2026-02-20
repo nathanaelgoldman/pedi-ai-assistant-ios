@@ -2886,3 +2886,17 @@
 "well_visit_form.ai.json_debug.title" = "AI JSON";
 "well_visit_form.ai.json_debug.placeholder" = "<点按加载>";
 "well_visit_form.ai.json_debug.load" = "加载 JSON";
+
+"sick_episode_form.vitals_validation.invalid_weight" = "体重数值无效。";
+"sick_episode_form.vitals_validation.invalid_height" = "身长/身高数值无效。";
+"sick_episode_form.vitals_validation.invalid_head_circumference" = "头围数值无效。";
+"sick_episode_form.vitals_validation.invalid_temperature" = "体温数值无效。";
+"sick_episode_form.vitals_validation.invalid_heart_rate" = "心率数值无效。";
+"sick_episode_form.vitals_validation.invalid_respiratory_rate" = "呼吸频率数值无效。";
+"sick_episode_form.vitals_validation.invalid_spo2" = "血氧饱和度（SpO₂）数值无效。";
+"sick_episode_form.vitals_validation.invalid_bp_systolic" = "收缩压数值无效。";
+"sick_episode_form.vitals_validation.invalid_bp_diastolic" = "舒张压数值无效。";
+
+"common.ok" = "确定";
+"sick_episode_form.vitals_validation.alert_title" = "生命体征数值无效";
+"common.ok" = "确定";
