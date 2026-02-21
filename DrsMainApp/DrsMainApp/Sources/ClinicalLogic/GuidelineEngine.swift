@@ -283,6 +283,7 @@ public struct Condition: Codable {
         case betweenInclusive
         case present
         case absent
+        case descendantOf
         case unknown(String)
 
         public init(from decoder: Decoder) throws {
@@ -309,6 +310,8 @@ public struct Condition: Codable {
             case "present": self = .present
             case "exists": self = .present
             case "absent": self = .absent
+            case "descendant_of": self = .descendantOf
+            case "isa": self = .descendantOf
             default: return nil
             }
         }
@@ -326,6 +329,7 @@ public struct Condition: Codable {
             case .betweenInclusive: return "between_inclusive"
             case .present: return "present"
             case .absent: return "absent"
+            case .descendantOf: return "descendant_of"
             case .unknown(let s): return s
             }
         }
@@ -375,6 +379,23 @@ public struct Condition: Codable {
 // MARK: - Engine
 
 public enum GuidelineEngine {
+
+    // MARK: - Optional SNOMED subsumption resolver
+
+    /// Optional callback that answers: is `child` a descendant of `ancestor` in the shipped SNOMED subset graph?
+    ///
+    /// If configured, the engine can satisfy `present` checks for keys like `sct:386661006`
+    /// by matching any present SNOMED concept that is a descendant of the requested ancestor.
+    ///
+    /// Set this from the app layer, e.g.:
+    ///   GuidelineEngine.snomedIsDescendant = { child, ancestor in terminologyStore.isDescendant(child, of: ancestor) }
+    public static var snomedIsDescendant: ((Int64, Int64) -> Bool)?
+
+    /// If true (default), `present` on an `sct:<ancestor>` key will also return true when
+    /// ANY present SNOMED concept in the profile is a descendant of that ancestor.
+    ///
+    /// Set to false to make `.present` strictly mean: the key itself exists/is true in the profile.
+    public static var snomedPresentImpliesAncestorPresence: Bool = true
 
     /// Evaluate a guideline JSON ruleset against a clinical profile.
     ///
@@ -476,14 +497,70 @@ public enum GuidelineEngine {
 
     private static func conditionMatches(_ c: Condition, profile: ClinicalFeatureProviding) -> Bool {
         func hasAnyValue(_ key: String) -> Bool {
-            if let b = profile.bool(key) { return b || true }
+            // For booleans, treat "present" as true (not merely non-nil).
+            if let b = profile.bool(key) { return b }
             if profile.int(key) != nil { return true }
             if profile.double(key) != nil { return true }
             if profile.string(key) != nil { return true }
             if profile.strings(key) != nil { return true }
             return false
         }
+
+        func parseSCTID(_ key: String) -> Int64? {
+            guard key.hasPrefix("sct:") else { return nil }
+            let raw = String(key.dropFirst(4))
+            return Int64(raw)
+        }
+
+        func parseSCTIDLoose(_ s: String?) -> Int64? {
+            guard let s else { return nil }
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("sct:") {
+                return Int64(String(trimmed.dropFirst(4)))
+            }
+            return Int64(trimmed)
+        }
+
+        func presentSCTIDs(from profile: ClinicalFeatureProviding) -> [Int64] {
+            // We can only enumerate keys for known concrete implementations.
+            if let p = profile as? PatientClinicalProfile {
+                // Best effort: treat any key starting with sct: and evaluating to true as present.
+                let keys = p.features.map { $0.key }
+                var out: [Int64] = []
+                out.reserveCapacity(16)
+                for k in keys where k.hasPrefix("sct:") {
+                    if profile.bool(k) == true, let id = parseSCTID(k) {
+                        out.append(id)
+                    }
+                }
+                return out
+            }
+            if let p = profile as? FeatureMapProfile {
+                let keys = p.features.keys
+                var out: [Int64] = []
+                out.reserveCapacity(16)
+                for k in keys where k.hasPrefix("sct:") {
+                    if profile.bool(k) == true, let id = parseSCTID(k) {
+                        out.append(id)
+                    }
+                }
+                return out
+            }
+            return []
+        }
+
         switch c.op {
+
+        case .descendantOf:
+            // Interpretation:
+            //   - c.key is the CHILD concept (expects `sct:<id>`)
+            //   - c.valueString is the ANCESTOR concept (`sct:<id>` or raw id)
+            // Returns true if child IS-A ancestor.
+            guard let subsumes = GuidelineEngine.snomedIsDescendant else { return false }
+            guard let childID = parseSCTID(c.key) else { return false }
+            let ancestorID = parseSCTIDLoose(c.valueString) ?? (c.valueInt.map { Int64($0) })
+            guard let ancestorID else { return false }
+            return subsumes(childID, ancestorID)
         case .eq:
             // Try string equality first, then numeric.
             if let expected = c.valueBool {
@@ -593,7 +670,27 @@ public enum GuidelineEngine {
             return false
 
         case .present:
-            return hasAnyValue(c.key)
+            // Default: key exists in the profile in any typed form.
+            if hasAnyValue(c.key) { return true }
+
+            // SNOMED subsumption (optional): if the condition asks for `sct:<ancestor>` and we have ANY present
+            // `sct:<child>` where child IS-A ancestor, treat as present.
+            if GuidelineEngine.snomedPresentImpliesAncestorPresence,
+               let ancestorID = parseSCTID(c.key),
+               let subsumes = GuidelineEngine.snomedIsDescendant {
+
+                let present = presentSCTIDs(from: profile)
+                for childID in present {
+                    if subsumes(childID, ancestorID) {
+                        #if DEBUG
+                        print("[GuidelineEngine v1] present(\(c.key)) satisfied via descendant child sct:\(childID)")
+                        #endif
+                        return true
+                    }
+                }
+            }
+
+            return false
 
         case .absent:
             return !hasAnyValue(c.key)

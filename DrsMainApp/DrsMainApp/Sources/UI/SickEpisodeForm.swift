@@ -145,6 +145,10 @@ struct SickEpisodeForm: View {
     @State private var anticipatoryGuidance: String = "URI"
     @State private var comments: String = ""
 
+    // MARK: - Episode signals (local clinical support)
+    @State private var episodeSignals: [String] = []
+    @State private var episodeSignalsLastUpdatedISO: String? = nil
+
     // MARK: - AI assistance
     @State private var aiIsRunning: Bool = false
     @State private var aiPromptPreview: String = ""
@@ -483,6 +487,10 @@ struct SickEpisodeForm: View {
             TextEditor(text: $problemListing)
                 .frame(minHeight: 120)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+
+            // Episode Signal Panel (local decision support)
+            episodeSignalsPanel
+
             TextField(NSLocalizedString("sick_episode_form.problem_listing.complementary_investigations.placeholder", comment: "Placeholder for complementary investigations"), text: $complementaryInvestigations, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
             TextField(NSLocalizedString("sick_episode_form.problem_listing.working_diagnosis.placeholder", comment: "Placeholder for working diagnosis"), text: $diagnosis)
@@ -498,6 +506,47 @@ struct SickEpisodeForm: View {
         .padding(12)
         .lightBlueSectionCardStyle()
         .padding(.top, 8)
+    }
+
+    
+
+    private func refreshEpisodeSignals() {
+        var lines: [String] = []
+
+        // 1) Abnormal vitals badges already computed live
+        let badges = vitalsBadgesList
+        if !badges.isEmpty {
+            let joined = badges.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString(
+                "sick_episode_form.episode_signals.vitals_badges",
+                comment: "Line describing abnormal vitals badges in episode signals"
+            ), joined))
+        }
+
+        // 2) Positive findings proxy: selected complaints + selected PE tokens
+        let positivesCount = presetComplaints.count
+            + skinSet.filter { $0 != "Normal" }.count
+            + lungsSet.filter { $0 != "Normal" }.count
+            + abdomenSet.filter { $0 != "Normal" }.count
+            + ent.filter { $0 != "Normal" }.count
+        lines.append(String(format: NSLocalizedString(
+            "sick_episode_form.episode_signals.positives_count",
+            comment: "Line showing a rough count of positive findings"
+        ), positivesCount))
+
+        // 3) Local guideline flags (already stored on AppState by the guideline check)
+        let flags = appState.aiGuidelineFlagsForActiveEpisode
+        if !flags.isEmpty {
+            lines.append(String(format: NSLocalizedString(
+                "sick_episode_form.episode_signals.guideline_flags_count",
+                comment: "Line showing count of guideline flags"
+            ), flags.count))
+        }
+
+
+        // Save
+        episodeSignals = lines
+        episodeSignalsLastUpdatedISO = isoNow()
     }
 
     private var aiSection: some View {
@@ -939,6 +988,7 @@ struct SickEpisodeForm: View {
                 prefillVitalsIfEditing()
                 loadVitalsHistory()
                 loadAddenda()
+                refreshEpisodeSignals()
             }
             
             .alert(item: $vitalsValidationAlert) { alert in
@@ -2054,6 +2104,23 @@ struct SickEpisodeForm: View {
         return complaints.joined(separator: ", ")
     }
 
+    /// Compute a combined complaint string for *display* (localized preset + raw free text).
+    ///
+    /// - Preset complaints are stored as stable raw values (English) but displayed localized via `sickChoiceText`.
+    /// - Free-text complaints are shown as-is.
+    private func currentMainComplaintDisplayString() -> String {
+        let free = otherComplaints
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        let presetLocalized = Array(presetComplaints)
+            .sorted()
+            .map { sickChoiceText($0) }
+
+        return (presetLocalized + free).joined(separator: ", ")
+    }
+
     /// Fetch basic demographics for the active patient from the DB.
     private func fetchPatientDemographics(dbURL: URL, patientID: Int64) -> (first: String?, last: String?, dobISO: String?, sex: String?, vax: String?) {
         var db: OpaquePointer?
@@ -2146,12 +2213,13 @@ struct SickEpisodeForm: View {
                !vax.isEmpty,
                vax.lowercased() != "up to date",
                vax.lowercased() != "up-to-date" {
-                lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vaccination_status", comment: "Problem list line: Vaccination status"), vax))
+                lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.vaccination_status", comment: "Problem list line: Vaccination status"), vaccinationStatusText(vax)))
             }
         }
 
         // Main complaint + duration
-        let mc = currentMainComplaintString()
+        // Use localized labels for preset complaints, but keep free-text as-is.
+        let mc = currentMainComplaintDisplayString()
         if !mc.isEmpty {
             lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.main_complaint", comment: "Problem list line: Main complaint"), mc))
         }
@@ -2621,6 +2689,56 @@ struct SickEpisodeForm: View {
         // De-dup just in case the same token was added twice
         return Array(Set(out)).sorted()
     }
+    // MARK: - Positive Findings List Helper
+
+    /// Returns a localized, de-duplicated list of positive/abnormal findings based on current UI state.
+    private func positiveFindingsDisplayList() -> [String] {
+        var out: [String] = []
+
+        // Preset main complaints (localized)
+        out.append(contentsOf: Array(presetComplaints).sorted().map { sickChoiceText($0) })
+
+        // Structured HPI abnormalities
+        if appearance != "Well" { out.append(sickChoiceText(appearance)) }
+        if feeding != "Normal" { out.append(sickChoiceText(feeding)) }
+        if breathing != "Normal" { out.append(sickChoiceText(breathing)) }
+        if urination != "Normal" { out.append(sickChoiceText(urination)) }
+        if pain != "None" { out.append(sickChoiceText(pain)) }
+        if stools != "Normal" { out.append(sickChoiceText(stools)) }
+
+        // Context (exclude None)
+        let ctx = Array(context).filter { $0 != "None" }.sorted().map { sickChoiceText($0) }
+        out.append(contentsOf: ctx)
+
+        // PE abnormalities
+        if generalAppearance != "Well" { out.append(sickChoiceText(generalAppearance)) }
+        if hydration != "Normal" { out.append(sickChoiceText(hydration)) }
+        if heart != "Normal" { out.append(sickChoiceText(heart)) }
+        if color != "Normal" { out.append(sickChoiceText(color)) }
+
+        out.append(contentsOf: Array(skinSet).filter { $0 != "Normal" }.sorted().map { sickChoiceText($0) })
+        out.append(contentsOf: Array(ent).filter { $0 != "Normal" }.sorted().map { sickChoiceText($0) })
+
+        if rightEar != "Normal" { out.append(sickChoiceText(rightEar)) }
+        if leftEar  != "Normal" { out.append(sickChoiceText(leftEar)) }
+        if rightEye != "Normal" { out.append(sickChoiceText(rightEye)) }
+        if leftEye  != "Normal" { out.append(sickChoiceText(leftEye)) }
+
+        out.append(contentsOf: Array(lungsSet).filter { $0 != "Normal" }.sorted().map { sickChoiceText($0) })
+        out.append(contentsOf: Array(abdomenSet).filter { $0 != "Normal" }.sorted().map { sickChoiceText($0) })
+        if peristalsis != "Normal" { out.append(sickChoiceText(peristalsis)) }
+        out.append(contentsOf: Array(genitaliaSet).filter { $0 != "Normal" }.sorted().map { sickChoiceText($0) })
+
+        if neurological != "Alert" { out.append(sickChoiceText(neurological)) }
+        if musculoskeletal != "Normal" { out.append(sickChoiceText(musculoskeletal)) }
+
+        out.append(contentsOf: Array(lymphNodesSet).filter { $0 != "None" }.sorted().map { sickChoiceText($0) })
+
+        // De-dupe while preserving order
+        var seen = Set<String>()
+        return out.filter { seen.insert($0).inserted }
+    }
+
     // MARK: - Save (commit to db + refresh UI)
     private func saveTapped() {
         AppLog.ui.info("SickEpisodeForm: saveTapped start | pid=\(String(describing: appState.selectedPatientID), privacy: .private) episodeID=\(String(describing: activeEpisodeID), privacy: .private) editingEpisodeID=\(String(describing: editingEpisodeID), privacy: .private)")
@@ -2718,6 +2836,99 @@ struct SickEpisodeForm: View {
     }
 }
 
+// MARK: - Episode Signal Panel (local decision support)
+
+// This panel is inserted with `episodeSignalsPanel` in the main UI.
+extension SickEpisodeForm {
+    private var episodeSignalsPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(NSLocalizedString("sick_episode_form.signal_panel.header", comment: "Signal panel header"))
+                    .font(.headline)
+                Spacer()
+                Button(action: {
+                    triggerGuidelineFlags()
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help(NSLocalizedString("sick_episode_form.signal_panel.refresh_help", comment: "Refresh guideline flags"))
+            }
+            .padding(.bottom, 2)
+
+            // Abnormal vitals row
+            let vitalsFlags = vitalsBadges()
+            if !vitalsFlags.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("sick_episode_form.signal_panel.abnormal_vitals", comment: "Abnormal vitals label"))
+                        .font(.subheadline)
+
+                    Text(vitalsFlags.joined(separator: ", "))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Positive signs (approximate) row and details
+            let positiveList = positiveFindingsDisplayList()
+            HStack(spacing: 8) {
+                Text(NSLocalizedString("sick_episode_form.signal_panel.positive_signs", comment: "Positive signs label"))
+                    .font(.subheadline)
+
+                Text("\(positiveList.count)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if !positiveList.isEmpty {
+                ForEach(Array(positiveList.prefix(8).enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(item)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.leading, 28)
+                }
+            }
+
+            // Rule alerts row and details
+            let ruleAlerts = appState.aiGuidelineFlagsForActiveEpisode
+            HStack(spacing: 8) {
+                Text(NSLocalizedString("sick_episode_form.signal_panel.rule_alerts", comment: "Rule alerts label"))
+                    .font(.subheadline)
+
+                Text("\(ruleAlerts.count)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if !ruleAlerts.isEmpty {
+                ForEach(Array(ruleAlerts.prefix(8).enumerated()), id: \.offset) { _, flag in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(flag)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.leading, 28)
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+        )
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Small helpers
 
 /// Convert a raw stored choice string into a stable localization key suffix.
@@ -2738,12 +2949,61 @@ private func sickChoiceKey(_ raw: String) -> String {
     return out.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
 }
 
+/// Normalize a stored/raw value so hidden characters (NBSP/ZWSP/BOM) or stray whitespace
+/// do not break key lookups.
+private func normalizeChoiceValue(_ raw: String) -> String {
+    var s = raw
+
+    // Common invisible / non-standard whitespace
+    s = s.replacingOccurrences(of: "\u{00A0}", with: " ") // NBSP
+    s = s.replacingOccurrences(of: "\u{200B}", with: "")  // ZWSP
+    s = s.replacingOccurrences(of: "\u{FEFF}", with: "")  // BOM
+
+    // Collapse internal whitespace runs to a single space
+    s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+
+    return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+}
+
+
 /// Localized label for a stored choice value.
 /// Falls back to the raw value if the key is missing.
 private func sickChoiceText(_ raw: String) -> String {
     let key = "sick_episode_form.choice.\(sickChoiceKey(raw))"
     let localized = NSLocalizedString(key, comment: "SickEpisodeForm choice label")
     return (localized == key) ? raw : localized
+}
+
+/// Localized label for a stored vaccination status value.
+/// Falls back to the raw value if the key is missing.
+///
+/// Stored values are expected to be stable (often English) while display is localized.
+/// We try a dedicated vaccination namespace first, then fall back to the generic sick choice keys
+/// (useful if vaccination options were previously localized under `sick_episode_form.choice.*`).
+private func vaccinationStatusText(_ raw: String) -> String {
+    // Normalize to avoid hidden characters / stray whitespace breaking key lookup.
+    let cleaned = normalizeChoiceValue(raw)
+    guard !cleaned.isEmpty else { return raw }
+
+    let suffix = sickChoiceKey(cleaned)
+
+    // Preferred namespace for vaccination status in this codebase (matches Localizable: vax.status.*)
+    let key0 = "vax.status.\(suffix)"
+    let loc0 = NSLocalizedString(key0, comment: "Vaccination status label")
+    if loc0 != key0 { return loc0 }
+
+    // Alternative namespace (older/other modules)
+    let key1 = "patient.vaccination_status.\(suffix)"
+    let loc1 = NSLocalizedString(key1, comment: "Vaccination status label")
+    if loc1 != key1 { return loc1 }
+
+    // Back-compat fallback (if the values were localized as generic sick choices)
+    let key2 = "sick_episode_form.choice.\(suffix)"
+    let loc2 = NSLocalizedString(key2, comment: "Vaccination status label (fallback)")
+    if loc2 != key2 { return loc2 }
+
+    // Final fallback: show the cleaned stored value
+    return cleaned
 }
 
 private func summary(for row: SickEpisodeForm.VitalsRow) -> String {

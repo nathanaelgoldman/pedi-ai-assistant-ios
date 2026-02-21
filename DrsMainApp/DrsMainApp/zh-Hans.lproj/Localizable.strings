@@ -2898,5 +2898,23 @@
 "sick_episode_form.vitals_validation.invalid_bp_diastolic" = "舒张压数值无效。";
 
 "common.ok" = "确定";
-"sick_episode_form.vitals_validation.alert_title" = "生命体征数值无效";
-"common.ok" = "确定";
+
+/* 病程信号面板（问题列表下方） */
+"sick_episode_form.episode_signals.title" = "本次就诊信号";
+"sick_episode_form.episode_signals.refresh_button" = "刷新";
+"sick_episode_form.episode_signals.updated_at" = "更新时间：%@";
+"sick_episode_form.episode_signals.empty_hint" = "暂无信号。点击“刷新”生成本地信号。";
+
+/* 信号行 */
+"sick_episode_form.episode_signals.vitals_badges" = "异常生命体征：%@";
+"sick_episode_form.episode_signals.positives_count" = "阳性体征（粗略）：%d";
+"sick_episode_form.episode_signals.guideline_flags_count" = "规则提示：%d";
+"sick_episode_form.episode_signals.spo2_badge" = "%@";
+
+"sick_episode_form.signal_panel.header" = "本次就诊信号";
+"sick_episode_form.signal_panel.refresh_help" = "刷新信号";
+"sick_episode_form.signal_panel.abnormal_vitals" = "异常生命体征";
+"sick_episode_form.signal_panel.positive_signs" = "阳性体征（约）";
+"sick_episode_form.signal_panel.rule_alerts" = "规则警示";
+
+

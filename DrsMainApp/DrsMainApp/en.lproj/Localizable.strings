@@ -3007,3 +3007,21 @@
 "common.ok" = "OK";
 "sick_episode_form.vitals_validation.alert_title" = "Invalid vitals value";
 "common.ok" = "OK";
+
+/* Episode Signal Panel (under Problem Listing) */
+"sick_episode_form.episode_signals.title" = "Episode signals";
+"sick_episode_form.episode_signals.refresh_button" = "Refresh";
+"sick_episode_form.episode_signals.updated_at" = "Updated: %@";
+"sick_episode_form.episode_signals.empty_hint" = "No signals yet. Tap Refresh to generate local signals.";
+
+/* Episode signal lines */
+"sick_episode_form.episode_signals.vitals_badges" = "Abnormal vitals: %@";
+"sick_episode_form.episode_signals.positives_count" = "Positive findings (rough): %d";
+"sick_episode_form.episode_signals.guideline_flags_count" = "Guideline flags: %d";
+"sick_episode_form.episode_signals.spo2_badge" = "%@";
+
+"sick_episode_form.signal_panel.header" = "Episode signals";
+"sick_episode_form.signal_panel.refresh_help" = "Refresh signals";
+"sick_episode_form.signal_panel.abnormal_vitals" = "Abnormal vitals";
+"sick_episode_form.signal_panel.positive_signs" = "Positive findings (approx.)";
+"sick_episode_form.signal_panel.rule_alerts" = "Rule alerts";

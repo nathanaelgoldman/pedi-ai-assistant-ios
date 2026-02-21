@@ -17,7 +17,7 @@ final class TerminologyStore: ObservableObject {
 
     // MARK: - Version contract
     // Bump this only when the SQLite schema layout changes (tables/columns/indexes).
-    private let expectedSchemaVersion = "1.0"
+    private let expectedSchemaVersion = "1.1"
 
     // Meta keys we expect in the terminology DB.
     private enum MetaKey {
@@ -27,6 +27,105 @@ final class TerminologyStore: ObservableObject {
         static let subsetVersion = "subset_version"
         static let dbBuild       = "db_build"
         static let contentHash   = "content_hash"
+    }
+
+    // MARK: - IS-A hierarchy (subset graph)
+
+    /// Loaded from the local terminology DB table `isa_edge`.
+    ///
+    /// We keep a simple parent adjacency list in memory because the subset is small
+    /// and we need fast subsumption checks during guideline evaluation.
+    private var isaLoaded = false
+    private var isaParents: [Int64: [Int64]] = [:]
+
+    /// Load `isa_edge` into memory (child -> [parents]). Safe to call multiple times.
+    private func loadISAIfNeeded() {
+        if isaLoaded { return }
+        isaLoaded = true
+
+        guard let db = openDBReadOnly() else {
+            log.info("TerminologyStore: cannot load isa_edge (DB not available)")
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT child_concept_id, parent_concept_id
+        FROM isa_edge;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("TerminologyStore: loadISAIfNeeded prepare failed: \(msg, privacy: .public)")
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        var parents: [Int64: [Int64]] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let child = sqlite3_column_int64(stmt, 0)
+            let parent = sqlite3_column_int64(stmt, 1)
+            parents[child, default: []].append(parent)
+        }
+
+        self.isaParents = parents
+        log.info("TerminologyStore: loaded isa_edge rows=\(parents.values.reduce(0) { $0 + $1.count }, privacy: .public)")
+    }
+
+    /// Direct parents of a concept (within the subset).
+    func parents(of conceptID: Int64) -> [Int64] {
+        loadISAIfNeeded()
+        return isaParents[conceptID] ?? []
+    }
+
+    /// Returns true if `child` is equal to `ancestor` or is a descendant via repeated IS-A.
+    ///
+    /// Notes:
+    /// - This only reasons over the subset we ship (not the full SNOMED graph).
+    /// - Works well as long as your subset includes the relevant ancestor chain.
+    func isDescendant(_ child: Int64, of ancestor: Int64) -> Bool {
+        if child == ancestor { return true }
+        loadISAIfNeeded()
+
+        var visited = Set<Int64>()
+        var stack: [Int64] = [child]
+
+        while let cur = stack.popLast() {
+            if !visited.insert(cur).inserted { continue }
+            for p in isaParents[cur] ?? [] {
+                if p == ancestor { return true }
+                stack.append(p)
+            }
+        }
+        return false
+    }
+
+    /// Returns a de-duplicated list of ancestors (parents, grandparents, ...) within the subset.
+    ///
+    /// - maxDepth: safety guard against cycles in unexpected data.
+    func ancestors(of conceptID: Int64, maxDepth: Int = 64) -> [Int64] {
+        loadISAIfNeeded()
+
+        var out: [Int64] = []
+        var visited = Set<Int64>()
+        var frontier: [Int64] = [conceptID]
+        var depth = 0
+
+        while !frontier.isEmpty, depth < maxDepth {
+            depth += 1
+            var next: [Int64] = []
+            for cur in frontier {
+                for p in isaParents[cur] ?? [] {
+                    if visited.insert(p).inserted {
+                        out.append(p)
+                        next.append(p)
+                    }
+                }
+            }
+            frontier = next
+        }
+        return out
     }
 
     // MARK: - Basic term search (dev / first integration)
@@ -286,10 +385,12 @@ final class TerminologyStore: ObservableObject {
         // Once the real schema is in place, we expect these core tables to exist.
         // (We keep the check lightweight and only log failures.)
         let expectedTables = [
-            "meta",          // schema/version stamp
-            "concept",       // SNOMED concepts (subset)
-            "description",   // FSN + synonyms (subset)
-            "langrefset"     // language refset preferences (subset)
+            "meta",              // schema/version stamp
+            "concept",           // SNOMED concepts (subset)
+            "description",       // FSN + synonyms (subset)
+            "langrefset",        // language refset preferences (subset)
+            "isa_edge",          // hierarchy graph (subset)
+            "feature_snomed_map" // app feature_key -> concept_id bridge
         ]
 
         func tableExists(_ name: String) -> Bool {

@@ -80,6 +80,14 @@ class RF2Snapshot:
             "der2_cRefset_LanguageSnapshot_*.txt",
             "der2_cRefset_LanguageSnapshot_*",
         ])
+        
+    def relationship_snapshot_path(self) -> Path:
+        # sct2_Relationship_Snapshot_INT_20240101.txt
+        # sct2_Relationship_Snapshot_US1000124_20240301.txt
+        return self._pick_one([
+            "sct2_Relationship_Snapshot_*.txt",
+            "sct2_Relationship_Snapshot_*",
+        ])
 
     # -------------------------
     # TSV iteration
@@ -129,6 +137,13 @@ class RF2Snapshot:
 
     def iter_language_refset(self, active_only: bool = True) -> Iterator[Dict[str, str]]:
         path = self.language_refset_snapshot_path()
+        for row in self._iter_tsv_dicts(path):
+            if active_only and not self._is_active(row):
+                continue
+            yield row
+            
+    def iter_relationships(self, active_only: bool = True) -> Iterator[Dict[str, str]]:
+        path = self.relationship_snapshot_path()
         for row in self._iter_tsv_dicts(path):
             if active_only and not self._is_active(row):
                 continue

@@ -705,6 +705,26 @@ final class AppState: ObservableObject {
         self.clinicianStore = clinicianStore
         self.loadRecentBundles()
         PerinatalStore.dbURLResolver = { [weak self] in self?.currentDBURL }
+
+        // Wire SNOMED hierarchy lookup into the guideline engine.
+        // This enables rules like `sct:<ancestor> present` to match when any present SCT key
+        // is a descendant of that ancestor (via `isa_edge` in snomed.sqlite).
+        GuidelineEngine.snomedIsDescendant = { [weak self] child, ancestor in
+            guard let self else { return false }
+            return self.terminologyStore.isDescendant(child, of: ancestor)
+        }
+
+        // Decide how `present(sct:<X>)` behaves.
+        // - true  => treat presence of any descendant as presence of the ancestor (subsumption)
+        // - false => strict: only true if the exact key exists in the profile
+        // Default (Option A): STRICT. Use `descendant_of` when you want hierarchy logic.
+        if let v = UserDefaults.standard.object(forKey: "guideline.snomed.presentImpliesAncestor") as? Bool {
+            GuidelineEngine.snomedPresentImpliesAncestorPresence = v
+            log.info("GuidelineEngine: snomedPresentImpliesAncestorPresence overridden via defaults = \(v, privacy: .public)")
+        } else {
+            GuidelineEngine.snomedPresentImpliesAncestorPresence = false
+            log.info("GuidelineEngine: snomedPresentImpliesAncestorPresence defaulted to false (strict present)")
+        }
     }
     
     /// Load vaccination status, cumulative PMH, and (optionally) perinatal summary for a patient.
@@ -3031,11 +3051,12 @@ func reloadPatients() {
         // AppState does NOT parse clinical facts from free text.
         let encounterDate = Date()
 
-        let profile = clinicalFeatureExtractor.buildProfile(
+        var profile = clinicalFeatureExtractor.buildProfile(
             fromEpisodeContext: context,
             encounterDate: encounterDate,
             terminology: terminologyStore
         )
+        
         
         let sctKeys = profile.features
             .map { $0.key }

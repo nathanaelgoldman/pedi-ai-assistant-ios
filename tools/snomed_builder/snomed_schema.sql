@@ -1,4 +1,4 @@
--- SNOMED subset SQLite schema (matches tools/snomed_builder/sqlite_writer.py)
+-- SNOMED subset SQLite schema (tools/snomed_builder/snomed_schema.sql)
 -- Schema version: 1.0
 
 PRAGMA foreign_keys = ON;
@@ -63,10 +63,31 @@ CREATE INDEX IF NOT EXISTS idx_langrefset_refcomp ON langrefset(referenced_compo
 CREATE INDEX IF NOT EXISTS idx_langrefset_refset  ON langrefset(refset_id);
 CREATE INDEX IF NOT EXISTS idx_langrefset_active  ON langrefset(active);
 
+-- -------------------------
+-- IS-A EDGES (concept hierarchy)
+-- -------------------------
+-- Relationship typeId = 116680003 (Is a)
+-- parent_concept_id = destinationId
+-- child_concept_id  = sourceId
+--
+-- NOTE:
+-- The runtime needs only the hierarchy graph for subsumption queries.
+-- We store a minimal edge list (active-only edges are filtered by the builder).
+CREATE TABLE IF NOT EXISTS isa_edge (
+  child_concept_id  INTEGER NOT NULL,
+  parent_concept_id INTEGER NOT NULL,
+  PRIMARY KEY(child_concept_id, parent_concept_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_isa_edge_parent ON isa_edge(parent_concept_id);
+CREATE INDEX IF NOT EXISTS idx_isa_edge_child  ON isa_edge(child_concept_id);
+
+-- -------------------------
 -- Token/feature key → SNOMED concept mapping (app-side bridge)
+-- -------------------------
 CREATE TABLE IF NOT EXISTS feature_snomed_map (
-  feature_key TEXT PRIMARY KEY,         -- e.g. sick.pe.lungs.wheeze
-  concept_id  INTEGER NOT NULL,          -- SNOMED SCTID
+  feature_key TEXT PRIMARY KEY,
+  concept_id  INTEGER NOT NULL,
   active      INTEGER NOT NULL DEFAULT 1,
   note        TEXT,
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

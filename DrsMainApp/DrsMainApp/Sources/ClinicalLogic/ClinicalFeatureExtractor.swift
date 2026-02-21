@@ -760,12 +760,28 @@ final class ClinicalFeatureExtractor {
                     AppLog.feature("extractor").debug("feature_map: \(t) -> sct:\(conceptID)")
                 } else {
                     // Telemetry: surface unmapped feature keys so we can fill feature_snomed_map systematically.
-                    // Deduped per app run to avoid log spam.
-                    struct MissingFeatureMapLogOnce {
-                        static var seen = Set<String>()
-                    }
-                    if MissingFeatureMapLogOnce.seen.insert(t).inserted {
-                        AppLog.feature("extractor").debug("missing_feature_map: \(t)")
+                    // Many tokens are intentionally *not* mapped (normal/well/none reassurance tokens),
+                    // so only log for tokens that look like positive/abnormal findings.
+
+                    let isReassuringOrNegativeToken: Bool = {
+                        if t.hasPrefix("neg:") { return true }
+                        if Self.reassuringNegMap[t] != nil { return true }
+                        if t.hasSuffix(".normal") { return true }
+                        if t.hasSuffix(".well") { return true }
+                        if t.hasSuffix(".none") { return true }
+                        if t.hasSuffix(".no") { return true }
+                        if t.hasSuffix(".alert") { return true }
+                        return false
+                    }()
+
+                    if !isReassuringOrNegativeToken {
+                        // Deduped per app run to avoid log spam.
+                        struct MissingFeatureMapLogOnce {
+                            static var seen = Set<String>()
+                        }
+                        if MissingFeatureMapLogOnce.seen.insert(t).inserted {
+                            AppLog.feature("extractor").debug("missing_feature_map: \(t)")
+                        }
                     }
                 }
             }
@@ -897,20 +913,26 @@ final class ClinicalFeatureExtractor {
         }
 
         // SNOMED mirror features
-        let existingKeys = Set(features.map { $0.key })
+        // If a feature carries `snomedConceptId`, ensure we also expose a stable `sct:<id>` key.
+        // Avoid duplicating keys that are already explicit SCT features.
+        var allKeys = Set(features.map { $0.key })
         let snapshot = features
-        var addedSCTKeys = Set<String>()
 
         for f in snapshot {
-            guard let id = f.snomedConceptId else { continue }
+            // If the feature is already an explicit SCT feature, don't mirror it again.
+            if f.key.hasPrefix("sct:") { continue }
+
+            guard let id = f.snomedConceptId, id > 0 else { continue }
             let k = "sct:\(id)"
-            guard !existingKeys.contains(k), addedSCTKeys.insert(k).inserted else { continue }
+
+            // Insert into the key set so we dedupe across both existing and newly-added keys.
+            guard allKeys.insert(k).inserted else { continue }
 
             features.append(.init(
                 key: k,
                 value: .bool(true),
                 snomedConceptId: id,
-                note: f.key,
+                note: "mirrored_from=\(f.key)",
                 isObjectivePositive: f.isObjectivePositive,
                 isAbnormal: f.isAbnormal,
                 source: "snomed_mirror"
@@ -919,6 +941,71 @@ final class ClinicalFeatureExtractor {
         // Final de-dupe: keep the FIRST occurrence of each key (preserves provenance order)
         var seenKeys = Set<String>()
         features = features.filter { seenKeys.insert($0.key).inserted }
+        
+        // SNOMED ancestor expansion
+        // If we have a terminology store with an `isa_edge` subset graph, expand present SCT keys
+        // to include their ancestors. This allows guideline rules to target higher-level concepts.
+/*        if let terminology {
+            // Collect present SCTIDs from explicit `sct:<id>` features.
+            let presentSCT: [Int64] = features.compactMap { f in
+                guard f.key.hasPrefix("sct:") else { return nil }
+                // Present == `.bool(true)`
+                if case .bool(let b) = f.value, b == true {
+                    let raw = String(f.key.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    return Int64(raw)
+                }
+                return nil
+            }
+
+            var keys = Set(features.map { $0.key })
+            var added = 0
+            let maxAdded = 256
+
+            for child in presentSCT {
+                if added >= maxAdded { break }
+                for anc in terminology.ancestors(of: child) {
+                    if added >= maxAdded { break }
+                    if anc == child { continue }
+                    let k = "sct:\(anc)"
+                    guard keys.insert(k).inserted else { continue }
+
+                    features.append(.init(
+                        key: k,
+                        value: .bool(true),
+                        snomedConceptId: anc,
+                        note: "ancestor_of=\(child)",
+                        isObjectivePositive: false,
+                        isAbnormal: false,
+                        source: "snomed_ancestor"
+                    ))
+                    added += 1
+                }
+            }
+
+            #if DEBUG
+            if added > 0 {
+                print("[Extractor] SNOMED ancestor expansion added=\(added)")
+            }
+            #endif
+
+            // Re-run de-dupe to keep first occurrence order stable.
+            seenKeys.removeAll(keepingCapacity: true)
+            features = features.filter { seenKeys.insert($0.key).inserted }
+        }
+ */
+        #if DEBUG
+        // Debug: verify whether high-level ancestors are actually present as explicit SCT keys.
+        func isTrueFlag(_ f: ClinicalFeature) -> Bool {
+            if case .bool(let b) = f.value { return b }
+            return false
+        }
+        let hasClinicalFinding = features.contains { $0.key == "sct:404684003" && isTrueFlag($0) }
+        if hasClinicalFinding {
+            print("[Extractor] DEBUG: profile contains sct:404684003 (Clinical finding)")
+        } else {
+            print("[Extractor] DEBUG: profile does NOT contain sct:404684003 (Clinical finding)")
+        }
+        #endif
         // Partitions
         let objective = features.filter { $0.isObjectivePositive }
         let abnormal = features.filter { $0.isAbnormal }

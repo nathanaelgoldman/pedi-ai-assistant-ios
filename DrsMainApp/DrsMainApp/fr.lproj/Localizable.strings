@@ -2993,3 +2993,22 @@
 "common.ok" = "OK";
 "sick_episode_form.vitals_validation.alert_title" = "Valeur de constantes invalide";
 "common.ok" = "OK";
+
+/* Panneau de signaux d’épisode (sous la liste de problèmes) */
+"sick_episode_form.episode_signals.title" = "Signaux de l’épisode";
+"sick_episode_form.episode_signals.refresh_button" = "Actualiser";
+"sick_episode_form.episode_signals.updated_at" = "Mis à jour : %@";
+"sick_episode_form.episode_signals.empty_hint" = "Aucun signal pour l’instant. Appuyez sur Actualiser pour générer des signaux locaux.";
+
+/* Lignes de signaux */
+"sick_episode_form.episode_signals.vitals_badges" = "Constantes anormales : %@";
+"sick_episode_form.episode_signals.positives_count" = "Signes positifs (approx.) : %d";
+"sick_episode_form.episode_signals.guideline_flags_count" = "Alertes des règles : %d";
+"sick_episode_form.episode_signals.spo2_badge" = "%@";
+
+"sick_episode_form.signal_panel.header" = "Signaux de l’épisode";
+"sick_episode_form.signal_panel.refresh_help" = "Actualiser les signaux";
+"sick_episode_form.signal_panel.abnormal_vitals" = "Constantes anormales";
+"sick_episode_form.signal_panel.positive_signs" = "Signes positifs (approx.)";
+"sick_episode_form.signal_panel.rule_alerts" = "Alertes des règles";
+
