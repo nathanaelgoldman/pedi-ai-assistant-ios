@@ -414,6 +414,7 @@ struct DrsMainAppApp: App {
                         maxHeight: 1000,
                         alignment: .center
                     )
+                    .environmentObject(appState)
                 }
                 .toolbar {
                     ToolbarItem(placement: .automatic) {
@@ -1035,6 +1036,7 @@ private extension View {
 
 private struct ClinicianProfileForm: View {
     @ObservedObject var clinicianStore: ClinicianStore
+    @EnvironmentObject var appState: AppState
     let user: Clinician?
     let onClose: () -> Void
     
@@ -1058,6 +1060,10 @@ private struct ClinicianProfileForm: View {
     @State private var aiWellPrompt: String = ""
     @State private var aiSickRulesJSON: String = ""
     @State private var aiWellRulesJSON: String = ""
+
+    // Guideline builder UI (avoids hand-editing JSON)
+    @State private var showGuidelineBuilder: Bool = false
+    @State private var guidelineBuilderError: String? = nil
     
     // App lock (password) state
     @State private var newPassword: String = ""
@@ -1279,12 +1285,51 @@ private struct ClinicianProfileForm: View {
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                                 .padding(.top, 4)
+                                            HStack(spacing: 10) {
+                                                Button {
+                                                    guidelineBuilderError = nil
+                                                    showGuidelineBuilder = true
+                                                } label: {
+                                                    Text(NSLocalizedString("app.clinician_profile.guidelines.builder.open", comment: "Open guideline builder"))
+                                                }
+                                                .buttonStyle(.bordered)
+
+                                                Button {
+                                                    formatSickRulesJSONInPlace()
+                                                } label: {
+                                                    Text(NSLocalizedString("app.clinician_profile.guidelines.format", comment: "Format sick rules JSON"))
+                                                }
+                                                .buttonStyle(.bordered)
+
+                                                #if os(macOS)
+                                                Button {
+                                                    exportSickRulesJSONToFile()
+                                                } label: {
+                                                    Text(NSLocalizedString("app.clinician_profile.guidelines.export", comment: "Export sick rules JSON"))
+                                                }
+                                                .buttonStyle(.bordered)
+                                                #endif
+
+                                                Spacer()
+
+                                                // Lightweight validation hint
+                                                if let err = guidelineBuilderError {
+                                                    Text(err)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.red)
+                                                        .lineLimit(2)
+                                                }
+                                            }
+
                                             TextEditor(text: $aiSickRulesJSON)
                                                 .frame(minHeight: 120)
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: 6)
                                                         .stroke(Color.secondary.opacity(0.2))
                                                 )
+                                                .onChange(of: aiSickRulesJSON) { _, newValue in
+                                                    guidelineBuilderError = validateSickRulesJSON(newValue)
+                                                }
                                         }
                                         .padding(.vertical, 4)
                                     }
@@ -1429,5 +1474,607 @@ private struct ClinicianProfileForm: View {
                 removePassword = false
             }
         }
+        .sheet(isPresented: $showGuidelineBuilder) {
+            GuidelineBuilderSheet(
+                rulesJSON: $aiSickRulesJSON,
+                terminology: appState.terminologyStore,
+                onValidationMessage: { msg in
+                    guidelineBuilderError = msg
+                }
+            )
+            .frame(
+                minWidth: 900,
+                idealWidth: 1100,
+                maxWidth: 1300,
+                minHeight: 620,
+                idealHeight: 760,
+                maxHeight: 900
+            )
+        }
+    }
+
+    private func validateSickRulesJSON(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let data = Data(trimmed.utf8)
+
+        // First: run a cheap JSON parse to get an error *location* (line/column) when possible.
+        if let locMsg = jsonParseLocationErrorMessage(from: data, originalText: trimmed) {
+            return locMsg
+        }
+
+        // Second: schema-level decode (gives better structural errors).
+        do {
+            _ = try JSONDecoder().decode(GuidelineDoc.self, from: data)
+            return nil
+        } catch {
+            return "Invalid JSON (schema): \(error.localizedDescription)"
+        }
+    }
+
+    private func formatSickRulesJSONInPlace() {
+        let trimmed = aiSickRulesJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            guidelineBuilderError = NSLocalizedString(
+                "app.clinician_profile.guidelines.format.empty",
+                comment: "Shown when formatting an empty sick rules JSON"
+            )
+            return
+        }
+
+        let data = Data(trimmed.utf8)
+
+        // If JSON is syntactically invalid, show a precise location.
+        if let locMsg = jsonParseLocationErrorMessage(from: data, originalText: trimmed) {
+            guidelineBuilderError = locMsg
+            return
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(GuidelineDoc.self, from: data)
+            let enc = JSONEncoder()
+            enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let out = try enc.encode(decoded)
+            aiSickRulesJSON = String(data: out, encoding: .utf8) ?? aiSickRulesJSON
+            guidelineBuilderError = nil
+        } catch {
+            guidelineBuilderError = "Invalid JSON (schema): \(error.localizedDescription)"
+        }
+    }
+    /// Returns a user-friendly JSON syntax error message with line/column if available.
+    /// - Important: This only checks JSON *syntax*, not schema.
+    private func jsonParseLocationErrorMessage(from data: Data, originalText: String) -> String? {
+        do {
+            _ = try JSONSerialization.jsonObject(with: data, options: [])
+            return nil
+        } catch {
+            let ns = error as NSError
+            // Apple uses NSJSONSerializationErrorDomain with the failing character index.
+            let idx = ns.userInfo["NSJSONSerializationErrorIndex"] as? Int
+            if let idx {
+                let (line, col) = lineAndColumn(in: originalText, utf8Index: idx)
+                // Keep this short; it will be shown inline next to the editor.
+                return "Invalid JSON at line \(line), col \(col): \(ns.localizedDescription)"
+            }
+            return "Invalid JSON: \(ns.localizedDescription)"
+        }
+    }
+
+    /// Compute 1-based (line, column) from a UTF-8 byte index.
+    private func lineAndColumn(in text: String, utf8Index: Int) -> (Int, Int) {
+        // Clamp to bounds; NSJSONSerializationErrorIndex can occasionally point at end.
+        let bytes = Array(text.utf8)
+        let i = max(0, min(utf8Index, bytes.count))
+
+        var line = 1
+        var col = 1
+        var j = 0
+        while j < i {
+            if bytes[j] == 0x0A { // \n
+                line += 1
+                col = 1
+            } else {
+                col += 1
+            }
+            j += 1
+        }
+        return (line, col)
+    }
+
+#if os(macOS)
+    private func exportSickRulesJSONToFile() {
+        let text = aiSickRulesJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            guidelineBuilderError = NSLocalizedString(
+                "app.clinician_profile.guidelines.export.empty",
+                comment: "Shown when exporting an empty sick rules JSON"
+            )
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "sick_guidelines.json"
+
+        let response = panel.runModal()
+        guard response == .OK, let dstURL = panel.url else { return }
+
+        do {
+            try text.data(using: .utf8)?.write(to: dstURL, options: [.atomic])
+            guidelineBuilderError = nil
+        } catch {
+            guidelineBuilderError = error.localizedDescription
+        }
+    }
+#endif
+}
+
+// MARK: - Guideline Builder (minimal, JSON-safe)
+
+private struct GuidelineBuilderSheet: View {
+    @Binding var rulesJSON: String
+    let terminology: TerminologyStore
+    let onValidationMessage: (String?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var doc: GuidelineDoc = GuidelineDoc(schema_version: "1.0.0", rules: [])
+    @State private var selectedRuleID: String? = nil
+    @State private var parseError: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    Button("app.common.cancel") {
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    Button("app.clinician_profile.guidelines.builder.add_rule") {
+                        addRule()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("app.common.save") {
+                        saveBackToJSON()
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                if let parseError {
+                    Text(parseError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                HStack(spacing: 14) {
+                    // Left: rule list
+                    List(selection: $selectedRuleID) {
+                        ForEach(doc.rules) { r in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(r.id).font(.headline)
+                                Text(r.flag).font(.caption).foregroundStyle(.secondary)
+                            }
+                            .tag(r.id)
+                        }
+                        .onDelete(perform: deleteRules)
+                    }
+                    .frame(minWidth: 320)
+
+                    Divider()
+
+                    // Right: editor
+                    if let binding = selectedRuleBinding {
+                        RuleEditor(rule: binding, terminology: terminology)
+                    } else {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("app.clinician_profile.guidelines.builder.no_selection")
+                                .foregroundStyle(.secondary)
+                            Text("app.clinician_profile.guidelines.builder.tip")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
+                }
+            }
+            .padding(16)
+            .navigationTitle("app.clinician_profile.guidelines.builder.title")
+            .onAppear {
+                loadFromJSON()
+            }
+        }
+    }
+
+    private var selectedRuleBinding: Binding<GuidelineRule>? {
+        guard let selectedRuleID else { return nil }
+        guard let idx = doc.rules.firstIndex(where: { $0.id == selectedRuleID }) else { return nil }
+        return $doc.rules[idx]
+    }
+
+    private func loadFromJSON() {
+        parseError = nil
+        onValidationMessage(nil)
+
+        let trimmed = rulesJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            doc = GuidelineDoc(schema_version: "1.0.0", rules: [])
+            selectedRuleID = nil
+            return
+        }
+
+        do {
+            let data = Data(trimmed.utf8)
+
+            // Prefer a syntax error with location if possible.
+            do {
+                _ = try JSONSerialization.jsonObject(with: data, options: [])
+            } catch {
+                let ns = error as NSError
+                let idx = ns.userInfo["NSJSONSerializationErrorIndex"] as? Int
+                if let idx {
+                    let (line, col) = lineAndColumn(in: trimmed, utf8Index: idx)
+                    parseError = "Invalid JSON at line \(line), col \(col): \(ns.localizedDescription)"
+                } else {
+                    parseError = "Invalid JSON: \(ns.localizedDescription)"
+                }
+                return
+            }
+
+            doc = try JSONDecoder().decode(GuidelineDoc.self, from: data)
+            selectedRuleID = doc.rules.first?.id
+        } catch {
+            // Don't destroy the raw text; just surface the schema-level error.
+            parseError = "Invalid JSON (schema): \(error.localizedDescription)"
+        }
+    }
+
+    private func saveBackToJSON() {
+        do {
+            let enc = JSONEncoder()
+            enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try enc.encode(doc)
+            rulesJSON = String(data: data, encoding: .utf8) ?? rulesJSON
+            onValidationMessage(nil)
+        } catch {
+            onValidationMessage(error.localizedDescription)
+        }
+    }
+
+    private func addRule() {
+        // Simple defaults; clinician can edit.
+        let newID = "RULE_\(Int(Date().timeIntervalSince1970))"
+        let r = GuidelineRule(
+            id: newID,
+            flag: "New guideline",
+            priority: 10,
+            when: GuidelineWhen(all: [GuidelineCondition(key: "", op: .present, value: nil)])
+        )
+        doc.rules.append(r)
+        selectedRuleID = r.id
+    }
+
+    private func deleteRules(at offsets: IndexSet) {
+        doc.rules.remove(atOffsets: offsets)
+        selectedRuleID = doc.rules.first?.id
     }
 }
+
+private struct RuleEditor: View {
+    @Binding var rule: GuidelineRule
+    let terminology: TerminologyStore
+
+    private enum PickerTarget: Equatable {
+        case conditionKey(UUID)
+        case conditionAncestor(UUID)
+    }
+
+    @State private var showSnomedPicker: Bool = false
+    @State private var pickerTarget: PickerTarget? = nil
+
+    @State private var snomedQuery: String = ""
+    @State private var snomedHits: [TerminologyStore.TermHit] = []
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("ID", text: $rule.id)
+                TextField("Flag", text: $rule.flag)
+                Stepper(value: $rule.priority, in: 0...100) {
+                    Text("Priority: \(rule.priority)")
+                }
+            } header: {
+                Text("Rule")
+            }
+
+            Section {
+                ForEach($rule.when.all) { $c in
+                    VStack(alignment: .leading, spacing: 8) {
+
+                        HStack(spacing: 8) {
+                            TextField("Feature key (e.g., sct:386661006)", text: $c.key)
+
+                            // Quick key picker so clinicians don't need to memorize internal profile keys.
+                            Menu {
+                                Section("Demographics") {
+                                    Button("Age (days)") { c.key = "demographics.age_days" }
+                                    Button("Age (months)") { c.key = "demographics.age_months" }
+                                    Button("Sex") { c.key = "demographics.sex" }
+                                }
+
+                                Section("Fever") {
+                                    Button("Fever present") { c.key = "symptom.fever.present" }
+                                    Button("Fever duration (hours)") { c.key = "symptom.fever.duration_hours" }
+                                    Button("Fever duration (days)") { c.key = "symptom.fever.duration_days" }
+                                }
+
+                                Section("Vitals") {
+                                    Button("Max temperature (°C)") { c.key = "vital.temp_c.max" }
+                                    Button("SpO₂") { c.key = "vital.spo2" }
+                                }
+
+                                Divider()
+
+                                Section("SNOMED") {
+                                    Button("SNOMED concept (sct:<id>)") {
+                                        // Keep as a hint; clinician can replace <id> after insertion.
+                                        c.key = "sct:"
+                                    }
+                                }
+
+                            } label: {
+                                Label("Keys", systemImage: "list.bullet")
+                            }
+                            .menuStyle(.borderlessButton)
+                            .help("Pick a built-in clinical key (age, fever duration, vitals, etc.).")
+
+                            Button {
+                                pickerTarget = .conditionKey(c.id)
+                                snomedQuery = sanitizeQuery(from: c.key)
+                                refreshHits()
+                                showSnomedPicker = true
+                            } label: {
+                                Label("SNOMED", systemImage: "magnifyingglass")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        Picker("Operator", selection: $c.op) {
+                            Text("present").tag(GuidelineCondition.Op.present)
+                            Text("absent").tag(GuidelineCondition.Op.absent)
+                            Text("descendant_of").tag(GuidelineCondition.Op.descendantOf)
+                        }
+                        .pickerStyle(.menu)
+
+                        if c.op == .descendantOf {
+                            HStack(spacing: 8) {
+                                TextField(
+                                    "Ancestor key (e.g., sct:404684003)",
+                                    text: Binding(
+                                        get: { c.value ?? "" },
+                                        set: { c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                    )
+                                )
+
+                                Button {
+                                    pickerTarget = .conditionAncestor(c.id)
+                                    snomedQuery = sanitizeQuery(from: c.value ?? "")
+                                    refreshHits()
+                                    showSnomedPicker = true
+                                } label: {
+                                    Label("SNOMED", systemImage: "magnifyingglass")
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+                .onDelete { idx in
+                    rule.when.all.remove(atOffsets: idx)
+                }
+
+                Button("Add condition") {
+                    rule.when.all.append(GuidelineCondition(key: "", op: .present, value: nil))
+                }
+                .buttonStyle(.bordered)
+
+            } header: {
+                Text("When (all)")
+            } footer: {
+                Text("Tip: Use Keys for common profile fields (age, fever duration, vitals), or SNOMED to insert an sct:<id> token.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(isPresented: $showSnomedPicker) {
+            SnomedPickerSheet(
+                terminology: terminology,
+                query: $snomedQuery,
+                hits: $snomedHits,
+                onPick: { hit in
+                    applyPickedConcept(hit.conceptID)
+                    showSnomedPicker = false
+                },
+                onCancel: {
+                    showSnomedPicker = false
+                }
+            )
+            .frame(minWidth: 700, idealWidth: 860, maxWidth: 980,
+                   minHeight: 560, idealHeight: 680, maxHeight: 800)
+        }
+        .onChange(of: snomedQuery) { _, _ in
+            refreshHits()
+        }
+    }
+
+    private func refreshHits() {
+        let q = snomedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else {
+            snomedHits = []
+            return
+        }
+        snomedHits = terminology.searchTerms(q, limit: 40)
+    }
+
+    private func sanitizeQuery(from raw: String) -> String {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // If user already has sct:12345, don't reuse that as a search query.
+        if t.lowercased().hasPrefix("sct:") { return "" }
+        return t
+    }
+
+    private func applyPickedConcept(_ conceptID: Int64) {
+        guard let target = pickerTarget else { return }
+        let token = "sct:\(conceptID)"
+
+        switch target {
+        case .conditionKey(let condUUID):
+            if let idx = rule.when.all.firstIndex(where: { $0.id == condUUID }) {
+                rule.when.all[idx].key = token
+            }
+        case .conditionAncestor(let condUUID):
+            if let idx = rule.when.all.firstIndex(where: { $0.id == condUUID }) {
+                rule.when.all[idx].value = token
+            }
+        }
+    }
+}
+
+private struct SnomedPickerSheet: View {
+    let terminology: TerminologyStore
+    @Binding var query: String
+    @Binding var hits: [TerminologyStore.TermHit]
+
+    let onPick: (TerminologyStore.TermHit) -> Void
+    let onCancel: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+
+                HStack(spacing: 10) {
+                    TextField("Search SNOMED term…", text: $query)
+                        .textFieldStyle(.roundedBorder)
+
+                    Button("Clear") {
+                        query = ""
+                        hits = []
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if hits.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Type a term to search the local SNOMED subset.")
+                            .foregroundStyle(.secondary)
+                        Text("Examples: fever, wheezing, rash")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.top, 6)
+                } else {
+                    List(hits, id: \.id) { h in
+                        Button {
+                            onPick(h)
+                            dismiss()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(h.term)
+                                Text("sct:\(h.conceptID)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(14)
+            .navigationTitle("SNOMED picker")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        onCancel()
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !q.isEmpty {
+                hits = terminology.searchTerms(q, limit: 40)
+            }
+        }
+    }
+}
+
+// MARK: - Codable guideline document (matches GuidelineEngine v1)
+
+private struct GuidelineDoc: Codable {
+    var schema_version: String
+    var rules: [GuidelineRule]
+}
+
+private struct GuidelineRule: Codable, Identifiable {
+    var id: String
+    var flag: String
+    var priority: Int
+    var when: GuidelineWhen
+}
+
+private struct GuidelineWhen: Codable {
+    var all: [GuidelineCondition]
+}
+
+private struct GuidelineCondition: Codable, Identifiable {
+    var id: UUID = UUID()
+    var key: String
+    var op: Op
+    var value: String?
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case op
+        case value
+    }
+
+    enum Op: String, Codable {
+        case present
+        case absent
+        case descendantOf = "descendant_of"
+    }
+}
+
+    private func lineAndColumn(in text: String, utf8Index: Int) -> (Int, Int) {
+        let bytes = Array(text.utf8)
+        let i = max(0, min(utf8Index, bytes.count))
+
+        var line = 1
+        var col = 1
+        var j = 0
+        while j < i {
+            if bytes[j] == 0x0A { // \n
+                line += 1
+                col = 1
+            } else {
+                col += 1
+            }
+            j += 1
+        }
+        return (line, col)
+    }

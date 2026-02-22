@@ -2723,54 +2723,66 @@ func reloadPatients() {
         /// Lightweight snapshot of the clinically relevant data we want to feed into
         /// guideline rules and AI prompts for a single sick visit.
     struct EpisodeAIContext: EpisodeAIContextProviding {
-            let patientID: Int
-            let episodeID: Int
-            let problemListing: String
-            let problemTokens: [String]
-            let complementaryInvestigations: String
-            let vaccinationStatus: String?
-            let pmhSummary: String?
-            let perinatalSummary: String?
-            let patientAgeDays: Int?
-            let patientSex: String?
-            let maxTempC: Double?
-            let maxTempIsAbnormal: Bool?
-            let spo2: Int?
-            let spo2IsAbnormal: Bool?
-        
-        
-            init(
-                patientID: Int,
-                episodeID: Int,
-                problemListing: String,
-                problemTokens: [String] = [],
-                complementaryInvestigations: String,
-                vaccinationStatus: String?,
-                perinatalSummary: String? = nil,
-                pmhSummary: String?,
-                patientAgeDays: Int? = nil,
-                patientSex: String? = nil,
-                maxTempC: Double? = nil,
-                maxTempIsAbnormal: Bool? = nil,
-                spo2: Int? = nil,
-                spo2IsAbnormal: Bool? = nil
-            ) {
-                self.patientID = patientID
-                self.episodeID = episodeID
-                self.problemListing = problemListing
-                self.problemTokens = problemTokens
-                self.complementaryInvestigations = complementaryInvestigations
-                self.vaccinationStatus = vaccinationStatus
-                self.perinatalSummary = perinatalSummary
-                self.pmhSummary = pmhSummary
-                self.patientAgeDays = patientAgeDays
-                self.patientSex = patientSex
-                self.maxTempC = maxTempC
-                self.maxTempIsAbnormal = maxTempIsAbnormal
-                self.spo2 = spo2
-                self.spo2IsAbnormal = spo2IsAbnormal
-            }
+        let patientID: Int
+        let episodeID: Int
+        let problemListing: String
+        let problemTokens: [String]
+        let complementaryInvestigations: String
+        let vaccinationStatus: String?
+        let pmhSummary: String?
+        let perinatalSummary: String?
+        let patientAgeDays: Int?
+        let patientSex: String?
+        let feverDurationDays: Int?
+        /// Fever duration normalized to hours (preferred canonical unit for rules).
+        /// When the UI provides days, this can be derived as days * 24.
+        let feverDurationHours: Int?
 
+        /// Raw unit as captured in the UI ("hours" or "days").
+        /// Keep as a String for now to avoid touching more files; we can later replace with an enum.
+        let feverDurationUnit: String?
+        let maxTempC: Double?
+        let maxTempIsAbnormal: Bool?
+        let spo2: Int?
+        let spo2IsAbnormal: Bool?
+
+        init(
+            patientID: Int,
+            episodeID: Int,
+            problemListing: String,
+            problemTokens: [String] = [],
+            complementaryInvestigations: String,
+            vaccinationStatus: String?,
+            perinatalSummary: String? = nil,
+            pmhSummary: String?,
+            patientAgeDays: Int? = nil,
+            patientSex: String? = nil,
+            feverDurationDays: Int? = nil,
+            feverDurationHours: Int? = nil,
+            feverDurationUnit: String? = nil,
+            maxTempC: Double? = nil,
+            maxTempIsAbnormal: Bool? = nil,
+            spo2: Int? = nil,
+            spo2IsAbnormal: Bool? = nil
+        ) {
+            self.patientID = patientID
+            self.episodeID = episodeID
+            self.problemListing = problemListing
+            self.problemTokens = problemTokens
+            self.complementaryInvestigations = complementaryInvestigations
+            self.vaccinationStatus = vaccinationStatus
+            self.perinatalSummary = perinatalSummary
+            self.pmhSummary = pmhSummary
+            self.patientAgeDays = patientAgeDays
+            self.patientSex = patientSex
+            self.feverDurationDays = feverDurationDays
+            self.feverDurationHours = feverDurationHours
+            self.feverDurationUnit = feverDurationUnit
+            self.maxTempC = maxTempC
+            self.maxTempIsAbnormal = maxTempIsAbnormal
+            self.spo2 = spo2
+            self.spo2IsAbnormal = spo2IsAbnormal
+        }
     }
         /// Lightweight snapshot of the clinically relevant data we want to feed into
         /// AI prompts for a single *well* visit (preventive check).
@@ -3056,6 +3068,10 @@ func reloadPatients() {
             encounterDate: encounterDate,
             terminology: terminologyStore
         )
+        
+        log.debug("GuidelineEval(v1): feverDurationDays(ctx)=\(String(describing: context.feverDurationDays)) feverDurationHours(ctx)=\(String(describing: context.feverDurationHours)) unit=\(String(describing: context.feverDurationUnit))")
+        log.debug("GuidelineEval(v1): profile durationHours key check: \(String(describing: profile.intValue(ClinicalFeatureExtractor.Key.feverDurationHours)))")
+        log.debug("GuidelineEval(v1): profile durationDays key check: \(String(describing: profile.intValue(ClinicalFeatureExtractor.Key.feverDurationDays)))")
         
         
         let sctKeys = profile.features
@@ -3498,6 +3514,9 @@ func reloadPatients() {
             }
             if let t = context.maxTempC {
                 payload["max_temp_c"] = t
+            }
+            if let d = context.feverDurationDays {
+                payload["fever_duration_days"] = d
             }
 
             if let vacc = context.vaccinationStatus?.trimmingCharacters(in: .whitespacesAndNewlines),

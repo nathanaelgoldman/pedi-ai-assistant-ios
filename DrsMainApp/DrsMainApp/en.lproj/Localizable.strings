@@ -917,7 +917,7 @@
 "sick_episode_form.problem_listing.vaccination_status" = "Vaccination status: %@";
 
 "sick_episode_form.problem_listing.main_complaint" = "Main complaint: %@";
-"sick_episode_form.problem_listing.duration_hours" = "Duration: %@ hours";
+"sick_episode_form.problem_listing.duration_hours" = "Duration: %@";
 "sick_episode_form.problem_listing.hpi_summary" = "HPI summary: %@";
 
 "sick_episode_form.problem_listing.appearance" = "Appearance: %@";
@@ -3025,3 +3025,29 @@
 "sick_episode_form.signal_panel.abnormal_vitals" = "Abnormal vitals";
 "sick_episode_form.signal_panel.positive_signs" = "Positive findings (approx.)";
 "sick_episode_form.signal_panel.rule_alerts" = "Rule alerts";
+
+/* Guideline Builder */
+"app.clinician_profile.guidelines.builder.open" = "Guideline Builder…";
+"app.clinician_profile.guidelines.builder.title" = "Guideline Builder";
+"app.clinician_profile.guidelines.builder.add_rule" = "Add rule";
+"app.clinician_profile.guidelines.builder.no_selection" = "Select a rule on the left to edit it.";
+"app.clinician_profile.guidelines.builder.tip" = "Tip: Start simple (present / descendant_of). We’ll add SNOMED search pickers next.";
+
+/* Export */
+"app.clinician_profile.guidelines.export" = "Export…";
+"app.clinician_profile.guidelines.export.empty" = "Nothing to export (empty rules).";
+
+/* Guideline Builder */
+"app.clinician_profile.guidelines.format" = "Format JSON";
+
+/* Duration unit toggle (segmented) */
+"common.hours_short" = "h";
+"common.days_short"  = "d";
+
+/* Duration input */
+"sick_episode_form.hpi.duration_value.placeholder" = "Duration";
+"sick_episode_form.hpi.duration.help" = "Enter the fever duration as a number, then choose hours (h) or days (d).";
+/* Fever duration label (shown above the duration input) */
+"sick_episode_form.hpi.fever_duration.label" = "Duration of fever";
+"sick_episode_form.duration.unit.hours.short" = "hours";
+"sick_episode_form.duration.unit.days.short"  = "days";

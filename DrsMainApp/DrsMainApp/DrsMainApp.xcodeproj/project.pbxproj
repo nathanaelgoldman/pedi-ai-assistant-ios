@@ -130,6 +130,7 @@
 		E9240F622F41843300C95DD8 /* snomed_schema.sql */ = {isa = PBXFileReference; lastKnownFileType = text; path = snomed_schema.sql; sourceTree = "<group>"; };
 		E9240F652F41EDC300C95DD8 /* ClinicalFeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalFeatureExtractor.swift; sourceTree = "<group>"; };
 		E9240F672F42130300C95DD8 /* GuidelineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidelineEngine.swift; sourceTree = "<group>"; };
+		E9240F692F4AD34A00C95DD8 /* PatientViewerApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = PatientViewerApp.xcodeproj; path = ../../PatientViewerApp/PatientViewerApp.xcodeproj; sourceTree = "<group>"; };
 		E93EDEC72F2201DC002A0381 /* WHOGrowthEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WHOGrowthEvaluator.swift; sourceTree = "<group>"; };
 		E98BC2682F1B5EAC002A5207 /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -326,6 +327,7 @@
 		BB9E72BB2EAD17A700601148 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				E9240F692F4AD34A00C95DD8 /* PatientViewerApp.xcodeproj */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

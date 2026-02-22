@@ -37,6 +37,9 @@ protocol EpisodeAIContextProviding {
 
     var patientAgeDays: Int? { get }
     var patientSex: String? { get }
+    
+    /// Fever duration in days (structured UI field if available)
+    var feverDurationDays: Int? { get }
 
     // Vitals (values + pre-evaluated abnormal flags; evaluator lives outside extractor)
     var maxTempC: Double? { get }
@@ -48,6 +51,7 @@ protocol EpisodeAIContextProviding {
 
 extension EpisodeAIContextProviding {
     var problemTokens: [String] { [] }
+    var feverDurationDays: Int? { nil }
     var maxTempIsAbnormal: Bool? { nil }
     var spo2: Int? { nil }
     var spo2IsAbnormal: Bool? { nil }
@@ -390,6 +394,8 @@ final class ClinicalFeatureExtractor {
         // Vitals
         static let tempCMax = "vital.temp_c.max"
         static let feverPresent = "symptom.fever.present"
+        static let feverDurationDays = "symptom.fever.duration_days"
+        static let feverDurationHours = "symptom.fever.duration_hours"
         static let hr = "vital.hr"
         static let rr = "vital.rr"
         static let spo2 = "vital.spo2"
@@ -1250,7 +1256,7 @@ extension ClinicalFeatureExtractor {
 
         let sexToken = patientSexToken?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return buildProfile(
+        var profile = buildProfile(
             patientId: Int64(ctx.patientID),
             sexToken: (sexToken?.isEmpty == true ? nil : sexToken),
             dob: patientDOB,
@@ -1261,6 +1267,43 @@ extension ClinicalFeatureExtractor {
             problemLines: problemLines,
             terminology: terminology
         )
+
+        // Fever duration (structured)
+        if let d = ctx.feverDurationDays, d >= 0 {
+            profile.features.append(.init(
+                key: Key.feverDurationDays,
+                value: .int(d),
+                snomedConceptId: nil,
+                note: "from episode UI",
+                isObjectivePositive: true,
+                isAbnormal: false,
+                source: "episode"
+            ))
+
+            // Canonical numeric unit for thresholds in rules.
+            let h = d * 24
+            profile.features.append(.init(
+                key: Key.feverDurationHours,
+                value: .int(h),
+                snomedConceptId: nil,
+                note: "derived from duration_days * 24",
+                isObjectivePositive: true,
+                isAbnormal: false,
+                source: "derived"
+            ))
+            
+            #if DEBUG
+            if let d = ctx.feverDurationDays {
+                print("[Extractor] feverDurationDays=\(d) -> durationHours=\(d * 24)")
+            }
+            #endif
+
+            // Recompute partitions to include the new features.
+            profile.objectivePositiveFindings = profile.features.filter { $0.isObjectivePositive }
+            profile.abnormalFindings = profile.features.filter { $0.isAbnormal }
+        }
+
+        return profile
     }
 
     /// Build a canonical clinical profile directly from an episode context.

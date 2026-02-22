@@ -105,7 +105,23 @@ struct SickEpisodeForm: View {
     @State private var presetComplaints: Set<String> = []
     @State private var otherComplaints: String = ""
     @State private var hpi: String = ""
+    // Duration (UI) — edited as value + unit, stored as a single string in DB
+    private enum DurationUnit: String, CaseIterable, Identifiable {
+        case hours = "h"
+        case days  = "d"
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .hours: return NSLocalizedString("common.hours_short", comment: "Short unit label for hours")
+            case .days:  return NSLocalizedString("common.days_short", comment: "Short unit label for days")
+            }
+        }
+    }
     @State private var duration: String = ""
+
+    @State private var durationValue: String = ""
+    @State private var durationUnit: DurationUnit = .hours
 
     // MARK: - Structured HPI
     @State private var appearance: String = "Well"
@@ -435,8 +451,34 @@ struct SickEpisodeForm: View {
                 TextField(NSLocalizedString("sick_episode_form.hpi.summary.placeholder", comment: "Placeholder for HPI summary"), text: $hpi, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(3...6)
-                TextField(NSLocalizedString("sick_episode_form.hpi.duration_hours.placeholder", comment: "Placeholder for duration in hours"), text: $duration)
+                // Visible label so clinicians understand this is specifically the FEVER duration.
+                Text(NSLocalizedString("sick_episode_form.hpi.fever_duration.label",
+                                       comment: "Small label shown above the fever duration input"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 10) {
+                    TextField(
+                        NSLocalizedString("sick_episode_form.hpi.duration_value.placeholder",
+                                          comment: "Placeholder for duration numeric value"),
+                        text: $durationValue
+                    )
                     .textFieldStyle(.roundedBorder)
+                    .frame(width: 140)
+
+                    Picker("", selection: $durationUnit) {
+                        ForEach(DurationUnit.allCases) { u in
+                            Text(u.label).tag(u)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 140)
+
+                    Spacer()
+                }
+                // Keep hover help as an extra hint on macOS.
+                .help(NSLocalizedString("sick_episode_form.hpi.duration.help",
+                                        comment: "Help text for duration input"))
 
                 additionalPEInfoSection()
             }
@@ -2027,6 +2069,33 @@ struct SickEpisodeForm: View {
         self.hpi = row["hpi"] ?? ""
         self.duration = row["duration"] ?? ""
 
+        // Keep the duration TextField/Picker in sync with the persisted `duration` string.
+        // Persisted format is expected to be compact, e.g. "48h" or "2d".
+        let rawDuration = (row["duration"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if rawDuration.isEmpty {
+            self.durationValue = ""
+            self.durationUnit = .hours
+        } else {
+            let lower = rawDuration.lowercased()
+            // Detect unit from suffix
+            if lower.hasSuffix("h") {
+                self.durationUnit = .hours
+                self.durationValue = String(lower.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if lower.hasSuffix("d") {
+                self.durationUnit = .days
+                self.durationValue = String(lower.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                // No explicit unit: keep behavior consistent with parser heuristic (<=72 => hours)
+                let digits = lower.replacingOccurrences(of: "[^0-9]+", with: "", options: .regularExpression)
+                self.durationValue = digits
+                if let n = Int(digits), n > 72 {
+                    self.durationUnit = .days
+                } else {
+                    self.durationUnit = .hours
+                }
+            }
+        }
+
         assignPicker(row["appearance"], allowed: appearanceChoices) { self.appearance = $0 }
         assignPicker(row["feeding"],   allowed: feedingChoices)   { self.feeding = $0 }
         assignPicker(row["breathing"], allowed: breathingChoices) { self.breathing = $0 }
@@ -2093,6 +2162,47 @@ struct SickEpisodeForm: View {
     }
 
     // MARK: - Problem List Generation Helpers
+
+    /// Build a *display* string for the duration line using localized unit suffixes.
+    ///
+    /// Notes:
+    /// - Persisted `duration` remains compact (e.g. "48h" / "2d") for stable parsing.
+    /// - UI display uses localized suffixes (e.g. "h" / "j" in French).
+    private func durationDisplayString() -> String {
+        let v = durationValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !v.isEmpty {
+            let key = (durationUnit == .days)
+                ? "sick_episode_form.duration.unit.days.short"
+                : "sick_episode_form.duration.unit.hours.short"
+            let suffix = NSLocalizedString(key, comment: "Short unit suffix for duration display (e.g. h / d or h / j)")
+            return "\(v)\(suffix)"
+        }
+
+        // Fallback for legacy rows: parse persisted compact string (e.g. "48h" / "2d").
+        let raw = duration.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return "" }
+        let lower = raw.lowercased()
+
+        if lower.hasSuffix("h") {
+            let num = String(lower.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+            let suffix = NSLocalizedString(
+                "sick_episode_form.duration.unit.hours.short",
+                comment: "Short unit suffix for duration display (e.g. h)"
+            )
+            return "\(num)\(suffix)"
+        }
+        if lower.hasSuffix("d") {
+            let num = String(lower.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+            let suffix = NSLocalizedString(
+                "sick_episode_form.duration.unit.days.short",
+                comment: "Short unit suffix for duration display (e.g. d / j)"
+            )
+            return "\(num)\(suffix)"
+        }
+
+        // If we can't parse, show as-is.
+        return raw
+    }
 
     /// Compute a combined complaint string from preset + free text.
     private func currentMainComplaintString() -> String {
@@ -2223,8 +2333,17 @@ struct SickEpisodeForm: View {
         if !mc.isEmpty {
             lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.main_complaint", comment: "Problem list line: Main complaint"), mc))
         }
-        if !duration.trimmingCharacters(in: .whitespaces).isEmpty {
-            lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.duration_hours", comment: "Problem list line: Duration in hours"), duration))
+        let durDisplay = durationDisplayString()
+        if !durDisplay.isEmpty {
+            lines.append(
+                String(
+                    format: NSLocalizedString(
+                        "sick_episode_form.problem_listing.duration_hours",
+                        comment: "Problem list line: Duration"
+                    ),
+                    durDisplay
+                )
+            )
         }
         // Free-text HPI summary (so items like "blood in stool" are visible to AI)
         if !hpi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2524,6 +2643,65 @@ struct SickEpisodeForm: View {
             return (cls == "low")
         }()
 
+        // ---- Fever duration (human input → canonical units) ----
+        // UI stores `duration` as free text; users may type: "48", "48h", "2d", "5 days", etc.
+        // We normalize to canonical hours for rules, and keep days when confidently derivable.
+        func parseFeverDuration(_ raw: String) -> (days: Int?, hours: Int?, unit: String?) {
+            let s0 = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !s0.isEmpty else { return (nil, nil, nil) }
+
+            // Lowercased, collapse whitespace
+            let s = s0
+                .lowercased()
+                .replacingOccurrences(of: "\u{00A0}", with: " ")
+                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Extract first integer (e.g. "48", "5")
+            let num: Int? = {
+                let digits = s.replacingOccurrences(of: "[^0-9]+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !digits.isEmpty else { return nil }
+                // Take the first chunk
+                let first = digits.split(separator: " ").first
+                return first.flatMap { Int($0) }
+            }()
+            guard let n = num, n >= 0 else { return (nil, nil, nil) }
+
+            // Detect explicit unit tokens
+            let isDays = s.contains(" day") || s.hasSuffix("d") || s.contains(" days")
+            let isHours = s.contains(" hour") || s.hasSuffix("h") || s.contains(" hours")
+
+            if isDays && !isHours {
+                let days = n
+                let hours = days * 24
+                return (days, hours, "days")
+            }
+            if isHours && !isDays {
+                let hours = n
+                let days = (hours % 24 == 0) ? (hours / 24) : nil
+                return (days, hours, "hours")
+            }
+
+            // If no unit (or ambiguous), apply a pragmatic heuristic:
+            // - up to 72 => assume hours (common clinician habit)
+            // - beyond 72 => assume days
+            if n <= 72 {
+                let hours = n
+                let days = (hours % 24 == 0) ? (hours / 24) : nil
+                return (days, hours, "hours")
+            } else {
+                let days = n
+                let hours = days * 24
+                return (days, hours, "days")
+            }
+        }
+
+        let dur = parseFeverDuration(duration)
+        let feverDurationDays: Int? = dur.days
+        let feverDurationHours: Int? = dur.hours
+        let feverDurationUnit: String? = dur.unit
+
         return AppState.EpisodeAIContext(
             patientID: pid,
             episodeID: Int(eid),
@@ -2534,6 +2712,9 @@ struct SickEpisodeForm: View {
             pmhSummary: pmhSummary,
             patientAgeDays: patientAgeDays,
             patientSex: patientSex,
+            feverDurationDays: feverDurationDays,
+            feverDurationHours: feverDurationHours,
+            feverDurationUnit: feverDurationUnit,
             maxTempC: maxTempC,
             // Delegate classification to VitalsRanges (single source of truth).
             maxTempIsAbnormal: {
@@ -2752,6 +2933,13 @@ struct SickEpisodeForm: View {
         // Core
         payload["main_complaint"] = complaints.joined(separator: ", ")
         payload["hpi"] = hpi
+        // Build duration string from UI fields (e.g. "48h", "3d")
+        let trimmed = durationValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            duration = trimmed + durationUnit.rawValue
+        } else {
+            duration = ""
+        }
         payload["duration"] = duration
         // Structured HPI
         payload["appearance"] = appearance
@@ -2790,6 +2978,11 @@ struct SickEpisodeForm: View {
 
         let episodeLabel = editingEpisodeID.map(String.init) ?? "new"
         AppLog.ui.debug("SickEpisodeForm: payload built | episode=\(episodeLabel, privacy: .private) keys=\(payload.count, privacy: .public)")
+
+        let durationTrimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines)
+        let payloadDuration = String(describing: payload["duration"])
+        AppLog.ui.info("SickEpisodeForm: duration UI raw='\(durationTrimmed, privacy: .private)' payload.duration='\(payloadDuration, privacy: .private)'")
+        AppLog.ui.debug("SickEpisodeForm: payload keys=\(payload.keys.count, privacy: .public)")
 
         guard let pid = appState.selectedPatientID,
               let dbURL = appState.currentDBURL,
