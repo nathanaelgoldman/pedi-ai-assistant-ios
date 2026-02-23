@@ -2685,6 +2685,10 @@ func reloadPatients() {
 
         /// Guideline flags derived for the active episode (local JSON rules will be wired later).
         @Published var aiGuidelineFlagsForActiveEpisode: [String] = []
+        
+    /// Rich guideline matches for the active episode (flag + note + priority + rule id).
+        /// Used by the SickEpisodeForm to show clickable guideline details.
+        @Published var aiGuidelineMatchesForActiveEpisode: [GuidelineMatch] = []
 
         /// AI summaries per provider label (e.g., "OpenAI", "UpToDate"), for the active episode.
         /// For now this is populated by a local stub.
@@ -2862,6 +2866,7 @@ func reloadPatients() {
         /// Clear AI state when switching patient, bundle, or active episode.
         func clearAIForEpisodeContext() {
             aiGuidelineFlagsForActiveEpisode = []
+            aiGuidelineMatchesForActiveEpisode = []
             aiSummariesForActiveEpisode = [:]
             icd10SuggestionForActiveEpisode = nil
         }
@@ -2965,10 +2970,12 @@ func reloadPatients() {
                     rulesLoaded,
                     noMatchFound
                 ]
+                aiGuidelineMatchesForActiveEpisode = []
             } else {
                 aiGuidelineFlagsForActiveEpisode = [
                     noRulesConfigured
                 ]
+                aiGuidelineMatchesForActiveEpisode = []
             }
         }
 
@@ -3055,6 +3062,7 @@ func reloadPatients() {
 
         // No rules configured anywhere? Use the existing stub so the UI still shows something helpful.
         guard let raw = effectiveRaw else {
+            aiGuidelineMatchesForActiveEpisode = []
             runGuidelineFlagsStub(using: context)
             return
         }
@@ -3101,6 +3109,7 @@ func reloadPatients() {
                 .map { $0.flagText }
 
             aiGuidelineFlagsForActiveEpisode = ordered
+            aiGuidelineMatchesForActiveEpisode = result.matches
             log.debug("GuidelineEval(v1): episodeID=\(context.episodeID) matches=\(ordered.count)")
             return
         }

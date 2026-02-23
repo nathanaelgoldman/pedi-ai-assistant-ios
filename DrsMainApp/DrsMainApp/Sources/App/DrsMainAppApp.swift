@@ -1772,9 +1772,14 @@ private struct RuleEditor: View {
     @Binding var rule: GuidelineRule
     let terminology: TerminologyStore
 
+    private enum ConditionScope: String, Equatable {
+        case all
+        case any
+    }
+
     private enum PickerTarget: Equatable {
-        case conditionKey(UUID)
-        case conditionAncestor(UUID)
+        case conditionKey(ConditionScope, UUID)
+        case conditionAncestor(ConditionScope, UUID)
     }
 
     @State private var showSnomedPicker: Bool = false
@@ -1784,118 +1789,390 @@ private struct RuleEditor: View {
     @State private var snomedHits: [TerminologyStore.TermHit] = []
 
     var body: some View {
-        Form {
-            Section {
-                TextField("ID", text: $rule.id)
-                TextField("Flag", text: $rule.flag)
-                Stepper(value: $rule.priority, in: 0...100) {
-                    Text("Priority: \(rule.priority)")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("ID", text: $rule.id)
+                            .textFieldStyle(.roundedBorder)
+
+                        TextField("Flag", text: $rule.flag)
+                            .textFieldStyle(.roundedBorder)
+
+                        TextEditor(
+                            text: Binding(
+                                get: { rule.note ?? "" },
+                                set: { newValue in
+                                    let t = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    rule.note = t.isEmpty ? nil : t
+                                }
+                            )
+                        )
+                        .frame(minHeight: 90)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.2))
+                        )
+                        .help("Optional: clinician instructions/warnings (stored in JSON, not evaluated yet).")
+
+                        Stepper(value: $rule.priority, in: 0...100) {
+                            Text("Priority: \(rule.priority)")
+                        }
+                    }
+                    .padding(.top, 2)
+                } label: {
+                    Text("Rule")
                 }
-            } header: {
-                Text("Rule")
-            }
 
-            Section {
-                ForEach($rule.when.all) { $c in
-                    VStack(alignment: .leading, spacing: 8) {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach($rule.when.all) { $c in
+                            VStack(alignment: .leading, spacing: 8) {
 
-                        HStack(spacing: 8) {
-                            TextField("Feature key (e.g., sct:386661006)", text: $c.key)
+                                HStack(spacing: 8) {
+                                    TextField("Feature key (e.g., sct:386661006)", text: $c.key)
+                                        .textFieldStyle(.roundedBorder)
 
-                            // Quick key picker so clinicians don't need to memorize internal profile keys.
-                            Menu {
-                                Section("Demographics") {
-                                    Button("Age (days)") { c.key = "demographics.age_days" }
-                                    Button("Age (months)") { c.key = "demographics.age_months" }
-                                    Button("Sex") { c.key = "demographics.sex" }
+                                    Menu {
+                                        Section("Demographics") {
+                                            Button("Age (days)") { c.key = "demographics.age_days" }
+                                            Button("Age (months)") { c.key = "demographics.age_months" }
+                                            Button("Sex") { c.key = "demographics.sex" }
+                                        }
+
+                                        Section("Fever") {
+                                            Button("Fever present") { c.key = "symptom.fever.present" }
+                                            Button("Fever duration (hours)") { c.key = "symptom.fever.duration_hours" }
+                                            Button("Fever duration (days)") { c.key = "symptom.fever.duration_days" }
+                                        }
+
+                                        Section("Vitals") {
+                                            Button("Max temperature (°C)") { c.key = "vital.temp_c.max" }
+                                            Button("SpO₂") { c.key = "vital.spo2" }
+                                        }
+
+                                        Divider()
+
+                                        Section("SNOMED") {
+                                            Button("SNOMED concept (sct:<id>)") {
+                                                c.key = "sct:"
+                                            }
+                                        }
+
+                                    } label: {
+                                        Label("Keys", systemImage: "list.bullet")
+                                    }
+                                    .menuStyle(.borderlessButton)
+                                    .help("Pick a built-in clinical key (age, fever duration, vitals, etc.).")
+
+                                    Button {
+                                        pickerTarget = .conditionKey(.all, c.id)
+                                        snomedQuery = sanitizeQuery(from: c.key)
+                                        refreshHits()
+                                        showSnomedPicker = true
+                                    } label: {
+                                        Label("SNOMED", systemImage: "magnifyingglass")
+                                    }
+                                    .buttonStyle(.bordered)
                                 }
 
-                                Section("Fever") {
-                                    Button("Fever present") { c.key = "symptom.fever.present" }
-                                    Button("Fever duration (hours)") { c.key = "symptom.fever.duration_hours" }
-                                    Button("Fever duration (days)") { c.key = "symptom.fever.duration_days" }
+                                Picker("Operator", selection: $c.op) {
+                                    Text("present").tag(GuidelineCondition.Op.present)
+                                    Text("absent").tag(GuidelineCondition.Op.absent)
+                                    Text("descendant_of").tag(GuidelineCondition.Op.descendantOf)
+
+                                    Divider()
+
+                                    Text("equals").tag(GuidelineCondition.Op.equals)
+                                    Text("not_equals").tag(GuidelineCondition.Op.notEquals)
+                                    Text("gte").tag(GuidelineCondition.Op.gte)
+                                    Text("lte").tag(GuidelineCondition.Op.lte)
+                                    Text("between").tag(GuidelineCondition.Op.between)
+                                    Text("one_of").tag(GuidelineCondition.Op.oneOf)
+                                }
+                                .pickerStyle(.menu)
+
+                                if c.op == .equals || c.op == .notEquals {
+                                    TextField("Value (text)", text: Binding(
+                                        get: { c.value ?? "" },
+                                        set: {
+                                            c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                                            c.valueNumber = nil
+                                            c.minNumber = nil
+                                            c.maxNumber = nil
+                                            c.values = nil
+                                        }
+                                    ))
+                                    .textFieldStyle(.roundedBorder)
                                 }
 
-                                Section("Vitals") {
-                                    Button("Max temperature (°C)") { c.key = "vital.temp_c.max" }
-                                    Button("SpO₂") { c.key = "vital.spo2" }
+                                if c.op == .gte || c.op == .lte {
+                                    TextField("Value (number)", text: Binding(
+                                        get: { c.valueNumber.map { String($0) } ?? "" },
+                                        set: {
+                                            let t = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                                            c.valueNumber = Double(t)
+                                            c.value = nil
+                                            c.minNumber = nil
+                                            c.maxNumber = nil
+                                            c.values = nil
+                                        }
+                                    ))
+                                    .textFieldStyle(.roundedBorder)
                                 }
 
-                                Divider()
+                                if c.op == .between {
+                                    HStack(spacing: 8) {
+                                        TextField("Min", text: Binding(
+                                            get: { c.minNumber.map { String($0) } ?? "" },
+                                            set: { c.minNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                                        ))
+                                        .textFieldStyle(.roundedBorder)
 
-                                Section("SNOMED") {
-                                    Button("SNOMED concept (sct:<id>)") {
-                                        // Keep as a hint; clinician can replace <id> after insertion.
-                                        c.key = "sct:"
+                                        TextField("Max", text: Binding(
+                                            get: { c.maxNumber.map { String($0) } ?? "" },
+                                            set: { c.maxNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                                        ))
+                                        .textFieldStyle(.roundedBorder)
+                                    }
+                                    .onChange(of: c.minNumber) { _, _ in c.value = nil; c.valueNumber = nil; c.values = nil }
+                                    .onChange(of: c.maxNumber) { _, _ in c.value = nil; c.valueNumber = nil; c.values = nil }
+                                }
+
+                                if c.op == .oneOf {
+                                    TextField("Values (comma-separated)", text: Binding(
+                                        get: { (c.values ?? []).joined(separator: ", ") },
+                                        set: {
+                                            c.values = $0
+                                                .split(separator: ",")
+                                                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                                .filter { !$0.isEmpty }
+                                            c.value = nil
+                                            c.valueNumber = nil
+                                            c.minNumber = nil
+                                            c.maxNumber = nil
+                                        }
+                                    ))
+                                    .textFieldStyle(.roundedBorder)
+                                }
+
+                                if c.op == .descendantOf {
+                                    HStack(spacing: 8) {
+                                        TextField(
+                                            "Ancestor key (e.g., sct:404684003)",
+                                            text: Binding(
+                                                get: { c.value ?? "" },
+                                                set: { c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                            )
+                                        )
+                                        .textFieldStyle(.roundedBorder)
+
+                                        Button {
+                                            pickerTarget = .conditionAncestor(.all, c.id)
+                                            snomedQuery = sanitizeQuery(from: c.value ?? "")
+                                            refreshHits()
+                                            showSnomedPicker = true
+                                        } label: {
+                                            Label("SNOMED", systemImage: "magnifyingglass")
+                                        }
+                                        .buttonStyle(.bordered)
                                     }
                                 }
 
-                            } label: {
-                                Label("Keys", systemImage: "list.bullet")
-                            }
-                            .menuStyle(.borderlessButton)
-                            .help("Pick a built-in clinical key (age, fever duration, vitals, etc.).")
-
-                            Button {
-                                pickerTarget = .conditionKey(c.id)
-                                snomedQuery = sanitizeQuery(from: c.key)
-                                refreshHits()
-                                showSnomedPicker = true
-                            } label: {
-                                Label("SNOMED", systemImage: "magnifyingglass")
-                            }
-                            .buttonStyle(.bordered)
-                        }
-
-                        Picker("Operator", selection: $c.op) {
-                            Text("present").tag(GuidelineCondition.Op.present)
-                            Text("absent").tag(GuidelineCondition.Op.absent)
-                            Text("descendant_of").tag(GuidelineCondition.Op.descendantOf)
-                        }
-                        .pickerStyle(.menu)
-
-                        if c.op == .descendantOf {
-                            HStack(spacing: 8) {
-                                TextField(
-                                    "Ancestor key (e.g., sct:404684003)",
-                                    text: Binding(
-                                        get: { c.value ?? "" },
-                                        set: { c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                                    )
-                                )
-
-                                Button {
-                                    pickerTarget = .conditionAncestor(c.id)
-                                    snomedQuery = sanitizeQuery(from: c.value ?? "")
-                                    refreshHits()
-                                    showSnomedPicker = true
-                                } label: {
-                                    Label("SNOMED", systemImage: "magnifyingglass")
-                                }
-                                .buttonStyle(.bordered)
+                                Divider()
                             }
                         }
+
+                        Button("Add condition") {
+                            rule.when.all.append(GuidelineCondition(key: "", op: .present, value: nil))
+                        }
+                        .buttonStyle(.bordered)
+
+                        Text("Tip: Use Keys for common profile fields (age, fever duration, vitals), or SNOMED to insert an sct:<id> token.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 6)
-                }
-                .onDelete { idx in
-                    rule.when.all.remove(atOffsets: idx)
+                    .padding(.top, 2)
+                } label: {
+                    Text("When (all)")
                 }
 
-                Button("Add condition") {
-                    rule.when.all.append(GuidelineCondition(key: "", op: .present, value: nil))
-                }
-                .buttonStyle(.bordered)
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach($rule.when.any) { $c in
+                            VStack(alignment: .leading, spacing: 8) {
 
-            } header: {
-                Text("When (all)")
-            } footer: {
-                Text("Tip: Use Keys for common profile fields (age, fever duration, vitals), or SNOMED to insert an sct:<id> token.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                                HStack(spacing: 8) {
+                                    TextField("Feature key (e.g., sct:386661006)", text: $c.key)
+                                        .textFieldStyle(.roundedBorder)
+
+                                    Menu {
+                                        Section("Demographics") {
+                                            Button("Age (days)") { c.key = "demographics.age_days" }
+                                            Button("Age (months)") { c.key = "demographics.age_months" }
+                                            Button("Sex") { c.key = "demographics.sex" }
+                                        }
+
+                                        Section("Fever") {
+                                            Button("Fever present") { c.key = "symptom.fever.present" }
+                                            Button("Fever duration (hours)") { c.key = "symptom.fever.duration_hours" }
+                                            Button("Fever duration (days)") { c.key = "symptom.fever.duration_days" }
+                                        }
+
+                                        Section("Vitals") {
+                                            Button("Max temperature (°C)") { c.key = "vital.temp_c.max" }
+                                            Button("SpO₂") { c.key = "vital.spo2" }
+                                        }
+
+                                        Divider()
+
+                                        Section("SNOMED") {
+                                            Button("SNOMED concept (sct:<id>)") {
+                                                c.key = "sct:"
+                                            }
+                                        }
+
+                                    } label: {
+                                        Label("Keys", systemImage: "list.bullet")
+                                    }
+                                    .menuStyle(.borderlessButton)
+
+                                    Button {
+                                        pickerTarget = .conditionKey(.any, c.id)
+                                        snomedQuery = sanitizeQuery(from: c.key)
+                                        refreshHits()
+                                        showSnomedPicker = true
+                                    } label: {
+                                        Label("SNOMED", systemImage: "magnifyingglass")
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+
+                                Picker("Operator", selection: $c.op) {
+                                    Text("present").tag(GuidelineCondition.Op.present)
+                                    Text("absent").tag(GuidelineCondition.Op.absent)
+                                    Text("descendant_of").tag(GuidelineCondition.Op.descendantOf)
+
+                                    Divider()
+
+                                    Text("equals").tag(GuidelineCondition.Op.equals)
+                                    Text("not_equals").tag(GuidelineCondition.Op.notEquals)
+                                    Text("gte").tag(GuidelineCondition.Op.gte)
+                                    Text("lte").tag(GuidelineCondition.Op.lte)
+                                    Text("between").tag(GuidelineCondition.Op.between)
+                                    Text("one_of").tag(GuidelineCondition.Op.oneOf)
+                                }
+                                .pickerStyle(.menu)
+
+                                if c.op == .equals || c.op == .notEquals {
+                                    TextField("Value (text)", text: Binding(
+                                        get: { c.value ?? "" },
+                                        set: {
+                                            c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                                            c.valueNumber = nil
+                                            c.minNumber = nil
+                                            c.maxNumber = nil
+                                            c.values = nil
+                                        }
+                                    ))
+                                    .textFieldStyle(.roundedBorder)
+                                }
+
+                                if c.op == .gte || c.op == .lte {
+                                    TextField("Value (number)", text: Binding(
+                                        get: { c.valueNumber.map { String($0) } ?? "" },
+                                        set: {
+                                            let t = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                                            c.valueNumber = Double(t)
+                                            c.value = nil
+                                            c.minNumber = nil
+                                            c.maxNumber = nil
+                                            c.values = nil
+                                        }
+                                    ))
+                                    .textFieldStyle(.roundedBorder)
+                                }
+
+                                if c.op == .between {
+                                    HStack(spacing: 8) {
+                                        TextField("Min", text: Binding(
+                                            get: { c.minNumber.map { String($0) } ?? "" },
+                                            set: { c.minNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                                        ))
+                                        .textFieldStyle(.roundedBorder)
+
+                                        TextField("Max", text: Binding(
+                                            get: { c.maxNumber.map { String($0) } ?? "" },
+                                            set: { c.maxNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                                        ))
+                                        .textFieldStyle(.roundedBorder)
+                                    }
+                                    .onChange(of: c.minNumber) { _, _ in c.value = nil; c.valueNumber = nil; c.values = nil }
+                                    .onChange(of: c.maxNumber) { _, _ in c.value = nil; c.valueNumber = nil; c.values = nil }
+                                }
+
+                                if c.op == .oneOf {
+                                    TextField("Values (comma-separated)", text: Binding(
+                                        get: { (c.values ?? []).joined(separator: ", ") },
+                                        set: {
+                                            c.values = $0
+                                                .split(separator: ",")
+                                                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                                .filter { !$0.isEmpty }
+                                            c.value = nil
+                                            c.valueNumber = nil
+                                            c.minNumber = nil
+                                            c.maxNumber = nil
+                                        }
+                                    ))
+                                    .textFieldStyle(.roundedBorder)
+                                }
+
+                                if c.op == .descendantOf {
+                                    HStack(spacing: 8) {
+                                        TextField(
+                                            "Ancestor key (e.g., sct:404684003)",
+                                            text: Binding(
+                                                get: { c.value ?? "" },
+                                                set: { c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                            )
+                                        )
+                                        .textFieldStyle(.roundedBorder)
+
+                                        Button {
+                                            pickerTarget = .conditionAncestor(.any, c.id)
+                                            snomedQuery = sanitizeQuery(from: c.value ?? "")
+                                            refreshHits()
+                                            showSnomedPicker = true
+                                        } label: {
+                                            Label("SNOMED", systemImage: "magnifyingglass")
+                                        }
+                                        .buttonStyle(.bordered)
+                                    }
+                                }
+
+                                Divider()
+                            }
+                        }
+
+                        Button("Add OR condition") {
+                            rule.when.any.append(GuidelineCondition(key: "", op: .present, value: nil))
+                        }
+                        .buttonStyle(.bordered)
+
+                        Text("Any: at least one condition must match. Leave empty for pure AND rules.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 2)
+                } label: {
+                    Text("When (any)")
+                }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showSnomedPicker) {
             SnomedPickerSheet(
                 terminology: terminology,
@@ -1938,13 +2215,28 @@ private struct RuleEditor: View {
         let token = "sct:\(conceptID)"
 
         switch target {
-        case .conditionKey(let condUUID):
-            if let idx = rule.when.all.firstIndex(where: { $0.id == condUUID }) {
-                rule.when.all[idx].key = token
+        case .conditionKey(let scope, let condUUID):
+            switch scope {
+            case .all:
+                if let idx = rule.when.all.firstIndex(where: { $0.id == condUUID }) {
+                    rule.when.all[idx].key = token
+                }
+            case .any:
+                if let idx = rule.when.any.firstIndex(where: { $0.id == condUUID }) {
+                    rule.when.any[idx].key = token
+                }
             }
-        case .conditionAncestor(let condUUID):
-            if let idx = rule.when.all.firstIndex(where: { $0.id == condUUID }) {
-                rule.when.all[idx].value = token
+
+        case .conditionAncestor(let scope, let condUUID):
+            switch scope {
+            case .all:
+                if let idx = rule.when.all.firstIndex(where: { $0.id == condUUID }) {
+                    rule.when.all[idx].value = token
+                }
+            case .any:
+                if let idx = rule.when.any.firstIndex(where: { $0.id == condUUID }) {
+                    rule.when.any[idx].value = token
+                }
             }
         }
     }
@@ -2034,29 +2326,86 @@ private struct GuidelineRule: Codable, Identifiable {
     var id: String
     var flag: String
     var priority: Int
+    var note: String?
     var when: GuidelineWhen
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case flag
+        case priority
+        case note
+        case when
+    }
 }
 
 private struct GuidelineWhen: Codable {
     var all: [GuidelineCondition]
+    var any: [GuidelineCondition]
+
+    init(all: [GuidelineCondition] = [], any: [GuidelineCondition] = []) {
+        self.all = all
+        self.any = any
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case all
+        case any
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.all = try c.decodeIfPresent([GuidelineCondition].self, forKey: .all) ?? []
+        self.any = try c.decodeIfPresent([GuidelineCondition].self, forKey: .any) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(all, forKey: .all)
+        // Encode explicitly (even if empty) so the schema stays clear.
+        try c.encode(any, forKey: .any)
+    }
 }
 
 private struct GuidelineCondition: Codable, Identifiable {
     var id: UUID = UUID()
     var key: String
     var op: Op
+
+    // String value (e.g., demographics.sex == "M")
     var value: String?
+
+    // Numeric value (e.g., demographics.age_months >= 3)
+    var valueNumber: Double?
+
+    // Numeric range (e.g., age_months between 3 and 6)
+    var minNumber: Double?
+    var maxNumber: Double?
+
+    // Enumerated string set (e.g., sex in ["M","F"])
+    var values: [String]?
 
     enum CodingKeys: String, CodingKey {
         case key
         case op
         case value
+        case valueNumber = "value_number"
+        case minNumber   = "min_number"
+        case maxNumber   = "max_number"
+        case values
     }
 
     enum Op: String, Codable {
         case present
         case absent
         case descendantOf = "descendant_of"
+
+        // NEW (for demographics, duration, vitals…)
+        case equals = "equals"
+        case notEquals = "not_equals"
+        case gte = "gte"
+        case lte = "lte"
+        case between = "between"
+        case oneOf = "one_of"
     }
 }
 

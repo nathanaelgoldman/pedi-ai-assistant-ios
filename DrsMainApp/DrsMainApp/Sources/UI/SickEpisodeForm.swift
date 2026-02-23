@@ -105,6 +105,13 @@ struct SickEpisodeForm: View {
     @State private var presetComplaints: Set<String> = []
     @State private var otherComplaints: String = ""
     @State private var hpi: String = ""
+    // MARK: - Guideline match details
+    private struct GuidelineMatchSelection: Identifiable, Equatable {
+        let id: String            // ruleId
+        let match: GuidelineMatch // includes flagText, priority, note
+    }
+    // Selected guideline match for popover details (must live in the View, not in an extension)
+    @State private var selectedGuidelineMatch: GuidelineMatchSelection? = nil
     // Duration (UI) — edited as value + unit, stored as a single string in DB
     private enum DurationUnit: String, CaseIterable, Identifiable {
         case hours = "h"
@@ -164,6 +171,16 @@ struct SickEpisodeForm: View {
     // MARK: - Episode signals (local clinical support)
     @State private var episodeSignals: [String] = []
     @State private var episodeSignalsLastUpdatedISO: String? = nil
+    // MARK: - Guideline match details (clickable UI)
+    private struct GuidelineMatchForUI: Identifiable, Equatable {
+        let id: String          // ruleId
+        let flag: String
+        let note: String?
+        let priority: Int
+    }
+
+    @State private var guidelineMatchesForUI: [GuidelineMatchForUI] = []
+    
 
     // MARK: - AI assistance
     @State private var aiIsRunning: Bool = false
@@ -524,6 +541,15 @@ struct SickEpisodeForm: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .help(NSLocalizedString("sick_episode_form.problem_listing.generate_help", comment: "Help for generating problem listing"))
+                Button {
+                    // Re-run local guideline evaluation and refresh the Episode Signals panel.
+                    triggerGuidelineFlags()
+                    refreshEpisodeSignals()
+                } label: {
+                    Label("Update guideline flags", systemImage: "flag.fill")
+                }
+                .buttonStyle(.bordered)
+                .help("Re-evaluates local sick-visit rules and updates the Episode Signals panel below.")
                 Spacer()
             }
             TextEditor(text: $problemListing)
@@ -583,6 +609,18 @@ struct SickEpisodeForm: View {
                 "sick_episode_form.episode_signals.guideline_flags_count",
                 comment: "Line showing count of guideline flags"
             ), flags.count))
+
+            // Show first 6 flags as bullets
+            for f in flags.prefix(6) {
+                let clean = f.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !clean.isEmpty {
+                    lines.append("• \(clean)")
+                }
+            }
+
+            if flags.count > 6 {
+                lines.append("• …(+\(flags.count - 6) more)")
+            }
         }
 
 
@@ -590,6 +628,7 @@ struct SickEpisodeForm: View {
         episodeSignals = lines
         episodeSignalsLastUpdatedISO = isoNow()
     }
+    
 
     private var aiSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -3033,6 +3072,7 @@ struct SickEpisodeForm: View {
 
 // This panel is inserted with `episodeSignalsPanel` in the main UI.
 extension SickEpisodeForm {
+
     private var episodeSignalsPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -3085,26 +3125,38 @@ extension SickEpisodeForm {
                 }
             }
 
-            // Rule alerts row and details
-            let ruleAlerts = appState.aiGuidelineFlagsForActiveEpisode
+            // Rule alerts row and details (clickable)
+            let matches = appState.aiGuidelineMatchesForActiveEpisode
+                .sorted { (a, b) in
+                    if a.priority != b.priority { return a.priority > b.priority }
+                    return a.flagText.localizedCaseInsensitiveCompare(b.flagText) == .orderedAscending
+                }
+
             HStack(spacing: 8) {
                 Text(NSLocalizedString("sick_episode_form.signal_panel.rule_alerts", comment: "Rule alerts label"))
                     .font(.subheadline)
 
-                Text("\(ruleAlerts.count)")
+                Text("\(matches.count)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            if !ruleAlerts.isEmpty {
-                ForEach(Array(ruleAlerts.prefix(8).enumerated()), id: \.offset) { _, flag in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("•")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text(flag)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+
+            if !matches.isEmpty {
+                ForEach(matches.prefix(8), id: \.ruleId) { m in
+                    Button {
+                        selectedGuidelineMatch = GuidelineMatchSelection(id: m.ruleId, match: m)
+                    } label: {
+                        HStack(alignment: .top, spacing: 6) {
+                            Text("•")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(m.flagText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
+                    .buttonStyle(.plain)
                     .padding(.leading, 28)
                 }
             }
@@ -3119,6 +3171,43 @@ extension SickEpisodeForm {
                 .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
         )
         .padding(.vertical, 4)
+        .popover(item: $selectedGuidelineMatch, arrowEdge: .trailing) { sel in
+            let m = sel.match
+            VStack(alignment: .leading, spacing: 10) {
+                Text(m.flagText)
+                    .font(.headline)
+
+                if let note = m.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ScrollView {
+                        Text(note)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(minHeight: 120, idealHeight: 200, maxHeight: 320)
+                } else {
+                    Text(NSLocalizedString(
+                        "sick_episode_form.signal_panel.no_guideline_note",
+                        comment: "Shown when a matched guideline has no note"
+                    ))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text("Rule: \(m.ruleId)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Priority: \(m.priority)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .frame(minWidth: 360, idealWidth: 440, maxWidth: 520,
+                   minHeight: 180, idealHeight: 260, maxHeight: 420)
+        }
     }
 }
 

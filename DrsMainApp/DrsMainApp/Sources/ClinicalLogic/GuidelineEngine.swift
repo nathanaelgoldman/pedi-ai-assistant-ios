@@ -106,11 +106,13 @@ public struct GuidelineMatch: Equatable {
     public let ruleId: String
     public let flagText: String
     public let priority: Int
+    public let note: String?
 
-    public init(ruleId: String, flagText: String, priority: Int = 0) {
+    public init(ruleId: String, flagText: String, priority: Int = 0, note: String? = nil) {
         self.ruleId = ruleId
         self.flagText = flagText
         self.priority = priority
+        self.note = note
     }
 }
 
@@ -125,6 +127,12 @@ public struct GuidelineResult {
         matches
             .sorted { $0.priority > $1.priority }
             .map { $0.flagText }
+    }
+
+    public var flagsWithNotesForUI: [(flag: String, note: String?, priority: Int, ruleId: String)] {
+        matches
+            .sorted { $0.priority > $1.priority }
+            .map { ($0.flagText, $0.note, $0.priority, $0.ruleId) }
     }
 
     public var matchedRuleIds: [String] {
@@ -166,12 +174,14 @@ public struct GuidelineRuleSetV1: Codable {
         public let id: String
         public let flag: String
         public let priority: Int?
+        public let note: String?
         public let when: Predicate
 
-        public init(id: String, flag: String, priority: Int? = nil, when: Predicate) {
+        public init(id: String, flag: String, priority: Int? = nil, note: String? = nil, when: Predicate) {
             self.id = id
             self.flag = flag
             self.priority = priority
+            self.note = note
             self.when = when
         }
     }
@@ -185,7 +195,11 @@ public indirect enum Predicate: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case all, any, not
-        case key, op, value, values, min, max
+        case key, op
+        case value, valueNumber
+        case values
+        case min, minNumber
+        case max, maxNumber
     }
 
     public init(from decoder: Decoder) throws {
@@ -212,15 +226,32 @@ public indirect enum Predicate: Codable {
         let op = try c.decode(String.self, forKey: .op)
 
         // We support a few value shapes.
-        let value = try? c.decode(Double.self, forKey: .value)
-        let intValue = try? c.decode(Int.self, forKey: .value)
+        // NOTE: The builder emits snake_case numeric fields like `value_number`, `min_number`, `max_number`.
+        // With `JSONDecoder.keyDecodingStrategy = .convertFromSnakeCase`, these appear as `valueNumber`, etc.
+
+        // Primary value
+        var value = try? c.decode(Double.self, forKey: .value)
+        var intValue = try? c.decode(Int.self, forKey: .value)
         let strValue = try? c.decode(String.self, forKey: .value)
         let boolValue = try? c.decode(Bool.self, forKey: .value)
+
+        // Fallback numeric value (`value_number`)
+        if value == nil { value = try? c.decode(Double.self, forKey: .valueNumber) }
+        if intValue == nil { intValue = try? c.decode(Int.self, forKey: .valueNumber) }
+
         let values = try? c.decode([String].self, forKey: .values)
-        let min = try? c.decode(Double.self, forKey: .min)
-        let max = try? c.decode(Double.self, forKey: .max)
-        let minInt = try? c.decode(Int.self, forKey: .min)
-        let maxInt = try? c.decode(Int.self, forKey: .max)
+
+        // Range values
+        var min = try? c.decode(Double.self, forKey: .min)
+        var max = try? c.decode(Double.self, forKey: .max)
+        var minInt = try? c.decode(Int.self, forKey: .min)
+        var maxInt = try? c.decode(Int.self, forKey: .max)
+
+        // Fallback range numeric fields (`min_number` / `max_number`)
+        if min == nil { min = try? c.decode(Double.self, forKey: .minNumber) }
+        if max == nil { max = try? c.decode(Double.self, forKey: .maxNumber) }
+        if minInt == nil { minInt = try? c.decode(Int.self, forKey: .minNumber) }
+        if maxInt == nil { maxInt = try? c.decode(Int.self, forKey: .maxNumber) }
 
         let cond = Condition(
             key: key,
@@ -237,7 +268,7 @@ public indirect enum Predicate: Codable {
         )
         self = .condition(cond)
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
@@ -299,14 +330,18 @@ public struct Condition: Codable {
         public init?(rawValue: String) {
             switch rawValue {
             case "eq": self = .eq
+            case "equals": self = .eq
             case "neq": self = .neq
+            case "not_equals": self = .neq
             case "in": self = .inSet
+            case "one_of": self = .inSet
             case "contains": self = .contains
             case "gte": self = .gte
             case "gt": self = .gt
             case "lte": self = .lte
             case "lt": self = .lt
             case "between_inclusive": self = .betweenInclusive
+            case "between": self = .betweenInclusive
             case "present": self = .present
             case "exists": self = .present
             case "absent": self = .absent
@@ -466,7 +501,9 @@ public enum GuidelineEngine {
                     let p = rule.priority ?? 0
                     let text = rule.flag.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !text.isEmpty {
-                        matches.append(GuidelineMatch(ruleId: rule.id, flagText: text, priority: p))
+                        let note = rule.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let cleanNote = (note?.isEmpty == true) ? nil : note
+                        matches.append(GuidelineMatch(ruleId: rule.id, flagText: text, priority: p, note: cleanNote))
                     }
                 }
             }
@@ -487,7 +524,7 @@ public enum GuidelineEngine {
         case .all(let arr):
             return arr.allSatisfy { predicateMatches($0, profile: profile) }
         case .any(let arr):
-            return arr.contains { predicateMatches($0, profile: profile) }
+            return arr.isEmpty ? true : arr.contains { predicateMatches($0, profile: profile) }
         case .not(let inner):
             return !predicateMatches(inner, profile: profile)
         case .condition(let c):
