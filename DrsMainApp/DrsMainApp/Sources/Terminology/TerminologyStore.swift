@@ -38,6 +38,80 @@ final class TerminologyStore: ObservableObject {
     private var isaLoaded = false
     private var isaParents: [Int64: [Int64]] = [:]
 
+    // MARK: - Localized term index (UI language)
+
+    /// Cache of display terms for the shipped subset, using UI-localized strings when available.
+    /// conceptID -> (stable description_id, displayTerm (localized or fallback), englishFallbackTerm)
+    private var localizedIndexLoaded = false
+    private var localizedTermByConcept: [Int64: (descID: Int64, display: String, fallbackEN: String)] = [:]
+
+    /// Build the localized search index once per app launch.
+    ///
+    /// Strategy:
+    /// - Enumerate active descriptions from the local subset DB.
+    /// - For each concept, keep the shortest English term as a fallback.
+    /// - Prefer a UI-localized label if `Localizable.strings` contains `snomed.<conceptID>`.
+    private func loadLocalizedIndexIfNeeded() {
+        if localizedIndexLoaded { return }
+        localizedIndexLoaded = true
+
+        guard let db = openDBReadOnly() else {
+            log.info("TerminologyStore: cannot build localized term index (DB not available)")
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT description_id, concept_id, term
+        FROM description
+        WHERE active = 1;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            let msg = String(cString: sqlite3_errmsg(db))
+            log.error("TerminologyStore: loadLocalizedIndexIfNeeded prepare failed: \(msg, privacy: .public)")
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        // Keep the shortest English term as fallback per concept.
+        var bestEnglish: [Int64: (descID: Int64, term: String)] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let descID = sqlite3_column_int64(stmt, 0)
+            let conceptID = sqlite3_column_int64(stmt, 1)
+            guard let cStr = sqlite3_column_text(stmt, 2) else { continue }
+            let term = String(cString: cStr)
+
+            if let cur = bestEnglish[conceptID] {
+                if term.count < cur.term.count {
+                    bestEnglish[conceptID] = (descID, term)
+                }
+            } else {
+                bestEnglish[conceptID] = (descID, term)
+            }
+        }
+
+        var out: [Int64: (descID: Int64, display: String, fallbackEN: String)] = [:]
+        out.reserveCapacity(bestEnglish.count)
+
+        for (conceptID, fallback) in bestEnglish {
+            // Localized concept label is looked up via a stable key: snomed.<conceptID>
+            let locKey = "snomed.\(conceptID)"
+            let localized = NSLocalizedString(locKey, comment: "SNOMED concept display term")
+
+            // If not found, NSLocalizedString returns the key itself. In that case, display English.
+            if localized == locKey {
+                out[conceptID] = (fallback.descID, fallback.term, fallback.term)
+            } else {
+                out[conceptID] = (fallback.descID, localized, fallback.term)
+            }
+        }
+
+        localizedTermByConcept = out
+        log.info("TerminologyStore: localized term index built concepts=\(out.count, privacy: .public)")
+    }
+
     /// Load `isa_edge` into memory (child -> [parents]). Safe to call multiple times.
     private func loadISAIfNeeded() {
         if isaLoaded { return }
@@ -133,51 +207,83 @@ final class TerminologyStore: ObservableObject {
     struct TermHit: Identifiable, Hashable {
         let id: Int64            // description_id
         let conceptID: Int64
-        let term: String
+        let term: String         // display term (localized if available)
+        let subtitle: String?    // disambiguation line (e.g., "56018004 · Wheezing")
     }
 
-    /// Simple LIKE search in description.term (active rows only).
+    /// Search SNOMED concepts using UI-localized labels when available.
     ///
-    /// Notes:
-    /// - This is intentionally minimal for first wiring.
-    /// - Later we’ll upgrade to preferred terms via langrefset and add locale/language handling.
+    /// - If `Localizable.strings` contains `snomed.<conceptID>`, the picker can be searched in that UI language.
+    /// - Fallback: English term from the shipped subset DB.
     func searchTerms(_ query: String, limit: Int = 25) -> [TermHit] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return [] }
+        let qRaw = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !qRaw.isEmpty else { return [] }
 
-        guard let db = openDBReadOnly() else { return [] }
-        defer { sqlite3_close(db) }
+        // Build index once.
+        loadLocalizedIndexIfNeeded()
 
-        let sql = """
-        SELECT description_id, concept_id, term
-        FROM description
-        WHERE active = 1
-          AND term LIKE ?
-        ORDER BY LENGTH(term) ASC
-        LIMIT ?;
-        """
+        // Normalize
+        let q = qRaw.lowercased()
 
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
-            let msg = String(cString: sqlite3_errmsg(db))
-            log.error("TerminologyStore: searchTerms prepare failed: \(msg, privacy: .public)")
-            return []
+        // Fast path: if user typed digits, allow concept ID lookup.
+        let digitsOnly = q.allSatisfy { $0.isNumber }
+
+        // Rank: starts-with first, then contains.
+        var scored: [(score: Int, hit: TermHit)] = []
+        scored.reserveCapacity(64)
+
+        for (conceptID, meta) in localizedTermByConcept {
+            let termLower = meta.display.lowercased()
+
+            if digitsOnly {
+                let idStr = String(conceptID)
+                if idStr.hasPrefix(q) {
+                    let hit = TermHit(
+                        id: meta.descID,
+                        conceptID: conceptID,
+                        term: meta.display,
+                        subtitle: "\(conceptID)"
+                    )
+                    scored.append((0, hit))
+                }
+                continue
+            }
+
+            if termLower.hasPrefix(q) {
+                let sub: String? = (meta.fallbackEN.lowercased() == meta.display.lowercased())
+                    ? "\(conceptID)"
+                    : "\(conceptID) · \(meta.fallbackEN)"
+                let hit = TermHit(
+                    id: meta.descID,
+                    conceptID: conceptID,
+                    term: meta.display,
+                    subtitle: sub
+                )
+                scored.append((0, hit))
+            } else if termLower.contains(q) {
+                // Slightly worse than prefix
+                let sub: String? = (meta.fallbackEN.lowercased() == meta.display.lowercased())
+                    ? "\(conceptID)"
+                    : "\(conceptID) · \(meta.fallbackEN)"
+                let hit = TermHit(
+                    id: meta.descID,
+                    conceptID: conceptID,
+                    term: meta.display,
+                    subtitle: sub
+                )
+                scored.append((1, hit))
+            }
         }
-        defer { sqlite3_finalize(stmt) }
 
-        let like = "%\(q)%"
-        _ = like.withCString { sqlite3_bind_text(stmt, 1, $0, -1, SQLITE_TRANSIENT) }
-        sqlite3_bind_int(stmt, 2, Int32(max(1, min(limit, 200))))
-
-        var out: [TermHit] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            let descID = sqlite3_column_int64(stmt, 0)
-            let conceptID = sqlite3_column_int64(stmt, 1)
-            guard let cStr = sqlite3_column_text(stmt, 2) else { continue }
-            let term = String(cString: cStr)
-            out.append(TermHit(id: descID, conceptID: conceptID, term: term))
+        // Deterministic ordering
+        scored.sort { (a, b) in
+            if a.score != b.score { return a.score < b.score }
+            if a.hit.term.count != b.hit.term.count { return a.hit.term.count < b.hit.term.count }
+            return a.hit.term.localizedCaseInsensitiveCompare(b.hit.term) == .orderedAscending
         }
-        return out
+
+        let cap = max(1, min(limit, 200))
+        return scored.prefix(cap).map { $0.hit }
     }
     
     /// Very small “normalization” helper:

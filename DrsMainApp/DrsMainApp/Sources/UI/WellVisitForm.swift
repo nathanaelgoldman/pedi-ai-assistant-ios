@@ -5343,6 +5343,7 @@ private var problemListingHeaderLine: String {
             
             problemListing: problemsForAI,
             perinatalSummary: perinatalSummary,
+            
             pmhSummary: pmhSummary,
             vaccinationStatus: vaccSummary,
             growthTrendSummary: growthTrendSummaryForAI,

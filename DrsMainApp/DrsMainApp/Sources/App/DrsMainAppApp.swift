@@ -1788,6 +1788,10 @@ private struct RuleEditor: View {
     @State private var snomedQuery: String = ""
     @State private var snomedHits: [TerminologyStore.TermHit] = []
 
+    @State private var showKeyPicker: Bool = false
+    @State private var keyPickerTarget: PickerTarget? = nil
+    @State private var keySearch: String = ""
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -1834,37 +1838,15 @@ private struct RuleEditor: View {
                                     TextField("Feature key (e.g., sct:386661006)", text: $c.key)
                                         .textFieldStyle(.roundedBorder)
 
-                                    Menu {
-                                        Section("Demographics") {
-                                            Button("Age (days)") { c.key = "demographics.age_days" }
-                                            Button("Age (months)") { c.key = "demographics.age_months" }
-                                            Button("Sex") { c.key = "demographics.sex" }
-                                        }
-
-                                        Section("Fever") {
-                                            Button("Fever present") { c.key = "symptom.fever.present" }
-                                            Button("Fever duration (hours)") { c.key = "symptom.fever.duration_hours" }
-                                            Button("Fever duration (days)") { c.key = "symptom.fever.duration_days" }
-                                        }
-
-                                        Section("Vitals") {
-                                            Button("Max temperature (°C)") { c.key = "vital.temp_c.max" }
-                                            Button("SpO₂") { c.key = "vital.spo2" }
-                                        }
-
-                                        Divider()
-
-                                        Section("SNOMED") {
-                                            Button("SNOMED concept (sct:<id>)") {
-                                                c.key = "sct:"
-                                            }
-                                        }
-
+                                    Button {
+                                        keyPickerTarget = .conditionKey(.all, c.id)
+                                        keySearch = ""
+                                        showKeyPicker = true
                                     } label: {
                                         Label("Keys", systemImage: "list.bullet")
                                     }
-                                    .menuStyle(.borderlessButton)
-                                    .help("Pick a built-in clinical key (age, fever duration, vitals, etc.).")
+                                    .buttonStyle(.borderless)
+                                    .help("Search and pick a clinical key emitted by the extractor.")
 
                                     Button {
                                         pickerTarget = .conditionKey(.all, c.id)
@@ -2007,36 +1989,15 @@ private struct RuleEditor: View {
                                     TextField("Feature key (e.g., sct:386661006)", text: $c.key)
                                         .textFieldStyle(.roundedBorder)
 
-                                    Menu {
-                                        Section("Demographics") {
-                                            Button("Age (days)") { c.key = "demographics.age_days" }
-                                            Button("Age (months)") { c.key = "demographics.age_months" }
-                                            Button("Sex") { c.key = "demographics.sex" }
-                                        }
-
-                                        Section("Fever") {
-                                            Button("Fever present") { c.key = "symptom.fever.present" }
-                                            Button("Fever duration (hours)") { c.key = "symptom.fever.duration_hours" }
-                                            Button("Fever duration (days)") { c.key = "symptom.fever.duration_days" }
-                                        }
-
-                                        Section("Vitals") {
-                                            Button("Max temperature (°C)") { c.key = "vital.temp_c.max" }
-                                            Button("SpO₂") { c.key = "vital.spo2" }
-                                        }
-
-                                        Divider()
-
-                                        Section("SNOMED") {
-                                            Button("SNOMED concept (sct:<id>)") {
-                                                c.key = "sct:"
-                                            }
-                                        }
-
+                                    Button {
+                                        keyPickerTarget = .conditionKey(.any, c.id)
+                                        keySearch = ""
+                                        showKeyPicker = true
                                     } label: {
                                         Label("Keys", systemImage: "list.bullet")
                                     }
-                                    .menuStyle(.borderlessButton)
+                                    .buttonStyle(.borderless)
+                                    .help("Search and pick a clinical key emitted by the extractor.")
 
                                     Button {
                                         pickerTarget = .conditionKey(.any, c.id)
@@ -2173,7 +2134,25 @@ private struct RuleEditor: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .sheet(isPresented: $showKeyPicker) {
+            GuidelineKeyPickerSheet(
+                searchText: $keySearch,
+                registry: ClinicalFeatureExtractor.guidelineKeyRegistry,
+                onPick: { pickedKey in
+                    applyPickedKey(pickedKey)
+                    showKeyPicker = false
+                },
+                onCancel: {
+                    showKeyPicker = false
+                }
+            )
+            .frame(minWidth: 720, idealWidth: 860, maxWidth: 980,
+                   minHeight: 560, idealHeight: 680, maxHeight: 800)
+        }
+        
+    
         .sheet(isPresented: $showSnomedPicker) {
+    
             SnomedPickerSheet(
                 terminology: terminology,
                 query: $snomedQuery,
@@ -2191,6 +2170,26 @@ private struct RuleEditor: View {
         }
         .onChange(of: snomedQuery) { _, _ in
             refreshHits()
+        }
+    }
+    
+    private func applyPickedKey(_ key: String) {
+        guard let target = keyPickerTarget else { return }
+        switch target {
+        case .conditionKey(let scope, let condUUID):
+            switch scope {
+            case .all:
+                if let idx = rule.when.all.firstIndex(where: { $0.id == condUUID }) {
+                    rule.when.all[idx].key = key
+                }
+            case .any:
+                if let idx = rule.when.any.firstIndex(where: { $0.id == condUUID }) {
+                    rule.when.any[idx].key = key
+                }
+            }
+        case .conditionAncestor:
+            // Not used by the key picker.
+            break
         }
     }
 
@@ -2257,10 +2256,13 @@ private struct SnomedPickerSheet: View {
             VStack(spacing: 12) {
 
                 HStack(spacing: 10) {
-                    TextField("Search SNOMED term…", text: $query)
-                        .textFieldStyle(.roundedBorder)
+                    TextField(
+                        NSLocalizedString("guideline.snomed_picker.search.placeholder", comment: "Placeholder for SNOMED search"),
+                        text: $query
+                    )
+                    .textFieldStyle(.roundedBorder)
 
-                    Button("Clear") {
+                    Button(NSLocalizedString("guideline.snomed_picker.clear", comment: "Clear SNOMED search")) {
                         query = ""
                         hits = []
                     }
@@ -2269,9 +2271,9 @@ private struct SnomedPickerSheet: View {
 
                 if hits.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Type a term to search the local SNOMED subset.")
+                        Text(NSLocalizedString("guideline.snomed_picker.empty.title", comment: "Shown when SNOMED search has no results yet"))
                             .foregroundStyle(.secondary)
-                        Text("Examples: fever, wheezing, rash")
+                        Text(NSLocalizedString("guideline.snomed_picker.empty.tip", comment: "Example search terms for SNOMED picker"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -2285,7 +2287,7 @@ private struct SnomedPickerSheet: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(h.term)
-                                Text("sct:\(h.conceptID)")
+                                Text(h.subtitle ?? "sct:\(h.conceptID)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -2296,10 +2298,10 @@ private struct SnomedPickerSheet: View {
                 }
             }
             .padding(14)
-            .navigationTitle("SNOMED picker")
+            .navigationTitle(NSLocalizedString("guideline.snomed_picker.title", comment: "Title of SNOMED picker sheet"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(NSLocalizedString("common.cancel", comment: "Cancel")) {
                         onCancel()
                         dismiss()
                     }
@@ -2427,3 +2429,102 @@ private struct GuidelineCondition: Codable, Identifiable {
         }
         return (line, col)
     }
+
+private struct GuidelineKeyPickerSheet: View {
+    @Binding var searchText: String
+    let registry: [ClinicalFeatureExtractor.GuidelineKeyDescriptor]
+
+    let onPick: (String) -> Void
+    let onCancel: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
+    private var filtered: [ClinicalFeatureExtractor.GuidelineKeyDescriptor] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return registry }
+        return registry.filter { d in
+            let label = localized(d.labelKey)
+            return d.searchBlob(localizedLabel: label).contains(q)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+
+                HStack(spacing: 10) {
+                    TextField(
+                        NSLocalizedString("guideline.key_picker.search.placeholder", comment: "Placeholder for guideline key search"),
+                        text: $searchText
+                    )
+
+                    Button(NSLocalizedString("guideline.key_picker.clear", comment: "Clear search button")) {
+                        searchText = ""
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if filtered.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(NSLocalizedString("guideline.key_picker.empty.title", comment: "Shown when no keys match search"))
+                            .foregroundStyle(.secondary)
+                        Text(NSLocalizedString("guideline.key_picker.empty.tip", comment: "Tip for searching keys"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.top, 6)
+                } else {
+                    List {
+                        ForEach(ClinicalFeatureExtractor.GuidelineKeyCategory.allCases, id: \.self) { cat in
+                            let rows = filtered
+                                .filter { $0.category == cat }
+                                .sorted { localized($0.labelKey).localizedCaseInsensitiveCompare(localized($1.labelKey)) == .orderedAscending }
+
+                            if !rows.isEmpty {
+                                Section {
+                                    ForEach(rows, id: \.id) { d in
+                                        Button {
+                                            onPick(d.key)
+                                            dismiss()
+                                        } label: {
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(localized(d.labelKey))
+                                                Text(d.key)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                if let ex = d.example, !ex.isEmpty {
+                                                    Text(ex)
+                                                        .font(.caption2)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                } header: {
+                                    Text(localized(cat.labelKey))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .navigationTitle(NSLocalizedString("guideline.key_picker.title", comment: "Title of guideline key picker sheet"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("common.cancel", comment: "Cancel")) {
+                        onCancel()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}

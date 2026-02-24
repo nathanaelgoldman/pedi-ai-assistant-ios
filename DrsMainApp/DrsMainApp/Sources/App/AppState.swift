@@ -2735,6 +2735,9 @@ func reloadPatients() {
         let vaccinationStatus: String?
         let pmhSummary: String?
         let perinatalSummary: String?
+        let gestationalAgeWeeks: Int?
+        let birthWeightG: Int?
+        let nicuStay: Bool?
         let patientAgeDays: Int?
         let patientSex: String?
         let feverDurationDays: Int?
@@ -2758,6 +2761,9 @@ func reloadPatients() {
             complementaryInvestigations: String,
             vaccinationStatus: String?,
             perinatalSummary: String? = nil,
+            gestationalAgeWeeks: Int? = nil,
+            birthWeightG: Int? = nil,
+            nicuStay: Bool? = nil,
             pmhSummary: String?,
             patientAgeDays: Int? = nil,
             patientSex: String? = nil,
@@ -2776,6 +2782,9 @@ func reloadPatients() {
             self.complementaryInvestigations = complementaryInvestigations
             self.vaccinationStatus = vaccinationStatus
             self.perinatalSummary = perinatalSummary
+            self.gestationalAgeWeeks = gestationalAgeWeeks
+            self.birthWeightG = birthWeightG
+            self.nicuStay = nicuStay
             self.pmhSummary = pmhSummary
             self.patientAgeDays = patientAgeDays
             self.patientSex = patientSex

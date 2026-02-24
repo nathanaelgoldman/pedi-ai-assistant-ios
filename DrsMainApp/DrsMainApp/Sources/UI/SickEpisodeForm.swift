@@ -2740,6 +2740,10 @@ struct SickEpisodeForm: View {
         let feverDurationDays: Int? = dur.days
         let feverDurationHours: Int? = dur.hours
         let feverDurationUnit: String? = dur.unit
+        // Structured perinatal fields (best-effort): prefer structured cache if present.
+        let gaWeeks: Int? = appState.perinatalHistory?.birthTermWeeks
+        let bwG: Int? = appState.perinatalHistory?.birthWeightG
+        let nicu: Bool? = appState.perinatalHistory?.nicuStay
 
         return AppState.EpisodeAIContext(
             patientID: pid,
@@ -2748,6 +2752,9 @@ struct SickEpisodeForm: View {
             problemTokens: buildSickEpisodeTokens(),
             complementaryInvestigations: complementaryInvestigations,
             vaccinationStatus: vaccinationStatus,
+            gestationalAgeWeeks: gaWeeks,
+            birthWeightG: bwG,
+            nicuStay: nicu,
             pmhSummary: pmhSummary,
             patientAgeDays: patientAgeDays,
             patientSex: patientSex,
@@ -2755,6 +2762,7 @@ struct SickEpisodeForm: View {
             feverDurationHours: feverDurationHours,
             feverDurationUnit: feverDurationUnit,
             maxTempC: maxTempC,
+            
             // Delegate classification to VitalsRanges (single source of truth).
             maxTempIsAbnormal: {
                 let cls = VitalsRanges.classifyTempC(maxTempC)

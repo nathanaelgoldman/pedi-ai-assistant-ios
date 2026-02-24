@@ -35,6 +35,12 @@ protocol EpisodeAIContextProviding {
     var perinatalSummary: String? { get }
     var pmhSummary: String? { get }
 
+    // Structured perinatal fields (optional). These complement perinatalSummary (free text) and
+    // allow guideline rules to match on stable numeric/boolean keys.
+    var gestationalAgeWeeks: Int? { get }
+    var birthWeightG: Int? { get }
+    var nicuStay: Bool? { get }
+
     var patientAgeDays: Int? { get }
     var patientSex: String? { get }
     
@@ -55,6 +61,10 @@ extension EpisodeAIContextProviding {
     var maxTempIsAbnormal: Bool? { nil }
     var spo2: Int? { nil }
     var spo2IsAbnormal: Bool? { nil }
+
+    var gestationalAgeWeeks: Int? { nil }
+    var birthWeightG: Int? { nil }
+    var nicuStay: Bool? { nil }
 }
 
 // MARK: - Core Models
@@ -358,6 +368,28 @@ struct PerinatalSnapshot {
     var birthWeightG: Int?
     var nicuStay: Bool?
     var infectionRiskText: String?
+
+    // MARK: - Perinatal risk factors (for guideline matching)
+
+    /// Maternal gestational diabetes during pregnancy.
+    var maternalGestationalDiabetes: Bool?
+
+    /// Any significant maternal infection during pregnancy (non-specific; local database does not store details).
+    var maternalInfectionPregnancy: Bool?
+
+    /// TORCH seroconversion during pregnancy (non-specific; local database does not store which pathogen).
+    var torchSeroconversion: Bool?
+
+    /// Prolonged rupture of membranes. If true, we will emit `perinatal.prom_hours` with a conservative default (18h).
+    var promProlonged: Bool?
+
+    /// GBS prophylaxis at delivery.
+    /// - "antibiotic": GBS+ with adequate intrapartum antibiotics
+    /// - "none": GBS+ without antibiotics
+    /// - nil/"unknown": not known
+    var gbsProphylaxis: String?
+
+    // If you add an explicit initializer, update it to include these fields.
 }
 
 /// A normalized episode / problem list line emitted by forms.
@@ -374,6 +406,254 @@ struct ProblemLine {
 
 @MainActor
 final class ClinicalFeatureExtractor {
+
+    // MARK: - Guideline Key Registry (single source of truth)
+
+    enum GuidelineKeyCategory: String, CaseIterable {
+        case demographics
+        case fever
+        case vitals
+        case vaccination
+        case perinatal
+        case negatives
+        case snomed
+        case other
+
+        /// Localization key for the category label shown in UI.
+        var labelKey: String {
+            switch self {
+            case .demographics: return "guideline.key.category.demographics"
+            case .fever:        return "guideline.key.category.fever"
+            case .vitals:       return "guideline.key.category.vitals"
+            case .vaccination:  return "guideline.key.category.vaccination"
+            case .perinatal:    return "guideline.key.category.perinatal"
+            case .negatives:    return "guideline.key.category.negatives"
+            case .snomed:       return "guideline.key.category.snomed"
+            case .other:        return "guideline.key.category.other"
+            }
+        }
+    }
+
+    enum GuidelineKeyValueType: String {
+        case bool
+        case number
+        case string
+        case list
+    }
+
+    struct GuidelineKeyDescriptor: Identifiable, Hashable {
+        /// Stable key used by the guideline engine (e.g., "vital.spo2", "symptom.fever.present").
+        let key: String
+
+        /// Category used to group keys in the builder UI.
+        let category: GuidelineKeyCategory
+
+        /// Localization key (Localizable.strings) for display.
+        let labelKey: String
+
+        /// Value type to drive operator choices / input widgets.
+        let valueType: GuidelineKeyValueType
+
+        /// Search tags/synonyms (non-localized) to support quick lookup.
+        let searchTags: [String]
+
+        /// Optional example shown in UI help.
+        let example: String?
+
+        var id: String { key }
+
+        init(
+            key: String,
+            category: GuidelineKeyCategory,
+            labelKey: String,
+            valueType: GuidelineKeyValueType,
+            searchTags: [String] = [],
+            example: String? = nil
+        ) {
+            self.key = key
+            self.category = category
+            self.labelKey = labelKey
+            self.valueType = valueType
+            self.searchTags = searchTags
+            self.example = example
+        }
+
+        /// Utility used by UI search: combine key + tags + (localized) label.
+        func searchBlob(localizedLabel: String) -> String {
+            ([localizedLabel, key] + searchTags)
+                .joined(separator: " ")
+                .lowercased()
+        }
+    }
+
+    /// Canonical list of guideline keys emitted by the extractor.
+    /// UI should render `labelKey` via localization and use `searchTags` for lookup.
+    static let guidelineKeyRegistry: [GuidelineKeyDescriptor] = [
+        // Demographics
+        .init(
+            key: Key.demographicsAgeDays,
+            category: .demographics,
+            labelKey: "guideline.key.demographics.age_days",
+            valueType: .number,
+            searchTags: ["age", "days", "newborn"],
+            example: "e.g. 12"
+        ),
+        .init(
+            key: Key.demographicsAgeMonths,
+            category: .demographics,
+            labelKey: "guideline.key.demographics.age_months",
+            valueType: .number,
+            searchTags: ["age", "months", "infant"],
+            example: "e.g. 3"
+        ),
+        .init(
+            key: Key.demographicsSex,
+            category: .demographics,
+            labelKey: "guideline.key.demographics.sex",
+            valueType: .string,
+            searchTags: ["sex", "gender", "M", "F"],
+            example: "M / F"
+        ),
+
+        // Fever
+        .init(
+            key: Key.feverPresent,
+            category: .fever,
+            labelKey: "guideline.key.symptom.fever.present",
+            valueType: .bool,
+            searchTags: ["fever", "temperature"],
+            example: "present"
+        ),
+        .init(
+            key: Key.tempCMax,
+            category: .fever,
+            labelKey: "guideline.key.vital.temp_c.max",
+            valueType: .number,
+            searchTags: ["temp", "temperature", "celsius", "max"],
+            example: "e.g. 39.5"
+        ),
+        .init(
+            key: Key.feverDurationDays,
+            category: .fever,
+            labelKey: "guideline.key.symptom.fever.duration_days",
+            valueType: .number,
+            searchTags: ["duration", "days"],
+            example: "e.g. 2"
+        ),
+        .init(
+            key: Key.feverDurationHours,
+            category: .fever,
+            labelKey: "guideline.key.symptom.fever.duration_hours",
+            valueType: .number,
+            searchTags: ["duration", "hours"],
+            example: "e.g. 36"
+        ),
+
+        // Vitals
+        .init(
+            key: Key.spo2,
+            category: .vitals,
+            labelKey: "guideline.key.vital.spo2",
+            valueType: .number,
+            searchTags: ["spo2", "oxygen", "sat", "saturation"],
+            example: "e.g. 97"
+        ),
+        .init(
+            key: Key.spo2Low,
+            category: .vitals,
+            labelKey: "guideline.key.vital.spo2.low",
+            valueType: .bool,
+            searchTags: ["spo2", "low", "hypoxemia"],
+            example: "present"
+        ),
+        .init(
+            key: Key.spo2LowNeg,
+            category: .negatives,
+            labelKey: "guideline.key.neg.vital.spo2.low",
+            valueType: .bool,
+            searchTags: ["spo2", "not low", "normal oxygen"],
+            example: "present"
+        ),
+        .init(
+            key: Key.hr,
+            category: .vitals,
+            labelKey: "guideline.key.vital.hr",
+            valueType: .number,
+            searchTags: ["heart", "rate", "hr", "tachycardia"],
+            example: "e.g. 140"
+        ),
+        .init(
+            key: Key.rr,
+            category: .vitals,
+            labelKey: "guideline.key.vital.rr",
+            valueType: .number,
+            searchTags: ["resp", "rate", "rr", "tachypnea"],
+            example: "e.g. 40"
+        ),
+        .init(
+            key: Key.bpSys,
+            category: .vitals,
+            labelKey: "guideline.key.vital.bp.systolic",
+            valueType: .number,
+            searchTags: ["bp", "blood", "pressure", "systolic"],
+            example: "e.g. 100"
+        ),
+        .init(
+            key: Key.bpDia,
+            category: .vitals,
+            labelKey: "guideline.key.vital.bp.diastolic",
+            valueType: .number,
+            searchTags: ["bp", "blood", "pressure", "diastolic"],
+            example: "e.g. 60"
+        ),
+
+        // Vaccination
+        .init(
+            key: Key.vaxStatus,
+            category: .vaccination,
+            labelKey: "guideline.key.vaccination.status",
+            valueType: .string,
+            searchTags: ["vaccine", "vaccination", "status"],
+            example: "complete / incomplete / unknown"
+        ),
+
+        // Perinatal
+        .init(
+            key: Key.gaWeeks,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.ga_weeks",
+            valueType: .number,
+            searchTags: ["gestational", "age", "ga"],
+            example: "e.g. 39"
+        ),
+        .init(
+            key: Key.birthWeightG,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.birth_weight_g",
+            valueType: .number,
+            searchTags: ["birth", "weight", "grams"],
+            example: "e.g. 3200"
+        ),
+        .init(
+            key: Key.nicuStay,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.nicu_stay",
+            valueType: .bool,
+            searchTags: ["nicu", "neonatal", "stay"],
+            example: "present"
+        ),
+
+        // SNOMED helper (dynamic keys)
+        .init(
+            key: "sct:",
+            category: .snomed,
+            labelKey: "guideline.key.snomed.concept",
+            valueType: .bool,
+            searchTags: ["snomed", "sct", "concept", "id"],
+            example: "sct:56018004"
+        )
+    ]
+
 
     // MARK: Feature Keys (stable contract)
     enum Key {
@@ -1190,15 +1470,25 @@ extension ClinicalFeatureExtractor {
             return VaccinationSnapshot(statusToken: raw, vaccineTokens: [])
         }()
 
-        // Perinatal: keep as provenance until structured fields exist.
+        // Perinatal: populate structured fields and provenance text if available.
         let perinatal: PerinatalSnapshot? = {
-            guard let raw = ctx.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty else { return nil }
+            let raw = ctx.perinatalSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasText = (raw != nil && !(raw ?? "").isEmpty)
+
+            let ga = ctx.gestationalAgeWeeks
+            let bw = ctx.birthWeightG
+            let nicu = ctx.nicuStay
+
+            // If nothing is provided (no text and no structured fields), omit perinatal.
+            if !hasText && ga == nil && bw == nil && nicu == nil {
+                return nil
+            }
+
             return PerinatalSnapshot(
-                gestationalAgeWeeks: nil,
-                birthWeightG: nil,
-                nicuStay: nil,
-                infectionRiskText: raw
+                gestationalAgeWeeks: ga,
+                birthWeightG: bw,
+                nicuStay: nicu,
+                infectionRiskText: hasText ? raw : nil
             )
         }()
 
