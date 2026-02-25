@@ -1808,8 +1808,9 @@ private struct RuleEditor: View {
                             text: Binding(
                                 get: { rule.note ?? "" },
                                 set: { newValue in
-                                    let t = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    rule.note = t.isEmpty ? nil : t
+                                    // Do NOT trim on every keystroke; it prevents typing spaces naturally.
+                                    // We can normalize/trim later when saving/exporting if needed.
+                                    rule.note = newValue.isEmpty ? nil : newValue
                                 }
                             )
                         )
@@ -1831,7 +1832,7 @@ private struct RuleEditor: View {
 
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach($rule.when.all) { $c in
+                        ForEach(Array($rule.when.all.enumerated()), id: \.element.id) { idx, $c in
                             VStack(alignment: .leading, spacing: 8) {
 
                                 HStack(spacing: 8) {
@@ -1857,6 +1858,18 @@ private struct RuleEditor: View {
                                         Label("SNOMED", systemImage: "magnifyingglass")
                                     }
                                     .buttonStyle(.bordered)
+
+                                    Spacer(minLength: 0)
+
+                                    Button(role: .destructive) {
+                                        if idx < rule.when.all.count {
+                                            rule.when.all.remove(at: idx)
+                                        }
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Remove this condition")
                                 }
 
                                 Picker("Operator", selection: $c.op) {
@@ -1982,7 +1995,7 @@ private struct RuleEditor: View {
 
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach($rule.when.any) { $c in
+                        ForEach(Array($rule.when.any.enumerated()), id: \.element.id) { idx, $c in
                             VStack(alignment: .leading, spacing: 8) {
 
                                 HStack(spacing: 8) {
@@ -2008,6 +2021,18 @@ private struct RuleEditor: View {
                                         Label("SNOMED", systemImage: "magnifyingglass")
                                     }
                                     .buttonStyle(.bordered)
+
+                                    Spacer(minLength: 0)
+
+                                    Button(role: .destructive) {
+                                        if idx < rule.when.any.count {
+                                            rule.when.any.remove(at: idx)
+                                        }
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Remove this condition")
                                 }
 
                                 Picker("Operator", selection: $c.op) {

@@ -34,7 +34,13 @@ python3 -u build.py \
   --rf2-release 20260201 \
   --subset-name sick_tokens_v1 \
   --subset-version 2026-02-01 \
-  --feature-map "$FEATURE_MAP_PATH"
+  --feature-map "$FEATURE_MAP_PATH" \
+  --validate-feature-map \
+  --feature-map-report "${OUT_PATH}.feature_map_report.csv"
+  # --fail-on-feature-map-mismatch
+
+# Show feature-map validation report location
+echo "Feature-map report: $(pwd)/${OUT_PATH}.feature_map_report.csv"
 
 # --- Sanity checks on the generated SQLite DB ---
 command -v sqlite3 >/dev/null 2>&1 || { echo "ERROR: sqlite3 not found in PATH"; exit 2; }

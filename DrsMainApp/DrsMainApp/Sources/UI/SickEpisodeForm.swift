@@ -2744,6 +2744,24 @@ struct SickEpisodeForm: View {
         let gaWeeks: Int? = appState.perinatalHistory?.birthTermWeeks
         let bwG: Int? = appState.perinatalHistory?.birthWeightG
         let nicu: Bool? = appState.perinatalHistory?.nicuStay
+        let p = appState.perinatalHistory
+        let perinatalRaw: AppState.EpisodeAIContext.PerinatalRaw? = {
+            guard let p else { return nil }
+            return .init(
+                pregnancyRisk: p.pregnancyRisk,
+                infectionRisk: p.infectionRisk,
+                resuscitation: p.resuscitation,
+                maternityStayEvents: p.maternityStayEvents,
+                maternityVaccinations: p.maternityVaccinations,
+                motherVaccinations: p.motherVaccinations,
+                familyVaccinations: p.familyVaccinations,
+                birthMode: p.birthMode,
+                feedingInMaternity: p.feedingInMaternity,
+                heartScreening: p.heartScreening,
+                metabolicScreening: p.metabolicScreening,
+                hearingScreening: p.hearingScreening
+            )
+        }()
 
         return AppState.EpisodeAIContext(
             patientID: pid,
@@ -2755,6 +2773,7 @@ struct SickEpisodeForm: View {
             gestationalAgeWeeks: gaWeeks,
             birthWeightG: bwG,
             nicuStay: nicu,
+            perinatalRaw: perinatalRaw,
             pmhSummary: pmhSummary,
             patientAgeDays: patientAgeDays,
             patientSex: patientSex,

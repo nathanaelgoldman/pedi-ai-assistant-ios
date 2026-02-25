@@ -2738,6 +2738,55 @@ func reloadPatients() {
         let gestationalAgeWeeks: Int?
         let birthWeightG: Int?
         let nicuStay: Bool?
+
+        /// Raw perinatal coded-choice fields (as stored today in PerinatalHistory).
+        /// These are NOT used for reporting/UI; they are only used by ClinicalFeatureExtractor
+        /// to derive stable guideline keys without changing downstream report formatting.
+        struct PerinatalRaw: Codable, Hashable {
+            // Multi-select (CSV of localized labels)
+            let pregnancyRisk: String?
+            let infectionRisk: String?
+            let resuscitation: String?
+            let maternityStayEvents: String?
+            let maternityVaccinations: String?
+            let motherVaccinations: String?
+            let familyVaccinations: String?
+
+            // Single-select (localized label)
+            let birthMode: String?
+            let feedingInMaternity: String?
+            let heartScreening: String?
+            let metabolicScreening: String?
+            let hearingScreening: String?
+        }
+
+        let perinatalRawStored: PerinatalRaw?
+
+        /// Protocol-facing view: expose the raw perinatal coded-choice payload as a dictionary.
+        /// This keeps the extractor decoupled from AppState’s internal PerinatalRaw struct.
+        var perinatalRaw: [String: String]? {
+            guard let p = perinatalRawStored else { return nil }
+            var d: [String: String] = [:]
+
+            // Multi-select CSV fields
+            if let v = p.pregnancyRisk { d["pregnancyRisk"] = v }
+            if let v = p.infectionRisk { d["infectionRisk"] = v }
+            if let v = p.resuscitation { d["resuscitation"] = v }
+            if let v = p.maternityStayEvents { d["maternityStayEvents"] = v }
+            if let v = p.maternityVaccinations { d["maternityVaccinations"] = v }
+            if let v = p.motherVaccinations { d["motherVaccinations"] = v }
+            if let v = p.familyVaccinations { d["familyVaccinations"] = v }
+
+            // Single-select fields
+            if let v = p.birthMode { d["birthMode"] = v }
+            if let v = p.feedingInMaternity { d["feedingInMaternity"] = v }
+            if let v = p.heartScreening { d["heartScreening"] = v }
+            if let v = p.metabolicScreening { d["metabolicScreening"] = v }
+            if let v = p.hearingScreening { d["hearingScreening"] = v }
+
+            return d.isEmpty ? nil : d
+        }
+
         let patientAgeDays: Int?
         let patientSex: String?
         let feverDurationDays: Int?
@@ -2764,6 +2813,7 @@ func reloadPatients() {
             gestationalAgeWeeks: Int? = nil,
             birthWeightG: Int? = nil,
             nicuStay: Bool? = nil,
+            perinatalRaw: PerinatalRaw? = nil,
             pmhSummary: String?,
             patientAgeDays: Int? = nil,
             patientSex: String? = nil,
@@ -2785,6 +2835,7 @@ func reloadPatients() {
             self.gestationalAgeWeeks = gestationalAgeWeeks
             self.birthWeightG = birthWeightG
             self.nicuStay = nicuStay
+            self.perinatalRawStored = perinatalRaw
             self.pmhSummary = pmhSummary
             self.patientAgeDays = patientAgeDays
             self.patientSex = patientSex

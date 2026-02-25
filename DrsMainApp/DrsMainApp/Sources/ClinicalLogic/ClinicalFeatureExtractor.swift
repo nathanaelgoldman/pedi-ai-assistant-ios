@@ -40,6 +40,7 @@ protocol EpisodeAIContextProviding {
     var gestationalAgeWeeks: Int? { get }
     var birthWeightG: Int? { get }
     var nicuStay: Bool? { get }
+    var perinatalRaw: [String: String]? { get }
 
     var patientAgeDays: Int? { get }
     var patientSex: String? { get }
@@ -65,6 +66,8 @@ extension EpisodeAIContextProviding {
     var gestationalAgeWeeks: Int? { nil }
     var birthWeightG: Int? { nil }
     var nicuStay: Bool? { nil }
+    var perinatalRaw: [String: String]? { nil }
+    
 }
 
 // MARK: - Core Models
@@ -642,6 +645,81 @@ final class ClinicalFeatureExtractor {
             searchTags: ["nicu", "neonatal", "stay"],
             example: "present"
         ),
+        
+        .init(
+            key: Key.perinatalInfectionRFPresent,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.infection_rf_present",
+            valueType: .bool,
+            searchTags: ["infection", "rf", "eos", "prom", "gbs", "torch"],
+            example: "present"
+        ),
+        .init(
+            key: Key.perinatalInfectionRFProm,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.infection_rf_prom",
+            valueType: .bool,
+            searchTags: ["prom", "rupture", "membranes"],
+            example: "present"
+        ),
+        .init(
+            key: Key.perinatalInfectionRFTorch,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.infection_rf_torch",
+            valueType: .bool,
+            searchTags: ["torch", "sero", "seroconversion"],
+            example: "present"
+        ),
+        .init(
+            key: Key.perinatalInfectionRFGbsTreatment,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.infection_rf_gbs_treatment",
+            valueType: .bool,
+            searchTags: ["gbs", "antibiotic", "treatment"],
+            example: "present"
+        ),
+        .init(
+            key: Key.perinatalInfectionRFGbsNoTreatment,
+            category: .perinatal,
+            labelKey: "guideline.key.perinatal.infection_rf_gbs_no_treatment",
+            valueType: .bool,
+            searchTags: ["gbs", "no", "antibiotic"],
+            example: "present"
+        ),
+
+        // General condition / red flags (HPI + PE)
+        .init(
+            key: "sick.hpi.appearance.irritable",
+            category: .other,
+            labelKey: "guideline.key.sick.hpi.appearance.irritable",
+            valueType: .bool,
+            searchTags: ["appearance", "general condition", "irritable", "hpi"],
+            example: "present"
+        ),
+        .init(
+            key: "sick.hpi.appearance.lethargic",
+            category: .other,
+            labelKey: "guideline.key.sick.hpi.appearance.lethargic",
+            valueType: .bool,
+            searchTags: ["appearance", "general condition", "lethargy", "lethargic", "hpi"],
+            example: "present"
+        ),
+        .init(
+            key: "sick.pe.general_appearance.irritable",
+            category: .other,
+            labelKey: "guideline.key.sick.pe.general_appearance.irritable",
+            valueType: .bool,
+            searchTags: ["general appearance", "irritable", "pe"],
+            example: "present"
+        ),
+        .init(
+            key: "sick.pe.general_appearance.lethargic",
+            category: .other,
+            labelKey: "guideline.key.sick.pe.general_appearance.lethargic",
+            valueType: .bool,
+            searchTags: ["general appearance", "lethargy", "lethargic", "pe"],
+            example: "present"
+        ),
 
         // SNOMED helper (dynamic keys)
         .init(
@@ -689,6 +767,11 @@ final class ClinicalFeatureExtractor {
         static let gaWeeks = "perinatal.ga_weeks"
         static let birthWeightG = "perinatal.birth_weight_g"
         static let nicuStay = "perinatal.nicu_stay"
+        static let perinatalInfectionRFPresent = "perinatal.infection_rf.present"
+        static let perinatalInfectionRFProm = "perinatal.infection_rf.prom"
+        static let perinatalInfectionRFTorch = "perinatal.infection_rf.torch_seroconversion"
+        static let perinatalInfectionRFGbsTreatment = "perinatal.infection_rf.gbs_treatment"
+        static let perinatalInfectionRFGbsNoTreatment = "perinatal.infection_rf.gbs_no_treatment"
 
         // Examples for PE tokens (expand)
         static let peLungsWheeze = "pe.lungs.wheeze"
@@ -843,6 +926,8 @@ final class ClinicalFeatureExtractor {
                     source: "perinatal"
                 ))
             }
+            
+            
             if let txt = perinatal.infectionRiskText, !txt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 notes.append("Perinatal infection risk: \(txt)")
             }
@@ -1423,6 +1508,63 @@ extension ClinicalFeature {
 
 
 
+
+    // MARK: - Perinatal coded-choice translation (guideline-only)
+
+    /// Split a CSV-ish string (commas/semicolons/newlines) into trimmed tokens.
+    private func splitCSVish(_ raw: String?) -> [String] {
+        guard let raw else { return [] }
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return [] }
+        return s
+            .split(whereSeparator: { ",;\n".contains($0) })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Best-effort translation from localized labels (current UI language) to stable codes.
+    /// If the raw values already contain stable codes, they are accepted as-is.
+    private func translateChoices(
+        raw: String?,
+        map: [(labelKey: String, code: String)],
+        allowCodes: Set<String>
+    ) -> [String] {
+        let parts = splitCSVish(raw)
+        guard !parts.isEmpty else { return [] }
+
+        let localizedPairs: [(label: String, code: String)] = map.map {
+            (label: String(localized: String.LocalizationValue($0.labelKey)), code: $0.code)
+        }
+
+        var out: [String] = []
+        out.reserveCapacity(4)
+
+        for p in parts {
+            if allowCodes.contains(p) {
+                if !out.contains(p) { out.append(p) }
+                continue
+            }
+            if let hit = localizedPairs.first(where: { $0.label == p }) {
+                if !out.contains(hit.code) { out.append(hit.code) }
+            }
+        }
+        return out
+    }
+
+    /// Translate perinatal infection risk selections into stable codes.
+    /// Codes: prom, torch_seroconversion, gbs_treatment, gbs_no_treatment
+    private func infectionRiskCodes(from perinatalRaw: [String: String]?) -> [String] {
+        let raw = perinatalRaw?["infectionRisk"]
+        let map: [(labelKey: String, code: String)] = [
+            ("perinatal.choice.infrisk.prom", "prom"),
+            ("perinatal.choice.infrisk.seroconversion_torch", "torch_seroconversion"),
+            ("perinatal.choice.infrisk.gbs_treatment", "gbs_treatment"),
+            ("perinatal.choice.infrisk.gbs_no_treatment", "gbs_no_treatment")
+        ]
+        let allowCodes: Set<String> = ["prom", "torch_seroconversion", "gbs_treatment", "gbs_no_treatment"]
+        return translateChoices(raw: raw, map: map, allowCodes: allowCodes)
+    }
+
 // MARK: - Episode context adapter
 
 extension ClinicalFeatureExtractor {
@@ -1546,6 +1688,9 @@ extension ClinicalFeatureExtractor {
 
         let sexToken = patientSexToken?.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Guideline-only: derive stable perinatal infection RF flags from raw coded-choice payload.
+        let infCodes = infectionRiskCodes(from: ctx.perinatalRaw)
+
         var profile = buildProfile(
             patientId: Int64(ctx.patientID),
             sexToken: (sexToken?.isEmpty == true ? nil : sexToken),
@@ -1557,6 +1702,36 @@ extension ClinicalFeatureExtractor {
             problemLines: problemLines,
             terminology: terminology
         )
+
+        // Perinatal infection risk factors (guideline-only; does not affect reports/UI).
+        if !infCodes.isEmpty {
+            profile.features.append(.flag(
+                Key.perinatalInfectionRFPresent,
+                true,
+                source: "perinatal",
+                note: "derived from perinatal infectionRisk selections",
+                objective: true
+            ))
+
+            for c in infCodes {
+                switch c {
+                case "prom":
+                    profile.features.append(.flag(Key.perinatalInfectionRFProm, true, source: "perinatal", note: "derived from perinatal infectionRisk selections", objective: true))
+                case "torch_seroconversion":
+                    profile.features.append(.flag(Key.perinatalInfectionRFTorch, true, source: "perinatal", note: "derived from perinatal infectionRisk selections", objective: true))
+                case "gbs_treatment":
+                    profile.features.append(.flag(Key.perinatalInfectionRFGbsTreatment, true, source: "perinatal", note: "derived from perinatal infectionRisk selections", objective: true))
+                case "gbs_no_treatment":
+                    profile.features.append(.flag(Key.perinatalInfectionRFGbsNoTreatment, true, source: "perinatal", note: "derived from perinatal infectionRisk selections", objective: true))
+                default:
+                    break
+                }
+            }
+
+            // Recompute partitions to include the newly appended perinatal flags.
+            profile.objectivePositiveFindings = profile.features.filter { $0.isObjectivePositive }
+            profile.abnormalFindings = profile.features.filter { $0.isAbnormal }
+        }
 
         // Fever duration (structured)
         if let d = ctx.feverDurationDays, d >= 0 {
