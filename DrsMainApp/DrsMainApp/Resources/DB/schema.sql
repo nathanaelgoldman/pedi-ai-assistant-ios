@@ -1,6 +1,6 @@
 PRAGMA foreign_keys=ON;
 PRAGMA journal_mode=WAL;
-PRAGMA user_version=2;
+PRAGMA user_version=3;
 
 -- ========== TABLES ==========
 
@@ -91,6 +91,19 @@ CREATE TABLE IF NOT EXISTS episodes (
   hpi TEXT,
   duration TEXT,
 
+  -- Visit mode
+  visit_mode TEXT NOT NULL DEFAULT 'in_person',  -- 'in_person' | 'telemedicine'
+
+  -- Duration per main complaint (optional, for the complaint text area)
+  dur_other TEXT,
+  dur_cough TEXT,
+  dur_runny_nose TEXT,
+  dur_vomiting TEXT,
+  dur_diarrhea TEXT,
+  dur_abdominal_pain TEXT,
+  dur_rash TEXT,
+  dur_headache TEXT,
+
   -- Structured HPI
   appearance TEXT,
   feeding TEXT,
@@ -102,6 +115,7 @@ CREATE TABLE IF NOT EXISTS episodes (
 
   -- Physical Exam
   general_appearance TEXT,
+  work_of_breathing TEXT,
   hydration TEXT,
   color TEXT,
   skin TEXT,
@@ -118,6 +132,12 @@ CREATE TABLE IF NOT EXISTS episodes (
   neurological TEXT,
   musculoskeletal TEXT,
   lymph_nodes TEXT,
+
+  -- Telemedicine documentation (does not change report summary; used for telemed-specific UI/report sections)
+  pe_assessment_mode TEXT NOT NULL DEFAULT 'in_person', -- 'in_person' | 'remote' | 'not_assessed'
+  telemed_limitations_explained INTEGER NOT NULL DEFAULT 0,
+  telemed_safety_net_given INTEGER NOT NULL DEFAULT 0,
+  telemed_remote_observations TEXT,
 
   problem_listing TEXT,
   complementary_investigations TEXT,
@@ -499,4 +519,23 @@ JOIN patients p ON p.id = per.patient_id
 WHERE per.maternity_discharge_date IS NOT NULL;
 
 -- user_version=2 introduces soft-delete flags for episodes + well_visits
-PRAGMA user_version=2;
+
+-- user_version=3 adds telemedicine fields + complaint durations + work of breathing
+PRAGMA user_version=3;
+-- ======== MIGRATION HELPERS (safe ALTERs for existing DBs) ========
+-- When applying this schema.sql to an existing bundle DB, add missing columns.
+-- NOTE: We avoid ADD COLUMN IF NOT EXISTS for compatibility; duplicate-column errors are tolerated by the app applier.
+ALTER TABLE episodes ADD COLUMN visit_mode TEXT NOT NULL DEFAULT 'in_person';
+ALTER TABLE episodes ADD COLUMN dur_other TEXT;
+ALTER TABLE episodes ADD COLUMN dur_cough TEXT;
+ALTER TABLE episodes ADD COLUMN dur_runny_nose TEXT;
+ALTER TABLE episodes ADD COLUMN dur_vomiting TEXT;
+ALTER TABLE episodes ADD COLUMN dur_diarrhea TEXT;
+ALTER TABLE episodes ADD COLUMN dur_abdominal_pain TEXT;
+ALTER TABLE episodes ADD COLUMN dur_rash TEXT;
+ALTER TABLE episodes ADD COLUMN dur_headache TEXT;
+ALTER TABLE episodes ADD COLUMN work_of_breathing TEXT;
+ALTER TABLE episodes ADD COLUMN pe_assessment_mode TEXT NOT NULL DEFAULT 'in_person';
+ALTER TABLE episodes ADD COLUMN telemed_limitations_explained INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE episodes ADD COLUMN telemed_safety_net_given INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE episodes ADD COLUMN telemed_remote_observations TEXT;

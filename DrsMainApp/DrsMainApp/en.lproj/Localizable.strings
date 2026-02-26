@@ -3185,3 +3185,49 @@
 "guideline.key.sick.hpi.appearance.lethargic" = "HPI appearance: Lethargic";
 "guideline.key.sick.pe.general_appearance.irritable" = "PE general appearance: Irritable";
 "guideline.key.sick.pe.general_appearance.lethargic" = "PE general appearance: Lethargic";
+
+"guideline.rule_editor.rule.id" = "Rule ID";
+"guideline.rule_editor.rule.flag" = "Flag / Title";
+"guideline.rule_editor.rule.note.help" = "Optional: clinician instructions/warnings (stored in JSON, not evaluated yet).";
+"guideline.rule_editor.rule.priority_format" = "Priority: %d";
+
+"guideline.rule_editor.section.rule" = "Rule";
+"guideline.rule_editor.section.when_all" = "When (all)";
+"guideline.rule_editor.section.when_any" = "When (any)";
+
+"guideline.rule_editor.condition.key.placeholder" = "Feature key (e.g., sct:386661006)";
+"guideline.rule_editor.condition.keys.help" = "Search and pick a clinical key emitted by the extractor.";
+"guideline.rule_editor.condition.remove.help" = "Remove this condition";
+"guideline.rule_editor.condition.operator" = "Operator";
+
+"guideline.rule_editor.value.text.placeholder" = "Value (text)";
+"guideline.rule_editor.value.number.placeholder" = "Value (number)";
+"guideline.rule_editor.value.min.placeholder" = "Min";
+"guideline.rule_editor.value.max.placeholder" = "Max";
+"guideline.rule_editor.value.one_of.placeholder" = "Values (comma-separated)";
+
+"guideline.rule_editor.ancestor.placeholder" = "Ancestor key (e.g., sct:404684003)";
+
+"guideline.rule_editor.condition.add_all" = "Add condition";
+"guideline.rule_editor.condition.add_any" = "Add OR condition";
+
+"guideline.rule_editor.when_all.tip" = "Tip: Use Keys for common profile fields (age, fever duration, vitals), or SNOMED to insert an sct:<id> token.";
+"guideline.rule_editor.when_any.tip" = "Any: at least one condition must match. Leave empty for pure AND rules.";
+
+"guideline.rule_editor.button.keys" = "Keys";
+"guideline.rule_editor.button.snomed" = "SNOMED";
+
+"guideline.op.present" = "present";
+"guideline.op.absent" = "absent";
+"guideline.op.descendant_of" = "descendant of";
+"guideline.op.equals" = "equals";
+"guideline.op.not_equals" = "not equals";
+"guideline.op.gte" = "≥";
+"guideline.op.lte" = "≤";
+"guideline.op.between" = "between";
+"guideline.op.one_of" = "one of";
+
+"exporter.mac.sharechooser.title" = "Share exported bundle";
+"exporter.mac.sharechooser.airdrop" = "AirDrop";
+"exporter.mac.sharechooser.mail" = "Mail";
+"exporter.mac.sharechooser.messages" = "Messages";

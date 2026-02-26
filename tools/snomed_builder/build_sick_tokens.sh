@@ -12,6 +12,39 @@ FEATURE_MAP_PATH="/Users/goldman/Documents/CodeProjects/pedi-ai-assistant-ios/to
 SCHEMA_PATH="snomed_schema.sql"
 OUT_PATH="snomed.sqlite"
 
+# --- Regenerate subset concept list from the feature-map CSV ---
+# This ensures snomed.sqlite always matches the latest concept IDs in the CSV.
+export FEATURE_MAP_PATH
+export SUBSET_PATH
+
+python3 - <<'PY'
+import csv, re, pathlib, os, sys
+
+csv_path = pathlib.Path(os.environ.get("FEATURE_MAP_PATH", ""))
+out_path = pathlib.Path(os.environ.get("SUBSET_PATH", ""))
+
+if not csv_path.is_file():
+    print(f"ERROR: feature-map CSV not found: {csv_path}", file=sys.stderr)
+    raise SystemExit(2)
+
+out_path.parent.mkdir(parents=True, exist_ok=True)
+
+def is_true(x: str) -> bool:
+    return (x or "").strip().lower() in {"true","1","yes","y"}
+
+concepts = set()
+with csv_path.open("r", encoding="utf-8", newline="") as f:
+    for row in csv.DictReader(f):
+        if not is_true(row.get("map_to_snomed", "")):
+            continue
+        cid = (row.get("snomed_concept_id") or "").strip()
+        if re.fullmatch(r"\d+", cid):
+            concepts.add(cid)
+
+out_path.write_text("\n".join(sorted(concepts, key=int)) + "\n", encoding="utf-8")
+print(f"✅ Regenerated subset list: {out_path} (ids={len(concepts)})")
+PY
+
 echo "=== SNOMED SickTokens build ==="
 echo "RF2:         $RF2_PATH"
 echo "Subset list: $SUBSET_PATH"
@@ -21,7 +54,8 @@ echo "Out:         $(pwd)/$OUT_PATH"
 
 # Fail fast if any inputs are missing
 [[ -e "$RF2_PATH" ]] || { echo "ERROR: RF2 not found: $RF2_PATH"; exit 2; }
-[[ -f "$SUBSET_PATH" ]] || { echo "ERROR: subset list not found: $SUBSET_PATH"; exit 2; }
+# SUBSET_PATH is regenerated from the CSV above.
+[[ -f "$SUBSET_PATH" ]] || { echo "ERROR: subset list not found after regeneration: $SUBSET_PATH"; exit 2; }
 [[ -f "$FEATURE_MAP_PATH" ]] || { echo "ERROR: feature-map CSV not found: $FEATURE_MAP_PATH"; exit 2; }
 [[ -f "$SCHEMA_PATH" ]] || { echo "ERROR: schema.sql not found in $(pwd): $SCHEMA_PATH"; exit 2; }
 
@@ -36,7 +70,7 @@ python3 -u build.py \
   --subset-version 2026-02-01 \
   --feature-map "$FEATURE_MAP_PATH" \
   --validate-feature-map \
-  --feature-map-report "${OUT_PATH}.feature_map_report.csv"
+  --feature-map-report "${OUT_PATH}.feature_map_report.csv" \
   # --fail-on-feature-map-mismatch
 
 # Show feature-map validation report location

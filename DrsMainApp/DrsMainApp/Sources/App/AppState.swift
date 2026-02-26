@@ -622,6 +622,19 @@ final class AppState: ObservableObject {
             return
         }
 
+        // If the bundle DB is already at the latest schema version, skip re-applying schema.sql.
+        // This avoids duplicate-column noise from idempotent ALTER statements.
+        let latestSchemaVersion = 3
+        if let currentVersion = sqliteUserVersion(dbURL: dbURL), currentVersion >= latestSchemaVersion {
+            schemaAppliedForBundlePath = bundlePath
+            log.info("ensureBundledSchemaAppliedIfNeeded: db user_version=\(currentVersion, privacy: .public) (>=\(latestSchemaVersion, privacy: .public)); skipping schema.sql apply")
+
+            // Still run lightweight idempotent helpers (views/triggers etc.)
+            ensureSoftDeleteVisitSchema(at: dbURL)
+            ensureGrowthUnificationSchema(at: dbURL)
+            return
+        }
+
         schemaAppliedForBundlePath = bundlePath
 
         log.info("ensureBundledSchemaAppliedIfNeeded: applying bundled schema.sql (if present) to \(dbURL.lastPathComponent, privacy: .public)")
@@ -5332,6 +5345,20 @@ func reloadPatients() {
                     // Best-effort: upgrade/refresh manifest.json to the current v2 schema so
                     // legacy bundles get re-circulated in a healthy up-to-date format.
                     _ = self.upgradeBundleManifestIfNeeded(at: bundleRoot)
+                    
+                    // Immediately migrate the imported bundle DB to the latest bundled schema.
+                    // This guarantees newly imported bundles are upgraded even before the user selects them.
+                    let plainDB = bundleRoot.appendingPathComponent("db.sqlite")
+                    if FileManager.default.fileExists(atPath: plainDB.path) {
+                        ensureBundledSchemaAppliedIfNeeded(dbURL: plainDB)
+                    } else {
+                        // If the bundle is encrypted (db.sqlite.enc only), we cannot migrate without decrypting.
+                        // Migration will occur later when/if a plaintext db.sqlite becomes available.
+                        self.log.info("importZipBundles: imported bundle has no plaintext db.sqlite; migration deferred")
+                    }
+
+                    // Refresh manifest.json (non-fatal). Keeps db_sha256 consistent after migrations.
+                    _ = upgradeBundleManifestIfNeeded(at: bundleRoot)
 
                     // Extract patient identity from the staged bundle
                     guard let identity = self.extractPatientIdentity(from: bundleRoot) else {
@@ -7776,3 +7803,23 @@ extension VisitRow {
 
 // If there is code that restores recentBundles from UserDefaults, ensure it ends with:
 // pruneRecentBundlesInPlace()
+
+    /// Read PRAGMA user_version from a SQLite DB file (best-effort).
+    private func sqliteUserVersion(dbURL: URL) -> Int? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = db else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &stmt, nil) == SQLITE_OK else {
+            return nil
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        if sqlite3_step(stmt) == SQLITE_ROW {
+            return Int(sqlite3_column_int64(stmt, 0))
+        }
+        return nil
+    }

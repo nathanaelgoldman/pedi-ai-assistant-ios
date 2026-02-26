@@ -3013,18 +3013,18 @@
 "sick_episode_form.signal_panel.rule_alerts" = "Alertes des règles";
 
 /* Guideline Builder */
-"app.clinician_profile.guidelines.builder.open" = "Guideline Builder…";
-"app.clinician_profile.guidelines.builder.title" = "Guideline Builder";
-"app.clinician_profile.guidelines.builder.add_rule" = "Add rule";
-"app.clinician_profile.guidelines.builder.no_selection" = "Select a rule on the left to edit it.";
-"app.clinician_profile.guidelines.builder.tip" = "Tip: Start simple (present / descendant_of). We’ll add SNOMED search pickers next.";
+"app.clinician_profile.guidelines.builder.open" = "Construire un guideline";
+"app.clinician_profile.guidelines.builder.title" = "Constructeur de Guideline";
+"app.clinician_profile.guidelines.builder.add_rule" = "Ajouter un Guidline";
+"app.clinician_profile.guidelines.builder.no_selection" = "Selectionner un Guideline à gauche pour l'éditer.";
+"app.clinician_profile.guidelines.builder.tip" = "Info:Tip: Start simple (present / descendant_of). We’ll add SNOMED search pickers next.";
 
 /* Export */
 "app.clinician_profile.guidelines.export" = "Exporter";
 "app.clinician_profile.guidelines.export.empty" = "Rien à exporter.";
 
 /* Guideline Builder */
-"app.clinician_profile.guidelines.format" = "Format JSON";
+"app.clinician_profile.guidelines.format" = "Formater le JSON";
 
 /* Duration unit toggle (segmented) */
 "common.hours_short" = "h";
@@ -3125,10 +3125,10 @@
 "snomed.68235000" = "ORL : nez bouché";
 "snomed.126662008" = "ORL : gorge rouge";
 "snomed.90176007" = "ORL : dépôts amygdaliens";
-"snomed.1141807004" = "œil : croûtes";
-"snomed.246679005" = "œil : écoulement";
-"snomed.193967004" = "œil : œdème de la paupière";
-"snomed.193894004" = "œil : conjonctive rouge";
+"snomed.1141807004" = "oeil : croûtes";
+"snomed.246679005" = "oeil : écoulement";
+"snomed.193967004" = "oeil : oedème de la paupière";
+"snomed.193894004" = "oeil : conjonctive rouge";
 "snomed.162725004" = "état général : irritable";
 "snomed.271782001" = "état général : léthargique";
 "snomed.248952001" = "organes génitaux : écoulement";
@@ -3169,3 +3169,49 @@
 "guideline.key.sick.hpi.appearance.lethargic" = "ATCD récents (HPI) : Léthargique";
 "guideline.key.sick.pe.general_appearance.irritable" = "Examen clinique : Irritable";
 "guideline.key.sick.pe.general_appearance.lethargic" = "Examen clinique : Léthargique";
+
+"guideline.rule_editor.rule.id" = "ID de la règle";
+"guideline.rule_editor.rule.flag" = "Drapeau / Titre";
+"guideline.rule_editor.rule.note.help" = "Optionnel : consignes/avertissements pour le clinicien (stockés dans le JSON, non évalués pour l’instant).";
+"guideline.rule_editor.rule.priority_format" = "Priorité : %d";
+
+"guideline.rule_editor.section.rule" = "Règle";
+"guideline.rule_editor.section.when_all" = "Quand (tous)";
+"guideline.rule_editor.section.when_any" = "Quand (au moins un)";
+
+"guideline.rule_editor.condition.key.placeholder" = "Clé de caractéristique (ex. sct:386661006)";
+"guideline.rule_editor.condition.keys.help" = "Rechercher et choisir une clé clinique émise par l’extracteur.";
+"guideline.rule_editor.condition.remove.help" = "Supprimer cette condition";
+"guideline.rule_editor.condition.operator" = "Opérateur";
+
+"guideline.rule_editor.value.text.placeholder" = "Valeur (texte)";
+"guideline.rule_editor.value.number.placeholder" = "Valeur (nombre)";
+"guideline.rule_editor.value.min.placeholder" = "Min";
+"guideline.rule_editor.value.max.placeholder" = "Max";
+"guideline.rule_editor.value.one_of.placeholder" = "Valeurs (séparées par des virgules)";
+
+"guideline.rule_editor.ancestor.placeholder" = "Clé de l’ancêtre (ex. sct:404684003)";
+
+"guideline.rule_editor.condition.add_all" = "Ajouter une condition";
+"guideline.rule_editor.condition.add_any" = "Ajouter une condition OU";
+
+"guideline.rule_editor.when_all.tip" = "Astuce : utilisez « Keys » pour les champs courants (âge, durée de fièvre, constantes), ou « SNOMED » pour insérer un jeton sct:<id>.";
+"guideline.rule_editor.when_any.tip" = "Any : au moins une condition doit correspondre. Laissez vide pour des règles uniquement en ET.";
+
+"guideline.rule_editor.button.keys" = "Keys";
+"guideline.rule_editor.button.snomed" = "SNOMED";
+
+"guideline.op.present" = "présent";
+"guideline.op.absent" = "absent";
+"guideline.op.descendant_of" = "descendant de";
+"guideline.op.equals" = "égal à";
+"guideline.op.not_equals" = "différent de";
+"guideline.op.gte" = "≥";
+"guideline.op.lte" = "≤";
+"guideline.op.between" = "entre";
+"guideline.op.one_of" = "un parmi";
+
+"exporter.mac.sharechooser.title" = "Partager le dossier exporté";
+"exporter.mac.sharechooser.airdrop" = "AirDrop";
+"exporter.mac.sharechooser.mail" = "Mail";
+"exporter.mac.sharechooser.messages" = "Messages";

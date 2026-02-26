@@ -89,6 +89,11 @@ struct BundleExporter {
 
             // Remove soft-deleted visits from the *staged* copy only (source bundle DB remains reversible).
             purgeSoftDeletedVisits(in: stagedDB)
+
+            // Ensure the staged DB is upgraded to the latest bundled schema before we encrypt it.
+            // This guarantees exported bundles carry the current db schema even if the source bundle
+            // hasn't been selected/migrated recently.
+            applyBundledSchemaIfPresent(to: stagedDB)
         }
         if fm.fileExists(atPath: docsSrc.path) {
             try copyTreeFiltered(from: docsSrc, to: stageRoot.appendingPathComponent("docs"))
@@ -358,6 +363,50 @@ struct BundleExporter {
     }
 
     // MARK: - Export sanitization (remove soft-deleted visits from staged DB)
+
+    // MARK: - Schema upgrade (export-side)
+
+    /// Best-effort: apply the app-bundled `schema.sql` to the given DB.
+    /// Non-fatal: export should continue even if schema application fails.
+    private static func applyBundledSchemaIfPresent(to dbURL: URL) {
+        // If your schema.sql is packaged as DB/schema.sql in the bundle, use subdirectory: "DB"
+        guard let schemaURL = Bundle.main.url(forResource: "schema", withExtension: "sql", subdirectory: "DB") else {
+            return
+        }
+        do {
+            let sql = try String(contentsOf: schemaURL, encoding: .utf8)
+            applySQL(sql, to: dbURL)
+        } catch {
+            // Non-fatal: keep export working.
+            // (We avoid OSLog privacy args here to keep it portable.)
+            print("BundleExporter: schema.sql apply skipped: \(error)")
+        }
+    }
+
+    /// Apply a SQL script (multiple statements) to a SQLite DB file.
+    /// Uses sqlite3_exec which can process multiple statements separated by semicolons.
+    private static func applySQL(_ sql: String, to dbURL: URL) {
+        var db: OpaquePointer?
+        if sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) != SQLITE_OK {
+            if let db { sqlite3_close(db) }
+            return
+        }
+        guard let db = db else { return }
+        defer { sqlite3_close(db) }
+
+        _ = sqlite3_exec(db, "PRAGMA foreign_keys=ON;", nil, nil, nil)
+
+        var errMsg: UnsafeMutablePointer<CChar>?
+        let rc = sqlite3_exec(db, sql, nil, nil, &errMsg)
+        if rc != SQLITE_OK {
+            if let errMsg {
+                let msg = String(cString: errMsg)
+                sqlite3_free(errMsg)
+                // Non-fatal
+                print("BundleExporter: schema.sql apply error: \(msg)")
+            }
+        }
+    }
 
     /// Best-effort WAL checkpoint so db.sqlite copies include recent writes.
     private static func walCheckpointIfNeeded(dbURL: URL) {

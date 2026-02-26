@@ -52,6 +52,7 @@ struct DrsMainAppApp: App {
     @State private var pendingShareURL: URL? = nil
     #if os(macOS)
     @State private var helpWindowController: NSWindowController? = nil
+    @State private var sharePickerDelegate: SharePickerDelegate = SharePickerDelegate()
     #endif
 
     private enum ActiveAlert: Identifiable {
@@ -491,6 +492,27 @@ struct DrsMainAppApp: App {
         }
     }
     #if os(macOS)
+    // Helper delegate to filter out problematic sharing services for .pemr archives
+    private final class SharePickerDelegate: NSObject, NSSharingServicePickerDelegate {
+        func sharingServicePicker(
+            _ sharingServicePicker: NSSharingServicePicker,
+            sharingServicesForItems items: [Any],
+            proposedSharingServices proposedServices: [NSSharingService]
+        ) -> [NSSharingService] {
+            // Filter out services that commonly produce noise with custom archive UTIs.
+            // Copy-to-pasteboard in particular logs: "CopyToPasteboard: Not handling archive UTI".
+            let copyName = NSSharingService.Name(rawValue: "com.apple.share.CopyToPasteboard")
+            let copySvc = NSSharingService(named: copyName)
+            let cloudSvc = NSSharingService(named: .cloudSharing)
+
+            return proposedServices.filter { svc in
+                if let copySvc, svc == copySvc { return false }
+                if let cloudSvc, svc == cloudSvc { return false }
+                return true
+            }
+        }
+    }
+
     private func presentShareSheet(for fileURL: URL) {
         // Ensure we're on the main thread and the app is foregrounded.
         DispatchQueue.main.async {
@@ -508,7 +530,25 @@ struct DrsMainAppApp: App {
                 return
             }
 
-            let picker = NSSharingServicePicker(items: [fileURL])
+            // Wrap the URL in an item provider with an explicit UTType so Sharing Services
+            // can treat `.pemr` as an archive and avoid FileProvider/pasteboard warnings.
+            let pemrType = UTType("com.yunastic.pedia.pemr") ?? .zip
+            guard let provider = NSItemProvider(contentsOf: fileURL) else {
+                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                return
+            }
+            provider.suggestedName = fileURL.lastPathComponent
+            provider.registerFileRepresentation(
+                forTypeIdentifier: pemrType.identifier,
+                fileOptions: [],
+                visibility: .all
+            ) { completion in
+                completion(fileURL, true, nil)
+                return nil
+            }
+
+            let picker = NSSharingServicePicker(items: [provider])
+            picker.delegate = sharePickerDelegate
 
             // Anchor to a stable rect in the contentView.
             let bounds = view.bounds
@@ -1798,10 +1838,10 @@ private struct RuleEditor: View {
 
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {
-                        TextField("ID", text: $rule.id)
+                        TextField(NSLocalizedString("guideline.rule_editor.rule.id", comment: "Rule ID field label"), text: $rule.id)
                             .textFieldStyle(.roundedBorder)
 
-                        TextField("Flag", text: $rule.flag)
+                        TextField(NSLocalizedString("guideline.rule_editor.rule.flag", comment: "Rule flag/title field label"), text: $rule.flag)
                             .textFieldStyle(.roundedBorder)
 
                         TextEditor(
@@ -1819,15 +1859,15 @@ private struct RuleEditor: View {
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color.secondary.opacity(0.2))
                         )
-                        .help("Optional: clinician instructions/warnings (stored in JSON, not evaluated yet).")
+                        .help(NSLocalizedString("guideline.rule_editor.rule.note.help", comment: "Help text for rule note field"))
 
                         Stepper(value: $rule.priority, in: 0...100) {
-                            Text("Priority: \(rule.priority)")
+                            Text(String(format: NSLocalizedString("guideline.rule_editor.rule.priority_format", comment: "Priority label with value"), rule.priority))
                         }
                     }
                     .padding(.top, 2)
                 } label: {
-                    Text("Rule")
+                    Text(NSLocalizedString("guideline.rule_editor.section.rule", comment: "Section title: Rule"))
                 }
 
                 GroupBox {
@@ -1836,7 +1876,7 @@ private struct RuleEditor: View {
                             VStack(alignment: .leading, spacing: 8) {
 
                                 HStack(spacing: 8) {
-                                    TextField("Feature key (e.g., sct:386661006)", text: $c.key)
+                                    TextField(NSLocalizedString("guideline.rule_editor.condition.key.placeholder", comment: "Placeholder for condition key"), text: $c.key)
                                         .textFieldStyle(.roundedBorder)
 
                                     Button {
@@ -1844,18 +1884,18 @@ private struct RuleEditor: View {
                                         keySearch = ""
                                         showKeyPicker = true
                                     } label: {
-                                        Label("Keys", systemImage: "list.bullet")
+                                        Label(NSLocalizedString("guideline.rule_editor.button.keys", comment: "Keys button"), systemImage: "list.bullet")
                                     }
                                     .buttonStyle(.borderless)
-                                    .help("Search and pick a clinical key emitted by the extractor.")
+                                    .help(NSLocalizedString("guideline.rule_editor.condition.keys.help", comment: "Help text for Keys button"))
 
                                     Button {
                                         pickerTarget = .conditionKey(.all, c.id)
-                                        snomedQuery = sanitizeQuery(from: c.key)
-                                        refreshHits()
+                                        snomedQuery = ""
+                                        snomedHits = []
                                         showSnomedPicker = true
                                     } label: {
-                                        Label("SNOMED", systemImage: "magnifyingglass")
+                                        Label(NSLocalizedString("guideline.rule_editor.button.snomed", comment: "SNOMED button"), systemImage: "magnifyingglass")
                                     }
                                     .buttonStyle(.bordered)
 
@@ -1869,27 +1909,27 @@ private struct RuleEditor: View {
                                         Image(systemName: "trash")
                                     }
                                     .buttonStyle(.borderless)
-                                    .help("Remove this condition")
+                                    .help(NSLocalizedString("guideline.rule_editor.condition.remove.help", comment: "Help text for removing a condition"))
                                 }
 
-                                Picker("Operator", selection: $c.op) {
-                                    Text("present").tag(GuidelineCondition.Op.present)
-                                    Text("absent").tag(GuidelineCondition.Op.absent)
-                                    Text("descendant_of").tag(GuidelineCondition.Op.descendantOf)
+                                Picker(NSLocalizedString("guideline.rule_editor.condition.operator", comment: "Operator picker label"), selection: $c.op) {
+                                    Text(NSLocalizedString("guideline.op.present", comment: "Operator: present")).tag(GuidelineCondition.Op.present)
+                                    Text(NSLocalizedString("guideline.op.absent", comment: "Operator: absent")).tag(GuidelineCondition.Op.absent)
+                                    Text(NSLocalizedString("guideline.op.descendant_of", comment: "Operator: descendant_of")).tag(GuidelineCondition.Op.descendantOf)
 
                                     Divider()
 
-                                    Text("equals").tag(GuidelineCondition.Op.equals)
-                                    Text("not_equals").tag(GuidelineCondition.Op.notEquals)
-                                    Text("gte").tag(GuidelineCondition.Op.gte)
-                                    Text("lte").tag(GuidelineCondition.Op.lte)
-                                    Text("between").tag(GuidelineCondition.Op.between)
-                                    Text("one_of").tag(GuidelineCondition.Op.oneOf)
+                                    Text(NSLocalizedString("guideline.op.equals", comment: "Operator: equals")).tag(GuidelineCondition.Op.equals)
+                                    Text(NSLocalizedString("guideline.op.not_equals", comment: "Operator: not_equals")).tag(GuidelineCondition.Op.notEquals)
+                                    Text(NSLocalizedString("guideline.op.gte", comment: "Operator: gte")).tag(GuidelineCondition.Op.gte)
+                                    Text(NSLocalizedString("guideline.op.lte", comment: "Operator: lte")).tag(GuidelineCondition.Op.lte)
+                                    Text(NSLocalizedString("guideline.op.between", comment: "Operator: between")).tag(GuidelineCondition.Op.between)
+                                    Text(NSLocalizedString("guideline.op.one_of", comment: "Operator: one_of")).tag(GuidelineCondition.Op.oneOf)
                                 }
                                 .pickerStyle(.menu)
 
                                 if c.op == .equals || c.op == .notEquals {
-                                    TextField("Value (text)", text: Binding(
+                                    TextField(NSLocalizedString("guideline.rule_editor.value.text.placeholder", comment: "Placeholder for text value"), text: Binding(
                                         get: { c.value ?? "" },
                                         set: {
                                             c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1903,7 +1943,7 @@ private struct RuleEditor: View {
                                 }
 
                                 if c.op == .gte || c.op == .lte {
-                                    TextField("Value (number)", text: Binding(
+                                    TextField(NSLocalizedString("guideline.rule_editor.value.number.placeholder", comment: "Placeholder for number value"), text: Binding(
                                         get: { c.valueNumber.map { String($0) } ?? "" },
                                         set: {
                                             let t = $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1919,13 +1959,13 @@ private struct RuleEditor: View {
 
                                 if c.op == .between {
                                     HStack(spacing: 8) {
-                                        TextField("Min", text: Binding(
+                                        TextField(NSLocalizedString("guideline.rule_editor.value.min.placeholder", comment: "Placeholder for min value"), text: Binding(
                                             get: { c.minNumber.map { String($0) } ?? "" },
                                             set: { c.minNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
                                         ))
                                         .textFieldStyle(.roundedBorder)
 
-                                        TextField("Max", text: Binding(
+                                        TextField(NSLocalizedString("guideline.rule_editor.value.max.placeholder", comment: "Placeholder for max value"), text: Binding(
                                             get: { c.maxNumber.map { String($0) } ?? "" },
                                             set: { c.maxNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
                                         ))
@@ -1936,7 +1976,7 @@ private struct RuleEditor: View {
                                 }
 
                                 if c.op == .oneOf {
-                                    TextField("Values (comma-separated)", text: Binding(
+                                    TextField(NSLocalizedString("guideline.rule_editor.value.one_of.placeholder", comment: "Placeholder for one-of values"), text: Binding(
                                         get: { (c.values ?? []).joined(separator: ", ") },
                                         set: {
                                             c.values = $0
@@ -1955,7 +1995,7 @@ private struct RuleEditor: View {
                                 if c.op == .descendantOf {
                                     HStack(spacing: 8) {
                                         TextField(
-                                            "Ancestor key (e.g., sct:404684003)",
+                                            NSLocalizedString("guideline.rule_editor.ancestor.placeholder", comment: "Placeholder for descendant_of ancestor key"),
                                             text: Binding(
                                                 get: { c.value ?? "" },
                                                 set: { c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1965,11 +2005,11 @@ private struct RuleEditor: View {
 
                                         Button {
                                             pickerTarget = .conditionAncestor(.all, c.id)
-                                            snomedQuery = sanitizeQuery(from: c.value ?? "")
-                                            refreshHits()
+                                            snomedQuery = ""
+                                            snomedHits = []
                                             showSnomedPicker = true
                                         } label: {
-                                            Label("SNOMED", systemImage: "magnifyingglass")
+                                            Label(NSLocalizedString("guideline.rule_editor.button.snomed", comment: "SNOMED button"), systemImage: "magnifyingglass")
                                         }
                                         .buttonStyle(.bordered)
                                     }
@@ -1979,18 +2019,18 @@ private struct RuleEditor: View {
                             }
                         }
 
-                        Button("Add condition") {
+                        Button(NSLocalizedString("guideline.rule_editor.condition.add_all", comment: "Add condition button")) {
                             rule.when.all.append(GuidelineCondition(key: "", op: .present, value: nil))
                         }
                         .buttonStyle(.bordered)
 
-                        Text("Tip: Use Keys for common profile fields (age, fever duration, vitals), or SNOMED to insert an sct:<id> token.")
+                        Text(NSLocalizedString("guideline.rule_editor.when_all.tip", comment: "Tip for When (all) conditions"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.top, 2)
                 } label: {
-                    Text("When (all)")
+                    Text(NSLocalizedString("guideline.rule_editor.section.when_all", comment: "Section title: When (all)"))
                 }
 
                 GroupBox {
@@ -1999,7 +2039,7 @@ private struct RuleEditor: View {
                             VStack(alignment: .leading, spacing: 8) {
 
                                 HStack(spacing: 8) {
-                                    TextField("Feature key (e.g., sct:386661006)", text: $c.key)
+                                    TextField(NSLocalizedString("guideline.rule_editor.condition.key.placeholder", comment: "Placeholder for condition key"), text: $c.key)
                                         .textFieldStyle(.roundedBorder)
 
                                     Button {
@@ -2007,18 +2047,18 @@ private struct RuleEditor: View {
                                         keySearch = ""
                                         showKeyPicker = true
                                     } label: {
-                                        Label("Keys", systemImage: "list.bullet")
+                                        Label(NSLocalizedString("guideline.rule_editor.button.keys", comment: "Keys button"), systemImage: "list.bullet")
                                     }
                                     .buttonStyle(.borderless)
-                                    .help("Search and pick a clinical key emitted by the extractor.")
+                                    .help(NSLocalizedString("guideline.rule_editor.condition.keys.help", comment: "Help text for Keys button"))
 
                                     Button {
                                         pickerTarget = .conditionKey(.any, c.id)
-                                        snomedQuery = sanitizeQuery(from: c.key)
-                                        refreshHits()
+                                        snomedQuery = ""
+                                        snomedHits = []
                                         showSnomedPicker = true
                                     } label: {
-                                        Label("SNOMED", systemImage: "magnifyingglass")
+                                        Label(NSLocalizedString("guideline.rule_editor.button.snomed", comment: "SNOMED button"), systemImage: "magnifyingglass")
                                     }
                                     .buttonStyle(.bordered)
 
@@ -2032,27 +2072,27 @@ private struct RuleEditor: View {
                                         Image(systemName: "trash")
                                     }
                                     .buttonStyle(.borderless)
-                                    .help("Remove this condition")
+                                    .help(NSLocalizedString("guideline.rule_editor.condition.remove.help", comment: "Help text for removing a condition"))
                                 }
 
-                                Picker("Operator", selection: $c.op) {
-                                    Text("present").tag(GuidelineCondition.Op.present)
-                                    Text("absent").tag(GuidelineCondition.Op.absent)
-                                    Text("descendant_of").tag(GuidelineCondition.Op.descendantOf)
+                                Picker(NSLocalizedString("guideline.rule_editor.condition.operator", comment: "Operator picker label"), selection: $c.op) {
+                                    Text(NSLocalizedString("guideline.op.present", comment: "Operator: present")).tag(GuidelineCondition.Op.present)
+                                    Text(NSLocalizedString("guideline.op.absent", comment: "Operator: absent")).tag(GuidelineCondition.Op.absent)
+                                    Text(NSLocalizedString("guideline.op.descendant_of", comment: "Operator: descendant_of")).tag(GuidelineCondition.Op.descendantOf)
 
                                     Divider()
 
-                                    Text("equals").tag(GuidelineCondition.Op.equals)
-                                    Text("not_equals").tag(GuidelineCondition.Op.notEquals)
-                                    Text("gte").tag(GuidelineCondition.Op.gte)
-                                    Text("lte").tag(GuidelineCondition.Op.lte)
-                                    Text("between").tag(GuidelineCondition.Op.between)
-                                    Text("one_of").tag(GuidelineCondition.Op.oneOf)
+                                    Text(NSLocalizedString("guideline.op.equals", comment: "Operator: equals")).tag(GuidelineCondition.Op.equals)
+                                    Text(NSLocalizedString("guideline.op.not_equals", comment: "Operator: not_equals")).tag(GuidelineCondition.Op.notEquals)
+                                    Text(NSLocalizedString("guideline.op.gte", comment: "Operator: gte")).tag(GuidelineCondition.Op.gte)
+                                    Text(NSLocalizedString("guideline.op.lte", comment: "Operator: lte")).tag(GuidelineCondition.Op.lte)
+                                    Text(NSLocalizedString("guideline.op.between", comment: "Operator: between")).tag(GuidelineCondition.Op.between)
+                                    Text(NSLocalizedString("guideline.op.one_of", comment: "Operator: one_of")).tag(GuidelineCondition.Op.oneOf)
                                 }
                                 .pickerStyle(.menu)
 
                                 if c.op == .equals || c.op == .notEquals {
-                                    TextField("Value (text)", text: Binding(
+                                    TextField(NSLocalizedString("guideline.rule_editor.value.text.placeholder", comment: "Placeholder for text value"), text: Binding(
                                         get: { c.value ?? "" },
                                         set: {
                                             c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2066,7 +2106,7 @@ private struct RuleEditor: View {
                                 }
 
                                 if c.op == .gte || c.op == .lte {
-                                    TextField("Value (number)", text: Binding(
+                                    TextField(NSLocalizedString("guideline.rule_editor.value.number.placeholder", comment: "Placeholder for number value"), text: Binding(
                                         get: { c.valueNumber.map { String($0) } ?? "" },
                                         set: {
                                             let t = $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2082,13 +2122,13 @@ private struct RuleEditor: View {
 
                                 if c.op == .between {
                                     HStack(spacing: 8) {
-                                        TextField("Min", text: Binding(
+                                        TextField(NSLocalizedString("guideline.rule_editor.value.min.placeholder", comment: "Placeholder for min value"), text: Binding(
                                             get: { c.minNumber.map { String($0) } ?? "" },
                                             set: { c.minNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
                                         ))
                                         .textFieldStyle(.roundedBorder)
 
-                                        TextField("Max", text: Binding(
+                                        TextField(NSLocalizedString("guideline.rule_editor.value.max.placeholder", comment: "Placeholder for max value"), text: Binding(
                                             get: { c.maxNumber.map { String($0) } ?? "" },
                                             set: { c.maxNumber = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
                                         ))
@@ -2099,7 +2139,7 @@ private struct RuleEditor: View {
                                 }
 
                                 if c.op == .oneOf {
-                                    TextField("Values (comma-separated)", text: Binding(
+                                    TextField(NSLocalizedString("guideline.rule_editor.value.one_of.placeholder", comment: "Placeholder for one-of values"), text: Binding(
                                         get: { (c.values ?? []).joined(separator: ", ") },
                                         set: {
                                             c.values = $0
@@ -2118,7 +2158,7 @@ private struct RuleEditor: View {
                                 if c.op == .descendantOf {
                                     HStack(spacing: 8) {
                                         TextField(
-                                            "Ancestor key (e.g., sct:404684003)",
+                                            NSLocalizedString("guideline.rule_editor.ancestor.placeholder", comment: "Placeholder for descendant_of ancestor key"),
                                             text: Binding(
                                                 get: { c.value ?? "" },
                                                 set: { c.value = $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -2128,11 +2168,11 @@ private struct RuleEditor: View {
 
                                         Button {
                                             pickerTarget = .conditionAncestor(.any, c.id)
-                                            snomedQuery = sanitizeQuery(from: c.value ?? "")
-                                            refreshHits()
+                                            snomedQuery = ""
+                                            snomedHits = []
                                             showSnomedPicker = true
                                         } label: {
-                                            Label("SNOMED", systemImage: "magnifyingglass")
+                                            Label(NSLocalizedString("guideline.rule_editor.button.snomed", comment: "SNOMED button"), systemImage: "magnifyingglass")
                                         }
                                         .buttonStyle(.bordered)
                                     }
@@ -2142,18 +2182,18 @@ private struct RuleEditor: View {
                             }
                         }
 
-                        Button("Add OR condition") {
+                        Button(NSLocalizedString("guideline.rule_editor.condition.add_any", comment: "Add OR condition button")) {
                             rule.when.any.append(GuidelineCondition(key: "", op: .present, value: nil))
                         }
                         .buttonStyle(.bordered)
 
-                        Text("Any: at least one condition must match. Leave empty for pure AND rules.")
+                        Text(NSLocalizedString("guideline.rule_editor.when_any.tip", comment: "Tip for When (any) conditions"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.top, 2)
                 } label: {
-                    Text("When (any)")
+                    Text(NSLocalizedString("guideline.rule_editor.section.when_any", comment: "Section title: When (any)"))
                 }
             }
             .padding(16)

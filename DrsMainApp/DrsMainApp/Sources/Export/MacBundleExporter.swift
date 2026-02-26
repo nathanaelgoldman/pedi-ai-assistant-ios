@@ -11,10 +11,59 @@ import Foundation
 import AppKit
 import UniformTypeIdentifiers
 
+
 @inline(__always)
 private func L(_ key: String, comment: String = "") -> String {
     NSLocalizedString(key, tableName: nil, bundle: .main, value: key, comment: comment)
 }
+
+ #if os(macOS)
+private func presentPemrShareChooser(fileURL: URL) {
+    let pemrType = UTType("com.yunastic.pedia.pemr") ?? .zip
+
+    // Use an item provider so services treat the file as an archive with the correct UTType.
+    guard let provider = NSItemProvider(contentsOf: fileURL) else {
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        return
+    }
+    provider.suggestedName = fileURL.lastPathComponent
+    provider.registerFileRepresentation(
+        forTypeIdentifier: pemrType.identifier,
+        fileOptions: [],
+        visibility: .all
+    ) { completion in
+        completion(fileURL, true, nil)
+        return nil
+    }
+
+    let alert = NSAlert()
+    alert.messageText = L("exporter.mac.sharechooser.title", comment: "Title for share chooser alert")
+    alert.informativeText = fileURL.lastPathComponent
+
+    // Buttons order matters: first is default.
+    alert.addButton(withTitle: L("exporter.mac.sharechooser.airdrop", comment: "Share via AirDrop"))
+    alert.addButton(withTitle: L("exporter.mac.sharechooser.mail", comment: "Share via Mail"))
+    alert.addButton(withTitle: L("exporter.mac.sharechooser.messages", comment: "Share via Messages"))
+    alert.addButton(withTitle: L("common.cancel", comment: "Cancel"))
+
+    let resp = alert.runModal()
+
+    let svc: NSSharingService?
+    switch resp {
+    case .alertFirstButtonReturn:
+        svc = NSSharingService(named: .sendViaAirDrop)
+    case .alertSecondButtonReturn:
+        svc = NSSharingService(named: .composeEmail)
+    case .alertThirdButtonReturn:
+        svc = NSSharingService(named: .composeMessage)
+    default:
+        svc = nil
+    }
+
+    guard let svc else { return }
+    svc.perform(withItems: [provider])
+}
+#endif
 
 // MARK: - macOS front-end wrapper
 @MainActor
@@ -86,11 +135,7 @@ struct MacBundleExporter {
                 if response == .alertFirstButtonReturn {
                     NSWorkspace.shared.activateFileViewerSelecting([dest])
                 } else if response == .alertSecondButtonReturn {
-                    if let window = NSApp.keyWindow,
-                       let contentView = window.contentView {
-                        let picker = NSSharingServicePicker(items: [dest])
-                        picker.show(relativeTo: contentView.bounds, of: contentView, preferredEdge: .minY)
-                    }
+                    presentPemrShareChooser(fileURL: dest)
                 }
 
                 return dest
