@@ -2810,6 +2810,12 @@ func reloadPatients() {
         /// Raw unit as captured in the UI ("hours" or "days").
         /// Keep as a String for now to avoid touching more files; we can later replace with an enum.
         let feverDurationUnit: String?
+
+        /// Complaint-specific durations captured in the SickEpisodeForm.
+        /// Values are compact strings like "48h" or "3d" (same format as fever duration UI).
+        /// Keys are stable complaint identifiers (NOT localized UI strings):
+        ///   cough, runny_nose, vomiting, diarrhea, abdominal_pain, rash, headache
+        let complaintDurations: [String: String]?
         let maxTempC: Double?
         let maxTempIsAbnormal: Bool?
         let spo2: Int?
@@ -2833,6 +2839,7 @@ func reloadPatients() {
             feverDurationDays: Int? = nil,
             feverDurationHours: Int? = nil,
             feverDurationUnit: String? = nil,
+            complaintDurations: [String: String]? = nil,
             maxTempC: Double? = nil,
             maxTempIsAbnormal: Bool? = nil,
             spo2: Int? = nil,
@@ -2855,6 +2862,7 @@ func reloadPatients() {
             self.feverDurationDays = feverDurationDays
             self.feverDurationHours = feverDurationHours
             self.feverDurationUnit = feverDurationUnit
+            self.complaintDurations = complaintDurations
             self.maxTempC = maxTempC
             self.maxTempIsAbnormal = maxTempIsAbnormal
             self.spo2 = spo2

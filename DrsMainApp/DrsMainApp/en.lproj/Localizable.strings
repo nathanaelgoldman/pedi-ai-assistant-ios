@@ -3231,3 +3231,43 @@
 "exporter.mac.sharechooser.airdrop" = "AirDrop";
 "exporter.mac.sharechooser.mail" = "Mail";
 "exporter.mac.sharechooser.messages" = "Messages";
+
+"sick_episode_form.hpi.complaint_duration.label_format" = "%@: duration";
+
+"sick_episode_form.problem_listing.complaint_duration_format" = "%@: %@";
+
+"guideline.key.symptom.cough.duration_days" = "Cough duration (days)";
+"guideline.key.symptom.cough.duration_hours" = "Cough duration (hours)";
+
+"guideline.key.symptom.runny_nose.duration_days" = "Runny nose duration (days)";
+"guideline.key.symptom.runny_nose.duration_hours" = "Runny nose duration (hours)";
+
+"guideline.key.symptom.vomiting.duration_days" = "Vomiting duration (days)";
+"guideline.key.symptom.vomiting.duration_hours" = "Vomiting duration (hours)";
+
+"guideline.key.symptom.diarrhea.duration_days" = "Diarrhea duration (days)";
+"guideline.key.symptom.diarrhea.duration_hours" = "Diarrhea duration (hours)";
+
+"guideline.key.symptom.abdominal_pain.duration_days" = "Abdominal pain duration (days)";
+"guideline.key.symptom.abdominal_pain.duration_hours" = "Abdominal pain duration (hours)";
+
+"guideline.key.symptom.rash.duration_days" = "Rash duration (days)";
+"guideline.key.symptom.rash.duration_hours" = "Rash duration (hours)";
+
+"guideline.key.symptom.headache.duration_days" = "Headache duration (days)";
+"guideline.key.symptom.headache.duration_hours" = "Headache duration (hours)";
+"sick_episode_form.complaint.other.label" = "Other complaints";
+"sick_episode_form.choice.other" = "Other";
+"sick_episode_form.duration.unit.days.short" = "d";
+
+/* Work of breathing */
+"sick_episode_form.pe.work_of_breathing.label" = "Work of breathing";
+
+/* Work of breathing choices */
+"sick_episode_form.choice.normal_effort" = "Normal effort";
+"sick_episode_form.choice.tachypnea" = "Tachypnea";
+"sick_episode_form.choice.retractions" = "Retractions";
+"sick_episode_form.choice.nasal_flaring" = "Nasal flaring";
+"sick_episode_form.choice.paradoxical_breathing" = "Paradoxical breathing";
+"sick_episode_form.choice.grunting" = "Grunting";
+"sick_episode_form.choice.stridor" = "Stridor";

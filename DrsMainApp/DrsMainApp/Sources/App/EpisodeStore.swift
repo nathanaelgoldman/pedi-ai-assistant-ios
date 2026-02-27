@@ -27,6 +27,17 @@ public struct Episode: Identifiable, Equatable {
     public var hpi: String?
     public var duration: String?
 
+    // Visit mode + complaint durations (v3)
+    public var visitMode: String?
+    public var durOther: String?
+    public var durCough: String?
+    public var durRunnyNose: String?
+    public var durVomiting: String?
+    public var durDiarrhea: String?
+    public var durAbdominalPain: String?
+    public var durRash: String?
+    public var durHeadache: String?
+
     // Structured HPI
     public var appearance: String?
     public var feeding: String?
@@ -38,6 +49,7 @@ public struct Episode: Identifiable, Equatable {
 
     // Physical Exam
     public var generalAppearance: String?
+    public var workOfBreathing: String?
     public var hydration: String?
     public var color: String?
     public var skin: String?
@@ -54,6 +66,12 @@ public struct Episode: Identifiable, Equatable {
     public var neurological: String?
     public var musculoskeletal: String?
     public var lymphNodes: String?
+
+    // Telemedicine documentation (v3)
+    public var peAssessmentMode: String?
+    public var telemedLimitationsExplained: Int?
+    public var telemedSafetyNetGiven: Int?
+    public var telemedRemoteObservations: String?
 
     // Plan
     public var problemListing: String?
@@ -72,6 +90,17 @@ public struct EpisodePayload: Equatable {
     public var hpi: String? = nil
     public var duration: String? = nil
 
+    // Visit mode + complaint durations (v3)
+    public var visitMode: String? = nil
+    public var durOther: String? = nil
+    public var durCough: String? = nil
+    public var durRunnyNose: String? = nil
+    public var durVomiting: String? = nil
+    public var durDiarrhea: String? = nil
+    public var durAbdominalPain: String? = nil
+    public var durRash: String? = nil
+    public var durHeadache: String? = nil
+
     // Structured HPI
     public var appearance: String? = nil
     public var feeding: String? = nil
@@ -83,6 +112,7 @@ public struct EpisodePayload: Equatable {
 
     // Physical Exam
     public var generalAppearance: String? = nil
+    public var workOfBreathing: String? = nil
     public var hydration: String? = nil
     public var color: String? = nil
     public var skin: String? = nil
@@ -99,6 +129,12 @@ public struct EpisodePayload: Equatable {
     public var neurological: String? = nil
     public var musculoskeletal: String? = nil
     public var lymphNodes: String? = nil
+
+    // Telemedicine documentation (v3)
+    public var peAssessmentMode: String? = nil
+    public var telemedLimitationsExplained: Int? = nil
+    public var telemedSafetyNetGiven: Int? = nil
+    public var telemedRemoteObservations: String? = nil
 
     // Plan
     public var problemListing: String? = nil
@@ -333,11 +369,14 @@ public struct EpisodeStore {
         SELECT
             id, patient_id, user_id, created_at,
             main_complaint, hpi, duration,
+            visit_mode,
+            dur_other, dur_cough, dur_runny_nose, dur_vomiting, dur_diarrhea, dur_abdominal_pain, dur_rash, dur_headache,
             appearance, feeding, breathing, urination, pain, stools, context,
-            general_appearance, hydration, color, skin,
+            general_appearance, work_of_breathing, hydration, color, skin,
             ent, right_ear, left_ear, right_eye, left_eye,
             heart, lungs, abdomen, peristalsis, genitalia,
             neurological, musculoskeletal, lymph_nodes,
+            pe_assessment_mode, telemed_limitations_explained, telemed_safety_net_given, telemed_remote_observations,
             problem_listing, complementary_investigations,
             diagnosis, icd10, medications, anticipatory_guidance,
             comments
@@ -365,42 +404,60 @@ public struct EpisodeStore {
             hpi: columnText(stmt, 5),
             duration: columnText(stmt, 6),
 
+            // v3
+            visitMode: columnText(stmt, 7),
+            durOther: columnText(stmt, 8),
+            durCough: columnText(stmt, 9),
+            durRunnyNose: columnText(stmt, 10),
+            durVomiting: columnText(stmt, 11),
+            durDiarrhea: columnText(stmt, 12),
+            durAbdominalPain: columnText(stmt, 13),
+            durRash: columnText(stmt, 14),
+            durHeadache: columnText(stmt, 15),
+
             // Structured HPI
-            appearance: columnText(stmt, 7),
-            feeding: columnText(stmt, 8),
-            breathing: columnText(stmt, 9),
-            urination: columnText(stmt, 10),
-            pain: columnText(stmt, 11),
-            stools: columnText(stmt, 12),
-            context: columnText(stmt, 13),
+            appearance: columnText(stmt, 16),
+            feeding: columnText(stmt, 17),
+            breathing: columnText(stmt, 18),
+            urination: columnText(stmt, 19),
+            pain: columnText(stmt, 20),
+            stools: columnText(stmt, 21),
+            context: columnText(stmt, 22),
 
             // Physical Exam
-            generalAppearance: columnText(stmt, 14),
-            hydration: columnText(stmt, 15),
-            color: columnText(stmt, 16),
-            skin: columnText(stmt, 17),
-            ent: columnText(stmt, 18),
-            rightEar: columnText(stmt, 19),
-            leftEar: columnText(stmt, 20),
-            rightEye: columnText(stmt, 21),
-            leftEye: columnText(stmt, 22),
-            heart: columnText(stmt, 23),
-            lungs: columnText(stmt, 24),
-            abdomen: columnText(stmt, 25),
-            peristalsis: columnText(stmt, 26),
-            genitalia: columnText(stmt, 27),
-            neurological: columnText(stmt, 28),
-            musculoskeletal: columnText(stmt, 29),
-            lymphNodes: columnText(stmt, 30),
+            generalAppearance: columnText(stmt, 23),
+            workOfBreathing: columnText(stmt, 24),
+            hydration: columnText(stmt, 25),
+            color: columnText(stmt, 26),
+            skin: columnText(stmt, 27),
+            ent: columnText(stmt, 28),
+            rightEar: columnText(stmt, 29),
+            leftEar: columnText(stmt, 30),
+            rightEye: columnText(stmt, 31),
+            leftEye: columnText(stmt, 32),
+            heart: columnText(stmt, 33),
+            lungs: columnText(stmt, 34),
+            abdomen: columnText(stmt, 35),
+            peristalsis: columnText(stmt, 36),
+            genitalia: columnText(stmt, 37),
+            neurological: columnText(stmt, 38),
+            musculoskeletal: columnText(stmt, 39),
+            lymphNodes: columnText(stmt, 40),
+
+            // Telemedicine documentation (v3)
+            peAssessmentMode: columnText(stmt, 41),
+            telemedLimitationsExplained: sqlite3_column_type(stmt, 42) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(stmt, 42)),
+            telemedSafetyNetGiven: sqlite3_column_type(stmt, 43) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(stmt, 43)),
+            telemedRemoteObservations: columnText(stmt, 44),
 
             // Plan
-            problemListing: columnText(stmt, 31),
-            complementaryInvestigations: columnText(stmt, 32),
-            diagnosis: columnText(stmt, 33),
-            icd10: columnText(stmt, 34),
-            medications: columnText(stmt, 35),
-            anticipatoryGuidance: columnText(stmt, 36),
-            comments: columnText(stmt, 37)
+            problemListing: columnText(stmt, 45),
+            complementaryInvestigations: columnText(stmt, 46),
+            diagnosis: columnText(stmt, 47),
+            icd10: columnText(stmt, 48),
+            medications: columnText(stmt, 49),
+            anticipatoryGuidance: columnText(stmt, 50),
+            comments: columnText(stmt, 51)
         )
     }
 
@@ -417,11 +474,14 @@ public struct EpisodeStore {
         INSERT INTO episodes (
             patient_id, user_id,
             main_complaint, hpi, duration,
+            visit_mode,
+            dur_other, dur_cough, dur_runny_nose, dur_vomiting, dur_diarrhea, dur_abdominal_pain, dur_rash, dur_headache,
             appearance, feeding, breathing, urination, pain, stools, context,
-            general_appearance, hydration, color, skin,
+            general_appearance, work_of_breathing, hydration, color, skin,
             ent, right_ear, left_ear, right_eye, left_eye,
             heart, lungs, abdomen, peristalsis, genitalia,
             neurological, musculoskeletal, lymph_nodes,
+            pe_assessment_mode, telemed_limitations_explained, telemed_safety_net_given, telemed_remote_observations,
             problem_listing, complementary_investigations,
             diagnosis, icd10, medications, anticipatory_guidance,
             comments
@@ -429,11 +489,14 @@ public struct EpisodeStore {
         VALUES (
             ?, ?,
             ?, ?, ?,
+            ?,
+            ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?,
+            ?, ?, ?, ?,
             ?, ?,
             ?, ?, ?, ?,
             ?
@@ -453,6 +516,17 @@ public struct EpisodeStore {
         bindText(stmt, index: idx, value: payload.hpi); idx += 1
         bindText(stmt, index: idx, value: payload.duration); idx += 1
 
+        // v3
+        bindText(stmt, index: idx, value: payload.visitMode); idx += 1
+        bindText(stmt, index: idx, value: payload.durOther); idx += 1
+        bindText(stmt, index: idx, value: payload.durCough); idx += 1
+        bindText(stmt, index: idx, value: payload.durRunnyNose); idx += 1
+        bindText(stmt, index: idx, value: payload.durVomiting); idx += 1
+        bindText(stmt, index: idx, value: payload.durDiarrhea); idx += 1
+        bindText(stmt, index: idx, value: payload.durAbdominalPain); idx += 1
+        bindText(stmt, index: idx, value: payload.durRash); idx += 1
+        bindText(stmt, index: idx, value: payload.durHeadache); idx += 1
+
         // Structured HPI
         bindText(stmt, index: idx, value: payload.appearance); idx += 1
         bindText(stmt, index: idx, value: payload.feeding); idx += 1
@@ -464,6 +538,7 @@ public struct EpisodeStore {
 
         // Physical Exam
         bindText(stmt, index: idx, value: payload.generalAppearance); idx += 1
+        bindText(stmt, index: idx, value: payload.workOfBreathing); idx += 1
         bindText(stmt, index: idx, value: payload.hydration); idx += 1
         bindText(stmt, index: idx, value: payload.color); idx += 1
         bindText(stmt, index: idx, value: payload.skin); idx += 1
@@ -483,6 +558,14 @@ public struct EpisodeStore {
         bindText(stmt, index: idx, value: payload.neurological); idx += 1
         bindText(stmt, index: idx, value: payload.musculoskeletal); idx += 1
         bindText(stmt, index: idx, value: payload.lymphNodes); idx += 1
+
+        // Telemedicine documentation (v3)
+        bindText(stmt, index: idx, value: payload.peAssessmentMode); idx += 1
+        if let v = payload.telemedLimitationsExplained { sqlite3_bind_int64(stmt, idx, Int64(v)) } else { sqlite3_bind_null(stmt, idx) }
+        idx += 1
+        if let v = payload.telemedSafetyNetGiven { sqlite3_bind_int64(stmt, idx, Int64(v)) } else { sqlite3_bind_null(stmt, idx) }
+        idx += 1
+        bindText(stmt, index: idx, value: payload.telemedRemoteObservations); idx += 1
 
         // Plan
         bindText(stmt, index: idx, value: payload.problemListing); idx += 1
@@ -509,6 +592,15 @@ public struct EpisodeStore {
             main_complaint = ?,
             hpi = ?,
             duration = ?,
+            visit_mode = ?,
+            dur_other = ?,
+            dur_cough = ?,
+            dur_runny_nose = ?,
+            dur_vomiting = ?,
+            dur_diarrhea = ?,
+            dur_abdominal_pain = ?,
+            dur_rash = ?,
+            dur_headache = ?,
             appearance = ?,
             feeding = ?,
             breathing = ?,
@@ -517,6 +609,7 @@ public struct EpisodeStore {
             stools = ?,
             context = ?,
             general_appearance = ?,
+            work_of_breathing = ?,
             hydration = ?,
             color = ?,
             skin = ?,
@@ -533,6 +626,10 @@ public struct EpisodeStore {
             neurological = ?,
             musculoskeletal = ?,
             lymph_nodes = ?,
+            pe_assessment_mode = ?,
+            telemed_limitations_explained = ?,
+            telemed_safety_net_given = ?,
+            telemed_remote_observations = ?,
             problem_listing = ?,
             complementary_investigations = ?,
             diagnosis = ?,
@@ -553,6 +650,15 @@ public struct EpisodeStore {
         bindText(stmt, index: idx, value: payload.mainComplaint); idx += 1
         bindText(stmt, index: idx, value: payload.hpi); idx += 1
         bindText(stmt, index: idx, value: payload.duration); idx += 1
+        bindText(stmt, index: idx, value: payload.visitMode); idx += 1
+        bindText(stmt, index: idx, value: payload.durOther); idx += 1
+        bindText(stmt, index: idx, value: payload.durCough); idx += 1
+        bindText(stmt, index: idx, value: payload.durRunnyNose); idx += 1
+        bindText(stmt, index: idx, value: payload.durVomiting); idx += 1
+        bindText(stmt, index: idx, value: payload.durDiarrhea); idx += 1
+        bindText(stmt, index: idx, value: payload.durAbdominalPain); idx += 1
+        bindText(stmt, index: idx, value: payload.durRash); idx += 1
+        bindText(stmt, index: idx, value: payload.durHeadache); idx += 1
 
         // Structured HPI
         bindText(stmt, index: idx, value: payload.appearance); idx += 1
@@ -565,6 +671,7 @@ public struct EpisodeStore {
 
         // Physical Exam
         bindText(stmt, index: idx, value: payload.generalAppearance); idx += 1
+        bindText(stmt, index: idx, value: payload.workOfBreathing); idx += 1
         bindText(stmt, index: idx, value: payload.hydration); idx += 1
         bindText(stmt, index: idx, value: payload.color); idx += 1
         bindText(stmt, index: idx, value: payload.skin); idx += 1
@@ -581,6 +688,14 @@ public struct EpisodeStore {
         bindText(stmt, index: idx, value: payload.neurological); idx += 1
         bindText(stmt, index: idx, value: payload.musculoskeletal); idx += 1
         bindText(stmt, index: idx, value: payload.lymphNodes); idx += 1
+
+        // Telemedicine documentation (v3)
+        bindText(stmt, index: idx, value: payload.peAssessmentMode); idx += 1
+        if let v = payload.telemedLimitationsExplained { sqlite3_bind_int64(stmt, idx, Int64(v)) } else { sqlite3_bind_null(stmt, idx) }
+        idx += 1
+        if let v = payload.telemedSafetyNetGiven { sqlite3_bind_int64(stmt, idx, Int64(v)) } else { sqlite3_bind_null(stmt, idx) }
+        idx += 1
+        bindText(stmt, index: idx, value: payload.telemedRemoteObservations); idx += 1
 
         // Plan
         bindText(stmt, index: idx, value: payload.problemListing); idx += 1

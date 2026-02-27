@@ -313,7 +313,7 @@
 "perinatal.field.birth_mode" = "Mode d’accouchement";
 "perinatal.field.gestational_age_weeks" = "Âge gestationnel (semaines)";
 "perinatal.field.resuscitation_at_birth" = "Réanimation à la naissance";
-"perinatal.field.nicu_stay" = "Séjour en néonatalogie";
+"perinatal.field.nicu_stay" = "Séjour(s) en néonatalogie";
 "perinatal.field.infection_risk_factors" = "Facteurs de risque infectieux";
 
 "perinatal.field.birth_weight_g" = "Poids de naissance (g)";
@@ -453,7 +453,7 @@
 "vax.form.title" = "Statut vaccinal";
 "vax.field.status.label" = "Statut";
 
-"vax.status.up_to_date" = "À jour";
+"vax.status.up_to_date" = "À jour(s)";
 "vax.status.delayed" = "En retard";
 "vax.status.not_vaccinated" = "Non vacciné";
 "vax.status.unknown" = "Inconnu";
@@ -591,8 +591,8 @@
 "well_visit_form.feeding_older.title" = "Variété & apports en produits laitiers";
 "well_visit_form.feeding_older.food_variety_quality.label" = "Qualité de la variété alimentaire";
 "well_visit_form.feeding_older.food_variety_quality.picker" = "Qualité de la variété alimentaire";
-"well_visit_form.feeding_older.dairy_intake.label" = "Apports en produits laitiers (par jour)";
-"well_visit_form.feeding_older.dairy_intake.picker" = "Apports en produits laitiers (par jour)";
+"well_visit_form.feeding_older.dairy_intake.label" = "Apports en produits laitiers (par jour(s))";
+"well_visit_form.feeding_older.dairy_intake.picker" = "Apports en produits laitiers (par jour(s))";
 "well_visit_form.feeding_older.dairy_intake.1" = "1 tasse ou biberon";
 "well_visit_form.feeding_older.dairy_intake.2" = "2 tasses ou biberons";
 "well_visit_form.feeding_older.dairy_intake.3" = "3 tasses ou biberons";
@@ -622,7 +622,7 @@
 
 // Sections near the end
 "well_visit_form.problem_listing.title" = "Liste des problèmes";
-"well_visit_form.problem_listing.update_from_findings" = "Mettre à jour à partir des constatations";
+"well_visit_form.problem_listing.update_from_findings" = "Mettre à jour(s) à partir des constatations";
 
 "well_visit_form.conclusions.title" = "Conclusions";
 "well_visit_form.plan.title" = "Plan / Conseils anticipatoires";
@@ -795,7 +795,7 @@
 
 "well_visit_form.section.neurodevelopment_screening" = "Dépistage neurodéveloppemental";
 "well_visit_form.problem_listing.title" = "Liste de problèmes";
-"well_visit_form.problem_listing.update_from_findings" = "Mettre à jour à partir des constatations";
+"well_visit_form.problem_listing.update_from_findings" = "Mettre à jour(s) à partir des constatations";
 "well_visit_form.conclusions.title" = "Conclusions";
 "well_visit_form.plan.title" = "Plan / conseils anticipatoires";
 "well_visit_form.clinician_comment.title" = "Commentaire du clinicien";
@@ -803,7 +803,7 @@
 "well_visit_form.next_visit.toggle" = "Définir la date de la prochaine visite";
 "well_visit_form.next_visit.datepicker" = "Date de la prochaine visite";
 "well_visit_form.weight_trend.weight_at_date_format" = "%.2f kg (%@)";
-"well_visit_form.problem_listing.weight_gain.suboptimal" = "Prise de poids insuffisante : %d g/jour (objectif ≥ 20 g/jour)";
+"well_visit_form.problem_listing.weight_gain.suboptimal" = "Prise de poids insuffisante : %d g/jour(s) (objectif ≥ 20 g/jour(s))";
 
 "well_visit_form.section.visit_info.title" = "Informations de visite";
 "well_visit_form.section.visit_info.date" = "Date";
@@ -1132,7 +1132,7 @@
 "wellVisitStore.error.prepare" = "Échec de préparation SQL : %@";
 "wellVisitStore.error.step" = "Échec de l’étape SQLite (rc=%d).";
 "wellVisitStore.error.bindInt64" = "Échec de liaison Int64 à l’index %d.";
-"wellVisitStore.error.updateStep" = "Impossible de mettre à jour la consultation (SQLite rc=%d).";
+"wellVisitStore.error.updateStep" = "Impossible de mettre à jour(s) la consultation (SQLite rc=%d).";
 "wellVisitStore.error.withSQLite" = "%@ (%@)";
 
 /* AppState */
@@ -1147,14 +1147,14 @@
 "appstate.profile.pmh.allergies_yes" = "Allergies : Oui";
 "appstate.profile.pmh.allergy_details_format" = "Détails des allergies : %@";
 "appstate.profile.pmh.other_format" = "Autre : %@";
-"appstate.profile.pmh.updated_format" = "ATCD mis à jour : %@";
+"appstate.profile.pmh.updated_format" = "ATCD mis à jour(s) : %@";
 
 /* Patient profile — Perinatal summary */
 "appstate.profile.perinatal.pregnancy_risk_format" = "Risque grossesse : %@";
 "appstate.profile.perinatal.birth_mode_format" = "Mode d’accouchement : %@";
 "appstate.profile.perinatal.term_weeks_format" = "Terme : %d semaines";
 "appstate.profile.perinatal.resuscitation_format" = "Réanimation : %@";
-"appstate.profile.perinatal.nicu_stay_format" = "Sejour en néonatologie: %@";
+"appstate.profile.perinatal.nicu_stay_format" = "Sejour(s) en néonatologie: %@";
 "appstate.profile.perinatal.infection_risk_format" = "Risque infectieux : %@";
 "appstate.profile.perinatal.birth_weight_g_format" = "Poids de naissance : %d g";
 "appstate.profile.perinatal.birth_length_cm_format" = "Taille de naissance : %.1f cm";
@@ -1173,7 +1173,7 @@
 "appstate.profile.perinatal.discharge_date_format" = "Date de sortie : %@";
 "appstate.profile.perinatal.discharge_weight_g_format" = "Poids de sortie : %d g";
 "appstate.profile.perinatal.illnesses_after_birth_format" = "Maladies néonatales : %@";
-"appstate.profile.perinatal.updated_at_format" = "Mis à jour à : %@";
+"appstate.profile.perinatal.updated_at_format" = "Mis à jour(s) à : %@";
 "appstate.profile.perinatal.evolution_since_maternity_format" = "Évolution depuis la sortie de maternité : %@";
 
 /* Patient summary: perinatal item like 'birth_weight: 3200' */
@@ -1302,7 +1302,7 @@
 "appstate.ai.stub.well.piece.perinatal_included" = "Historique périnatal inclus";
 "appstate.ai.stub.well.piece.pmh_included" = "ATCD inclus";
 "appstate.ai.stub.well.piece.vaccination_included" = "Résumé du statut vaccinal inclus";
-"appstate.ai.stub.well.piece.age_days_format" = "Âge en jours : %d";
+"appstate.ai.stub.well.piece.age_days_format" = "Âge en jour(s)s : %d";
 "appstate.ai.stub.well.piece.custom_prompt_configured" = "Invite de consultation de suivi configurée par le clinicien";
 "appstate.ai.stub.well.piece.using_default_prompt" = "Utilisation de l’invite par défaut pour la consultation de suivi";
 "appstate.ai.stub.well.summary.no_context" = "Résumé de la consultation de suivi généré par défaut – aucun contexte de suivi fourni. Une fois configurés, les fournisseurs d’IA analyseront la liste des problèmes, l’historique périnatal, les ATCD et le statut vaccinal.";
@@ -1339,7 +1339,7 @@
 "appstate.episode.start.inserted_format" = "startNewEpisode : ligne insérée %d, user_id=%@";
 
 /* Log when there is no active clinician id; mirroring to bundle users is skipped. */
-"appstate.users_mirror.no_active_user_id" = "ensureActiveClinicianMirroredIntoBundleUsers : pas d’activeUserID ; saut de la mise à jour";
+"appstate.users_mirror.no_active_user_id" = "ensureActiveClinicianMirroredIntoBundleUsers : pas d’activeUserID ; saut de la mise à jour(s)";
 
 /* Log when clinicians DB cannot be opened; %@ is the clinicians DB path. */
 "appstate.users_mirror.open_clinicians_db_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers : échec d’ouverture de la base de données des cliniciens %@";
@@ -1357,7 +1357,7 @@
 "appstate.users_mirror.update_step_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers : échec de l’exécution de UPDATE : %@";
 
 /* Log when a clinician is updated in the bundle users table; %d is the clinician id. */
-"appstate.users_mirror.updated_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers : utilisateur %d mis à jour dans la table users du dossier";
+"appstate.users_mirror.updated_user_format" = "ensureActiveClinicianMirroredIntoBundleUsers : utilisateur %d mis à jour(s) dans la table users du dossier";
 
 /* Log when preparing INSERT users fails; %@ is the sqlite error. */
 "appstate.users_mirror.insert_prepare_failed_format" = "ensureActiveClinicianMirroredIntoBundleUsers : échec de préparation de INSERT : %@";
@@ -1880,7 +1880,7 @@
 "report.perinatal.birth_length_cm" = "TN : %@ cm";
 "report.perinatal.birth_head_circumference_cm" = "PC : %@ cm";
 
-"report.perinatal.maternity_stay_events" = "Séjour en maternité : %@";
+"report.perinatal.maternity_stay_events" = "Séjour(s) en maternité : %@";
 "report.perinatal.maternity_vaccinations" = "Vaccins en maternité : %@";
 "report.perinatal.vitamin_k" = "Vitamine K : %@";
 "report.perinatal.feeding_in_maternity" = "Alimentation : %@";
@@ -2079,7 +2079,7 @@
 "report.well.measurement.length" = "Taille";
 "report.well.measurement.headCircumference" = "Périmètre crânien";
 "report.well.measurement.weightGainSinceDischarge" = "Prise de poids depuis la sortie";
-"report.well.measurement.weightGain.value.overDays" = "%@%d g sur %d jours";
+"report.well.measurement.weightGain.value.overDays" = "%@%d g sur %d jour(s)s";
 "report.well.measurement.weightGain.value.simple" = "%@%d g";
 
 /* Sick episode — Vitals summary parts */
@@ -2585,7 +2585,7 @@
 "report.sick.title" = "Rapport de consultation maladie";
 
 /* Header meta formats */
-"report.sick.meta.triad_format" = "Créé : %@   •   Mis à jour : %@   •   Généré : %@";
+"report.sick.meta.triad_format" = "Créé : %@   •   Mis à jour(s) : %@   •   Généré : %@";
 "report.sick.meta.alias_mrn_format" = "Alias : %@   •   MRN : %@";
 "report.sick.meta.name_format" = "Nom : %@";
 "report.sick.meta.dob_sex_age_format" = "Date de naissance : %@   •   Sexe : %@   •   Âge : %@";
@@ -2647,7 +2647,7 @@
 "well_visit_form.problem_listing.feeding.solids_quality" = "Qualité des solides : %@";
 "well_visit_form.problem_listing.feeding.solids_comment" = "Commentaires sur les solides : %@";
 "well_visit_form.problem_listing.feeding.food_variety" = "Variété alimentaire : %@";
-"well_visit_form.problem_listing.feeding.dairy_gt_3" = "Produits laitiers > 3 tasses/jour.";
+"well_visit_form.problem_listing.feeding.dairy_gt_3" = "Produits laitiers > 3 tasses/jour(s).";
 
 /* Selles */
 "well_visit_form.problem_listing.stools.abnormal" = "Selles anormales rapportées.";
@@ -2665,7 +2665,7 @@
 "well_visit_form.milestones.status.uncertain" = "Incertain";
 "well_visit_form.milestones.status.not_yet" = "Pas encore acquis";
 
-"well_visit_form.weight_trend.delta_weight_per_day" = "Variation de poids par jour : %d g/jour";
+"well_visit_form.weight_trend.delta_weight_per_day" = "Variation de poids par jour(s) : %d g/jour(s)";
 
 "growth.charts.tab.bmi" = "IMC";
 "report.chart.caption.bmi_for_age" = "IMC pour l'Âge";
@@ -2715,7 +2715,7 @@
 "well_visit_form.milestone.sentences_4plus_words" = "Utilise des phrases de 4 mots ou plus";
 "well_visit_form.milestone.prefers_play_with_others" = "Préfère jouer avec d’autres plutôt que seul";
 "well_visit_form.milestone.cooperates_with_children" = "Coopère avec les autres enfants";
-"well_visit_form.milestone.confuses_real_vs_makebelieve" = "N’arrive pas toujours à distinguer le réel de l’imaginaire";
+"well_visit_form.milestone.confuses_real_vs_makebelieve" = "N’arrive pas toujour(s)s à distinguer le réel de l’imaginaire";
 "well_visit_form.milestone.names_colors_and_numbers" = "Nomme certaines couleurs et certains nombres";
 "well_visit_form.milestone.starts_to_understand_time" = "Commence à comprendre le temps";
 "well_visit_form.milestone.draws_person_2_to_4_parts" = "Dessine une personne avec 2 à 4 parties du corps";
@@ -2753,7 +2753,7 @@
 "sick_episode_form.addenda.save_episode_first_hint" = "Enregistrez d’abord l’épisode pour ajouter un addendum.";
 
 /* well visit addendum*/
-"wellVisitStore.error.addendaUpdateStep" = "Échec de la mise à jour de l’addendum (rc=%@).";
+"wellVisitStore.error.addendaUpdateStep" = "Échec de la mise à jour(s) de l’addendum (rc=%@).";
 "wellVisitStore.error.addendaDeleteStep" = "Échec de la suppression de l’addendum (rc=%@).";
 
 /* Visite de suivi – Addendum */
@@ -2775,7 +2775,7 @@
 
 "well_visit_form.growth_snapshot.title" = "Aperçu de la croissance (autour de la visite)";
 /* ===== Aperçu de croissance (WellVisitForm) ===== */
-"well_visit_form.growth_snapshot.age_at_visit" = "Âge à la visite : %@ jours (~%@ mois)";
+"well_visit_form.growth_snapshot.age_at_visit" = "Âge à la visite : %@ jour(s)s (~%@ mois)";
 "well_visit_form.growth_snapshot.near_visit" = "Croissance autour de la visite (%@) : **Poids :** %@ kg · **Longueur / Taille :** %@ cm · **PC :** %@ cm";
 "well_visit_form.growth_snapshot.previous"  = "Précédent (%@) : **Poids :** %@ kg · **Longueur / Taille :** %@ cm · **PC :** %@ cm";
 "well_visit_form.growth_snapshot.delta" = "Δ vs précédent : poids %@ kg ; taille %@ cm ; PC %@ cm ; poids/j %@ g/j";
@@ -2801,7 +2801,7 @@
 "appstate.ai.prompt.well.growth_trend.flagged_yes" = "Signalé : OUI";
 "appstate.ai.prompt.well.growth_trend.flagged_no" = "Signalé : non";
 
-"well_visit_form.growth_snapshot.weight_gain_low" = "Prise de poids faible : %+0.2f kg en %d jours.";
+"well_visit_form.growth_snapshot.weight_gain_low" = "Prise de poids faible : %+0.2f kg en %d jour(s)s.";
 
 /* WHOGrowthEvaluator — contrôle de “vitesse” WFA : gain observé vs attendu (médiane OMS) */
 "well_visit_form.growth_trend.wfa_velocity_low" = "Prise de poids insuffisante pour l’âge : +%@ kg vs attendu +%@ kg sur %@ mois.";
@@ -2904,12 +2904,12 @@
 "patient.visit.deleted.badge" = "Supprimée";
 
 /* Barre d’outils */
-"app.toolbar.export_support_log" = "Exporter le journal de support…";
+"app.toolbar.export_support_log" = "Exporter le jour(s)nal de support…";
 
-/* Alertes export journal */
-"support_log.export.success.title" = "Journal de support exporté";
+/* Alertes export jour(s)nal */
+"support_log.export.success.title" = "jour(s)nal de support exporté";
 "support_log.export.success.message" = "Enregistré : %@";
-"support_log.export.error.title" = "Échec de l’export du journal";
+"support_log.export.error.title" = "Échec de l’export du jour(s)nal";
 "support_log.export.error.message" = "Erreur : %@";
 
 "app.common.ok" = "ok";
@@ -2935,7 +2935,7 @@
 "exporter.mac.success.share" = "Partager…";
 "common.ok" = "OK";
 
-/* Boutons de la boîte de dialogue d’export du journal de support */
+/* Boutons de la boîte de dialogue d’export du jour(s)nal de support */
 "support_log.export.success.reveal" = "Afficher dans le Finder";
 "support_log.export.success.share" = "Partager…";
 
@@ -2950,7 +2950,7 @@
 "help.header.subtitle" = "Guide rapide du flux de travail principal.";
 
 "help.section.quick_start.title" = "Démarrage rapide";
-"help.section.quick_start.body" = "1) Connectez-vous en tant que clinicien.\n2) Ouvrez ou créez un dossier patient (bundle).\n3) Ajoutez une consultation aiguë (Sick Episode) ou une visite de suivi (Well Visit).\n4) Exportez le bundle pour le partager ou l’archiver.\n5) Après exportation, le bundle est destiné à être partagé et importé dans l’application partenaire CareView Kids, afin que les parents puissent lire, partager et imprimer les rapports, consulter les courbes de croissance, ajouter des notes et insérer des documents. Une fois créé, le parent peut réexporter le dossier depuis CareView Kids, et CareFlow Kids peut le réimporter afin de mettre à jour les informations lors d’une consultation.";
+"help.section.quick_start.body" = "1) Connectez-vous en tant que clinicien.\n2) Ouvrez ou créez un dossier patient (bundle).\n3) Ajoutez une consultation aiguë (Sick Episode) ou une visite de suivi (Well Visit).\n4) Exportez le bundle pour le partager ou l’archiver.\n5) Après exportation, le bundle est destiné à être partagé et importé dans l’application partenaire CareView Kids, afin que les parents puissent lire, partager et imprimer les rapports, consulter les courbes de croissance, ajouter des notes et insérer des documents. Une fois créé, le parent peut réexporter le dossier depuis CareView Kids, et CareFlow Kids peut le réimporter afin de mettre à jour(s) les informations lors d’une consultation.";
 
 "help.section.patients.title" = "Patients et dossiers";
 "help.section.patients.body" = "Les informations d'un patient sont contenues dans chaque dossier .pemr. L’ouverture d’un dossier charge les informations du patient dans CareFlow Kids, les visites et les documents associés. L’exportation crée un fichier portable .pemr destiné à être utilisé avec l’application partenaire CareView Kids.";
@@ -2974,7 +2974,7 @@
 "help.footer.contact.whatsapp.value" = "+32 475 41 63 94";
 "help.footer.contact.wechat.label" = "WeChat";
 "help.footer.contact.wechat.value" = "yunastic";
-"help.footer.contact.note" = "En cas de problème, veuillez joindre l’export du journal de support.";
+"help.footer.contact.note" = "En cas de problème, veuillez joindre l’export du jour(s)nal de support.";
 
 "well_visit_form.weight_trend.no_weight_data" = "Aucune donnée de poids antérieure disponible pour évaluer l’évolution.";
 "well_visit_form.ai.json_debug.title" = "JSON IA";
@@ -2997,7 +2997,7 @@
 /* Panneau de signaux d’épisode (sous la liste de problèmes) */
 "sick_episode_form.episode_signals.title" = "Signaux de l’épisode";
 "sick_episode_form.episode_signals.refresh_button" = "Actualiser";
-"sick_episode_form.episode_signals.updated_at" = "Mis à jour : %@";
+"sick_episode_form.episode_signals.updated_at" = "Mis à jour(s) : %@";
 "sick_episode_form.episode_signals.empty_hint" = "Aucun signal pour l’instant. Appuyez sur Actualiser pour générer des signaux locaux.";
 
 /* Lignes de signaux */
@@ -3032,13 +3032,13 @@
 
 /* Duration input */
 "sick_episode_form.hpi.duration_value.placeholder" = "Durée";
-"sick_episode_form.hpi.duration.help" = "Ajoutez la durée de la fièvre et choisissez l'unité jours (j) ou heures (h).";
+"sick_episode_form.hpi.duration.help" = "Ajoutez la durée de la fièvre et choisissez l'unité jour(s)s (j) ou heures (h).";
 /* Fever duration label (shown above the duration input) */
 "sick_episode_form.hpi.fever_duration.label" = "Durée de la fièvre";
 
 /* Duration unit suffix (problem listing display) */
 "sick_episode_form.duration.unit.hours.short" = "heures";
-"sick_episode_form.duration.unit.days.short"  = "jours";
+"sick_episode_form.duration.unit.days.short"  = "jour(s)s";
 
 "guideline.key.category.demographics" = "Données démographiques";
 "guideline.key.category.fever" = "Fièvre";
@@ -3048,12 +3048,12 @@
 "guideline.key.category.negatives" = "Négatifs rassurants";
 "guideline.key.category.snomed" = "SNOMED";
 
-"guideline.key.demographics.age_days" = "Âge (jours)";
+"guideline.key.demographics.age_days" = "Âge (jour(s)s)";
 "guideline.key.demographics.age_months" = "Âge (mois)";
 "guideline.key.demographics.sex" = "Sexe";
 
 "guideline.key.symptom.fever.present" = "Fièvre présente";
-"guideline.key.symptom.fever.duration_days" = "Durée de fièvre (jours)";
+"guideline.key.symptom.fever.duration_days" = "Durée de fièvre (jour(s)s)";
 "guideline.key.symptom.fever.duration_hours" = "Durée de fièvre (heures)";
 
 "guideline.key.vital.temp_c.max" = "Température max (°C)";
@@ -3070,7 +3070,7 @@
 
 "guideline.key.perinatal.ga_weeks" = "Âge gestationnel (semaines)";
 "guideline.key.perinatal.birth_weight_g" = "Poids de naissance (g)";
-"guideline.key.perinatal.nicu_stay" = "Séjour en néonat";
+"guideline.key.perinatal.nicu_stay" = "Séjour(s) en néonat";
 
 "guideline.key.snomed.concept" = "Concept SNOMED (sct:<id>)";
 
@@ -3215,3 +3215,45 @@
 "exporter.mac.sharechooser.airdrop" = "AirDrop";
 "exporter.mac.sharechooser.mail" = "Mail";
 "exporter.mac.sharechooser.messages" = "Messages";
+
+"sick_episode_form.hpi.complaint_duration.label_format" = "%@: durée";
+
+"sick_episode_form.problem_listing.complaint_duration_format" = "%@: %@";
+
+"guideline.key.symptom.cough.duration_days" = "Durée de la toux (jour(s)s)";
+"guideline.key.symptom.cough.duration_hours" = "Durée de la toux (heures)";
+
+"guideline.key.symptom.runny_nose.duration_days" = "Durée du nez qui coule (jour(s)s)";
+"guideline.key.symptom.runny_nose.duration_hours" = "Durée du nez qui coule (heures)";
+
+"guideline.key.symptom.vomiting.duration_days" = "Durée des vomissements (jour(s)s)";
+"guideline.key.symptom.vomiting.duration_hours" = "Durée des vomissements (heures)";
+
+"guideline.key.symptom.diarrhea.duration_days" = "Durée de la diarrhée (jour(s)s)";
+"guideline.key.symptom.diarrhea.duration_hours" = "Durée de la diarrhée (heures)";
+
+"guideline.key.symptom.abdominal_pain.duration_days" = "Durée des douleurs abdominales (jour(s))";
+"guideline.key.symptom.abdominal_pain.duration_hours" = "Durée des douleurs abdominales (heures)";
+
+"guideline.key.symptom.rash.duration_days" = "Durée de l’éruption cutanée (jour(s))";
+"guideline.key.symptom.rash.duration_hours" = "Durée de l’éruption cutanée (heure(s))";
+
+"guideline.key.symptom.headache.duration_days" = "Durée des céphalées (jour(s)s)";
+"guideline.key.symptom.headache.duration_hours" = "Durée des céphalées (heures)";
+"sick_episode_form.complaint.other.label" = "Autres plaintes";
+"sick_episode_form.choice.other" = "Autre";
+"sick_episode_form.duration.unit.days.short" = " jour(s)";
+
+/* Travail respiratoire */
+"sick_episode_form.pe.work_of_breathing.label" = "Travail respiratoire";
+
+/* Choix – travail respiratoire */
+"sick_episode_form.choice.normal_effort" = "Effort normal";
+"sick_episode_form.choice.tachypnea" = "Tachypnée";
+"sick_episode_form.choice.retractions" = "Tirage";
+"sick_episode_form.choice.nasal_flaring" = "Battement des ailes du nez";
+"sick_episode_form.choice.paradoxical_breathing" = "Respiration paradoxale";
+"sick_episode_form.choice.grunting" = "Geignement expiratoire";
+"sick_episode_form.choice.stridor" = "Stridor";
+
+

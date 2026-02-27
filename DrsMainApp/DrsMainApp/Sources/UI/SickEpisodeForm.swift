@@ -130,6 +130,16 @@ struct SickEpisodeForm: View {
     @State private var durationValue: String = ""
     @State private var durationUnit: DurationUnit = .hours
 
+    // Per-complaint durations (UI): value + unit, stored later as a single string "48h"/"3d".
+    private struct DurationInput: Equatable {
+        var value: String = ""
+        var unit: DurationUnit = .hours
+    }
+
+    // Keys match `complaintOptions` strings (e.g. "Cough", "Vomiting").
+    @State private var complaintDurations: [String: DurationInput] = [:]
+    
+
     // MARK: - Structured HPI
     @State private var appearance: String = "Well"
     @State private var feeding: String = "Normal"
@@ -144,6 +154,7 @@ struct SickEpisodeForm: View {
     @State private var hydration: String = "Normal"
     @State private var heart: String = "Normal"
     @State private var color: String = "Normal"
+    @State private var workOfBreathingSet: Set<String> = ["Normal effort"]
 
     @State private var ent: Set<String> = ["Normal"]
     @State private var rightEar: String = "Normal"
@@ -158,6 +169,7 @@ struct SickEpisodeForm: View {
     @State private var abdomenSet: Set<String> = ["Normal"]
     @State private var genitaliaSet: Set<String> = ["Normal"]
     @State private var lymphNodesSet: Set<String> = ["None"]
+    
 
     // MARK: - Plan
     @State private var problemListing: String = ""
@@ -245,6 +257,15 @@ struct SickEpisodeForm: View {
     private let hydrationChoices = ["Normal","Decreased"]
     private let heartChoices = ["Normal","Murmur","Tachycardia","Bradycardia"]
     private let colorChoices = ["Normal","Pale","Yellow"]
+    private let workOfBreathingOptionsMulti = [
+        "Normal effort",
+        "Tachypnea",
+        "Retractions",
+        "Nasal flaring",
+        "Paradoxical breathing",
+        "Grunting",
+        "Stridor"
+    ]
 
     // ENT stays multi-select; add tonsil deposits
     private let entChoices = ["Normal","Red throat","Ear discharge","Congested nose","Tonsil deposits"]
@@ -509,6 +530,7 @@ struct SickEpisodeForm: View {
                 pickerRow(NSLocalizedString("sick_episode_form.pe.general_appearance.label", comment: "Label for general appearance picker"), $generalAppearance, generalChoices)
                 pickerRow(NSLocalizedString("sick_episode_form.pe.hydration.label", comment: "Label for hydration picker"), $hydration, hydrationChoices)
                 pickerRow(NSLocalizedString("sick_episode_form.pe.color_hemodynamics.label", comment: "Label for color/hemodynamics picker"), $color, colorChoices)
+                workOfBreathingChips()
                 multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.skin.label", comment: "Label for skin multiselect"), options: skinOptionsMulti, selection: $skinSet)
                 multiSelectChips(title: NSLocalizedString("sick_episode_form.pe.ent.label", comment: "Label for ENT multiselect"), options: entChoices, selection: $ent)
                 pickerRow(NSLocalizedString("sick_episode_form.pe.right_ear.label", comment: "Label for right ear picker"), $rightEar, earChoices)
@@ -1144,8 +1166,87 @@ struct SickEpisodeForm: View {
             // Simple chip-like toggles in rows of 4 for predictable wrapping
             WrappingChips(strings: complaintOptions, selection: $presetComplaints)
 
+            // Complaint-specific durations (shown only when complaint is selected)
+            VStack(alignment: .leading, spacing: 8) {
+                if presetComplaints.contains("Cough") {
+                    complaintDurationRow(titleKey: "sick_episode_form.choice.cough", complaint: "Cough")
+                }
+                if presetComplaints.contains("Runny nose") {
+                    complaintDurationRow(titleKey: "sick_episode_form.choice.runny_nose", complaint: "Runny nose")
+                }
+                if presetComplaints.contains("Vomiting") {
+                    complaintDurationRow(titleKey: "sick_episode_form.choice.vomiting", complaint: "Vomiting")
+                }
+                if presetComplaints.contains("Diarrhea") {
+                    complaintDurationRow(titleKey: "sick_episode_form.choice.diarrhea", complaint: "Diarrhea")
+                }
+                if presetComplaints.contains("Abdominal pain") {
+                    complaintDurationRow(titleKey: "sick_episode_form.choice.abdominal_pain", complaint: "Abdominal pain")
+                }
+                if presetComplaints.contains("Rash") {
+                    complaintDurationRow(titleKey: "sick_episode_form.choice.rash", complaint: "Rash")
+                }
+                if presetComplaints.contains("Headache") {
+                    complaintDurationRow(titleKey: "sick_episode_form.choice.headache", complaint: "Headache")
+                }
+            }
+
             TextField(NSLocalizedString("sick_episode_form.complaint.other_complaints.placeholder", comment: "Text field for other complaints, comma-separated"), text: $otherComplaints)
                 .textFieldStyle(.roundedBorder)
+
+            // Duration for free-text “Other complaints” (shown only when free text is non-empty)
+            if !otherComplaints.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                complaintDurationRow(
+                    titleKey: "sick_episode_form.complaint.other.label",
+                    complaint: "__other__"
+                )
+            }
+        }
+    }
+
+    private func durationBinding(for complaint: String) -> Binding<DurationInput> {
+        Binding<DurationInput>(
+            get: { complaintDurations[complaint] ?? DurationInput() },
+            set: { complaintDurations[complaint] = $0 }
+        )
+    }
+    
+    private func serializeDuration(_ input: DurationInput?) -> String? {
+        guard let input else { return nil }
+        let v = input.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !v.isEmpty else { return nil }
+        return v + input.unit.rawValue // "48h" / "3d"
+    }
+    
+    private func parseCompactDuration(_ raw: String?) -> DurationInput? {
+        guard let raw else { return nil }
+        let s0 = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s0.isEmpty else { return nil }
+        let s = s0.lowercased()
+
+        // Extract first integer
+        let digits = s.replacingOccurrences(of: "[^0-9]+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = digits.split(separator: " ").first,
+              let n = Int(first),
+              n >= 0 else { return nil }
+
+        // Detect unit
+        let isDays = s.contains(" day") || s.hasSuffix("d") || s.contains(" days")
+        let isHours = s.contains(" hour") || s.hasSuffix("h") || s.contains(" hours")
+
+        if isDays && !isHours {
+            return DurationInput(value: String(n), unit: .days)
+        }
+        if isHours && !isDays {
+            return DurationInput(value: String(n), unit: .hours)
+        }
+
+        // Heuristic: <=72 => hours, else days
+        if n <= 72 {
+            return DurationInput(value: String(n), unit: .hours)
+        } else {
+            return DurationInput(value: String(n), unit: .days)
         }
     }
 
@@ -1169,6 +1270,82 @@ struct SickEpisodeForm: View {
             Text(title).foregroundStyle(.secondary)
             // (Note: `title` is already passed in as a localized string where used above.)
             WrappingChips(strings: options, selection: selection)
+        }
+    }
+    
+    private func workOfBreathingChips() -> some View {
+        // Enforce exclusivity: selecting any abnormal sign removes "Normal effort";
+        // selecting "Normal effort" clears all others; never allow empty.
+        let binding = Binding<Set<String>>(
+            get: { workOfBreathingSet },
+            set: { newValue in
+                var v = newValue
+
+                let abnormalSelected = v.contains(where: { $0 != "Normal effort" })
+                if abnormalSelected {
+                    v.remove("Normal effort")
+                }
+
+                if v.contains("Normal effort") {
+                    v = ["Normal effort"]
+                }
+
+                if v.isEmpty {
+                    v = ["Normal effort"]
+                }
+
+                workOfBreathingSet = v
+            }
+        )
+
+        return multiSelectChips(
+            title: NSLocalizedString(
+                "sick_episode_form.pe.work_of_breathing.label",
+                comment: "Label for work of breathing multiselect"
+            ),
+            options: workOfBreathingOptionsMulti,
+            selection: binding
+        )
+    }
+
+
+    @ViewBuilder
+    private func complaintDurationRow(titleKey: String, complaint: String) -> some View {
+        let b = durationBinding(for: complaint)
+
+        VStack(alignment: .leading, spacing: 4) {
+            Text(String(format: NSLocalizedString(
+                "sick_episode_form.hpi.complaint_duration.label_format",
+                comment: "Label shown above a complaint-specific duration input; %@ is the complaint name"
+            ), NSLocalizedString(titleKey, comment: "Complaint name")))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                TextField(
+                    NSLocalizedString(
+                        "sick_episode_form.hpi.duration_value.placeholder",
+                        comment: "Placeholder for duration numeric value"
+                    ),
+                    text: b.value
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 140)
+
+                Picker("", selection: b.unit) {
+                    ForEach(DurationUnit.allCases) { u in
+                        Text(u.label).tag(u)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+
+                Spacer()
+            }
+            .help(NSLocalizedString(
+                "sick_episode_form.hpi.duration.help",
+                comment: "Help text for duration input"
+            ))
         }
     }
 
@@ -1283,6 +1460,15 @@ struct SickEpisodeForm: View {
         case "Bradycardia": return NSLocalizedString("sick_episode_form.choice.bradycardia", comment: "SickEpisodeForm choice")
         case "Pale": return NSLocalizedString("sick_episode_form.choice.pale", comment: "SickEpisodeForm choice")
         case "Yellow": return NSLocalizedString("sick_episode_form.choice.yellow", comment: "SickEpisodeForm choice")
+            
+        // Work of breathing (PE)
+        case "Normal effort": return NSLocalizedString("sick_episode_form.choice.normal_effort", comment: "SickEpisodeForm choice")
+        case "Tachypnea": return NSLocalizedString("sick_episode_form.choice.tachypnea", comment: "SickEpisodeForm choice")
+        case "Retractions": return NSLocalizedString("sick_episode_form.choice.retractions", comment: "SickEpisodeForm choice")
+        case "Nasal flaring": return NSLocalizedString("sick_episode_form.choice.nasal_flaring", comment: "SickEpisodeForm choice")
+        case "Paradoxical breathing": return NSLocalizedString("sick_episode_form.choice.paradoxical_breathing", comment: "SickEpisodeForm choice")
+        case "Grunting": return NSLocalizedString("sick_episode_form.choice.grunting", comment: "SickEpisodeForm choice")
+        case "Stridor": return NSLocalizedString("sick_episode_form.choice.stridor", comment: "SickEpisodeForm choice")
 
         // ENT
         case "Red throat": return NSLocalizedString("sick_episode_form.choice.red_throat", comment: "SickEpisodeForm choice")
@@ -1497,14 +1683,15 @@ struct SickEpisodeForm: View {
         INSERT INTO episodes (
           patient_id, user_id, created_at,
           main_complaint, hpi, duration,
+          dur_other, dur_cough, dur_runny_nose, dur_vomiting, dur_diarrhea, dur_abdominal_pain, dur_rash, dur_headache,
           appearance, feeding, breathing, urination, pain, stools, context,
-          general_appearance, hydration, heart, color, skin,
+          general_appearance, hydration, heart, color, work_of_breathing, skin,
           ent, right_ear, left_ear, right_eye, left_eye,
           lungs, abdomen, peristalsis, genitalia,
           neurological, musculoskeletal, lymph_nodes,
           problem_listing, complementary_investigations, diagnosis, icd10, medications,
           anticipatory_guidance, comments
-        ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
+        ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
         """
 
         var stmt: OpaquePointer?
@@ -1533,37 +1720,46 @@ struct SickEpisodeForm: View {
         bindText(stmt, 4,  str("main_complaint"))
         bindText(stmt, 5,  str("hpi"))
         bindText(stmt, 6,  str("duration"))
-        bindText(stmt, 7,  str("appearance"))
-        bindText(stmt, 8,  str("feeding"))
-        bindText(stmt, 9,  str("breathing"))
-        bindText(stmt, 10, str("urination"))
-        bindText(stmt, 11, str("pain"))
-        bindText(stmt, 12, str("stools"))
-        bindText(stmt, 13, str("context"))
-        bindText(stmt, 14, str("general_appearance"))
-        bindText(stmt, 15, str("hydration"))
-        bindText(stmt, 16, str("heart"))
-        bindText(stmt, 17, str("color"))
-        bindText(stmt, 18, str("skin"))
-        bindText(stmt, 19, str("ent"))
-        bindText(stmt, 20, str("right_ear"))
-        bindText(stmt, 21, str("left_ear"))
-        bindText(stmt, 22, str("right_eye"))
-        bindText(stmt, 23, str("left_eye"))
-        bindText(stmt, 24, str("lungs"))
-        bindText(stmt, 25, str("abdomen"))
-        bindText(stmt, 26, str("peristalsis"))
-        bindText(stmt, 27, str("genitalia"))
-        bindText(stmt, 28, str("neurological"))
-        bindText(stmt, 29, str("musculoskeletal"))
-        bindText(stmt, 30, str("lymph_nodes"))
-        bindText(stmt, 31, str("problem_listing"))
-        bindText(stmt, 32, str("complementary_investigations"))
-        bindText(stmt, 33, str("diagnosis"))
-        bindText(stmt, 34, str("icd10"))
-        bindText(stmt, 35, str("medications"))
-        bindText(stmt, 36, str("anticipatory_guidance"))
-        bindText(stmt, 37, str("comments"))
+        bindText(stmt, 7,  str("dur_other"))
+        bindText(stmt, 8,  str("dur_cough"))
+        bindText(stmt, 9,  str("dur_runny_nose"))
+        bindText(stmt, 10, str("dur_vomiting"))
+        bindText(stmt, 11, str("dur_diarrhea"))
+        bindText(stmt, 12, str("dur_abdominal_pain"))
+        bindText(stmt, 13, str("dur_rash"))
+        bindText(stmt, 14, str("dur_headache"))
+        bindText(stmt, 15, str("appearance"))
+        bindText(stmt, 16, str("feeding"))
+        bindText(stmt, 17, str("breathing"))
+        bindText(stmt, 18, str("urination"))
+        bindText(stmt, 19, str("pain"))
+        bindText(stmt, 20, str("stools"))
+        bindText(stmt, 21, str("context"))
+        bindText(stmt, 22, str("general_appearance"))
+        bindText(stmt, 23, str("hydration"))
+        bindText(stmt, 24, str("heart"))
+        bindText(stmt, 25, str("color"))
+        bindText(stmt, 26, str("work_of_breathing"))
+        bindText(stmt, 27, str("skin"))
+        bindText(stmt, 28, str("ent"))
+        bindText(stmt, 29, str("right_ear"))
+        bindText(stmt, 30, str("left_ear"))
+        bindText(stmt, 31, str("right_eye"))
+        bindText(stmt, 32, str("left_eye"))
+        bindText(stmt, 33, str("lungs"))
+        bindText(stmt, 34, str("abdomen"))
+        bindText(stmt, 35, str("peristalsis"))
+        bindText(stmt, 36, str("genitalia"))
+        bindText(stmt, 37, str("neurological"))
+        bindText(stmt, 38, str("musculoskeletal"))
+        bindText(stmt, 39, str("lymph_nodes"))
+        bindText(stmt, 40, str("problem_listing"))
+        bindText(stmt, 41, str("complementary_investigations"))
+        bindText(stmt, 42, str("diagnosis"))
+        bindText(stmt, 43, str("icd10"))
+        bindText(stmt, 44, str("medications"))
+        bindText(stmt, 45, str("anticipatory_guidance"))
+        bindText(stmt, 46, str("comments"))
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
@@ -1581,8 +1777,9 @@ struct SickEpisodeForm: View {
         let sql = """
         UPDATE episodes SET
           main_complaint = ?, hpi = ?, duration = ?,
+          dur_other = ?, dur_cough = ?, dur_runny_nose = ?, dur_vomiting = ?, dur_diarrhea = ?, dur_abdominal_pain = ?, dur_rash = ?, dur_headache = ?,
           appearance = ?, feeding = ?, breathing = ?, urination = ?, pain = ?, stools = ?, context = ?,
-          general_appearance = ?, hydration = ?, heart = ?, color = ?, skin = ?,
+          general_appearance = ?, hydration = ?, heart = ?, color = ?, work_of_breathing = ?, skin = ?,
           ent = ?, right_ear = ?, left_ear = ?, right_eye = ?, left_eye = ?,
           lungs = ?, abdomen = ?, peristalsis = ?, genitalia = ?,
           neurological = ?, musculoskeletal = ?, lymph_nodes = ?,
@@ -1604,39 +1801,48 @@ struct SickEpisodeForm: View {
         bindText(stmt, 1,  str("main_complaint"))
         bindText(stmt, 2,  str("hpi"))
         bindText(stmt, 3,  str("duration"))
-        bindText(stmt, 4,  str("appearance"))
-        bindText(stmt, 5,  str("feeding"))
-        bindText(stmt, 6,  str("breathing"))
-        bindText(stmt, 7,  str("urination"))
-        bindText(stmt, 8,  str("pain"))
-        bindText(stmt, 9,  str("stools"))
-        bindText(stmt, 10, str("context"))
-        bindText(stmt, 11, str("general_appearance"))
-        bindText(stmt, 12, str("hydration"))
-        bindText(stmt, 13, str("heart"))
-        bindText(stmt, 14, str("color"))
-        bindText(stmt, 15, str("skin"))
-        bindText(stmt, 16, str("ent"))
-        bindText(stmt, 17, str("right_ear"))
-        bindText(stmt, 18, str("left_ear"))
-        bindText(stmt, 19, str("right_eye"))
-        bindText(stmt, 20, str("left_eye"))
-        bindText(stmt, 21, str("lungs"))
-        bindText(stmt, 22, str("abdomen"))
-        bindText(stmt, 23, str("peristalsis"))
-        bindText(stmt, 24, str("genitalia"))
-        bindText(stmt, 25, str("neurological"))
-        bindText(stmt, 26, str("musculoskeletal"))
-        bindText(stmt, 27, str("lymph_nodes"))
-        bindText(stmt, 28, str("problem_listing"))
-        bindText(stmt, 29, str("complementary_investigations"))
-        bindText(stmt, 30, str("diagnosis"))
-        bindText(stmt, 31, str("icd10"))
-        bindText(stmt, 32, str("medications"))
-        bindText(stmt, 33, str("anticipatory_guidance"))
-        bindText(stmt, 34, str("comments"))
+        bindText(stmt, 4,  str("dur_other"))
+        bindText(stmt, 5,  str("dur_cough"))
+        bindText(stmt, 6,  str("dur_runny_nose"))
+        bindText(stmt, 7,  str("dur_vomiting"))
+        bindText(stmt, 8,  str("dur_diarrhea"))
+        bindText(stmt, 9,  str("dur_abdominal_pain"))
+        bindText(stmt, 10, str("dur_rash"))
+        bindText(stmt, 11, str("dur_headache"))
+        bindText(stmt, 12, str("appearance"))
+        bindText(stmt, 13, str("feeding"))
+        bindText(stmt, 14, str("breathing"))
+        bindText(stmt, 15, str("urination"))
+        bindText(stmt, 16, str("pain"))
+        bindText(stmt, 17, str("stools"))
+        bindText(stmt, 18, str("context"))
+        bindText(stmt, 19, str("general_appearance"))
+        bindText(stmt, 20, str("hydration"))
+        bindText(stmt, 21, str("heart"))
+        bindText(stmt, 22, str("color"))
+        bindText(stmt, 23, str("work_of_breathing"))
+        bindText(stmt, 24, str("skin"))
+        bindText(stmt, 25, str("ent"))
+        bindText(stmt, 26, str("right_ear"))
+        bindText(stmt, 27, str("left_ear"))
+        bindText(stmt, 28, str("right_eye"))
+        bindText(stmt, 29, str("left_eye"))
+        bindText(stmt, 30, str("lungs"))
+        bindText(stmt, 31, str("abdomen"))
+        bindText(stmt, 32, str("peristalsis"))
+        bindText(stmt, 33, str("genitalia"))
+        bindText(stmt, 34, str("neurological"))
+        bindText(stmt, 35, str("musculoskeletal"))
+        bindText(stmt, 36, str("lymph_nodes"))
+        bindText(stmt, 37, str("problem_listing"))
+        bindText(stmt, 38, str("complementary_investigations"))
+        bindText(stmt, 39, str("diagnosis"))
+        bindText(stmt, 40, str("icd10"))
+        bindText(stmt, 41, str("medications"))
+        bindText(stmt, 42, str("anticipatory_guidance"))
+        bindText(stmt, 43, str("comments"))
 
-        sqlite3_bind_int64(stmt, 35, episodeID)
+        sqlite3_bind_int64(stmt, 44, episodeID)
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
@@ -2041,8 +2247,9 @@ struct SickEpisodeForm: View {
 
         let sql = """
         SELECT main_complaint, hpi, duration,
+               dur_other, dur_cough, dur_runny_nose, dur_vomiting, dur_diarrhea, dur_abdominal_pain, dur_rash, dur_headache,
                appearance, feeding, breathing, urination, pain, stools, context,
-               general_appearance, hydration, heart, color, skin,
+               general_appearance, hydration, heart, color, work_of_breathing, skin,
                ent, right_ear, left_ear, right_eye, left_eye,
                lungs, abdomen, peristalsis, genitalia,
                neurological, musculoskeletal, lymph_nodes,
@@ -2068,8 +2275,9 @@ struct SickEpisodeForm: View {
 
         let keys = [
             "main_complaint","hpi","duration",
+            "dur_other","dur_cough","dur_runny_nose","dur_vomiting","dur_diarrhea","dur_abdominal_pain","dur_rash","dur_headache",
             "appearance","feeding","breathing","urination","pain","stools","context",
-            "general_appearance","hydration","heart","color","skin",
+            "general_appearance","hydration","heart","color","work_of_breathing","skin",
             "ent","right_ear","left_ear","right_eye","left_eye",
             "lungs","abdomen","peristalsis","genitalia",
             "neurological","musculoskeletal","lymph_nodes",
@@ -2135,6 +2343,62 @@ struct SickEpisodeForm: View {
             }
         }
 
+        // Prefill complaint-specific durations from v3 `dur_*` fields.
+        // Stored format is compact: "48h" / "2d".
+        func parseCompactDuration(_ raw: String) -> DurationInput? {
+            let s0 = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !s0.isEmpty else { return nil }
+            let lower = s0.lowercased()
+
+            if lower.hasSuffix("h") {
+                let v = String(lower.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !v.isEmpty else { return nil }
+                return DurationInput(value: v, unit: .hours)
+            }
+            if lower.hasSuffix("d") {
+                let v = String(lower.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !v.isEmpty else { return nil }
+                return DurationInput(value: v, unit: .days)
+            }
+
+            // No explicit unit: keep consistent with fever heuristic (<=72 => hours).
+            let digits = lower.replacingOccurrences(of: "[^0-9]+", with: "", options: .regularExpression)
+            guard !digits.isEmpty else { return nil }
+            let n = Int(digits) ?? 0
+            return DurationInput(value: digits, unit: (n > 72 ? .days : .hours))
+        }
+
+        // Reset then rebuild from row
+        self.complaintDurations = [:]
+
+        let durMap: [(complaint: String, key: String)] = [
+            ("Cough", "dur_cough"),
+            ("Runny nose", "dur_runny_nose"),
+            ("Vomiting", "dur_vomiting"),
+            ("Diarrhea", "dur_diarrhea"),
+            ("Abdominal pain", "dur_abdominal_pain"),
+            ("Rash", "dur_rash"),
+            ("Headache", "dur_headache")
+        ]
+
+
+        for item in durMap {
+            let raw = row[item.key] ?? ""
+            if let parsed = parseCompactDuration(raw) {
+                // Ensure the complaint is selected so its duration row is visible.
+                if !self.presetComplaints.contains(item.complaint) {
+                    self.presetComplaints.insert(item.complaint)
+                }
+                self.complaintDurations[item.complaint] = parsed
+            }
+        }
+
+        // Prefill duration for free-text "Other complaints" (dur_other)
+        let rawOtherDur = row["dur_other"] ?? ""
+        if let parsedOther = parseCompactDuration(rawOtherDur) {
+            self.complaintDurations["__other__"] = parsedOther
+        }
+
         assignPicker(row["appearance"], allowed: appearanceChoices) { self.appearance = $0 }
         assignPicker(row["feeding"],   allowed: feedingChoices)   { self.feeding = $0 }
         assignPicker(row["breathing"], allowed: breathingChoices) { self.breathing = $0 }
@@ -2147,7 +2411,16 @@ struct SickEpisodeForm: View {
         assignPicker(row["hydration"], allowed: hydrationChoices) { self.hydration = $0 }
         assignPicker(row["heart"], allowed: heartChoices) { self.heart = $0 }
         assignPicker(row["color"], allowed: colorChoices) { self.color = $0 }
-        
+        // Work of breathing (multi-select)
+        if let wob = row["work_of_breathing"] {
+            let parts = wob
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            workOfBreathingSet = parts.isEmpty ? ["Normal effort"] : Set(parts)
+        } else {
+            workOfBreathingSet = ["Normal effort"]
+        }
 
         let entParts = splitTrim(row["ent"])
         self.ent = Set(entParts.filter { entChoices.contains($0) })
@@ -2241,6 +2514,21 @@ struct SickEpisodeForm: View {
 
         // If we can't parse, show as-is.
         return raw
+    }
+
+    /// Build a *display* string for a complaint-specific duration stored in `complaintDurations`.
+    /// Uses localized unit suffixes (e.g. h / j in French).
+    private func complaintDurationDisplayString(for complaint: String) -> String {
+        guard presetComplaints.contains(complaint) else { return "" }
+        guard let input = complaintDurations[complaint] else { return "" }
+        let v = input.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !v.isEmpty else { return "" }
+
+        let key = (input.unit == .days)
+            ? "sick_episode_form.duration.unit.days.short"
+            : "sick_episode_form.duration.unit.hours.short"
+        let suffix = NSLocalizedString(key, comment: "Short unit suffix for duration display (e.g. h / d or h / j)")
+        return "\(v)\(suffix)"
     }
 
     /// Compute a combined complaint string from preset + free text.
@@ -2384,6 +2672,46 @@ struct SickEpisodeForm: View {
                 )
             )
         }
+
+        // Complaint-specific durations (shown only for selected preset complaints).
+        // These are persisted in v3 as dur_* fields but displayed here from the UI state.
+        let complaintDurationOrder: [(raw: String, labelKey: String)] = [
+            ("Cough", "sick_episode_form.choice.cough"),
+            ("Runny nose", "sick_episode_form.choice.runny_nose"),
+            ("Vomiting", "sick_episode_form.choice.vomiting"),
+            ("Diarrhea", "sick_episode_form.choice.diarrhea"),
+            ("Abdominal pain", "sick_episode_form.choice.abdominal_pain"),
+            ("Rash", "sick_episode_form.choice.rash"),
+            ("Headache", "sick_episode_form.choice.headache")
+        ]
+
+        for item in complaintDurationOrder {
+            let d = complaintDurationDisplayString(for: item.raw)
+            if !d.isEmpty {
+                let name = NSLocalizedString(item.labelKey, comment: "Complaint name")
+                lines.append(String(format: NSLocalizedString(
+                    "sick_episode_form.problem_listing.complaint_duration_format",
+                    comment: "Problem list line: complaint duration; %@ is complaint name, %@ is duration"
+                ), name, d))
+            }
+        }
+
+        // Duration for free-text other complaints (if provided)
+        if let input = complaintDurations["__other__"] {
+            let v = input.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !v.isEmpty {
+                let key = (input.unit == .days)
+                    ? "sick_episode_form.duration.unit.days.short"
+                    : "sick_episode_form.duration.unit.hours.short"
+                let suffix = NSLocalizedString(key, comment: "Short unit suffix for duration display (e.g. h / d or h / j)")
+                let d = "\(v)\(suffix)"
+                let name = NSLocalizedString("sick_episode_form.complaint.other.label", comment: "Other complaints label")
+                lines.append(String(format: NSLocalizedString(
+                    "sick_episode_form.problem_listing.complaint_duration_format",
+                    comment: "Problem list line: complaint duration; %@ is complaint name, %@ is duration"
+                ), name, d))
+            }
+        }
         // Free-text HPI summary (so items like "blood in stool" are visible to AI)
         if !hpi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.hpi_summary", comment: "Problem list line: HPI summary"), hpi))
@@ -2467,6 +2795,23 @@ struct SickEpisodeForm: View {
         }
         if color != "Normal" {
             lines.append(String(format: NSLocalizedString("sick_episode_form.problem_listing.color", comment: "Problem list line: Color"), sickChoiceText(color)))
+        }
+
+        // Work of breathing (multi-select): omit default "Normal effort"
+        let wobAbnormal = workOfBreathingSet
+            .filter { $0 != "Normal effort" }
+            .sorted()
+
+        if !wobAbnormal.isEmpty {
+            let label = NSLocalizedString(
+                "sick_episode_form.pe.work_of_breathing.label",
+                comment: "Problem list label: Work of breathing"
+            )
+            let value = wobAbnormal.map { sickChoiceText($0) }.joined(separator: ", ")
+            lines.append(String(format: NSLocalizedString(
+                "sick_episode_form.problem_listing.complaint_duration_format",
+                comment: "Generic two-part format used in problem listing; %@ is label, %@ is value"
+            ), label, value))
         }
         if !(skinSet.count == 1 && skinSet.contains("Normal")) {
             let joined = Array(skinSet).sorted().map { sickChoiceText($0) }.joined(separator: ", ")
@@ -2740,6 +3085,34 @@ struct SickEpisodeForm: View {
         let feverDurationDays: Int? = dur.days
         let feverDurationHours: Int? = dur.hours
         let feverDurationUnit: String? = dur.unit
+
+        // Complaint-specific durations (compact strings like "48h" / "3d") for guideline logic.
+        // Keys are stable identifiers (not localized UI strings).
+        func compactComplaintDurationForContext(_ complaint: String) -> String {
+            guard presetComplaints.contains(complaint) else { return "" }
+            let input = complaintDurations[complaint] ?? DurationInput()
+            let v = input.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !v.isEmpty else { return "" }
+            return v + input.unit.rawValue
+        }
+
+        var complaintDurationsPayload: [String: String] = [:]
+        let mapping: [(raw: String, key: String)] = [
+            ("Cough", "cough"),
+            ("Runny nose", "runny_nose"),
+            ("Vomiting", "vomiting"),
+            ("Diarrhea", "diarrhea"),
+            ("Abdominal pain", "abdominal_pain"),
+            ("Rash", "rash"),
+            ("Headache", "headache")
+        ]
+        for m in mapping {
+            let s = compactComplaintDurationForContext(m.raw)
+            if !s.isEmpty {
+                complaintDurationsPayload[m.key] = s
+            }
+        }
+        let complaintDurationsForContext: [String: String]? = complaintDurationsPayload.isEmpty ? nil : complaintDurationsPayload
         // Structured perinatal fields (best-effort): prefer structured cache if present.
         let gaWeeks: Int? = appState.perinatalHistory?.birthTermWeeks
         let bwG: Int? = appState.perinatalHistory?.birthWeightG
@@ -2780,6 +3153,7 @@ struct SickEpisodeForm: View {
             feverDurationDays: feverDurationDays,
             feverDurationHours: feverDurationHours,
             feverDurationUnit: feverDurationUnit,
+            complaintDurations: complaintDurationsForContext,
             maxTempC: maxTempC,
             
             // Delegate classification to VitalsRanges (single source of truth).
@@ -2915,6 +3289,14 @@ struct SickEpisodeForm: View {
         out.append(makeSickToken(domain: "pe", field: "general_appearance", value: generalAppearance))
         out.append(makeSickToken(domain: "pe", field: "hydration", value: hydration))
         out.append(makeSickToken(domain: "pe", field: "color_hemodynamics", value: color))
+
+        // Work of breathing (WOB) — emit stable guideline tokens (not localized).
+        // These feed Guideline Builder rules and ClinicalFeatureExtractor.
+        for v in workOfBreathingSet.sorted() {
+            let cleaned = normalizeChoiceValue(v)
+            guard !cleaned.isEmpty, cleaned != "Normal effort" else { continue }
+            out.append("pe.work_of_breathing.\(tokenizeValue(cleaned))")
+        }
         out.append(makeSickToken(domain: "pe", field: "heart", value: heart))
         out.append(makeSickToken(domain: "pe", field: "peristalsis", value: peristalsis))
         out.append(makeSickToken(domain: "pe", field: "neuro", value: neurological))
@@ -3007,6 +3389,41 @@ struct SickEpisodeForm: View {
             duration = ""
         }
         payload["duration"] = duration
+
+        // ---- v3 (telemedicine + per-complaint durations + WOB) ----
+        // For now (before the dedicated UI is added), keep defaults explicit so
+        // upgraded DBs stay consistent and future UI wiring has a stable base.
+        payload["visit_mode"] = "in_person"            // or "telemedicine" later via UI
+        payload["pe_assessment_mode"] = "in_person"     // or "remote" / "not_assessed" later via UI
+
+        // Telemedicine documentation flags (0/1). Defaults are safe for in-person visits.
+        payload["telemed_limitations_explained"] = 0
+        payload["telemed_safety_net_given"] = 0
+        payload["telemed_remote_observations"] = ""
+
+        // Per-complaint duration fields (v3).
+        // Persist compact strings like "48h" / "3d" (same pattern as fever duration).
+        // Only store durations for selected preset complaints. (No duration for free-text other complaints.)
+        func compactComplaintDuration(_ complaint: String) -> String {
+            guard presetComplaints.contains(complaint) else { return "" }
+            let input = complaintDurations[complaint] ?? DurationInput()
+            let v = input.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !v.isEmpty else { return "" }
+            return v + input.unit.rawValue
+        }
+
+        payload["dur_other"] = serializeDuration(complaintDurations["__other__"])
+        payload["dur_cough"] = compactComplaintDuration("Cough")
+        payload["dur_runny_nose"] = compactComplaintDuration("Runny nose")
+        payload["dur_vomiting"] = compactComplaintDuration("Vomiting")
+        payload["dur_diarrhea"] = compactComplaintDuration("Diarrhea")
+        payload["dur_abdominal_pain"] = compactComplaintDuration("Abdominal pain")
+        payload["dur_rash"] = compactComplaintDuration("Rash")
+        payload["dur_headache"] = compactComplaintDuration("Headache")
+
+        // Physical exam: Work of breathing (new column). Leave empty until wired.
+        // Physical exam: Work of breathing (multi-select). Persist as comma-separated list.
+        payload["work_of_breathing"] = Array(workOfBreathingSet).sorted().joined(separator: ", ")
         // Structured HPI
         payload["appearance"] = appearance
         payload["feeding"] = feeding

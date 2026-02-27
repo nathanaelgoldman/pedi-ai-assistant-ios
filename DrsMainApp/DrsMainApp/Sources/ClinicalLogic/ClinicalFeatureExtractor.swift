@@ -47,7 +47,10 @@ protocol EpisodeAIContextProviding {
     
     /// Fever duration in days (structured UI field if available)
     var feverDurationDays: Int? { get }
-
+    /// Complaint-specific durations captured in the SickEpisodeForm.
+    /// Values are compact strings like "48h" or "3d".
+    /// Keys are stable identifiers: cough, runny_nose, vomiting, diarrhea, abdominal_pain, rash, headache
+    var complaintDurations: [String: String]? { get }
     // Vitals (values + pre-evaluated abnormal flags; evaluator lives outside extractor)
     var maxTempC: Double? { get }
     var maxTempIsAbnormal: Bool? { get }
@@ -59,6 +62,7 @@ protocol EpisodeAIContextProviding {
 extension EpisodeAIContextProviding {
     var problemTokens: [String] { [] }
     var feverDurationDays: Int? { nil }
+    var complaintDurations: [String: String]? { nil }
     var maxTempIsAbnormal: Bool? { nil }
     var spo2: Int? { nil }
     var spo2IsAbnormal: Bool? { nil }
@@ -551,6 +555,28 @@ final class ClinicalFeatureExtractor {
             searchTags: ["duration", "hours"],
             example: "e.g. 36"
         ),
+        
+        // Complaint durations
+        .init(key: Key.coughDurationDays, category: .other, labelKey: "guideline.key.symptom.cough.duration_days", valueType: .number, searchTags: ["cough", "duration", "days"], example: "e.g. 2"),
+        .init(key: Key.coughDurationHours, category: .other, labelKey: "guideline.key.symptom.cough.duration_hours", valueType: .number, searchTags: ["cough", "duration", "hours"], example: "e.g. 36"),
+
+        .init(key: Key.runnyNoseDurationDays, category: .other, labelKey: "guideline.key.symptom.runny_nose.duration_days", valueType: .number, searchTags: ["runny nose", "rhinorrhea", "duration", "days"], example: "e.g. 3"),
+        .init(key: Key.runnyNoseDurationHours, category: .other, labelKey: "guideline.key.symptom.runny_nose.duration_hours", valueType: .number, searchTags: ["runny nose", "rhinorrhea", "duration", "hours"], example: "e.g. 48"),
+
+        .init(key: Key.vomitingDurationDays, category: .other, labelKey: "guideline.key.symptom.vomiting.duration_days", valueType: .number, searchTags: ["vomiting", "emesis", "duration", "days"], example: "e.g. 1"),
+        .init(key: Key.vomitingDurationHours, category: .other, labelKey: "guideline.key.symptom.vomiting.duration_hours", valueType: .number, searchTags: ["vomiting", "emesis", "duration", "hours"], example: "e.g. 12"),
+
+        .init(key: Key.diarrheaDurationDays, category: .other, labelKey: "guideline.key.symptom.diarrhea.duration_days", valueType: .number, searchTags: ["diarrhea", "duration", "days"], example: "e.g. 2"),
+        .init(key: Key.diarrheaDurationHours, category: .other, labelKey: "guideline.key.symptom.diarrhea.duration_hours", valueType: .number, searchTags: ["diarrhea", "duration", "hours"], example: "e.g. 36"),
+
+        .init(key: Key.abdominalPainDurationDays, category: .other, labelKey: "guideline.key.symptom.abdominal_pain.duration_days", valueType: .number, searchTags: ["abdominal pain", "duration", "days"], example: "e.g. 1"),
+        .init(key: Key.abdominalPainDurationHours, category: .other, labelKey: "guideline.key.symptom.abdominal_pain.duration_hours", valueType: .number, searchTags: ["abdominal pain", "duration", "hours"], example: "e.g. 8"),
+
+        .init(key: Key.rashDurationDays, category: .other, labelKey: "guideline.key.symptom.rash.duration_days", valueType: .number, searchTags: ["rash", "duration", "days"], example: "e.g. 2"),
+        .init(key: Key.rashDurationHours, category: .other, labelKey: "guideline.key.symptom.rash.duration_hours", valueType: .number, searchTags: ["rash", "duration", "hours"], example: "e.g. 48"),
+
+        .init(key: Key.headacheDurationDays, category: .other, labelKey: "guideline.key.symptom.headache.duration_days", valueType: .number, searchTags: ["headache", "duration", "days"], example: "e.g. 1"),
+        .init(key: Key.headacheDurationHours, category: .other, labelKey: "guideline.key.symptom.headache.duration_hours", valueType: .number, searchTags: ["headache", "duration", "hours"], example: "e.g. 6"),
 
         // Vitals
         .init(
@@ -720,6 +746,14 @@ final class ClinicalFeatureExtractor {
             searchTags: ["general appearance", "lethargy", "lethargic", "pe"],
             example: "present"
         ),
+        
+        // Work of breathing (PE)
+        .init(key: Key.peWobTachypnea,    category: .other, labelKey: "guideline.key.pe.work_of_breathing.tachypnea",    valueType: .bool, searchTags: ["work of breathing","wob","tachypnea"], example: "present"),
+        .init(key: Key.peWobRetractions,  category: .other, labelKey: "guideline.key.pe.work_of_breathing.retractions",  valueType: .bool, searchTags: ["work of breathing","wob","retractions","tirage"], example: "present"),
+        .init(key: Key.peWobNasalFlaring, category: .other, labelKey: "guideline.key.pe.work_of_breathing.nasal_flaring", valueType: .bool, searchTags: ["work of breathing","wob","nasal flaring"], example: "present"),
+        .init(key: Key.peWobParadoxical,  category: .other, labelKey: "guideline.key.pe.work_of_breathing.paradoxical_breathing", valueType: .bool, searchTags: ["work of breathing","wob","paradoxical"], example: "present"),
+        .init(key: Key.peWobGrunting,     category: .other, labelKey: "guideline.key.pe.work_of_breathing.grunting",     valueType: .bool, searchTags: ["work of breathing","wob","grunting"], example: "present"),
+        .init(key: Key.peWobStridor,      category: .other, labelKey: "guideline.key.pe.work_of_breathing.stridor",      valueType: .bool, searchTags: ["work of breathing","wob","stridor"], example: "present"),
 
         // SNOMED helper (dynamic keys)
         .init(
@@ -754,6 +788,27 @@ final class ClinicalFeatureExtractor {
         static let feverPresent = "symptom.fever.present"
         static let feverDurationDays = "symptom.fever.duration_days"
         static let feverDurationHours = "symptom.fever.duration_hours"
+        // Complaint-specific durations (captured in SickEpisodeForm; compact strings like "48h" / "3d")
+        static let coughDurationDays = "symptom.cough.duration_days"
+        static let coughDurationHours = "symptom.cough.duration_hours"
+
+        static let runnyNoseDurationDays = "symptom.runny_nose.duration_days"
+        static let runnyNoseDurationHours = "symptom.runny_nose.duration_hours"
+
+        static let vomitingDurationDays = "symptom.vomiting.duration_days"
+        static let vomitingDurationHours = "symptom.vomiting.duration_hours"
+
+        static let diarrheaDurationDays = "symptom.diarrhea.duration_days"
+        static let diarrheaDurationHours = "symptom.diarrhea.duration_hours"
+
+        static let abdominalPainDurationDays = "symptom.abdominal_pain.duration_days"
+        static let abdominalPainDurationHours = "symptom.abdominal_pain.duration_hours"
+
+        static let rashDurationDays = "symptom.rash.duration_days"
+        static let rashDurationHours = "symptom.rash.duration_hours"
+
+        static let headacheDurationDays = "symptom.headache.duration_days"
+        static let headacheDurationHours = "symptom.headache.duration_hours"
         static let hr = "vital.hr"
         static let rr = "vital.rr"
         static let spo2 = "vital.spo2"
@@ -776,6 +831,14 @@ final class ClinicalFeatureExtractor {
         // Examples for PE tokens (expand)
         static let peLungsWheeze = "pe.lungs.wheeze"
         static let generalIrritable = "behavior.irritable"
+        
+        // Work of breathing (PE) — boolean presence flags
+        static let peWobTachypnea    = "pe.work_of_breathing.tachypnea"
+        static let peWobRetractions  = "pe.work_of_breathing.retractions"
+        static let peWobNasalFlaring = "pe.work_of_breathing.nasal_flaring"
+        static let peWobParadoxical  = "pe.work_of_breathing.paradoxical_breathing"
+        static let peWobGrunting     = "pe.work_of_breathing.grunting"
+        static let peWobStridor      = "pe.work_of_breathing.stridor"
     }
 
     /// Extract a structured clinical profile.
@@ -1690,6 +1753,10 @@ extension ClinicalFeatureExtractor {
 
         // Guideline-only: derive stable perinatal infection RF flags from raw coded-choice payload.
         let infCodes = infectionRiskCodes(from: ctx.perinatalRaw)
+        
+        
+
+        
 
         var profile = buildProfile(
             patientId: Int64(ctx.patientID),
@@ -1702,6 +1769,59 @@ extension ClinicalFeatureExtractor {
             problemLines: problemLines,
             terminology: terminology
         )
+        
+        // Work of breathing (PE) — upgrade existing token-derived features to objective PE findings.
+        // SickEpisodeForm emits stable tokens like `pe.work_of_breathing.tachypnea` into ctx.problemTokens.
+        // Because we keep the FIRST occurrence of each key during final de-dupe, we must *modify* the existing
+        // feature instead of appending a duplicate.
+        let tokenSet = Set(ctx.problemTokens)
+        let wobKeys: [(stableKey: String, fallbackChoiceKey: String)] = [
+            (Key.peWobTachypnea,    "sick_episode_form.choice.tachypnea"),
+            (Key.peWobRetractions,  "sick_episode_form.choice.retractions"),
+            (Key.peWobNasalFlaring, "sick_episode_form.choice.nasal_flaring"),
+            (Key.peWobParadoxical,  "sick_episode_form.choice.paradoxical_breathing"),
+            (Key.peWobGrunting,     "sick_episode_form.choice.grunting"),
+            (Key.peWobStridor,      "sick_episode_form.choice.stridor"),
+        ]
+
+        var addedOrUpgradedWob = false
+        for pair in wobKeys {
+            let present = tokenSet.contains(pair.stableKey) || tokenSet.contains(pair.fallbackChoiceKey)
+            guard present else { continue }
+
+            if let idx = profile.features.firstIndex(where: { $0.key == pair.stableKey }) {
+                // Upgrade the existing token-derived feature by replacing it (ClinicalFeature.value is immutable).
+                let old = profile.features[idx]
+                let newNote = (old.note == nil || old.note?.isEmpty == true)
+                    ? "derived from work_of_breathing selection"
+                    : old.note
+
+                profile.features[idx] = ClinicalFeature(
+                    key: old.key,
+                    value: .bool(true),
+                    snomedConceptId: old.snomedConceptId,
+                    note: newNote,
+                    isObjectivePositive: true,
+                    isAbnormal: true,
+                    source: "pe"
+                )
+            } else {
+                // Token wasn't present as a stable key (fallback path): append a new one.
+                profile.features.append(ClinicalFeature.flag(
+                    pair.stableKey,
+                    true,
+                    source: "pe",
+                    note: "derived from work_of_breathing selection",
+                    objective: true
+                ))
+            }
+            addedOrUpgradedWob = true
+        }
+
+        if addedOrUpgradedWob {
+            profile.objectivePositiveFindings = profile.features.filter { $0.isObjectivePositive }
+            profile.abnormalFindings = profile.features.filter { $0.isAbnormal }
+        }
 
         // Perinatal infection risk factors (guideline-only; does not affect reports/UI).
         if !infCodes.isEmpty {
@@ -1731,6 +1851,88 @@ extension ClinicalFeatureExtractor {
             // Recompute partitions to include the newly appended perinatal flags.
             profile.objectivePositiveFindings = profile.features.filter { $0.isObjectivePositive }
             profile.abnormalFindings = profile.features.filter { $0.isAbnormal }
+        }
+        
+        // Complaint-specific durations (structured)
+        if let map = ctx.complaintDurations, !map.isEmpty {
+
+            func parseCompactDuration(_ raw: String) -> (days: Int?, hours: Int?)? {
+                let s0 = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !s0.isEmpty else { return nil }
+                let s = s0.lowercased()
+
+                // Extract first integer
+                let digits = s.replacingOccurrences(of: "[^0-9]+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let first = digits.split(separator: " ").first, let n = Int(first), n >= 0 else { return nil }
+
+                let isDays = s.contains(" day") || s.hasSuffix("d") || s.contains(" days")
+                let isHours = s.contains(" hour") || s.hasSuffix("h") || s.contains(" hours")
+
+                if isDays && !isHours { return (days: n, hours: n * 24) }
+                if isHours && !isDays {
+                    let h = n
+                    let d = (h % 24 == 0) ? (h / 24) : nil
+                    return (days: d, hours: h)
+                }
+
+                // Heuristic: <=72 => hours, else days
+                if n <= 72 {
+                    let h = n
+                    let d = (h % 24 == 0) ? (h / 24) : nil
+                    return (days: d, hours: h)
+                } else {
+                    return (days: n, hours: n * 24)
+                }
+            }
+
+            let keyMap: [String: (days: String, hours: String)] = [
+                "cough": (Key.coughDurationDays, Key.coughDurationHours),
+                "runny_nose": (Key.runnyNoseDurationDays, Key.runnyNoseDurationHours),
+                "vomiting": (Key.vomitingDurationDays, Key.vomitingDurationHours),
+                "diarrhea": (Key.diarrheaDurationDays, Key.diarrheaDurationHours),
+                "abdominal_pain": (Key.abdominalPainDurationDays, Key.abdominalPainDurationHours),
+                "rash": (Key.rashDurationDays, Key.rashDurationHours),
+                "headache": (Key.headacheDurationDays, Key.headacheDurationHours)
+            ]
+
+            var addedAny = false
+
+            for (k, raw) in map {
+                guard let dest = keyMap[k] else { continue }
+                guard let parsed = parseCompactDuration(raw) else { continue }
+
+                if let d = parsed.days {
+                    profile.features.append(.init(
+                        key: dest.days,
+                        value: .int(d),
+                        snomedConceptId: nil,
+                        note: "from episode UI",
+                        isObjectivePositive: true,
+                        isAbnormal: false,
+                        source: "episode"
+                    ))
+                    addedAny = true
+                }
+
+                if let h = parsed.hours {
+                    profile.features.append(.init(
+                        key: dest.hours,
+                        value: .int(h),
+                        snomedConceptId: nil,
+                        note: "from episode UI",
+                        isObjectivePositive: true,
+                        isAbnormal: false,
+                        source: "episode"
+                    ))
+                    addedAny = true
+                }
+            }
+
+            if addedAny {
+                profile.objectivePositiveFindings = profile.features.filter { $0.isObjectivePositive }
+                profile.abnormalFindings = profile.features.filter { $0.isAbnormal }
+            }
         }
 
         // Fever duration (structured)
