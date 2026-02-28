@@ -3256,4 +3256,23 @@
 "sick_episode_form.choice.grunting" = "Geignement expiratoire";
 "sick_episode_form.choice.stridor" = "Stridor";
 
+"guideline.key.pe.work_of_breathing.tachypnea" = "Travail respiratoire : tachypnée";
+"guideline.key.pe.work_of_breathing.retractions" = "Travail respiratoire : tirage";
+"guideline.key.pe.work_of_breathing.nasal_flaring" = "Travail respiratoire : battement des ailes du nez";
+"guideline.key.pe.work_of_breathing.paradoxical_breathing" = "Travail respiratoire : respiration paradoxale";
+"guideline.key.pe.work_of_breathing.grunting" = "Travail respiratoire : geignement expiratoire";
+"guideline.key.pe.work_of_breathing.stridor" = "Travail respiratoire : stridor";
 
+"sick_episode_form.telemed.pe_assessment_mode.label" = "Mode d’examen clinique";
+"sick_episode_form.telemed.pe_assessment_mode.remote_help" = "À distance = évalué via vidéo ou photos (avec aide des parents).";
+"sick_episode_form.telemed.pe_assessment_mode.choice.in_person" = "Présentiel";
+"sick_episode_form.telemed.pe_assessment_mode.choice.remote" = "À distance";
+"sick_episode_form.telemed.pe_assessment_mode.choice.not_assessed" = "Non évalué";
+/* Mode de consultation (télémédecine) */
+"sick_episode_form.telemed.visit_mode.section_title" = "Mode de consultation";
+"sick_episode_form.telemed.visit_mode.label" = "Mode de consultation";
+"sick_episode_form.telemed.visit_mode.help" = "Définit le contexte de la consultation (présentiel vs télémédecine).";
+
+/* Choix du mode de consultation */
+"sick_episode_form.telemed.visit_mode.choice.in_person" = "Présentiel";
+"sick_episode_form.telemed.visit_mode.choice.telemedicine" = "Télémédecine";

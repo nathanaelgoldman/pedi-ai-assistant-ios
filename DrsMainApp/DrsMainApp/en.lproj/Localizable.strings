@@ -3271,3 +3271,26 @@
 "sick_episode_form.choice.paradoxical_breathing" = "Paradoxical breathing";
 "sick_episode_form.choice.grunting" = "Grunting";
 "sick_episode_form.choice.stridor" = "Stridor";
+
+"guideline.key.pe.work_of_breathing.tachypnea" = "Work of breathing: tachypnea";
+"guideline.key.pe.work_of_breathing.retractions" = "Work of breathing: retractions";
+"guideline.key.pe.work_of_breathing.nasal_flaring" = "Work of breathing: nasal flaring";
+"guideline.key.pe.work_of_breathing.paradoxical_breathing" = "Work of breathing: paradoxical breathing";
+"guideline.key.pe.work_of_breathing.grunting" = "Work of breathing: grunting";
+"guideline.key.pe.work_of_breathing.stridor" = "Work of breathing: stridor";
+
+
+
+"sick_episode_form.telemed.pe_assessment_mode.label" = "Physical exam mode";
+"sick_episode_form.telemed.pe_assessment_mode.remote_help" = "Remote = assessed via video or photos (parent-assisted).";
+"sick_episode_form.telemed.pe_assessment_mode.choice.in_person" = "In-person";
+"sick_episode_form.telemed.pe_assessment_mode.choice.remote" = "Remote";
+"sick_episode_form.telemed.pe_assessment_mode.choice.not_assessed" = "Not assessed";
+/* Visit mode (telemedicine) */
+"sick_episode_form.telemed.visit_mode.section_title" = "Visit mode";
+"sick_episode_form.telemed.visit_mode.label" = "Visit mode";
+"sick_episode_form.telemed.visit_mode.help" = "Sets the context for the consultation (in-person vs telemedicine).";
+
+/* Visit mode choices */
+"sick_episode_form.telemed.visit_mode.choice.in_person" = "In-person";
+"sick_episode_form.telemed.visit_mode.choice.telemedicine" = "Telemedicine";

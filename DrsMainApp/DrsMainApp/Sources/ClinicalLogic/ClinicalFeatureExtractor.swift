@@ -833,12 +833,13 @@ final class ClinicalFeatureExtractor {
         static let generalIrritable = "behavior.irritable"
         
         // Work of breathing (PE) — boolean presence flags
-        static let peWobTachypnea    = "pe.work_of_breathing.tachypnea"
-        static let peWobRetractions  = "pe.work_of_breathing.retractions"
-        static let peWobNasalFlaring = "pe.work_of_breathing.nasal_flaring"
-        static let peWobParadoxical  = "pe.work_of_breathing.paradoxical_breathing"
-        static let peWobGrunting     = "pe.work_of_breathing.grunting"
-        static let peWobStridor      = "pe.work_of_breathing.stridor"
+        // Canonical keys are under the `sick.pe.*` namespace (no aliases).
+        static let peWobTachypnea    = "sick.pe.work_of_breathing.tachypnea"
+        static let peWobRetractions  = "sick.pe.work_of_breathing.retractions"
+        static let peWobNasalFlaring = "sick.pe.work_of_breathing.nasal_flaring"
+        static let peWobParadoxical  = "sick.pe.work_of_breathing.paradoxical_breathing"
+        static let peWobGrunting     = "sick.pe.work_of_breathing.grunting"
+        static let peWobStridor      = "sick.pe.work_of_breathing.stridor"
     }
 
     /// Extract a structured clinical profile.

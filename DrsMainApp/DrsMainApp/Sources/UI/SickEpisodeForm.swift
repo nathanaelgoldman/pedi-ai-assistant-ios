@@ -155,6 +155,24 @@ struct SickEpisodeForm: View {
     @State private var heart: String = "Normal"
     @State private var color: String = "Normal"
     @State private var workOfBreathingSet: Set<String> = ["Normal effort"]
+    
+    // Telemedicine: visit mode (persisted in DB column `visit_mode`)
+    @State private var visitMode: String = "in_person"
+
+    // UI choices for visit mode (stable codes)
+    private let visitModeChoices: [String] = [
+        "in_person",
+        "telemedicine"
+    ]
+    // Telemedicine: PE assessment mode (persisted in DB column `pe_assessment_mode`)
+    @State private var peAssessmentMode: String = "in_person"
+
+    // UI choices for PE assessment mode (stable codes)
+    private let peAssessmentModeChoices: [String] = [
+        "in_person",
+        "remote",
+        "not_assessed"
+    ]
 
     @State private var ent: Set<String> = ["Normal"]
     @State private var rightEar: String = "Normal"
@@ -470,6 +488,30 @@ struct SickEpisodeForm: View {
         .lightBlueSectionCardStyle()
         .padding(.top, 8)
     }
+    
+    private var visitModeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(NSLocalizedString(
+                "sick_episode_form.telemed.visit_mode.section_title",
+                comment: "Section header for visit mode"
+            ))
+
+            pickerRow(
+                NSLocalizedString(
+                    "sick_episode_form.telemed.visit_mode.label",
+                    comment: "Label for visit mode picker"
+                ),
+                $visitMode,
+                visitModeChoices
+            )
+            .help(NSLocalizedString(
+                "sick_episode_form.telemed.visit_mode.help",
+                comment: "Help for visit mode picker"
+            ))
+        }
+        .padding(12)
+        .lightBlueSectionCardStyle()
+    }
 
     private var twoColumnSection: some View {
         HStack(alignment: .top, spacing: 20) {
@@ -527,6 +569,28 @@ struct SickEpisodeForm: View {
             // Column B (right)
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(NSLocalizedString("sick_episode_form.section.physical_exam", comment: "Section header for physical exam"))
+                pickerRow(
+                    NSLocalizedString(
+                        "sick_episode_form.telemed.pe_assessment_mode.label",
+                        comment: "Label for PE assessment mode picker"
+                    ),
+                    $peAssessmentMode,
+                    (visitMode == "telemedicine")
+                        ? ["remote", "not_assessed"]
+                        : ["in_person", "not_assessed"]
+                )
+                .help(NSLocalizedString(
+                    "sick_episode_form.telemed.pe_assessment_mode.remote_help",
+                    comment: "Help text for remote PE assessment mode"
+                ))
+                .onChange(of: visitMode) { newMode in
+                    if newMode == "telemedicine", peAssessmentMode == "in_person" {
+                            peAssessmentMode = "remote"
+                    }
+                    if newMode == "in_person", peAssessmentMode == "remote" {
+                        peAssessmentMode = "in_person"
+                    }
+                }
                 pickerRow(NSLocalizedString("sick_episode_form.pe.general_appearance.label", comment: "Label for general appearance picker"), $generalAppearance, generalChoices)
                 pickerRow(NSLocalizedString("sick_episode_form.pe.hydration.label", comment: "Label for hydration picker"), $hydration, hydrationChoices)
                 pickerRow(NSLocalizedString("sick_episode_form.pe.color_hemodynamics.label", comment: "Label for color/hemodynamics picker"), $color, colorChoices)
@@ -1041,6 +1105,7 @@ struct SickEpisodeForm: View {
         VStack(alignment: .leading, spacing: 16) {
             headerView
             vitalsSection
+            visitModeSection
             twoColumnSection
             planSection
             aiSection
@@ -1469,6 +1534,23 @@ struct SickEpisodeForm: View {
         case "Paradoxical breathing": return NSLocalizedString("sick_episode_form.choice.paradoxical_breathing", comment: "SickEpisodeForm choice")
         case "Grunting": return NSLocalizedString("sick_episode_form.choice.grunting", comment: "SickEpisodeForm choice")
         case "Stridor": return NSLocalizedString("sick_episode_form.choice.stridor", comment: "SickEpisodeForm choice")
+            
+        // Telemedicine / PE assessment mode (stable codes)
+        case "in_person":
+            return NSLocalizedString(
+                "sick_episode_form.telemed.pe_assessment_mode.choice.in_person",
+                comment: "PE assessment mode choice: in-person"
+            )
+        case "remote":
+            return NSLocalizedString(
+                "sick_episode_form.telemed.pe_assessment_mode.choice.remote",
+                comment: "PE assessment mode choice: remote assessment"
+            )
+        case "not_assessed":
+            return NSLocalizedString(
+                "sick_episode_form.telemed.pe_assessment_mode.choice.not_assessed",
+                comment: "PE assessment mode choice: not assessed"
+            )
 
         // ENT
         case "Red throat": return NSLocalizedString("sick_episode_form.choice.red_throat", comment: "SickEpisodeForm choice")
@@ -1682,16 +1764,17 @@ struct SickEpisodeForm: View {
         let sql = """
         INSERT INTO episodes (
           patient_id, user_id, created_at,
-          main_complaint, hpi, duration,
+          main_complaint, hpi, duration, visit_mode,
           dur_other, dur_cough, dur_runny_nose, dur_vomiting, dur_diarrhea, dur_abdominal_pain, dur_rash, dur_headache,
           appearance, feeding, breathing, urination, pain, stools, context,
-          general_appearance, hydration, heart, color, work_of_breathing, skin,
+          general_appearance, hydration, heart, color, pe_assessment_mode, 
+        work_of_breathing, skin,
           ent, right_ear, left_ear, right_eye, left_eye,
           lungs, abdomen, peristalsis, genitalia,
           neurological, musculoskeletal, lymph_nodes,
           problem_listing, complementary_investigations, diagnosis, icd10, medications,
           anticipatory_guidance, comments
-        ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
+        ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? );
         """
 
         var stmt: OpaquePointer?
@@ -1720,46 +1803,48 @@ struct SickEpisodeForm: View {
         bindText(stmt, 4,  str("main_complaint"))
         bindText(stmt, 5,  str("hpi"))
         bindText(stmt, 6,  str("duration"))
-        bindText(stmt, 7,  str("dur_other"))
-        bindText(stmt, 8,  str("dur_cough"))
-        bindText(stmt, 9,  str("dur_runny_nose"))
-        bindText(stmt, 10, str("dur_vomiting"))
-        bindText(stmt, 11, str("dur_diarrhea"))
-        bindText(stmt, 12, str("dur_abdominal_pain"))
-        bindText(stmt, 13, str("dur_rash"))
-        bindText(stmt, 14, str("dur_headache"))
-        bindText(stmt, 15, str("appearance"))
-        bindText(stmt, 16, str("feeding"))
-        bindText(stmt, 17, str("breathing"))
-        bindText(stmt, 18, str("urination"))
-        bindText(stmt, 19, str("pain"))
-        bindText(stmt, 20, str("stools"))
-        bindText(stmt, 21, str("context"))
-        bindText(stmt, 22, str("general_appearance"))
-        bindText(stmt, 23, str("hydration"))
-        bindText(stmt, 24, str("heart"))
-        bindText(stmt, 25, str("color"))
-        bindText(stmt, 26, str("work_of_breathing"))
-        bindText(stmt, 27, str("skin"))
-        bindText(stmt, 28, str("ent"))
-        bindText(stmt, 29, str("right_ear"))
-        bindText(stmt, 30, str("left_ear"))
-        bindText(stmt, 31, str("right_eye"))
-        bindText(stmt, 32, str("left_eye"))
-        bindText(stmt, 33, str("lungs"))
-        bindText(stmt, 34, str("abdomen"))
-        bindText(stmt, 35, str("peristalsis"))
-        bindText(stmt, 36, str("genitalia"))
-        bindText(stmt, 37, str("neurological"))
-        bindText(stmt, 38, str("musculoskeletal"))
-        bindText(stmt, 39, str("lymph_nodes"))
-        bindText(stmt, 40, str("problem_listing"))
-        bindText(stmt, 41, str("complementary_investigations"))
-        bindText(stmt, 42, str("diagnosis"))
-        bindText(stmt, 43, str("icd10"))
-        bindText(stmt, 44, str("medications"))
-        bindText(stmt, 45, str("anticipatory_guidance"))
-        bindText(stmt, 46, str("comments"))
+        bindText(stmt, 7,  str("visit_mode"))
+        bindText(stmt, 8,  str("dur_other"))
+        bindText(stmt, 9,  str("dur_cough"))
+        bindText(stmt, 10,  str("dur_runny_nose"))
+        bindText(stmt, 11, str("dur_vomiting"))
+        bindText(stmt, 12, str("dur_diarrhea"))
+        bindText(stmt, 13, str("dur_abdominal_pain"))
+        bindText(stmt, 14, str("dur_rash"))
+        bindText(stmt, 15, str("dur_headache"))
+        bindText(stmt, 16, str("appearance"))
+        bindText(stmt, 17, str("feeding"))
+        bindText(stmt, 18, str("breathing"))
+        bindText(stmt, 19, str("urination"))
+        bindText(stmt, 20, str("pain"))
+        bindText(stmt, 21, str("stools"))
+        bindText(stmt, 22, str("context"))
+        bindText(stmt, 23, str("general_appearance"))
+        bindText(stmt, 24, str("hydration"))
+        bindText(stmt, 25, str("heart"))
+        bindText(stmt, 26, str("color"))
+        bindText(stmt, 27, str("pe_assessment_mode"))
+        bindText(stmt, 28, str("work_of_breathing"))
+        bindText(stmt, 29, str("skin"))
+        bindText(stmt, 30, str("ent"))
+        bindText(stmt, 31, str("right_ear"))
+        bindText(stmt, 32, str("left_ear"))
+        bindText(stmt, 33, str("right_eye"))
+        bindText(stmt, 34, str("left_eye"))
+        bindText(stmt, 35, str("lungs"))
+        bindText(stmt, 36, str("abdomen"))
+        bindText(stmt, 37, str("peristalsis"))
+        bindText(stmt, 38, str("genitalia"))
+        bindText(stmt, 39, str("neurological"))
+        bindText(stmt, 40, str("musculoskeletal"))
+        bindText(stmt, 41, str("lymph_nodes"))
+        bindText(stmt, 42, str("problem_listing"))
+        bindText(stmt, 43, str("complementary_investigations"))
+        bindText(stmt, 44, str("diagnosis"))
+        bindText(stmt, 45, str("icd10"))
+        bindText(stmt, 46, str("medications"))
+        bindText(stmt, 47, str("anticipatory_guidance"))
+        bindText(stmt, 48, str("comments"))
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
@@ -1776,10 +1861,10 @@ struct SickEpisodeForm: View {
 
         let sql = """
         UPDATE episodes SET
-          main_complaint = ?, hpi = ?, duration = ?,
+          main_complaint = ?, hpi = ?, duration = ?, visit_mode = ?,
           dur_other = ?, dur_cough = ?, dur_runny_nose = ?, dur_vomiting = ?, dur_diarrhea = ?, dur_abdominal_pain = ?, dur_rash = ?, dur_headache = ?,
           appearance = ?, feeding = ?, breathing = ?, urination = ?, pain = ?, stools = ?, context = ?,
-          general_appearance = ?, hydration = ?, heart = ?, color = ?, work_of_breathing = ?, skin = ?,
+          general_appearance = ?, hydration = ?, heart = ?, color = ?, pe_assessment_mode = ?, work_of_breathing = ?, skin = ?,
           ent = ?, right_ear = ?, left_ear = ?, right_eye = ?, left_eye = ?,
           lungs = ?, abdomen = ?, peristalsis = ?, genitalia = ?,
           neurological = ?, musculoskeletal = ?, lymph_nodes = ?,
@@ -1801,48 +1886,50 @@ struct SickEpisodeForm: View {
         bindText(stmt, 1,  str("main_complaint"))
         bindText(stmt, 2,  str("hpi"))
         bindText(stmt, 3,  str("duration"))
-        bindText(stmt, 4,  str("dur_other"))
-        bindText(stmt, 5,  str("dur_cough"))
-        bindText(stmt, 6,  str("dur_runny_nose"))
-        bindText(stmt, 7,  str("dur_vomiting"))
-        bindText(stmt, 8,  str("dur_diarrhea"))
-        bindText(stmt, 9,  str("dur_abdominal_pain"))
-        bindText(stmt, 10, str("dur_rash"))
-        bindText(stmt, 11, str("dur_headache"))
-        bindText(stmt, 12, str("appearance"))
-        bindText(stmt, 13, str("feeding"))
-        bindText(stmt, 14, str("breathing"))
-        bindText(stmt, 15, str("urination"))
-        bindText(stmt, 16, str("pain"))
-        bindText(stmt, 17, str("stools"))
-        bindText(stmt, 18, str("context"))
-        bindText(stmt, 19, str("general_appearance"))
-        bindText(stmt, 20, str("hydration"))
-        bindText(stmt, 21, str("heart"))
-        bindText(stmt, 22, str("color"))
-        bindText(stmt, 23, str("work_of_breathing"))
-        bindText(stmt, 24, str("skin"))
-        bindText(stmt, 25, str("ent"))
-        bindText(stmt, 26, str("right_ear"))
-        bindText(stmt, 27, str("left_ear"))
-        bindText(stmt, 28, str("right_eye"))
-        bindText(stmt, 29, str("left_eye"))
-        bindText(stmt, 30, str("lungs"))
-        bindText(stmt, 31, str("abdomen"))
-        bindText(stmt, 32, str("peristalsis"))
-        bindText(stmt, 33, str("genitalia"))
-        bindText(stmt, 34, str("neurological"))
-        bindText(stmt, 35, str("musculoskeletal"))
-        bindText(stmt, 36, str("lymph_nodes"))
-        bindText(stmt, 37, str("problem_listing"))
-        bindText(stmt, 38, str("complementary_investigations"))
-        bindText(stmt, 39, str("diagnosis"))
-        bindText(stmt, 40, str("icd10"))
-        bindText(stmt, 41, str("medications"))
-        bindText(stmt, 42, str("anticipatory_guidance"))
-        bindText(stmt, 43, str("comments"))
+        bindText(stmt, 4,  str("visit_mode"))
+        bindText(stmt, 5,  str("dur_other"))
+        bindText(stmt, 6,  str("dur_cough"))
+        bindText(stmt, 7,  str("dur_runny_nose"))
+        bindText(stmt, 8,  str("dur_vomiting"))
+        bindText(stmt, 9,  str("dur_diarrhea"))
+        bindText(stmt, 10,  str("dur_abdominal_pain"))
+        bindText(stmt, 11, str("dur_rash"))
+        bindText(stmt, 12, str("dur_headache"))
+        bindText(stmt, 13, str("appearance"))
+        bindText(stmt, 14, str("feeding"))
+        bindText(stmt, 15, str("breathing"))
+        bindText(stmt, 16, str("urination"))
+        bindText(stmt, 17, str("pain"))
+        bindText(stmt, 18, str("stools"))
+        bindText(stmt, 19, str("context"))
+        bindText(stmt, 20, str("general_appearance"))
+        bindText(stmt, 21, str("hydration"))
+        bindText(stmt, 22, str("heart"))
+        bindText(stmt, 23, str("color"))
+        bindText(stmt, 24, str("pe_assessment_mode"))
+        bindText(stmt, 25, str("work_of_breathing"))
+        bindText(stmt, 26, str("skin"))
+        bindText(stmt, 27, str("ent"))
+        bindText(stmt, 28, str("right_ear"))
+        bindText(stmt, 29, str("left_ear"))
+        bindText(stmt, 30, str("right_eye"))
+        bindText(stmt, 31, str("left_eye"))
+        bindText(stmt, 32, str("lungs"))
+        bindText(stmt, 33, str("abdomen"))
+        bindText(stmt, 34, str("peristalsis"))
+        bindText(stmt, 35, str("genitalia"))
+        bindText(stmt, 36, str("neurological"))
+        bindText(stmt, 37, str("musculoskeletal"))
+        bindText(stmt, 38, str("lymph_nodes"))
+        bindText(stmt, 39, str("problem_listing"))
+        bindText(stmt, 340, str("complementary_investigations"))
+        bindText(stmt, 41, str("diagnosis"))
+        bindText(stmt, 42, str("icd10"))
+        bindText(stmt, 43, str("medications"))
+        bindText(stmt, 44, str("anticipatory_guidance"))
+        bindText(stmt, 45, str("comments"))
 
-        sqlite3_bind_int64(stmt, 44, episodeID)
+        sqlite3_bind_int64(stmt, 46, episodeID)
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             let msg = String(cString: sqlite3_errmsg(db))
@@ -2246,10 +2333,10 @@ struct SickEpisodeForm: View {
         defer { if db != nil { sqlite3_close(db) } }
 
         let sql = """
-        SELECT main_complaint, hpi, duration,
+        SELECT main_complaint, hpi, duration, visit_mode,
                dur_other, dur_cough, dur_runny_nose, dur_vomiting, dur_diarrhea, dur_abdominal_pain, dur_rash, dur_headache,
                appearance, feeding, breathing, urination, pain, stools, context,
-               general_appearance, hydration, heart, color, work_of_breathing, skin,
+               general_appearance, hydration, heart, color, pe_assessment_mode, work_of_breathing, skin,
                ent, right_ear, left_ear, right_eye, left_eye,
                lungs, abdomen, peristalsis, genitalia,
                neurological, musculoskeletal, lymph_nodes,
@@ -2274,10 +2361,10 @@ struct SickEpisodeForm: View {
         }
 
         let keys = [
-            "main_complaint","hpi","duration",
+            "main_complaint","hpi","duration", "visit_mode",
             "dur_other","dur_cough","dur_runny_nose","dur_vomiting","dur_diarrhea","dur_abdominal_pain","dur_rash","dur_headache",
             "appearance","feeding","breathing","urination","pain","stools","context",
-            "general_appearance","hydration","heart","color","work_of_breathing","skin",
+            "general_appearance","hydration","heart","color", "pe_assessment_mode", "work_of_breathing","skin",
             "ent","right_ear","left_ear","right_eye","left_eye",
             "lungs","abdomen","peristalsis","genitalia",
             "neurological","musculoskeletal","lymph_nodes",
@@ -2306,6 +2393,29 @@ struct SickEpisodeForm: View {
 
     /// Prefill all @State fields from a row dict.
     private func prefillFromRow(_ row: [String: String]) {
+        
+        // PE assessment mode (stable codes): "in_person" / "remote" / "not_assessed"
+        // In telemedicine visit mode, disallow "in_person" to avoid contradictions.
+        // Visit mode (stable codes): "in_person" / "telemedicine"
+        do {
+            let raw = normalizeChoiceValue(row["visit_mode"] ?? "")
+            let allowed: Set<String> = ["in_person", "telemedicine"]
+            self.visitMode = allowed.contains(raw) ? raw : "in_person"
+        }
+        
+        do {
+            let raw = normalizeChoiceValue(row["pe_assessment_mode"] ?? "")
+
+            if self.visitMode == "telemedicine" {
+                let allowed: Set<String> = ["remote", "not_assessed"]
+                // If a legacy row has "in_person", normalize it to "remote".
+                self.peAssessmentMode = allowed.contains(raw) ? raw : "remote"
+            } else {
+                let allowed: Set<String> = ["in_person", "remote", "not_assessed"]
+                self.peAssessmentMode = allowed.contains(raw) ? raw : "in_person"
+            }
+        }
+        
         // Complaints → split and map into preset + "other"
         let allComplaints = splitTrim(row["main_complaint"])
         let presetSet = Set(allComplaints.filter { complaintOptions.contains($0) })
@@ -2398,6 +2508,8 @@ struct SickEpisodeForm: View {
         if let parsedOther = parseCompactDuration(rawOtherDur) {
             self.complaintDurations["__other__"] = parsedOther
         }
+        
+        
 
         assignPicker(row["appearance"], allowed: appearanceChoices) { self.appearance = $0 }
         assignPicker(row["feeding"],   allowed: feedingChoices)   { self.feeding = $0 }
@@ -2406,6 +2518,7 @@ struct SickEpisodeForm: View {
         assignPicker(row["pain"],      allowed: painChoices)      { self.pain = $0 }
         assignPicker(row["stools"],    allowed: stoolsChoices)    { self.stools = $0 }
         self.context = Set(splitTrim(row["context"]).filter { contextChoices.contains($0) })
+        // (removed duplicate PE assessment mode block)
 
         assignPicker(row["general_appearance"], allowed: generalChoices) { self.generalAppearance = $0 }
         assignPicker(row["hydration"], allowed: hydrationChoices) { self.hydration = $0 }
@@ -2874,6 +2987,7 @@ struct SickEpisodeForm: View {
     }
 
 // MARK: - PE Additional Info Input UI (TextEditor replacement)
+
     // MARK: - ICD-10 helper
 
     /// Append a candidate ICD-10 code to the editable field, avoiding duplicates.
@@ -3295,7 +3409,7 @@ struct SickEpisodeForm: View {
         for v in workOfBreathingSet.sorted() {
             let cleaned = normalizeChoiceValue(v)
             guard !cleaned.isEmpty, cleaned != "Normal effort" else { continue }
-            out.append("pe.work_of_breathing.\(tokenizeValue(cleaned))")
+            out.append("sick.pe.work_of_breathing.\(tokenizeValue(cleaned))")
         }
         out.append(makeSickToken(domain: "pe", field: "heart", value: heart))
         out.append(makeSickToken(domain: "pe", field: "peristalsis", value: peristalsis))
@@ -3390,11 +3504,10 @@ struct SickEpisodeForm: View {
         }
         payload["duration"] = duration
 
-        // ---- v3 (telemedicine + per-complaint durations + WOB) ----
+       // ---- v3 (telemedicine + per-complaint durations + WOB) ----
         // For now (before the dedicated UI is added), keep defaults explicit so
         // upgraded DBs stay consistent and future UI wiring has a stable base.
-        payload["visit_mode"] = "in_person"            // or "telemedicine" later via UI
-        payload["pe_assessment_mode"] = "in_person"     // or "remote" / "not_assessed" later via UI
+        payload["visit_mode"] = visitMode   // "in_person" / "telemedicine"            // or "telemedicine" later via UI
 
         // Telemedicine documentation flags (0/1). Defaults are safe for in-person visits.
         payload["telemed_limitations_explained"] = 0
@@ -3437,6 +3550,7 @@ struct SickEpisodeForm: View {
         payload["hydration"] = hydration
         payload["heart"] = heart
         payload["color"] = color
+        payload["pe_assessment_mode"] = peAssessmentMode
         payload["ent"] = Array(ent).sorted().joined(separator: ", ")
         payload["right_ear"] = rightEar
         payload["left_ear"] = leftEar
@@ -3510,6 +3624,7 @@ struct SickEpisodeForm: View {
             AppLog.db.error("Episode save failed: \(String(describing: error), privacy: .public)")
         }
     }
+   
 }
 
 // MARK: - Episode Signal Panel (local decision support)
@@ -3556,7 +3671,7 @@ extension SickEpisodeForm {
                     .foregroundStyle(.secondary)
             }
             if !positiveList.isEmpty {
-                ForEach(Array(positiveList.prefix(8).enumerated()), id: \.offset) { _, item in
+                ForEach(Array(positiveList.prefix(15).enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .top, spacing: 6) {
                         Text("•")
                             .font(.subheadline)
@@ -3652,6 +3767,39 @@ extension SickEpisodeForm {
             .frame(minWidth: 360, idealWidth: 440, maxWidth: 520,
                    minHeight: 180, idealHeight: 260, maxHeight: 420)
         }
+    }
+}
+
+// MARK: - Restore/prefill from DB row
+
+extension SickEpisodeForm {
+    private func prefillFromRow(_ row: [String: Any]) {
+        // ... other field assignments ...
+        // Restore visit mode (stable codes): "in_person" / "telemedicine"
+        if let vm = row["visit_mode"] as? String {
+            let cleaned = normalizeChoiceValue(vm)
+            self.visitMode = (cleaned == "telemedicine") ? "telemedicine" : "in_person"
+        } else {
+            self.visitMode = "in_person"
+        }
+
+        // Restore PE assessment mode with normalization and fallback.
+        // In telemedicine visit mode, disallow "in_person" to avoid contradictions.
+        if let m = row["pe_assessment_mode"] as? String {
+            let cleaned = normalizeChoiceValue(m)
+            if self.visitMode == "telemedicine" {
+                self.peAssessmentMode = (cleaned == "not_assessed") ? "not_assessed" : "remote"
+            } else {
+                if cleaned == "remote" || cleaned == "not_assessed" || cleaned == "in_person" {
+                    self.peAssessmentMode = cleaned
+                } else {
+                    self.peAssessmentMode = "in_person"
+                }
+            }
+        } else {
+            self.peAssessmentMode = (self.visitMode == "telemedicine") ? "remote" : "in_person"
+        }
+        // ... continue with other fields ...
     }
 }
 
@@ -4322,4 +4470,5 @@ extension SickEpisodeForm {
         }
     }
 }
+
 
